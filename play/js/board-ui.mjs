@@ -74,17 +74,30 @@ export class BoardUI {
     }
   }
 
-  /** Replace ALL marks. Absent keys clear their mark class. */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [] } = {}) {
+  /** Replace ALL marks. Absent keys clear their mark class.
+   *  hints: [{from, to, rank}] — cheat-mode best-move suggestions; the rank
+   *  number renders as a corner badge on the destination square. */
+  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], hints = [] } = {}) {
     const targetSet = new Set(targets);
     const lastSet = new Set(lastMove);
     const slotSet = new Set(slots);
+    const hintFrom = new Map();
+    const hintTo = new Map();
+    for (const h of hints) {
+      if (!hintFrom.has(h.from)) hintFrom.set(h.from, h.rank);
+      if (!hintTo.has(h.to)) hintTo.set(h.to, h.rank);
+    }
     for (const [sq, cell] of this.cells) {
       cell.classList.toggle('sel', sq === selected);
       cell.classList.toggle('target', targetSet.has(sq));
       cell.classList.toggle('last', lastSet.has(sq));
       cell.classList.toggle('check', sq === check);
       cell.classList.toggle('slot', slotSet.has(sq));
+      cell.classList.toggle('hint-from', hintFrom.has(sq));
+      cell.classList.toggle('hint-to', hintTo.has(sq));
+      const rank = hintTo.get(sq) ?? hintFrom.get(sq);
+      if (rank !== undefined) cell.dataset.hint = rank;
+      else delete cell.dataset.hint;
     }
   }
 

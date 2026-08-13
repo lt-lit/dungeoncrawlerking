@@ -2,12 +2,12 @@
   "schema": 1,
   "id": "arena01-first-duel",
   "title": "First Duel",
-  "intro": "An open hall, and you carry the heavier steel. You caught the summoner's eye — the barrier is yours to spring.",
+  "intro": "An open hall, and you carry far the heavier steel. You caught the summoner's eye — the barrier is yours to spring.",
   "files": 5,
   "ranks": 8,
   "walls": [],
-  "enemy": { "backRank": [null, "N", "K", "B", null], "backRankStart": 0 },
-  "player": { "pieceSet": ["R", "N", "B"], "backRankStart": 0, "patchWidth": 5 },
+  "enemy": { "backRank": [null, "R", "K", "N", null], "backRankStart": 0, "pawns": ["b", "d"] },
+  "player": { "pieceSet": ["Q", "R", "B"], "backRankStart": 0, "patchWidth": 5, "pawns": ["b", "c", "d"] },
   "initiative": "player",
   "crumble": { "onsetPly": 60, "cadence": 12, "seed": 101 }
 }

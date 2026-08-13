@@ -29,6 +29,7 @@ const app = {
   ffish: null,
   engine: null,
   catalog: null,
+  cheatHintMarks: [], // current best-move suggestions (cheat mode)
   arenas: [], // loaded arena objects, menu order
   arena: null,
   boardUI: null,
@@ -100,6 +101,186 @@ function defaultPlacement(arena) {
     placement[rest[i]] = p;
   });
   return placement;
+}
+
+// ------------------------------------------------------- options (cheat mode)
+
+const OPT_KEY = 'dck.options.v1';
+const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false };
+
+function loadOptions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPT_KEY) ?? '{}');
+    for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
+    if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
+  } catch {
+    /* defaults */
+  }
+}
+
+function saveOptions() {
+  try {
+    localStorage.setItem(OPT_KEY, JSON.stringify(options));
+  } catch {
+    /* QoL only */
+  }
+}
+
+const cheatHints = () => options.cheat && options.hints;
+const cheatEval = () => options.cheat && options.evalBar;
+const cheatUndo = () => options.cheat && options.undo;
+
+function syncOptionsUI() {
+  $('optCheat').checked = options.cheat;
+  $('optHints').checked = options.hints;
+  $('optHintN').value = String(options.hintN);
+  $('optUndo').checked = options.undo;
+  $('optEval').checked = options.evalBar;
+  $('cheat-opts').classList.toggle('disabled', !options.cheat);
+}
+
+function refreshCheatUI() {
+  const inDuel = !!app.duel && (app.phase === 'playing' || app.phase === 'ended');
+  $('btnUndo').hidden = !(cheatUndo() && inDuel);
+  $('btnUndo').disabled =
+    app.busy || !app.duel || (app.duel.state === 'playing' && app.duel.turnColor() !== app.arena.playerColor);
+  $('eval-bar').hidden = !(cheatEval() && inDuel);
+}
+
+function applyOptions() {
+  saveOptions();
+  syncOptionsUI();
+  refreshCheatUI();
+  if (!cheatHints()) {
+    app.cheatHintMarks = [];
+    if (app.duel && app.phase !== 'placement') renderPlayMarks();
+  }
+  if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.arena.playerColor) {
+    void runCheatSearch(); // options may have just enabled hints/eval mid-turn
+  }
+}
+
+/** Cheat search: one MultiPV probe of the CURRENT position on the player's
+ *  turn, feeding the hint marks and/or the eval bar. Runs on the shared
+ *  engine while it is otherwise idle; MultiPV is always restored to 1 so the
+ *  engine's own replies stay full-strength single-PV searches (§2.2). */
+const cheat = { seq: 0, active: null };
+
+async function cancelCheatSearch() {
+  cheat.seq++;
+  if (cheat.active) {
+    try {
+      app.engine.send('stop');
+    } catch {
+      /* dead engine */
+    }
+    await cheat.active;
+    cheat.active = null;
+  }
+}
+
+async function runCheatSearch() {
+  if (!app.duel || app.duel.state !== 'playing') return;
+  if (!(cheatHints() || cheatEval())) return;
+  if (app.duel.turnColor() !== app.arena.playerColor) return;
+  await cancelCheatSearch();
+  const duel = app.duel;
+  const engine = app.engine;
+  const mySeq = ++cheat.seq;
+  const n = cheatHints() ? options.hintN : 1;
+  engine.setoption('MultiPV', String(n));
+  engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
+  const p = engine.go('depth 60 movetime 450', { timeout: 12000 }).finally(() => {
+    try {
+      engine.setoption('MultiPV', '1');
+    } catch {
+      /* dead engine */
+    }
+  });
+  cheat.active = p.catch(() => {});
+  let res;
+  try {
+    res = await p;
+  } catch {
+    return; // stalled probe — the duel's own recovery ladder owns engine health
+  }
+  if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing') return; // stale
+  const pvs = parseMultiPv(res.infoLines, n);
+  if (!pvs.length) return;
+  if (cheatEval()) updateEvalBar(pvs[0].score, app.arena.playerColor);
+  if (cheatHints()) {
+    const hints = [];
+    const sans = [];
+    for (const pv of pvs) {
+      const m = pv.move.match(UCI_MOVE_RE);
+      if (!m) continue;
+      hints.push({ from: m[1], to: m[2], rank: pv.rank });
+      try {
+        sans.push(duel.board.sanMove(pv.move));
+      } catch {
+        sans.push(pv.move);
+      }
+    }
+    app.cheatHintMarks = hints;
+    renderPlayMarks();
+    setStatus(`your move · ${sans.join(' · ')}`);
+  }
+}
+
+/** Last (deepest) info line per multipv rank → [{rank, move, score}]. */
+function parseMultiPv(infoLines, n) {
+  const byRank = new Map();
+  for (const line of infoLines) {
+    const pv = line.match(/ pv (\S+)/);
+    if (!pv) continue;
+    const s = line.match(/score (cp|mate) (-?\d+)/);
+    const r = line.match(/multipv (\d+)/);
+    const rank = r ? parseInt(r[1], 10) : 1;
+    if (rank > n) continue;
+    byRank.set(rank, { rank, move: pv[1], score: s ? { type: s[1], value: parseInt(s[2], 10) } : null });
+  }
+  return [...byRank.values()].sort((a, b) => a.rank - b.rank);
+}
+
+/** score is from povColor's point of view; the bar renders player-POV. */
+function updateEvalBar(score, povColor) {
+  if (!score || !app.arena) return;
+  const pov = povColor === app.arena.playerColor ? score : { type: score.type, value: -score.value };
+  let cp;
+  let text;
+  if (pov.type === 'mate') {
+    cp = pov.value > 0 ? 10000 : -10000;
+    text = pov.value > 0 ? `M${pov.value}` : `−M${-pov.value}`;
+  } else {
+    cp = pov.value;
+    text = (cp >= 0 ? '+' : '') + (cp / 100).toFixed(1);
+  }
+  $('eval-fill').style.width = (100 / (1 + Math.exp(-0.004 * cp))).toFixed(1) + '%';
+  $('eval-text').textContent = text;
+}
+
+/** Undo (cheat mode): rewind to the player's previous turn — works from a
+ *  loss screen too, that being rather the point. */
+async function doUndo() {
+  if (!cheatUndo() || !app.duel || app.busy) return;
+  const duel = app.duel;
+  if (duel.state === 'playing' && duel.turnColor() !== app.arena.playerColor) return;
+  app.busy = true;
+  await cancelCheatSearch();
+  const did = duel.undoToTurn(app.arena.playerColor === 'white' ? 'w' : 'b');
+  app.busy = false;
+  if (!did) {
+    setStatus('nothing to undo');
+    return;
+  }
+  $('overlay').hidden = true;
+  app.phase = 'playing';
+  app.selectedSquare = null;
+  app.cheatHintMarks = [];
+  app.boardUI.setPosition(duel.fen());
+  renderPlayMarks();
+  log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'crumble');
+  await driveTurn();
 }
 
 // ---------------------------------------------------------------------- boot
@@ -307,6 +488,9 @@ async function beginDuel() {
     cadence: intParam('cadence', arena.crumble.cadence, 0),
     seed: intParam('seed', arena.crumble.seed, 1),
   };
+  app.cheatHintMarks = [];
+  $('eval-fill').style.width = '50%';
+  $('eval-text').textContent = '';
   if (app.duel) app.duel.destroy();
   app.duel = new DuelController({
     ffish: app.ffish,
@@ -334,13 +518,35 @@ async function driveTurn() {
     app.busy = false;
     app.boardUI.setInteractive(true);
     setStatus('your move');
+    refreshCheatUI();
+    void runCheatSearch();
   } else {
     app.busy = true;
     app.boardUI.setInteractive(false);
     setStatus('the enemy is thinking…');
+    refreshCheatUI();
     const r = await duel.engineMove();
     if (!r.ended) await driveTurn();
   }
+}
+
+/** Compose all in-play board marks (selection, last move, check, hints). */
+function renderPlayMarks() {
+  const marks = { lastMove: lastMoveMarks(), check: checkMark(), hints: app.cheatHintMarks };
+  if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
+    marks.selected = app.selectedSquare;
+    marks.targets = targetsFor(app.selectedSquare);
+  }
+  app.boardUI.setMarks(marks);
+}
+
+function targetsFor(from) {
+  const targets = app.duel
+    .legalMoves()
+    .map((m) => m.match(UCI_MOVE_RE))
+    .filter((p) => p && p[1] === from)
+    .map((p) => p[2]);
+  return [...new Set(targets)];
 }
 
 function onSquareTap(sq) {
@@ -360,17 +566,8 @@ function onSquareTap(sq) {
   }
   // (Re)select: any square with at least one legal move from it.
   const froms = new Set(legal.map((m) => (m.match(UCI_MOVE_RE) ?? [])[1]).filter(Boolean));
-  if (froms.has(sq) && sq !== from) {
-    app.selectedSquare = sq;
-    const targets = legal
-      .map((m) => m.match(UCI_MOVE_RE))
-      .filter((p) => p && p[1] === sq)
-      .map((p) => p[2]);
-    app.boardUI.setMarks({ selected: sq, targets: [...new Set(targets)], lastMove: lastMoveMarks() });
-  } else {
-    app.selectedSquare = null;
-    app.boardUI.setMarks({ lastMove: lastMoveMarks() });
-  }
+  app.selectedSquare = froms.has(sq) && sq !== from ? sq : null;
+  renderPlayMarks();
 }
 
 function lastMoveMarks() {
@@ -393,6 +590,7 @@ async function playPlayerMove(from, to, matches) {
   app.busy = true;
   app.selectedSquare = null;
   app.boardUI.setInteractive(false);
+  await cancelCheatSearch(); // the engine must be quiet before its reply search
   try {
     const r = await app.duel.playerMove(uci);
     if (!r.ended) await driveTurn();
@@ -408,9 +606,9 @@ async function playPlayerMove(from, to, matches) {
 let lastEngineInfo = null;
 
 async function onMove({ san, mover, ply }) {
+  app.cheatHintMarks = []; // stale the moment the position changes
   app.boardUI.setPosition(app.duel.fen());
-  const check = checkMark();
-  app.boardUI.setMarks({ lastMove: lastMoveMarks(), check });
+  renderPlayMarks();
   const n = Math.ceil(ply / 2);
   const isWhiteMove = ply % 2 === 1;
   log($('duel-log'), `${n}${isWhiteMove ? '.' : '…'} ${san}${mover === 'engine' && lastEngineInfo ? `  (${lastEngineInfo})` : ''}`);
@@ -432,7 +630,7 @@ async function onCrumble({ square, type, pieceLost, endedGame, postFen }) {
   await ui.animateCrumble(square);
   if (app.duel !== duel) return; // user backed out mid-animation
   ui.setPosition(postFen);
-  ui.setMarks({});
+  renderPlayMarks();
   let line = `⚠ ${type} crumble — ${square} collapses`;
   if (pieceLost) {
     const color = pieceLost === pieceLost.toUpperCase() ? 'white' : 'black';
@@ -464,6 +662,7 @@ function onEngineInfo({ score, depth }) {
   // Score is from the ENGINE's point of view (it is the mover).
   const s = score.type === 'mate' ? (score.value > 0 ? `M${score.value}` : `−M${-score.value}`) : (score.value / 100).toFixed(1);
   lastEngineInfo = `d${depth ?? '?'} ${s}`;
+  if (cheatEval()) updateEvalBar(score, app.arena.enemyColor);
 }
 
 async function onEnd({ result, winner, termination }) {
@@ -484,7 +683,9 @@ async function onEnd({ result, winner, termination }) {
         }[termination] ?? `${result}`;
   $('overlay-title').textContent = title;
   $('overlay-detail').textContent = detail;
+  $('btnOverlayUndo').hidden = !cheatUndo();
   $('overlay').hidden = false;
+  refreshCheatUI();
   setStatus(result ? `${result} · ${termination}` : 'error');
 }
 
@@ -497,17 +698,37 @@ $('btnResetPlacement').addEventListener('click', () => {
   refreshPlacement();
 });
 $('btnBack').addEventListener('click', () => {
-  if (app.duel) {
-    const d = app.duel;
-    app.duel = null;
-    d.destroy(); // sends 'stop' to any in-flight search
-    app.enginePending = d.whenQuiet(); // fence: next duel waits for the flushed bestmove
-  }
+  const hintQuiet = cancelCheatSearch(); // a cheat probe is also an in-flight search
+  const d = app.duel;
+  app.duel = null;
+  if (d) d.destroy(); // sends 'stop' to any in-flight search
+  // Fence: the next duel waits for every flushed bestmove before reusing the engine.
+  app.enginePending = Promise.all([hintQuiet, d ? d.whenQuiet() : null]).then(() => {});
   app.busy = false;
   app.phase = 'menu';
   showScreen('menu');
+  refreshCheatUI();
   $('title').textContent = 'Dungeon Crawler King';
   setStatus('choose an arena');
+});
+$('btnUndo').addEventListener('click', doUndo);
+$('btnOverlayUndo').addEventListener('click', doUndo);
+$('btnOptions').addEventListener('click', () => {
+  syncOptionsUI();
+  $('options').hidden = false;
+});
+$('btnOptionsClose').addEventListener('click', () => {
+  $('options').hidden = true;
+});
+for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar']]) {
+  $(el).addEventListener('change', (e) => {
+    options[key] = e.target.checked;
+    applyOptions();
+  });
+}
+$('optHintN').addEventListener('change', (e) => {
+  options.hintN = parseInt(e.target.value, 10);
+  applyOptions();
 });
 $('btnAgain').addEventListener('click', () => {
   $('overlay').hidden = true;
@@ -543,14 +764,20 @@ window.__DCK = {
     return legal[Math.floor(Math.random() * legal.length)];
   },
   playerMove: async (uci) => {
+    await cancelCheatSearch();
     const r = await app.duel.playerMove(uci);
     if (!r.ended) await driveTurn();
     return app.duel.state;
   },
+  options,
+  applyOptions,
+  undo: doUndo,
   waitIdle: async () => {
     while (app.busy) await new Promise((res) => setTimeout(res, 50));
     return app.duel?.state ?? app.phase;
   },
 };
 
+loadOptions();
+syncOptionsUI();
 window.__DCK.ready = boot();

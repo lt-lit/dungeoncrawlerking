@@ -91,6 +91,24 @@ export function loadArena(json) {
     if (!Number.isInteger(crumble[k]) || crumble[k] < min) bad(id, `crumble.${k} must be an integer >= ${min}`);
   }
 
+  // Optional explicit pawn files ("pawns": ["a","c"]) — sparse pawn rows.
+  // Absent = the §4.2 automatic full-patch-width row.
+  const parsePawns = (side, label) => {
+    if (side.pawns === undefined) return null;
+    if (!Array.isArray(side.pawns)) bad(id, `${label}.pawns must be an array of file letters`);
+    const idx = [];
+    for (const p of side.pawns) {
+      if (typeof p !== 'string' || !/^[a-l]$/.test(p)) bad(id, `${label}.pawns entry "${p}" is not a file letter`);
+      const f = p.charCodeAt(0) - 97;
+      if (f >= files) bad(id, `${label} pawn file "${p}" off the ${files}-file board`);
+      if (idx.includes(f)) bad(id, `duplicate ${label} pawn file "${p}"`);
+      idx.push(f);
+    }
+    return idx;
+  };
+  const enemyPawnFiles = parsePawns(enemy, 'enemy');
+  const playerPawnFiles = parsePawns(player, 'player');
+
   const arena = {
     id,
     title: json.title,
@@ -98,8 +116,8 @@ export function loadArena(json) {
     files,
     ranks,
     walls: [...wallSet],
-    enemy: { backRank: eRank, backRankStart: eStart },
-    player: { pieceSet, backRankStart: pStart, patchWidth: width },
+    enemy: { backRank: eRank, backRankStart: eStart, pawnFiles: enemyPawnFiles },
+    player: { pieceSet, backRankStart: pStart, patchWidth: width, pawnFiles: playerPawnFiles },
     initiative: json.initiative,
     playerColor,
     enemyColor,
@@ -148,11 +166,17 @@ function duelBoardFor(arena, placement) {
     backRank[parseSquare(sq).file - arena.player.backRankStart] = piece;
   }
   const pRow = playerBackRow(arena);
-  const playerSide = { backRank, backRankStart: arena.player.backRankStart, row: pRow };
+  const playerSide = {
+    backRank,
+    backRankStart: arena.player.backRankStart,
+    row: pRow,
+    pawnFiles: arena.player.pawnFiles ?? undefined,
+  };
   const enemySide = {
     backRank: arena.enemy.backRank,
     backRankStart: arena.enemy.backRankStart,
     row: pRow === 0 ? arena.ranks - 1 : 0,
+    pawnFiles: arena.enemy.pawnFiles ?? undefined,
   };
   return buildDuelBoard({
     files: arena.files,

@@ -64,6 +64,7 @@ export class DuelController {
     this.ply = 0;
     this.state = 'idle'; // idle | playing | ended | error
     this.record = { moves: [], sans: [], crumbles: [], anomalies: [], result: null, winner: null, termination: null, error: null };
+    this.snapshots = []; // undo support (cheat feature) — one per playable state
   }
 
   /** Register the variant + start position with both libraries. */
@@ -77,6 +78,8 @@ export class DuelController {
     if (gameEnded(this.board)) {
       // Arena validation should make this impossible; degrade gracefully.
       await this.#finish();
+    } else {
+      this.#takeSnapshot();
     }
     return this.state;
   }
@@ -256,7 +259,70 @@ export class DuelController {
         }
       }
     }
+    this.#takeSnapshot();
     return { ended: false };
+  }
+
+  // ---- undo (cheat feature) ----------------------------------------------
+
+  /** Full restorable state after a completed pipeline step. The crumble RNG
+   *  stream is deliberately NOT restored — after an undo, future pacing
+   *  rolls differ from the abandoned timeline, which is fine for a cheat
+   *  tool (crumble determinism matters for harness replays, not take-backs). */
+  #takeSnapshot() {
+    this.snapshots.push({
+      turn: this.board.turn() ? 'w' : 'b',
+      fen: this.board.fen(),
+      baseFen: this.baseFen,
+      moves: [...this.movesSinceBase],
+      ply: this.ply,
+      counts: new Map(this.crumbler.positionCounts),
+      lastPacingPly: this.crumbler.lastPacingPly,
+      lens: {
+        moves: this.record.moves.length,
+        crumbles: this.record.crumbles.length,
+        anomalies: this.record.anomalies.length,
+      },
+    });
+    if (this.snapshots.length > 200) this.snapshots.shift();
+  }
+
+  /** Rewind to the most recent earlier state where `colorChar` ('w'|'b') was
+   *  on turn. Works from 'ended' too (undo the losing blunder). Returns
+   *  whether anything was undone. */
+  undoToTurn(colorChar) {
+    const last = this.snapshots.length - 1;
+    const from = this.state === 'ended' || this.state === 'error' ? last : last - 1;
+    for (let i = from; i >= 0; i--) {
+      const s = this.snapshots[i];
+      if (s.turn === colorChar) {
+        this.#restore(s);
+        this.snapshots.length = i + 1;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #restore(s) {
+    if (this.board) this.board.delete();
+    this.board = new this.ffish.Board(this.variantName, s.fen);
+    this.baseFen = s.baseFen;
+    this.movesSinceBase = [...s.moves];
+    this.ply = s.ply;
+    this.crumbler.positionCounts = new Map(s.counts);
+    this.crumbler.lastPacingPly = s.lastPacingPly;
+    this.record.moves.length = s.lens.moves;
+    this.record.sans.length = s.lens.moves;
+    this.record.crumbles.length = s.lens.crumbles;
+    this.record.anomalies.length = s.lens.anomalies;
+    this.record.result = null;
+    this.record.winner = null;
+    this.record.termination = null;
+    this.record.error = null;
+    this.state = 'playing';
+    // Engine state needs no repair: the next engineMove sends
+    // `position fen <baseFen> moves …` from the restored protocol state.
   }
 
   /** Swap in the post-crumble board and reset both repetition histories

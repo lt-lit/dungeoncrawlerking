@@ -14,6 +14,8 @@
 <header id="topbar">
   <button id="btnBack" hidden aria-label="Back to arenas">&#8592;</button>
   <h1 id="title">Dungeon Crawler King</h1>
+  <button id="btnUndo" hidden aria-label="Undo">&#8630;</button>
+  <button id="btnOptions" aria-label="Options">&#9881;</button>
   <div id="status" aria-live="polite">loading&#8230;</div>
 </header>
 
@@ -26,6 +28,7 @@
 
   <section id="screen-duel" class="screen" hidden>
     <div id="enemy-bar" class="side-bar"></div>
+    <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
     <div id="board"></div>
     <div id="player-bar" class="side-bar"></div>
     <div id="tray"></div>
@@ -41,8 +44,24 @@
   <div id="overlay-card">
     <h2 id="overlay-title"></h2>
     <p id="overlay-detail"></p>
+    <button id="btnOverlayUndo" hidden>&#8630; Undo last move</button>
     <button id="btnAgain" class="primary">Play again</button>
     <button id="btnMenu">Back to arenas</button>
+  </div>
+</div>
+
+<div id="options" hidden>
+  <div id="options-card">
+    <h2>Options</h2>
+    <label class="opt"><input type="checkbox" id="optCheat"> Cheater Mode</label>
+    <div id="cheat-opts">
+      <label class="opt sub"><input type="checkbox" id="optHints"> Show best
+        <select id="optHintN"><option>1</option><option>2</option><option selected>3</option></select>
+        moves</label>
+      <label class="opt sub"><input type="checkbox" id="optUndo"> Allow undo</label>
+      <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
+    </div>
+    <button id="btnOptionsClose" class="primary">Done</button>
   </div>
 </div>
 
