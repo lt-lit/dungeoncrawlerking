@@ -1,6 +1,6 @@
 {
   "name": "smoke",
-  "go": "movetime 150",
+  "go": "depth 60 movetime 150",
   "maxPlies": 400,
   "evalDeadband": 50,
   "crumble": { "onsetPly": 40, "cadence": 8 },

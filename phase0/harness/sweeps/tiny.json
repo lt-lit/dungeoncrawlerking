@@ -1,6 +1,6 @@
 {
   "name": "tiny",
-  "go": "movetime 80",
+  "go": "depth 60 movetime 80",
   "maxPlies": 300,
   "evalDeadband": 50,
   "crumble": { "onsetPly": 30, "cadence": 6 },

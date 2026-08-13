@@ -111,9 +111,28 @@ export class UciEngine {
     this.send(cmd);
   }
 
-  /** Run `go` and resolve with { bestmove, ponder, info: lastInfoLines, lines } */
+  /**
+   * Run `go` and resolve with { bestmove, ponder, info: lastInfoLines, lines }.
+   *
+   * Watchdog: under the A-prime no-draw config (nFoldValue=loss), shuttle
+   * "fortress" positions have no repetition bound, so iterative deepening can
+   * hit MAX_PLY (~245) within the movetime and this WASM build then never
+   * emits bestmove on its own. If a time-limited search overruns its budget,
+   * send UCI `stop` to force the bestmove out. Live game code needs the same
+   * guard.
+   */
   async go(args = 'depth 10', { timeout = 120000 } = {}) {
-    const lines = await this.sendUntil(`go ${args}`, (l) => l.startsWith('bestmove'), { timeout });
+    const mt = args.match(/movetime (\d+)/);
+    let watchdog = null;
+    if (mt) {
+      watchdog = setTimeout(() => this.send('stop'), parseInt(mt[1], 10) + 1500);
+    }
+    let lines;
+    try {
+      lines = await this.sendUntil(`go ${args}`, (l) => l.startsWith('bestmove'), { timeout });
+    } finally {
+      if (watchdog) clearTimeout(watchdog);
+    }
     const bmLine = lines[lines.length - 1];
     const m = bmLine.match(/^bestmove (\S+)(?: ponder (\S+))?/);
     return {

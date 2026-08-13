@@ -40,6 +40,27 @@ Config matrix as generated variants (all on the `makeDuelVariantIni` baseline: `
 
 ## Verdict
 
+## Post-spike addendum (harness sweep, 2026-08-13)
+
+**Operational hazard found in live sweeps — the A-prime search-runaway.** In a
+shuttle-fortress position (bare-ish kings bouncing `a3a2/a7a8`, cp −69), the
+absence of any repetition bound let iterative deepening race to depth 245
+(MAX_PLY) inside the movetime, after which this WASM build **never emitted
+`bestmove`** for `go movetime 150` — the search completed iterations in ~118 ms
+and stalled at the depth ceiling. This never appeared in this spike's own tests
+because they used bounded `go depth N` searches.
+
+Fix (implemented in `lib/load.mjs` + sweep configs, required in live-game code):
+
+1. **Watchdog:** if a `movetime` search overruns its budget by ~1.5 s, send UCI
+   `stop` — the engine then emits its bestmove immediately.
+2. **Belt-and-braces:** pair limits — `go depth 60 movetime N` — so degenerate
+   positions stop at the depth cap long before MAX_PLY.
+
+Design-level note: the position that triggered this is precisely the fortress
+scenario §4.5's crumble system exists to demolish; the game design needs no
+change, only the engine-interface guard.
+
 **PASS_WITH_CAVEATS.** The brief's belief is refuted — in-search repetition draw-scoring survives `nFoldRule = 0` and cannot be switched off — and the brief's written Plan B is actively dangerous (losing engine chases repetitions as wins). But the design's intent is fully recoverable: **Plan A-prime (`nFoldRule = 0` + `nFoldValue = loss`) delivers exactly the specified Plan A semantics**, keeping §4.4 and the §4.5 crumble design unchanged.
 
 ## Design implications — definitive recommendation

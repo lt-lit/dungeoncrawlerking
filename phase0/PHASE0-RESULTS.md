@@ -75,6 +75,11 @@ no design change.
   BFS connectivity check in the harness.
 - **UCI squares are 3 chars on rank 10** (`f10`): move parsing must use a square
   regex, not fixed offsets. (Bit the harness once; fixed.)
+- **A-prime search-runaway guard is mandatory** (found by the sweep, addendum in
+  the spike 10 doc): with no repetition bound, shuttle-fortress positions drive
+  iterative deepening to MAX_PLY and `go movetime` may never return in this WASM
+  build. Live code must pair limits (`go depth 60 movetime N`) and watchdog-`stop`
+  an overrunning search (implemented in `lib/load.mjs`).
 - **Threading: ship Threads=1** (spike 8): lazy-SMP is a net loss at duel search
   sizes. coi-serviceworker is still required (pthread build needs
   SharedArrayBuffer), and it must sit next to index.html (service-worker scope),
