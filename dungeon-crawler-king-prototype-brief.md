@@ -17,7 +17,7 @@ A dungeon crawler roguelike where the player is a **king (summoner)** exploring 
 1. **The Prime Directive:** every duel state must be fully evaluable by Fairy-Stockfish. All duel mechanics must be expressible as **variant config (variants.ini options) + FEN**. If a mechanic can't be expressed in FSF's grammar, it does not go in the duel layer. (The exploration layer lives entirely outside FSF — that's fine and by design.) One sanctioned boundary case: **crumble events (§4.5)** are arena *regeneration*, not a duel mechanic — the harness rewrites the FEN between plies and play continues from the new position. Every state the engine ever sees is FSF-pure; only the transition is harness-owned, exactly like duel generation itself.
 2. **Full-strength engine, always.** No UCI_Elo weakening during live play. Difficulty comes from asymmetric material, position, and terrain — never from engine handicapping.
 3. **Classical evaluation only.** This game is a pile of user-defined variants with per-duel board dimensions and wall squares; no NNUE net exists or will exist for them. FSF's handcrafted classical eval is the opponent — it's what FSF's reputation for master-level play on user-defined variants is built on. Do not rely on NNUE-specific behavior or restrictions anywhere.
-4. **Tech stack:** vanilla JS, no build tools, static hosting on GitHub Pages, mobile-first UI. Fairy-Stockfish WASM (UCI engine) + ffish.js (rules/legality/FEN/SAN) run client-side. `coi-serviceworker` if threading is needed (proven approach from prior project).
+4. **Tech stack:** vanilla JS, no build tools, static hosting on GitHub Pages, mobile-first UI. Fairy-Stockfish WASM (UCI engine) + ffish.js (rules/legality/FEN/SAN) run client-side. `coi-serviceworker` if threading is needed (standard static-hosting workaround — see §13 for provenance).
 
 ---
 
@@ -251,9 +251,9 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 
 ## 13. Prior-Project Carryovers
 
-Decisions inherited from the earlier chess-roguelike design work, still in force:
+Decisions inherited from the earlier chess-roguelike design work, still in force. That project barely left the ground — these are design conclusions, not working code. Nothing below is proven *by us*; the stack's proof is public precedent, and our own integration is unvalidated until the Phase 0 spikes pass.
 
-- FSF WASM + ffish.js client-side on GitHub Pages is proven (pychess/fairyground precedent); coi-serviceworker for threading.
+- FSF WASM + ffish.js client-side on GitHub Pages, proven in the wild by pychess and fairyground. Fairyground is effectively a reference implementation of runtime variant loading against FSF WASM — crib from it. `coi-serviceworker` for threading only if spike 8 demands it; nothing exists to inherit, it would be set up fresh.
 - Prefer FSF's **predefined piece types** over custom Betza definitions — they come with pre-tuned evaluation values.
 - Asymmetric-advantage difficulty philosophy (the player gets structural edges; the engine plays perfectly).
 - **Kaneo piece set** (Kadagaden/chess-pieces, CC-BY-4.0) as the working asset source; Alfaerie / Wikimedia Commons as gap-fillers.
