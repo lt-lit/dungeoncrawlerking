@@ -61,12 +61,18 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 Absolute board coordinates; `backRank` arrays are file-ascending; patch
 widths 3–5 (§4.2); walls eat slots (a walled back-row slot suppresses that
 file's pawn too — under the default automatic pawn row); `pieceSet` excludes
-the king (always in the placement pool); a pool larger than the surviving
-slots gives §4.3 selection mode. The optional per-side `"pawns"` array (file
-letters) authors a SPARSE pawn row instead of §4.2's automatic full-patch
-row — the shipped arenas use 1–3 pawns per side. `loadArena` rejects
-out-of-catalog dims, patch violations, a walled enemy-king slot, and arenas
-whose walls sever the two formations.
+the king (always in the placement pool). The optional per-side `"pawns"`
+array (file letters) authors a SPARSE pawn row instead of §4.2's automatic
+full-patch row — the shipped arenas use 1–3 pawns per side. `loadArena`
+rejects out-of-catalog dims, patch violations, a walled enemy-king slot, and
+arenas whose walls sever the two formations.
+
+Placement (deliberately looser than §4.2's patch): the arena's
+`backRankStart`/`patchWidth`/`pawns` define only the DEFAULT arrangement.
+During setup the player may place pieces anywhere on their back row and
+pawns anywhere on their first two rows (FSF accepts back-rank pawns; they
+keep a single-step push). The pool is king + `pieceSet` + the authored pawn
+count.
 
 Balance philosophy (§13, §2.2): the engine is always full strength, so
 arenas hand the PLAYER a decisive material edge — difficulty tuning happens
@@ -74,11 +80,15 @@ entirely in these JSON files.
 
 ## Options / Cheater Mode
 
-The gear menu has a Cheater Mode toggle with three sub-options, persisted in
+The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
-on the player's turn — numbered badges on the board + SANs in the status
-line; MultiPV is always reset to 1 before the engine's own replies, which
-stay full-strength), **Allow undo** (snapshot-based rewind to the player's
+on the player's turn — lichess-style arrows whose width/opacity scale with
+how close each move is to the best one, + SANs in the status line; MultiPV
+is always reset to 1 before the engine's own replies, which stay
+full-strength), **Allow undo** (snapshot-based rewind to the player's
 previous turn, usable from the loss screen; the crumble RNG stream is not
-rewound), and **Show eval bar** (player-POV score from the engine's replies
-and the cheat probes).
+rewound), **Show eval bar** (player-POV score from the engine's replies and
+the cheat probes), and **Edit enemy pieces** (testing tool: during
+placement, tap an enemy piece to pick it up, tap a square to move it, tap it
+again to remove it — the enemy king can be moved but never removed, and the
+final position is FSF-validated at Begin).

@@ -8,6 +8,8 @@
 import { splitFen, parseBoard } from './fen.mjs';
 
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const CELL = 10; // SVG units per cell (viewBox space)
 
 export class BoardUI {
   constructor(container, { files, ranks, flipped = false, onSquareTap = null } = {}) {
@@ -45,6 +47,66 @@ export class BoardUI {
         this.cells.set(sq, cell);
       }
     }
+    // Arrow overlay (hints). position:absolute lifts it out of the grid flow.
+    this.svg = document.createElementNS(SVG_NS, 'svg');
+    this.svg.classList.add('arrow-layer');
+    this.svg.setAttribute('viewBox', `0 0 ${files * CELL} ${ranks * CELL}`);
+    this.svg.setAttribute('preserveAspectRatio', 'none');
+    container.appendChild(this.svg);
+  }
+
+  /** Center of a square in viewBox units (flip-aware). */
+  #squareCenter(sq) {
+    const f = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq.slice(1), 10);
+    const col = this.flipped ? this.files - 1 - f : f;
+    const rowFromTop = this.flipped ? rank - 1 : this.ranks - rank;
+    return [col * CELL + CELL / 2, rowFromTop * CELL + CELL / 2];
+  }
+
+  /** Draw hint arrows: [{from, to, strength}] with strength ∈ (0,1] scaling
+   *  width and opacity, lichess-style. Best (strength 1) draws on top. */
+  setArrows(arrows) {
+    this.svg.textContent = '';
+    const sorted = [...arrows].sort((a, b) => a.strength - b.strength);
+    for (const { from, to, strength } of sorted) {
+      const [x1, y1] = this.#squareCenter(from);
+      const [x2, y2] = this.#squareCenter(to);
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (!len) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      const width = 1.4 + 2.0 * strength;
+      const head = width * 1.9;
+      // shaft stops where the head begins; tip pulls short of the cell center
+      const tipX = x2 - ux * CELL * 0.12;
+      const tipY = y2 - uy * CELL * 0.12;
+      const baseX = tipX - ux * head;
+      const baseY = tipY - uy * head;
+      const g = document.createElementNS(SVG_NS, 'g');
+      g.classList.add('arrow');
+      g.dataset.from = from;
+      g.dataset.to = to;
+      g.setAttribute('opacity', (0.4 + 0.5 * strength).toFixed(2));
+      const line = document.createElementNS(SVG_NS, 'line');
+      line.setAttribute('x1', x1 + ux * CELL * 0.3);
+      line.setAttribute('y1', y1 + uy * CELL * 0.3);
+      line.setAttribute('x2', baseX);
+      line.setAttribute('y2', baseY);
+      line.setAttribute('stroke-width', width);
+      const headEl = document.createElementNS(SVG_NS, 'polygon');
+      const px = -uy;
+      const py = ux;
+      headEl.setAttribute(
+        'points',
+        `${tipX},${tipY} ${baseX + px * head * 0.55},${baseY + py * head * 0.55} ${baseX - px * head * 0.55},${baseY - py * head * 0.55}`
+      );
+      g.appendChild(line);
+      g.appendChild(headEl);
+      this.svg.appendChild(g);
+    }
   }
 
   /** Render pieces + walls from a full FEN (or a bare board field). */
@@ -74,31 +136,20 @@ export class BoardUI {
     }
   }
 
-  /** Replace ALL marks. Absent keys clear their mark class.
-   *  hints: [{from, to, rank}] — cheat-mode best-move suggestions; the rank
-   *  number renders as a corner badge on the destination square. */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], hints = [] } = {}) {
+  /** Replace ALL marks. Absent keys clear their mark class; `arrows` feeds
+   *  the SVG overlay (see setArrows). */
+  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], arrows = [] } = {}) {
     const targetSet = new Set(targets);
     const lastSet = new Set(lastMove);
     const slotSet = new Set(slots);
-    const hintFrom = new Map();
-    const hintTo = new Map();
-    for (const h of hints) {
-      if (!hintFrom.has(h.from)) hintFrom.set(h.from, h.rank);
-      if (!hintTo.has(h.to)) hintTo.set(h.to, h.rank);
-    }
     for (const [sq, cell] of this.cells) {
       cell.classList.toggle('sel', sq === selected);
       cell.classList.toggle('target', targetSet.has(sq));
       cell.classList.toggle('last', lastSet.has(sq));
       cell.classList.toggle('check', sq === check);
       cell.classList.toggle('slot', slotSet.has(sq));
-      cell.classList.toggle('hint-from', hintFrom.has(sq));
-      cell.classList.toggle('hint-to', hintTo.has(sq));
-      const rank = hintTo.get(sq) ?? hintFrom.get(sq);
-      if (rank !== undefined) cell.dataset.hint = rank;
-      else delete cell.dataset.hint;
     }
+    this.setArrows(arrows);
   }
 
   /** Floor-gives-way animation; caller follows with setPosition(postFen). */

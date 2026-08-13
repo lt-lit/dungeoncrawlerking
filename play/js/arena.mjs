@@ -10,7 +10,7 @@
 // pool (§4.3 — the summoner deploys with the army; where in the back row is
 // the player's choice).
 import { catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
-import { squareName, parseSquare } from './fen.mjs';
+import { squareName, parseSquare, emptyBoard } from './fen.mjs';
 
 export const ARENA_MANIFEST = [
   'arenas/arena01-first-duel.json',
@@ -126,16 +126,12 @@ export function loadArena(json) {
   };
 
   const slots = playerSlotSquares(arena);
-  if (slots.length < 2) bad(id, `player patch keeps only ${slots.length} surviving slot(s) — need king + at least one`);
+  if (slots.length < 2) bad(id, `player back row keeps only ${slots.length} non-wall square(s) — need king + at least one`);
 
   // Disconnected arenas are the one real §6 hazard (spike 2: finite eval, no
-  // progress possible, no draw rule). Lint with a maximal player formation.
-  const probe = {};
-  const pool = ['K', ...pieceSet];
-  slots.forEach((sq, i) => {
-    if (i < pool.length) probe[sq] = pool[i];
-  });
-  const board = duelBoardFor(arena, probe);
+  // progress possible, no draw rule). The BFS treats pieces as passable, so a
+  // walls-only board is all it needs.
+  const board = composeBoard(arena, {}, {});
   if (!formationsConnected(arena, board)) bad(id, 'arena is disconnected — walls fully sever the two formations (§6 lint)');
 
   return arena;
@@ -146,71 +142,151 @@ export function playerBackRow(arena) {
   return arena.playerColor === 'white' ? 0 : arena.ranks - 1;
 }
 
-/** Surviving (non-wall) squares of the player's back-row patch, file-ascending. */
-export function playerSlotSquares(arena) {
-  const row = playerBackRow(arena);
+/** Rank-from-bottom index of the player's pawn row (second row). */
+function playerPawnRow(arena) {
+  return playerBackRow(arena) === 0 ? 1 : arena.ranks - 2;
+}
+
+function rowSquares(arena, rowRb) {
   const wallSet = new Set(arena.walls);
   const out = [];
-  for (let i = 0; i < arena.player.patchWidth; i++) {
-    const sq = squareName(arena.player.backRankStart + i, row);
+  for (let f = 0; f < arena.files; f++) {
+    const sq = squareName(f, rowRb);
     if (!wallSet.has(sq)) out.push(sq);
   }
   return out;
 }
 
-/** Map a placement (square → piece) plus the enemy formation onto white/black
- *  buildDuelBoard sides per the initiative color mapping. */
-function duelBoardFor(arena, placement) {
-  const backRank = Array(arena.player.patchWidth).fill(null);
-  for (const [sq, piece] of Object.entries(placement)) {
-    backRank[parseSquare(sq).file - arena.player.backRankStart] = piece;
-  }
-  const pRow = playerBackRow(arena);
-  const playerSide = {
-    backRank,
-    backRankStart: arena.player.backRankStart,
-    row: pRow,
-    pawnFiles: arena.player.pawnFiles ?? undefined,
-  };
-  const enemySide = {
-    backRank: arena.enemy.backRank,
-    backRankStart: arena.enemy.backRankStart,
-    row: pRow === 0 ? arena.ranks - 1 : 0,
-    pawnFiles: arena.enemy.pawnFiles ?? undefined,
-  };
-  return buildDuelBoard({
+/** Piece slots: the ENTIRE non-wall back row (placement is not patch-bound). */
+export function playerSlotSquares(arena) {
+  return rowSquares(arena, playerBackRow(arena));
+}
+
+/** Pawn-legal squares: anywhere non-wall on the player's first two rows. */
+export function playerPawnSquares(arena) {
+  return [...rowSquares(arena, playerBackRow(arena)), ...rowSquares(arena, playerPawnRow(arena))];
+}
+
+/** Scan a buildDuelBoard result into { square: PIECE } (uppercase). */
+function scanSetup(arena, board) {
+  const setup = {};
+  board.forEach((rankArr, rt) => {
+    rankArr.forEach((cell, f) => {
+      if (cell && cell !== '*') setup[squareName(f, arena.ranks - 1 - rt)] = cell.toUpperCase();
+    });
+  });
+  return setup;
+}
+
+/** Stamp one side alone and scan it. buildDuelBoard's white/black slots
+ *  encode pawn-row DIRECTION (white's pawn row is above its back row), so
+ *  the slot must follow board position — bottom formation stamps as white,
+ *  top as black — regardless of the side's actual duel color. */
+function stampSideSetup(arena, side, row) {
+  const atBottom = row === 0;
+  const board = buildDuelBoard({
     files: arena.files,
     ranks: arena.ranks,
     walls: arena.walls,
-    white: arena.playerColor === 'white' ? playerSide : enemySide,
-    black: arena.playerColor === 'white' ? enemySide : playerSide,
+    white: atBottom ? { ...side, row } : null,
+    black: atBottom ? null : { ...side, row },
   });
+  return scanSetup(arena, board);
 }
 
-/** Placement-screen preview: enemy formation + automatic pawn rows + the
- *  player's PARTIAL back rank — no validation (kingless previews are fine). */
-export function buildPreviewFen(arena, placement) {
-  return boardToFen(duelBoardFor(arena, placement));
+/** The authored enemy formation as an editable { square: piece } map —
+ *  exactly what buildDuelBoard stamps (§4.2 semantics, walls eat slots). */
+export function defaultEnemySetup(arena) {
+  const eRow = playerBackRow(arena) === 0 ? arena.ranks - 1 : 0;
+  return stampSideSetup(
+    arena,
+    {
+      backRank: arena.enemy.backRank,
+      backRankStart: arena.enemy.backRankStart,
+      pawnFiles: arena.enemy.pawnFiles ?? undefined,
+    },
+    eRow
+  );
 }
 
-/** Validate a player placement and emit the duel startFen (turn = White,
- *  §4.3: placement consumes no plies regardless of initiative). */
-export function buildStartFen(arena, placement) {
-  const slots = new Set(playerSlotSquares(arena));
+/** The authored default squares for the player's pawns. */
+export function defaultPawnSquares(arena) {
+  const setup = stampSideSetup(
+    arena,
+    {
+      backRank: Array(arena.player.patchWidth).fill(null),
+      backRankStart: arena.player.backRankStart,
+      pawnFiles: arena.player.pawnFiles ?? undefined,
+    },
+    playerBackRow(arena)
+  );
+  return Object.keys(setup);
+}
+
+/** The player's full placement pool: king + pieces + pawns. */
+export function playerPool(arena) {
+  return ['K', ...arena.player.pieceSet, ...defaultPawnSquares(arena).map(() => 'P')];
+}
+
+/** Compose the duel board from explicit square maps (no validation). */
+function composeBoard(arena, placement, enemySetup) {
+  const board = emptyBoard(arena.files, arena.ranks);
+  const put = (sq, piece, color) => {
+    const { file, rankFromBottom } = parseSquare(sq);
+    board[arena.ranks - 1 - rankFromBottom][file] = color === 'white' ? piece.toUpperCase() : piece.toLowerCase();
+  };
+  for (const w of arena.walls) {
+    const { file, rankFromBottom } = parseSquare(w);
+    board[arena.ranks - 1 - rankFromBottom][file] = '*';
+  }
+  for (const [sq, piece] of Object.entries(enemySetup)) put(sq, piece, arena.enemyColor);
+  for (const [sq, piece] of Object.entries(placement)) put(sq, piece, arena.playerColor);
+  return board;
+}
+
+/** Placement-screen preview — no validation (kingless previews are fine). */
+export function buildPreviewFen(arena, placement, enemySetup = null) {
+  return boardToFen(composeBoard(arena, placement, enemySetup ?? defaultEnemySetup(arena)));
+}
+
+const PLACEABLE = new Set(['K', 'Q', 'R', 'B', 'N', 'P']);
+
+/** Validate a player placement (+ optionally edited enemy setup) and emit the
+ *  duel startFen (turn = White, §4.3: placement consumes no plies regardless
+ *  of initiative). Pieces go on the back row; pawns anywhere on the first two
+ *  rows; the enemy may be rearranged freely but keeps exactly one king. */
+export function buildStartFen(arena, placement, enemySetup = null) {
+  const enemy = enemySetup ?? defaultEnemySetup(arena);
   const entries = Object.entries(placement);
   if (!entries.length) throw new Error('place your king first');
-  const pool = ['K', ...arena.player.pieceSet];
+  const slots = new Set(playerSlotSquares(arena));
+  const pawnSquares = new Set(playerPawnSquares(arena));
+  const pool = playerPool(arena);
   let kings = 0;
   for (const [sq, piece] of entries) {
-    if (!slots.has(sq)) throw new Error(`${sq} is not one of your slots`);
-    if (piece === 'K') kings++;
+    if (piece === 'P') {
+      if (!pawnSquares.has(sq)) throw new Error(`pawns go on your first two rows (${sq})`);
+    } else {
+      if (!slots.has(sq)) throw new Error(`pieces go on your back row (${sq})`);
+      if (piece === 'K') kings++;
+    }
     const i = pool.indexOf(piece);
-    if (i < 0) throw new Error(`${piece} is not in your piece set`);
+    if (i < 0) throw new Error(`${piece} is not in your piece pool`);
     pool.splice(i, 1);
+    if (enemy[sq]) throw new Error(`${sq} is occupied by the enemy`);
   }
   if (kings !== 1) throw new Error('your king must be placed (exactly once)');
-  const board = duelBoardFor(arena, placement);
-  return { startFen: boardToFen(board) };
+  const wallSet = new Set(arena.walls);
+  let eKings = 0;
+  for (const [sq, piece] of Object.entries(enemy)) {
+    const { file, rankFromBottom } = parseSquare(sq);
+    if (file >= arena.files || rankFromBottom >= arena.ranks) throw new Error(`enemy piece off the board (${sq})`);
+    if (wallSet.has(sq)) throw new Error(`enemy piece on a wall (${sq})`);
+    if (!PLACEABLE.has(piece)) throw new Error(`bad enemy piece "${piece}" at ${sq}`);
+    if (piece === 'K') eKings++;
+  }
+  if (eKings !== 1) throw new Error('the enemy must keep exactly one king');
+  return { startFen: boardToFen(composeBoard(arena, placement, enemy)) };
 }
 
 /** 8-directional BFS from the PLAYER's surviving formation squares to any

@@ -16,7 +16,17 @@
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { parseSquare, findSquares } from './fen.mjs';
-import { ARENA_MANIFEST, fetchArena, playerSlotSquares, buildStartFen, buildPreviewFen } from './arena.mjs';
+import {
+  ARENA_MANIFEST,
+  fetchArena,
+  playerSlotSquares,
+  playerPawnSquares,
+  playerPool,
+  defaultPawnSquares,
+  defaultEnemySetup,
+  buildStartFen,
+  buildPreviewFen,
+} from './arena.mjs';
 import { BoardUI, Tray, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 
@@ -29,7 +39,9 @@ const app = {
   ffish: null,
   engine: null,
   catalog: null,
-  cheatHintMarks: [], // current best-move suggestions (cheat mode)
+  cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength}
+  enemySetup: {}, // square -> piece letter for the enemy formation (editable in cheat mode)
+  enemySelected: null, // enemy editor: selected enemy square
   arenas: [], // loaded arena objects, menu order
   arena: null,
   boardUI: null,
@@ -82,8 +94,9 @@ function savePlacement(arena, placement) {
   }
 }
 
-/** Default placement: king nearest the patch middle, pieces by value outward
- *  (the harness's "balanced" archetype, §7). */
+/** Default placement — the authored formation: king nearest the patch
+ *  middle, pieces by value outward (the harness's "balanced" archetype, §7),
+ *  pawns at their authored squares. */
 function defaultPlacement(arena) {
   const slots = playerSlotSquares(arena); // file-ascending
   if (!slots.length) return {};
@@ -100,13 +113,16 @@ function defaultPlacement(arena) {
   pieces.slice(0, rest.length).forEach((p, i) => {
     placement[rest[i]] = p;
   });
+  for (const sq of defaultPawnSquares(arena)) {
+    if (!placement[sq]) placement[sq] = 'P';
+  }
   return placement;
 }
 
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false };
+const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false };
 
 function loadOptions() {
   try {
@@ -129,6 +145,7 @@ function saveOptions() {
 const cheatHints = () => options.cheat && options.hints;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
+const cheatEnemyEdit = () => options.cheat && options.enemyEdit;
 
 function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
@@ -136,6 +153,7 @@ function syncOptionsUI() {
   $('optHintN').value = String(options.hintN);
   $('optUndo').checked = options.undo;
   $('optEval').checked = options.evalBar;
+  $('optEnemyEdit').checked = options.enemyEdit;
   $('cheat-opts').classList.toggle('disabled', !options.cheat);
 }
 
@@ -152,8 +170,12 @@ function applyOptions() {
   syncOptionsUI();
   refreshCheatUI();
   if (!cheatHints()) {
-    app.cheatHintMarks = [];
+    app.cheatArrows = [];
     if (app.duel && app.phase !== 'placement') renderPlayMarks();
+  }
+  if (app.phase === 'placement') {
+    if (!cheatEnemyEdit()) app.enemySelected = null;
+    refreshPlacement();
   }
   if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.arena.playerColor) {
     void runCheatSearch(); // options may have just enabled hints/eval mid-turn
@@ -209,19 +231,24 @@ async function runCheatSearch() {
   if (!pvs.length) return;
   if (cheatEval()) updateEvalBar(pvs[0].score, app.arena.playerColor);
   if (cheatHints()) {
-    const hints = [];
+    // Arrow strength scales with how close each move is to the best one
+    // (lichess-style): equal → full size, 300cp worse → minimum size.
+    const cpOf = (s) => (!s ? 0 : s.type === 'mate' ? (s.value > 0 ? 10000 - s.value : -10000 - s.value) : s.value);
+    const best = cpOf(pvs[0].score);
+    const arrows = [];
     const sans = [];
     for (const pv of pvs) {
       const m = pv.move.match(UCI_MOVE_RE);
       if (!m) continue;
-      hints.push({ from: m[1], to: m[2], rank: pv.rank });
+      const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
+      arrows.push({ from: m[1], to: m[2], strength });
       try {
         sans.push(duel.board.sanMove(pv.move));
       } catch {
         sans.push(pv.move);
       }
     }
-    app.cheatHintMarks = hints;
+    app.cheatArrows = arrows;
     renderPlayMarks();
     setStatus(`your move · ${sans.join(' · ')}`);
   }
@@ -276,7 +303,7 @@ async function doUndo() {
   $('overlay').hidden = true;
   app.phase = 'playing';
   app.selectedSquare = null;
-  app.cheatHintMarks = [];
+  app.cheatArrows = [];
   app.boardUI.setPosition(duel.fen());
   renderPlayMarks();
   log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'crumble');
@@ -371,23 +398,19 @@ async function openArena(arena) {
   $('player-bar').textContent = `you · ${arena.playerColor}`;
 
   app.placement = loadSavedPlacement(arena) ?? defaultPlacement(arena);
+  app.enemySetup = defaultEnemySetup(arena);
   app.selectedTrayId = null;
+  app.enemySelected = null;
 
-  // §4.3 QoL: auto-skip when there is genuinely no choice to make.
-  const slots = playerSlotSquares(arena);
-  const noChoice = arena.player.pieceSet.length === 0 && slots.length === 1;
   refreshPlacement();
-  if (noChoice || params.get('autoplace')) {
-    if (noChoice || params.get('autobegin')) await beginDuel();
-  }
+  if (params.get('autoplace') && params.get('autobegin')) await beginDuel();
 }
 
-/** Tray model: one entry per pool piece; king first. */
+/** Tray model: one entry per pool piece (king, pieces, then pawns). */
 function trayItems() {
-  const placedBySquare = Object.entries(app.placement); // [sq, piece]
-  const pool = [{ id: 'K', piece: 'K' }, ...app.arena.player.pieceSet.map((p, i) => ({ id: `${p}${i}`, piece: p }))];
+  const pool = playerPool(app.arena).map((p, i) => ({ id: `${p}${i}`, piece: p }));
   const used = new Map(); // piece -> count placed
-  for (const [, p] of placedBySquare) used.set(p, (used.get(p) ?? 0) + 1);
+  for (const p of Object.values(app.placement)) used.set(p, (used.get(p) ?? 0) + 1);
   return pool.map((item) => {
     let state = 'available';
     const left = used.get(item.piece) ?? 0;
@@ -400,15 +423,34 @@ function trayItems() {
   });
 }
 
+function selectedTrayPiece() {
+  return app.selectedTrayId ? app.selectedTrayId.replace(/\d+$/, '') : null;
+}
+
+/** Squares where the currently selected tray piece may go (empty, right rows). */
+function legalDropSquares(piece) {
+  const arena = app.arena;
+  const occupied = (sq) => app.placement[sq] || app.enemySetup[sq];
+  const base = piece === 'P' ? playerPawnSquares(arena) : piece ? playerSlotSquares(arena) : playerPawnSquares(arena);
+  return base.filter((sq) => !occupied(sq));
+}
+
 function refreshPlacement() {
   const arena = app.arena;
-  app.boardUI.setPosition(buildPreviewFen(arena, app.placement));
-  app.boardUI.setMarks({ slots: playerSlotSquares(arena).filter((sq) => !app.placement[sq]) });
+  app.boardUI.setPosition(buildPreviewFen(arena, app.placement, app.enemySetup));
+  app.boardUI.setMarks({
+    slots: legalDropSquares(selectedTrayPiece()),
+    selected: app.enemySelected ?? undefined,
+  });
   app.tray.setPieces(trayItems());
   app.boardUI.setInteractive(true);
   const hasKing = Object.values(app.placement).includes('K');
   $('btnBegin').disabled = !hasKing;
-  setStatus(hasKing ? 'place your pieces — then begin' : 'place your king');
+  if (app.enemySelected) {
+    setStatus('tap a square to move the enemy piece — tap it again to remove it');
+  } else {
+    setStatus(hasKing ? 'place your pieces — then begin' : 'place your king');
+  }
 }
 
 function onTrayTap(id) {
@@ -417,20 +459,62 @@ function onTrayTap(id) {
   const item = items.find((x) => x.id === id);
   if (!item || item.state === 'placed') return;
   app.selectedTrayId = app.selectedTrayId === id ? null : id;
+  app.enemySelected = null;
   refreshPlacement();
 }
 
+/** Enemy formation editor (cheat mode, testing tool): tap an enemy piece to
+ *  pick it up, tap a square to move it, tap it again to remove it. The king
+ *  can be moved but never removed (the duel config needs both kings). */
+function enemyEditTap(sq) {
+  const wallSet = new Set(app.arena.walls);
+  if (app.enemySelected) {
+    if (sq === app.enemySelected) {
+      if (app.enemySetup[sq] === 'K') {
+        app.enemySelected = null;
+        refreshPlacement();
+        setStatus('the enemy king must stay on the board');
+        return true;
+      }
+      delete app.enemySetup[sq]; // second tap removes
+      app.enemySelected = null;
+      refreshPlacement();
+      return true;
+    }
+    if (app.enemySetup[sq]) {
+      app.enemySelected = sq; // re-select another enemy piece
+      refreshPlacement();
+      return true;
+    }
+    if (!wallSet.has(sq) && !app.placement[sq]) {
+      app.enemySetup[sq] = app.enemySetup[app.enemySelected];
+      delete app.enemySetup[app.enemySelected];
+      app.enemySelected = null;
+      refreshPlacement();
+      return true;
+    }
+    return true; // wall / player-occupied — ignore the tap, keep selection
+  }
+  if (app.enemySetup[sq]) {
+    app.enemySelected = sq;
+    app.selectedTrayId = null;
+    refreshPlacement();
+    return true;
+  }
+  return false;
+}
+
 function placementTap(sq) {
-  const slots = playerSlotSquares(app.arena);
-  if (!slots.includes(sq)) return;
+  if (cheatEnemyEdit() && enemyEditTap(sq)) return;
   const existing = app.placement[sq];
-  if (app.selectedTrayId) {
-    const piece = app.selectedTrayId === 'K' ? 'K' : app.selectedTrayId.replace(/\d+$/, '');
+  const piece = selectedTrayPiece();
+  if (piece) {
+    if (!legalDropSquares(piece).includes(sq)) return;
     // A king may only exist once: placing it elsewhere moves it.
     if (piece === 'K') {
       for (const [s, p] of Object.entries(app.placement)) if (p === 'K') delete app.placement[s];
     }
-    app.placement[sq] = piece; // replaces any occupant (it returns to the tray)
+    app.placement[sq] = piece;
     app.selectedTrayId = null;
   } else if (existing) {
     delete app.placement[sq]; // pick the piece back up
@@ -471,9 +555,14 @@ async function beginDuel() {
   const arena = app.arena;
   let startFen;
   try {
-    ({ startFen } = buildStartFen(arena, app.placement));
+    ({ startFen } = buildStartFen(arena, app.placement, app.enemySetup));
   } catch (e) {
     setStatus(e.message);
+    return;
+  }
+  // The enemy editor can craft positions FSF rejects — check before starting.
+  if (app.ffish.validateFen(startFen, arena.variantName) !== 1) {
+    setStatus('illegal position — adjust the setup');
     return;
   }
   savePlacement(arena, app.placement);
@@ -488,7 +577,7 @@ async function beginDuel() {
     cadence: intParam('cadence', arena.crumble.cadence, 0),
     seed: intParam('seed', arena.crumble.seed, 1),
   };
-  app.cheatHintMarks = [];
+  app.cheatArrows = [];
   $('eval-fill').style.width = '50%';
   $('eval-text').textContent = '';
   if (app.duel) app.duel.destroy();
@@ -530,9 +619,9 @@ async function driveTurn() {
   }
 }
 
-/** Compose all in-play board marks (selection, last move, check, hints). */
+/** Compose all in-play board marks (selection, last move, check, arrows). */
 function renderPlayMarks() {
-  const marks = { lastMove: lastMoveMarks(), check: checkMark(), hints: app.cheatHintMarks };
+  const marks = { lastMove: lastMoveMarks(), check: checkMark(), arrows: app.cheatArrows };
   if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
     marks.selected = app.selectedSquare;
     marks.targets = targetsFor(app.selectedSquare);
@@ -606,7 +695,7 @@ async function playPlayerMove(from, to, matches) {
 let lastEngineInfo = null;
 
 async function onMove({ san, mover, ply }) {
-  app.cheatHintMarks = []; // stale the moment the position changes
+  app.cheatArrows = []; // stale the moment the position changes
   app.boardUI.setPosition(app.duel.fen());
   renderPlayMarks();
   const n = Math.ceil(ply / 2);
@@ -694,7 +783,9 @@ async function onEnd({ result, winner, termination }) {
 $('btnBegin').addEventListener('click', beginDuel);
 $('btnResetPlacement').addEventListener('click', () => {
   app.placement = defaultPlacement(app.arena);
+  app.enemySetup = defaultEnemySetup(app.arena);
   app.selectedTrayId = null;
+  app.enemySelected = null;
   refreshPlacement();
 });
 $('btnBack').addEventListener('click', () => {
@@ -720,7 +811,7 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar']]) {
+for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optEnemyEdit', 'enemyEdit']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
