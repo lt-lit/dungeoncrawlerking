@@ -1,0 +1,20 @@
+{
+  "name": "tiny",
+  "go": "movetime 80",
+  "maxPlies": 300,
+  "evalDeadband": 50,
+  "crumble": { "onsetPly": 30, "cadence": 6 },
+  "seeds": 1,
+  "baseSeed": 1000,
+  "axes": {
+    "widths": [4],
+    "gaps": [3],
+    "wallDensities": [0, 0.2],
+    "matchups": [
+      {
+        "white": { "comp": "mixed3", "arch": "balanced" },
+        "black": { "comp": "mixed3", "arch": "balanced" }
+      }
+    ]
+  }
+}
