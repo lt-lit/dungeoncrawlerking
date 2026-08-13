@@ -3,8 +3,21 @@
 // The ffish Board is the source of truth for legality and game end; the
 // engine is queried per ply with `position fen <base> moves <since-base>` so
 // its repetition history matches the harness's (history resets on crumble).
-import { CrumbleController, applyCrumble, validateCrumbleCandidate } from './crumble.mjs';
+import { CrumbleController, applyCrumble } from './crumble.mjs';
+// Spike 12's validated filter (exposure via turn-flip + isCheck; instant-end
+// via numberLegalMoves===0 and result(false)) — see results/spike12-crumble-filter.md
+import { validateCrumbleCandidate } from '../spikes/crumbleFilter.mjs';
 import { findSquares } from '../lib/fen.mjs';
+
+/**
+ * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
+ * condition (checkmate or stalemate — both decisive under stalemateValue=loss).
+ * ffish's isGameOver()/result() draw-adjudicate bare-kings insufficient
+ * material even under the no-draw config, so they must not drive the loop.
+ */
+function gameEnded(board) {
+  return board.numberLegalMoves() === 0;
+}
 
 const MATE_SENTINEL = 100000;
 
@@ -70,7 +83,7 @@ export async function playGame({ engine, ffish, arena, opts }) {
     crumbler.recordPosition(board.fen());
     let ply = 0;
     while (ply < opts.maxPlies) {
-      if (board.isGameOver()) break;
+      if (gameEnded(board)) break;
 
       const whiteToMove = board.turn();
       engine.position({ fen: baseFen, moves: movesSinceBase });
@@ -99,7 +112,7 @@ export async function playGame({ engine, ffish, arena, opts }) {
       record.plies = ply;
       lastEval = evalWhite;
 
-      if (board.isGameOver()) break;
+      if (gameEnded(board)) break;
 
       // --- crumble phase (between plies) ---
       const fenNow = board.fen();
@@ -131,7 +144,7 @@ export async function playGame({ engine, ffish, arena, opts }) {
           record.anomalies.push(`ply ${ply}: crumble ${crumbleEvent.type}@${crumbleEvent.square} produced invalid FEN — skipped`);
         } else {
           const next = new ffish.Board(variantName, postFen);
-          if (next.legalMoves().trim() === '' || next.isGameOver()) {
+          if (next.numberLegalMoves() === 0) {
             // Repetition crumbles are deterministic and may legitimately end
             // things via stalemate-as-loss; record it and let the result stand.
             if (crumbleEvent.type === 'repetition') {
@@ -164,11 +177,11 @@ export async function playGame({ engine, ffish, arena, opts }) {
 
     if (record.error) {
       // engine/ffish desync — already recorded
-    } else if (board.isGameOver()) {
-      record.result = board.result();
+    } else if (gameEnded(board)) {
+      record.result = board.result(false);
       record.winner = record.result === '1-0' ? 'white' : record.result === '0-1' ? 'black' : record.result;
-      if (record.result === '1/2-1/2') {
-        record.anomalies.push('DRAW RESULT under no-draw config — investigate');
+      if (record.result === '1/2-1/2' || record.result === '*') {
+        record.anomalies.push(`terminal result "${record.result}" under no-draw config — investigate`);
       }
     } else {
       record.error = `max-plies (${opts.maxPlies}) reached without termination`;

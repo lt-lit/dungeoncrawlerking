@@ -2,6 +2,7 @@
 // orchestration-layer arena regeneration. The harness rewrites the FEN
 // between plies; every state the engine sees is FSF-pure.
 import { splitFen, setSquare, clearEp, findSquares, squareName } from '../lib/fen.mjs';
+
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 
 /** Position key for repetition tracking: board + turn + ep (castling is always '-'). */
@@ -10,49 +11,8 @@ export function positionKey(fen) {
   return `${f.board} ${f.turn} ${f.ep}`;
 }
 
-/**
- * §4.5 legality filter: candidate collapse squares are validated with ffish
- * before they collapse. Reject candidates that:
- *  - are either king's current square (pacing crumbles never target kings),
- *  - would leave the side-not-to-move's king immediately capturable
- *    (a duel must never be decided by a dice roll in one ply),
- *  - would instantly end the game (checkmate or stalemate),
- *  - produce a position ffish rejects outright.
- * Returns { ok, reason, postFen }.
- */
-export function validateCrumbleCandidate(ffish, variantName, fen, square) {
-  const kings = findSquares(fen, (c) => c === 'K' || c === 'k').map((s) => s.name);
-  if (kings.includes(square)) return { ok: false, reason: 'king-square' };
-  let postFen;
-  try {
-    postFen = clearEp(setSquare(fen, square, '*'));
-  } catch (e) {
-    return { ok: false, reason: `fen-edit-failed: ${e.message}` };
-  }
-  let board = null;
-  try {
-    if (ffish.validateFen(postFen, variantName) < 0) {
-      return { ok: false, reason: 'invalid-fen' };
-    }
-    board = new ffish.Board(variantName, postFen);
-    // Exposed king: any legal move for the side to move that lands on the
-    // enemy king's square means the duel could be decided in one ply.
-    const enemyKingChar = splitFen(postFen).turn === 'w' ? 'k' : 'K';
-    const enemyKing = findSquares(postFen, (c) => c === enemyKingChar)[0];
-    if (!enemyKing) return { ok: false, reason: 'king-vanished' };
-    const moves = board.legalMoves().trim().split(/\s+/).filter(Boolean);
-    if (moves.length === 0) return { ok: false, reason: 'instant-stalemate-or-mate' };
-    if (board.isGameOver()) return { ok: false, reason: 'instant-game-over' };
-    if (moves.some((m) => m.slice(2, 4) === enemyKing.name || m.slice(2).startsWith(enemyKing.name))) {
-      return { ok: false, reason: 'exposes-king' };
-    }
-    return { ok: true, postFen };
-  } catch (e) {
-    return { ok: false, reason: `ffish-error: ${e.message}` };
-  } finally {
-    if (board) board.delete();
-  }
-}
+// NOTE: candidate legality filtering lives in spikes/crumbleFilter.mjs
+// (spike 12's validated implementation) — the harness imports it directly.
 
 /**
  * Per-game crumble controller. Tracks position occurrences for repetition

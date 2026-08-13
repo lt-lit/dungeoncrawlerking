@@ -18,10 +18,14 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     maxRank: String(ranks),
     maxFile: String(files),
     castling: 'false',
-    // No draws, ever (§4.4)
+    // No draws, ever (§4.4). nFoldRule=0 kills repetition adjudication;
+    // nFoldValue=loss additionally disables the engine's PRIVATE in-search
+    // repetition draw-scoring (spike 10: without it, a losing engine holds
+    // its eval at 0.00 by shuffling — "Plan A-prime" config).
     stalemateValue: 'loss',
     nMoveRule: '0',
     nFoldRule: '0',
+    nFoldValue: 'loss',
     // Dual loss condition: checkmate OR king capture (§4.4, spike 4)
     extinctionValue: 'loss',
     extinctionPieceTypes: 'k',
