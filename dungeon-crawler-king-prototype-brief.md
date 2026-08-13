@@ -76,7 +76,7 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 - **No draws, ever `[LOCKED]`.** Every duel ends in a win or a loss. The config closes every draw door FSF knows about:
   - `stalemateValue = loss` — a king with no legal moves loses, both sides: the floor gives way beneath him (§4.5).
   - `nMoveRule = 0` — no move-count draw clock.
-  - `nFoldRule = 0` — repetition never adjudicates a result. Repetition is handled *physically* by the crumble system (§4.5). `[PROVISIONAL config, pending spike 10 — if the engine's in-search repetition scoring can't be disabled, fall back to plan B in spike 10]`
+  - `nFoldRule = 0` **+ `nFoldValue = loss`** — repetition never adjudicates a result. Repetition is handled *physically* by the crumble system (§4.5). `[RESOLVED by spike 10 — "A-prime":` `nFoldRule = 0` alone is insufficient (the engine privately draw-scores repetition lines in search); adding `nFoldValue = loss` disables that scoring path while rule 0 keeps adjudication dead. The spike's Plan B as written below is refuted — do not ship it (parity exploit: a losing engine chases repetitions as wins). Crumble still fires on the 3rd occurrence. Details: `phase0/results/spike10-repetition-scoring.md`.`]`
   - Insufficient-material and fortress states resolve via §4.5: arenas that can't produce a result stop existing.
 - **Promotion region = enemy back rank** (per-color `promotionRegion`). March a pawn onto their home row and it transforms. Promotion piece targets `[OPEN]`.
 - **Initiative:** whichever side's move *completes* the legal duel condition plays White. Ambusher moves first; a player who deliberately steps into alignment holds White.
@@ -198,6 +198,8 @@ The central unknown of the whole design is **material budget**. It is empiricall
 
 ## 9. Phase 0 Spike List
 
+**Status: all 12 spikes complete and verified — verdicts, configs, and the findings the design must absorb are in `phase0/PHASE0-RESULTS.md`.** The list below is preserved as originally written; where a spike's "expected answer" was wrong, the results doc wins (notably spike 10 — see §4.4).
+
 Cheap fairyground / ffish.js checks. All load-bearing — do these before building systems on top of them.
 
 1. **Per-duel runtime variant loading.** Generate a variants.ini snippet + startFen per encounter and load it (ffish `loadVariantConfig` / engine option). Measure cost & correctness of doing this every fight.
@@ -217,7 +219,7 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 
 ## 10. Build Phases
 
-- **Phase 0 — Spikes + harness skeleton.** Everything in §9; harness able to run one sweep end-to-end.
+- **Phase 0 — Spikes + harness skeleton.** Everything in §9; harness able to run one sweep end-to-end. **✅ Done — `phase0/PHASE0-RESULTS.md`.**
 - **Phase 1 — Duel vertical slice.** Hand-authored arena JSON → variant config + FEN → playable duel vs. engine on a phone. Placement UI, win/loss, promotion. No overworld.
 - **Phase 2 — Exploration slice.** One hand-built map, two summoners with different levels. LOS/hunt/pursuit state machine, threat display, trigger → barrier → FEN pipeline proven end to end.
 - **Phase 3 — The loop.** Rewards, collection, level scaling from sweep data, floor transitions. First full runs.
