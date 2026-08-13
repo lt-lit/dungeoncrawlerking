@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "arena03-clipped-vault",
+  "title": "The Clipped Vault",
+  "intro": "A collapsed vault clips your ground — one of your slots is rubble. The warden fields two rooks and a queen.",
+  "files": 8,
+  "ranks": 7,
+  "walls": ["e1", "c4", "f4", "d6"],
+  "enemy": { "backRank": ["R", "Q", "K", "N", "R"], "backRankStart": 2 },
+  "player": { "pieceSet": ["Q", "R", "B", "N"], "backRankStart": 2, "patchWidth": 5 },
+  "initiative": "player",
+  "crumble": { "onsetPly": 50, "cadence": 10, "seed": 303 }
+}

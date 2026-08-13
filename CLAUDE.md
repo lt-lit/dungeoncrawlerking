@@ -3,12 +3,19 @@
 Design source of truth: `dungeon-crawler-king-prototype-brief.md`.
 Phase 0 (spikes + calibration harness) is **complete** — read
 `phase0/PHASE0-RESULTS.md` before touching anything engine-related; it
-summarizes 12 verified spikes and the sweep results. Next per brief §10:
-**Phase 1 — duel vertical slice** (hand-authored arena → playable duel vs
-engine on a phone; placement UI, win/loss, promotion; no overworld).
+summarizes 12 verified spikes and the sweep results. **Phase 1 — the duel
+vertical slice — is built and lives in `play/`** (hand-authored arena →
+playable duel vs engine on a phone; placement UI, win/loss, promotion, live
+crumbles; no overworld). See `play/README.md` for its layout and the arena
+JSON schema. Next per brief §10: **Phase 2 — exploration slice**.
 
 ## Layout
 
+- `play/` — the Phase 1 game (vanilla-JS ES modules, GitHub Pages). Phase 0
+  modules are ported verbatim into `play/js/`; `play/vendor/` carries its own
+  copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
+  `play/index.html` (rule 10). `play/selftest.html` is the in-browser infra
+  cross-check — keep it PASSing.
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)

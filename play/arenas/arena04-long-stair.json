@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "arena04-long-stair",
+  "title": "The Long Stair",
+  "intro": "A narrow stairway hall, ten ranks deep. Rook country — whoever rules the files rules the fight.",
+  "files": 4,
+  "ranks": 10,
+  "walls": ["b5", "c7"],
+  "enemy": { "backRank": ["R", "K", null, "R"], "backRankStart": 0 },
+  "player": { "pieceSet": ["R", "R", "N"], "backRankStart": 0, "patchWidth": 4 },
+  "initiative": "player",
+  "crumble": { "onsetPly": 50, "cadence": 12, "seed": 404 }
+}

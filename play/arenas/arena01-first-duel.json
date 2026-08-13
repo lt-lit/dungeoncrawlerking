@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "arena01-first-duel",
+  "title": "First Duel",
+  "intro": "An open hall, even ground, even steel. You caught the summoner's eye — the barrier is yours to spring.",
+  "files": 5,
+  "ranks": 8,
+  "walls": [],
+  "enemy": { "backRank": ["R", "N", "K", "B", null], "backRankStart": 0 },
+  "player": { "pieceSet": ["R", "N", "B"], "backRankStart": 0, "patchWidth": 5 },
+  "initiative": "player",
+  "crumble": { "onsetPly": 60, "cadence": 12, "seed": 101 }
+}

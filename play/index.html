@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dungeon Crawler King — Duel</title>
+<!-- coi-serviceworker MUST load first and sit NEXT TO this file (service
+     worker scope): the pthread engine build needs SharedArrayBuffer, so the
+     page must be cross-origin isolated. Self-reloads once on first visit. -->
+<script src="coi-serviceworker.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topbar">
+  <button id="btnBack" hidden aria-label="Back to arenas">&#8592;</button>
+  <h1 id="title">Dungeon Crawler King</h1>
+  <div id="status" aria-live="polite">loading&#8230;</div>
+</header>
+
+<main id="app">
+  <section id="screen-menu" class="screen">
+    <p id="menu-intro">Duel vertical slice &#8212; choose an arena.</p>
+    <div id="arena-list"></div>
+    <div id="boot-log" class="log"></div>
+  </section>
+
+  <section id="screen-duel" class="screen" hidden>
+    <div id="enemy-bar" class="side-bar"></div>
+    <div id="board"></div>
+    <div id="player-bar" class="side-bar"></div>
+    <div id="tray"></div>
+    <div id="placement-controls" hidden>
+      <button id="btnBegin" class="primary" disabled>Begin duel</button>
+      <button id="btnResetPlacement">Reset</button>
+    </div>
+    <div id="duel-log" class="log"></div>
+  </section>
+</main>
+
+<div id="overlay" hidden>
+  <div id="overlay-card">
+    <h2 id="overlay-title"></h2>
+    <p id="overlay-detail"></p>
+    <button id="btnAgain" class="primary">Play again</button>
+    <button id="btnMenu">Back to arenas</button>
+  </div>
+</div>
+
+<script>
+  // ffish.js is a classic (non-MODULARIZE) Emscripten build: it claims the
+  // global `Module`, auto-runs on script load, and fetches ffish.wasm relative
+  // to its own script URL. Pre-seed Module with the ready callback BEFORE the
+  // script tag; the initialized Module object IS the ffish API.
+  window.__ffishPromise = new Promise(function (resolve, reject) {
+    window.Module = {
+      onRuntimeInitialized: function () { resolve(window.Module); },
+      onAbort: function (reason) { reject(new Error('ffish abort: ' + reason)); },
+    };
+  });
+</script>
+<script src="vendor/ffish.js"></script>
+<!-- stockfish.js is MODULARIZE: exposes the global Stockfish() factory only. -->
+<script src="vendor/stockfish.js"></script>
+<script type="module" src="js/main.mjs"></script>
+</body>
+</html>
