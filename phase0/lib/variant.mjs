@@ -33,6 +33,11 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     // Promotion region = enemy back rank (§4.4, spike 5)
     promotionRegionWhite: `*${ranks}`,
     promotionRegionBlack: '*1',
+    // Symmetric pawn double-step from each side's pawn row (spike 7: the
+    // default doubleStepRegionBlack is literal *7, which misses black's pawn
+    // row on every board that isn't 8 ranks — silent formation asymmetry).
+    doubleStepRegionWhite: '*2',
+    doubleStepRegionBlack: `*${ranks - 1}`,
     ...extra,
   };
   const lines = [`[${name}:chess]`];

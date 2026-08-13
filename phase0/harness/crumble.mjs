@@ -52,8 +52,10 @@ export class CrumbleController {
    */
   repetitionCrumble(occurrences, lastMove) {
     if (occurrences < this.repetitionThreshold) return null;
-    const from = lastMove.slice(0, 2);
-    return { type: 'repetition', square: from };
+    // UCI squares are 3 chars on 10-rank boards (e.g. 'f10g8'): parse, don't slice.
+    const m = lastMove.match(/^([a-l](?:10|[1-9]))/);
+    if (!m) return null;
+    return { type: 'repetition', square: m[1] };
   }
 
   /**

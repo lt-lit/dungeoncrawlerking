@@ -36,7 +36,7 @@ Config matrix as generated variants (all on the `makeDuelVariantIni` baseline: `
 
 **5. History reset on position surgery (crumble mechanics, engine side).** Same board position (B1), `duelb` config: reached via 7 plies of real history → **mate +1** (forced reply completes a real 3-fold); as a bare `position fen` root → **mate +6**. Sending the 7-ply history and then immediately a bare `position fen` **without `ucinewgame`** gives mate +6 ⇒ **a bare `position fen` fully resets repetition history**. TT probe: no-clear vs clean-hash searches agree — no stale adjudication leaked through the transposition table in this test.
 
-**6. lib note (no lib edits made):** `lib/variant.mjs makeDuelVariantIni` baseline emits `nFoldRule = 0` with no `nFoldValue` — i.e. the dead Plan A config. Until lib is updated, every caller must pass `extra: { nFoldValue: 'loss' }`.
+**6. lib note:** RESOLVED — `lib/variant.mjs makeDuelVariantIni` now emits `nFoldValue = loss` in the baseline (A-prime is the default for every generated duel variant). The spike script pins its Plan A demonstration variant to the historical config (`extra: { nFoldValue: 'draw' }`) so the dead-config evidence keeps reproducing.
 
 ## Verdict
 

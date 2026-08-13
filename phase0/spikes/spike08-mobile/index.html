@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCK Spike 8 — Mobile Engine Bench</title>
+<script src="coi-serviceworker.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #14151a; color: #e8e8e8; }
+  h1 { font-size: 1.1rem; }
+  button { font-size: 1rem; padding: .7rem 1.2rem; margin: .25rem .25rem .25rem 0; border-radius: .5rem; border: 1px solid #555; background: #26304a; color: #fff; }
+  button:disabled { opacity: .4; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: .85rem; }
+  th, td { border: 1px solid #444; padding: .35rem .5rem; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  #log { font-family: monospace; font-size: .75rem; white-space: pre-wrap; background: #1d1e24; padding: .5rem; border-radius: .5rem; margin-top: 1rem; max-height: 12rem; overflow-y: auto; }
+  .ok { color: #7fd77f; } .bad { color: #ff8a8a; }
+</style>
+</head>
+<body>
+<h1>Dungeon Crawler King — Spike 8 mobile engine benchmark</h1>
+<div id="env"></div>
+<button id="btnInit">1. Init engine</button>
+<button id="btnBench" disabled>2. Run benchmark</button>
+<table id="results" hidden>
+  <thead><tr><th>arena</th><th>movetime ms</th><th>depth</th><th>nodes</th><th>nps</th></tr></thead>
+  <tbody></tbody>
+</table>
+<div id="log"></div>
+<script src="bench-data.js"></script>
+<script>
+const log = (msg, cls) => {
+  const el = document.getElementById('log');
+  el.innerHTML += (cls ? `<span class="${cls}">${msg}</span>` : msg) + '\n';
+  el.scrollTop = el.scrollHeight;
+};
+document.getElementById('env').textContent =
+  `UA: ${navigator.userAgent} · cores: ${navigator.hardwareConcurrency} · crossOriginIsolated: ${window.crossOriginIsolated}`;
+if (!window.crossOriginIsolated) {
+  log('crossOriginIsolated = false — SharedArrayBuffer unavailable. coi-serviceworker should fix this after ONE reload (it self-reloads). If this persists: serve over https or localhost.', 'bad');
+}
+
+let sf = null;
+let listeners = [];
+function onLine(line) { listeners.forEach((l) => l(line)); }
+function send(cmd) { sf.postMessage(cmd); }
+function until(cmd, pred, timeout = 120000) {
+  return new Promise((resolve, reject) => {
+    const got = [];
+    const fn = (line) => {
+      got.push(line);
+      if (pred(line)) { listeners = listeners.filter((x) => x !== fn); clearTimeout(t); resolve(got); }
+    };
+    const t = setTimeout(() => { listeners = listeners.filter((x) => x !== fn); reject(new Error('timeout: ' + cmd)); }, timeout);
+    listeners.push(fn);
+    if (cmd) send(cmd);
+  });
+}
+
+document.getElementById('btnInit').onclick = async () => {
+  const btn = document.getElementById('btnInit');
+  btn.disabled = true;
+  try {
+    const t0 = performance.now();
+    sf = await Stockfish();
+    sf.addMessageListener(onLine);
+    await until('uci', (l) => l === 'uciok');
+    send('setoption name Use NNUE value false');
+    const initMs = Math.round(performance.now() - t0);
+    log(`engine init -> uciok: ${initMs}ms`, 'ok');
+    // load all benchmark variants
+    const ini = window.BENCH_DATA.map((a) => a.ini).join('\n');
+    sf.FS.writeFile('/variants.ini', ini);
+    send('setoption name VariantPath value /variants.ini');
+    await until('isready', (l) => l === 'readyok');
+    log('variants loaded', 'ok');
+    document.getElementById('btnBench').disabled = false;
+  } catch (e) {
+    log('INIT FAILED: ' + e.message, 'bad');
+    log('If SharedArrayBuffer is the error: the page must be crossOriginIsolated (see note above).', 'bad');
+    btn.disabled = false;
+  }
+};
+
+document.getElementById('btnBench').onclick = async () => {
+  const btn = document.getElementById('btnBench');
+  btn.disabled = true;
+  const tbody = document.querySelector('#results tbody');
+  document.getElementById('results').hidden = false;
+  for (const arena of window.BENCH_DATA) {
+    send(`setoption name UCI_Variant value ${arena.variantName}`);
+    await until('isready', (l) => l === 'readyok');
+    for (const mt of [200, 500, 1000]) {
+      send('ucinewgame');
+      await until('isready', (l) => l === 'readyok');
+      send(`position fen ${arena.startFen}`);
+      const lines = await until(`go movetime ${mt}`, (l) => l.startsWith('bestmove'));
+      let depth = 0, nodes = 0;
+      for (const l of lines) {
+        const dm = l.match(/^info depth (\d+)/); if (dm) depth = +dm[1];
+        const nm = l.match(/nodes (\d+)/); if (nm) nodes = +nm[1];
+      }
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${arena.label}</td><td>${mt}</td><td>${depth}</td><td>${nodes}</td><td>${Math.round(nodes / (mt / 1000))}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+  log('benchmark complete. Pass thresholds (phone): init < 3000ms, standard arena depth >= 10 at 500ms.', 'ok');
+  btn.disabled = false;
+};
+</script>
+<script src="vendor/stockfish.js"></script>
+</body>
+</html>
