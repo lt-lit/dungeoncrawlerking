@@ -54,9 +54,17 @@ no design change.
   every rule except board dims lives in the FEN, so `duel_3x6`…`duel_12x10`
   (files 3–12 × ranks 6–10) covers every possible arena. One variants.ini,
   loaded once at boot in <1 s combined. Per-duel loading cost: zero.
-- **Game end must be read as `numberLegalMoves() === 0` then `result(false)`**
-  (spike 11): ffish's `isGameOver()` draw-adjudicates bare-kings insufficient
-  material even under the no-draw config.
+- **Game end protocol: `numberLegalMoves() === 0` → the side to move loses.**
+  Spike 11 found `isGameOver()` draw-adjudicates bare-kings insufficient
+  material under the no-draw config; the sweep then showed `result(false)` does
+  too — it labels a walls-sealed bare-king stalemate "1/2-1/2", masking
+  `stalemateValue=loss`. But under the duel config every zero-moves state is a
+  mover-loss (checkmate, stalemate-as-loss, post-king-capture alike), so game
+  code derives the result itself and ignores ffish's draw labels entirely.
+  Note the positive side of the same sweep games: open K-vs-K *keeps generating
+  moves*, the duels continued under crumble pressure, and each ended when a
+  crumble sealed a king — the §4.5 termination guarantee observed working
+  end-to-end, three times.
 - **King-en-prise states degrade gracefully** (spike 4): if the crumble filter
   ever misses an exposure, the position is "ongoing", king capture is a legal
   move, and capturing ends the game with the correct extinction result. Belt and

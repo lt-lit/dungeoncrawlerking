@@ -178,10 +178,20 @@ export async function playGame({ engine, ffish, arena, opts }) {
     if (record.error) {
       // engine/ffish desync — already recorded
     } else if (gameEnded(board)) {
-      record.result = board.result(false);
-      record.winner = record.result === '1-0' ? 'white' : record.result === '0-1' ? 'black' : record.result;
-      if (record.result === '1/2-1/2' || record.result === '*') {
-        record.anomalies.push(`terminal result "${record.result}" under no-draw config — investigate`);
+      // Under the duel config, numberLegalMoves()===0 always means the side
+      // to move LOSES: checkmate (mover mated), stalemate (stalemateValue=
+      // loss — the floor gives way), and post-king-capture states (mover has
+      // no king) all reduce to mover-loses. Derive the result directly —
+      // ffish's result(false) reports "1/2-1/2" for bare-kings stalemates
+      // because its insufficient-material adjudication masks the variant's
+      // stalemate rule.
+      const whiteToMove = board.turn();
+      record.result = whiteToMove ? '0-1' : '1-0';
+      record.winner = whiteToMove ? 'black' : 'white';
+      record.termination = board.isCheck() ? 'checkmate' : 'stalemate-or-extinction';
+      record.ffishResult = board.result(false);
+      if (record.ffishResult !== record.result && record.ffishResult !== '1/2-1/2') {
+        record.anomalies.push(`ffish result(false)="${record.ffishResult}" disagrees with derived "${record.result}"`);
       }
     } else {
       record.error = `max-plies (${opts.maxPlies}) reached without termination`;
