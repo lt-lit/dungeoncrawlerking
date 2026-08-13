@@ -55,9 +55,24 @@ console.log(`sweep "${cfg.name}": ${points.length} config points x ${cfg.seeds} 
 console.log(`go: ${cfg.go}; crumble: ${JSON.stringify(cfg.crumble ?? null)}; out: ${outPath}`);
 
 const ffish = await loadFfish();
-const engine = await loadEngine();
-await engine.uci();
-engine.setoption('Use NNUE', 'false');
+
+// The WASM engine has bounded instance longevity: sustained multi-game use
+// eventually corrupts the pthread heap ("memory access out of bounds" after
+// ~110 games observed). Recycle instances periodically and on crash — live
+// game code should do the same between duels (init is ~1s).
+const GAMES_PER_ENGINE = 40;
+let engine = null;
+let gamesOnEngine = 0;
+let catalogIni = null;
+async function freshEngine() {
+  engine = await loadEngine();
+  await engine.uci();
+  engine.setoption('Use NNUE', 'false');
+  if (catalogIni) await engine.loadVariantsIni(catalogIni);
+  gamesOnEngine = 0;
+  return engine;
+}
+await freshEngine();
 
 // Pre-generate all arenas so one variants.ini covers every (files, ranks)
 // the sweep needs — loaded once. All other variation lives in the FEN.
@@ -68,30 +83,47 @@ for (const point of points) {
     jobs.push({ point, seed, arena: buildArena(point, seed) });
   }
 }
-const ini = collectVariantsIni(jobs.map((j) => j.arena));
-ffish.loadVariantConfig(ini);
-await engine.loadVariantsIni(ini);
+catalogIni = collectVariantsIni(jobs.map((j) => j.arena));
+ffish.loadVariantConfig(catalogIni);
+await engine.loadVariantsIni(catalogIni);
 
 const out = fs.createWriteStream(outPath);
 const started = Date.now();
 let done = 0;
 const records = [];
 for (const job of jobs) {
-  engine.setoption('UCI_Variant', job.arena.variantName);
-  await engine.isready();
+  if (gamesOnEngine >= GAMES_PER_ENGINE) {
+    console.log(`(recycling engine after ${gamesOnEngine} games)`);
+    await freshEngine();
+  }
   const t0 = Date.now();
-  const record = await playGame({
-    engine,
-    ffish,
-    arena: job.arena,
-    opts: {
-      go: cfg.go,
-      maxPlies: cfg.maxPlies ?? 400,
-      crumble: cfg.crumble,
-      seed: job.seed,
-      evalDeadband: cfg.evalDeadband ?? 50,
-    },
-  });
+  const opts = {
+    go: cfg.go,
+    maxPlies: cfg.maxPlies ?? 400,
+    crumble: cfg.crumble,
+    seed: job.seed,
+    evalDeadband: cfg.evalDeadband ?? 50,
+  };
+  let record;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      engine.setoption('UCI_Variant', job.arena.variantName);
+      await engine.isready();
+      record = await playGame({ engine, ffish, arena: job.arena, opts });
+      break;
+    } catch (e) {
+      console.log(`engine crashed (${e.message.split('\n')[0]}) — recycling${attempt === 0 ? ', retrying game' : ''}`);
+      await freshEngine();
+      if (attempt === 1) {
+        record = {
+          arena: job.arena.meta, variantName: job.arena.variantName, startFen: job.arena.startFen,
+          seed: job.seed, go: cfg.go, moves: [], evals: [], crumbles: [], anomalies: [],
+          result: null, winner: null, plies: 0, error: `engine-crash: ${e.message.split('\n')[0]}`,
+        };
+      }
+    }
+  }
+  gamesOnEngine++;
   record.wallMs = Date.now() - t0;
   records.push(record);
   out.write(JSON.stringify(record) + '\n');
