@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "arena04-long-stair",
+  "title": "The Long Stair",
+  "intro": "A narrow stairway hall, ten ranks deep. The long files are a killing ground — bring the heavy pieces.",
+  "files": 4,
+  "ranks": 10,
+  "walls": ["b5", "c7"],
+  "enemy": { "backRank": ["R", "K", "N", null], "backRankStart": 0, "pawns": ["a", "c"] },
+  "player": { "pieceSet": ["Q", "R"], "backRankStart": 0, "patchWidth": 4, "pawns": ["b", "d"] },
+  "initiative": "player",
+  "crumble": { "onsetPly": 50, "cadence": 12, "seed": 404 }
+}

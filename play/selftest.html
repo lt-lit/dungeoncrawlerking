@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DCK selftest</title>
+<!-- coi-serviceworker MUST load first and sit NEXT TO this file (service
+     worker scope): the pthread engine build needs SharedArrayBuffer, so the
+     page must be cross-origin isolated. Self-reloads once on first visit. -->
+<script src="coi-serviceworker.min.js"></script>
+<style>
+  body {
+    background: #14151a;
+    color: #e8e8e8;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 14px;
+    margin: 1rem;
+  }
+  h1 { font-size: 1rem; color: #9fb0d0; margin: 0 0 0.75rem; }
+  .line { padding: 2px 0; white-space: pre-wrap; }
+  .pass { color: #7fd07f; }
+  .fail { color: #ff7070; }
+  #summary {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #26304a;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<h1>Dungeon Crawler King &#8212; infra selftest</h1>
+<div id="out"></div>
+<div id="summary">booting&#8230;</div>
+
+<script>
+  // ffish.js is a classic (non-MODULARIZE) Emscripten build: it claims the
+  // global `Module`, auto-runs on script load, and fetches ffish.wasm relative
+  // to its own script URL. Pre-seed Module with the ready callback BEFORE the
+  // script tag; the initialized Module object IS the ffish API.
+  window.__ffishPromise = new Promise(function (resolve, reject) {
+    window.Module = {
+      onRuntimeInitialized: function () { resolve(window.Module); },
+      onAbort: function (reason) { reject(new Error('ffish abort: ' + reason)); },
+    };
+  });
+</script>
+<script src="vendor/ffish.js"></script>
+<!-- stockfish.js is MODULARIZE: exposes the global Stockfish() factory only. -->
+<script src="vendor/stockfish.js"></script>
+<script type="module" src="js/selftest.mjs"></script>
+</body>
+</html>

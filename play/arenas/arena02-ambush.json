@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "arena02-ambush",
+  "title": "Ambush at the Cistern",
+  "intro": "You never saw them coming. The enemy springs the barrier among the drowned pillars — and moves first.",
+  "files": 6,
+  "ranks": 8,
+  "walls": ["c4", "e4", "d5"],
+  "enemy": { "backRank": ["R", null, "K", "B", null], "backRankStart": 0, "pawns": ["a", "c", "e"] },
+  "player": { "pieceSet": ["Q", "R", "B"], "backRankStart": 1, "patchWidth": 4, "pawns": ["c", "d"] },
+  "initiative": "enemy",
+  "crumble": { "onsetPly": 56, "cadence": 12, "seed": 202 }
+}
