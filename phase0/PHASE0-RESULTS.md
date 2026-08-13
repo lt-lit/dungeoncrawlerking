@@ -108,10 +108,30 @@ JSONL logging, and per-config summaries incl. the ply-length distribution vs the
 20–40 target band and the **crumble alarm metric** (fraction of games where a
 crumble flips the eval sign).
 
-Sweep results: see `results/sweep-smoke-summary.md` (numbers below are from the
-162-game smoke sweep at `movetime 150`, crumble onset 40 / cadence 8).
+### Smoke sweep results (162 games, `depth 60 movetime 150`, crumble onset 40 / cadence 8)
 
-<!-- SWEEP-SUMMARY -->
+Full per-config table: `results/sweep-smoke-summary.md`; raw games:
+`results/sweep-smoke.jsonl` (seeded — exact replays).
+
+- **162/162 decisive. Zero errors, zero draws.** The no-draw + crumble stack
+  held under load, including three bare-kings endgames that ended by
+  crumble-stalemate (the §4.5 termination guarantee observed working).
+- **White (initiative) won 67%** (109/53) — a first quantification of how much
+  the §4.4 initiative rule is worth; asymmetric matchups were won by the
+  stronger side essentially always at equal-ish widths.
+- **Ply lengths:** median 79, mean 110, max 346. Only clearly-asymmetric
+  matchups land in the 20–40 target band (23–31 plies, beautifully); mirrored
+  material grinds long, and gap 6 roughly doubles gap 2. Expect the §7 material
+  curve to be the main pacing lever, not just crumble tuning.
+- **Crumbles:** 131/162 games crumbled; 1670 total (180 repetition — the siege
+  mechanic is live in engine self-play). **Alarm metric: 37% of games had a
+  sign-flipping crumble — far above the ≈0 target**, confirming onset 40 /
+  cadence 8 is much too aggressive for these game lengths. This is the dial §7
+  exists to set; the harness now measures it.
+- 18 benign anomalies: late-game tiny boards where no legal pacing-crumble
+  candidate survives 60 rolls (scheduler skips, per design).
+- Ops notes proven this run: engine recycling every 40 games (4 recycles, no
+  crashes), watchdog + paired limits (no hangs).
 
 ## What Phase 0 explicitly did not settle
 
