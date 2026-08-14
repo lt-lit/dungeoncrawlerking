@@ -1,0 +1,56 @@
+{
+  "name": "starter-native",
+  "go": "depth 60 movetime 150",
+  "maxPlies": 400,
+  "evalDeadband": 50,
+  "crumble": { "onsetPly": 40, "cadence": 8 },
+  "seeds": 3,
+  "baseSeed": 3000,
+  "axes": {
+    "widths": [3],
+    "gaps": [2, 3, 4],
+    "wallDensities": [0],
+    "matchups": [
+      {
+        "white": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" },
+        "black": { "comp": ["N"], "arch": "balanced", "width": 2, "pawns": 2, "label": "scrubN" }
+      },
+      {
+        "white": { "comp": ["N"], "arch": "balanced", "width": 2, "pawns": 2, "label": "scrubN" },
+        "black": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" }
+      },
+      {
+        "white": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" },
+        "black": { "comp": ["B"], "arch": "balanced", "width": 2, "pawns": 2, "label": "scrubB" }
+      },
+      {
+        "white": { "comp": ["B"], "arch": "balanced", "width": 2, "pawns": 2, "label": "scrubB" },
+        "black": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" }
+      },
+      {
+        "white": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" },
+        "black": { "comp": ["R"], "arch": "balanced", "width": 2, "pawns": 2, "label": "eliteR" }
+      },
+      {
+        "white": { "comp": ["R"], "arch": "balanced", "width": 2, "pawns": 2, "label": "eliteR" },
+        "black": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" }
+      },
+      {
+        "white": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" },
+        "black": { "comp": ["N"], "arch": "balanced", "width": 2, "pawns": 1, "label": "tinyN" }
+      },
+      {
+        "white": { "comp": ["N"], "arch": "balanced", "width": 2, "pawns": 1, "label": "tinyN" },
+        "black": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" }
+      },
+      {
+        "white": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" },
+        "black": { "comp": ["N", "B"], "arch": "balanced", "width": 3, "pawns": 0, "label": "scrapNB" }
+      },
+      {
+        "white": { "comp": ["N", "B"], "arch": "balanced", "width": 3, "pawns": 0, "label": "scrapNB" },
+        "black": { "comp": ["R", "N"], "arch": "balanced", "label": "startRN" }
+      }
+    ]
+  }
+}

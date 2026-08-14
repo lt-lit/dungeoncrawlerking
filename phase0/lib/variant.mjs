@@ -26,10 +26,21 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     nMoveRule: '0',
     nFoldRule: '0',
     nFoldValue: 'loss',
-    // Dual loss condition: checkmate OR king capture (§4.4, spike 4)
+    // Loss conditions beyond checkmate (§4.4): bare-army IN-GRAMMAR.
+    // extinctionPieceTypes=* + extinctionPieceCount=1 is real total-count
+    // semantics (probed): a side down to 1 total piece (its king) loses, and
+    // the ENGINE understands — it plays strip-wins as mate-1 instead of
+    // king-shuffling toward a longer mate (the shipped-config pathology).
+    // pseudoRoyal must be false for the count rule to fire; the chess
+    // template's king stays fully royal regardless (spike 4 finding 5), so
+    // check/checkmate/stalemate semantics are untouched. King capture is NOT
+    // expressible alongside this (single (types,count) slot) — kingless
+    // states (surgery-only: the §4.5 filter re-rolls exposures, and crumbles
+    // cannot geometrically create them) are adjudicated at the game layer.
     extinctionValue: 'loss',
-    extinctionPieceTypes: 'k',
-    extinctionPseudoRoyal: 'true',
+    extinctionPieceTypes: '*',
+    extinctionPieceCount: '1',
+    extinctionPseudoRoyal: 'false',
     // Promotion region = enemy back rank (§4.4, spike 5)
     promotionRegionWhite: `*${ranks}`,
     promotionRegionBlack: '*1',

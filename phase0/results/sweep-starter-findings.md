@@ -136,7 +136,55 @@ The real sources of exposed-king states are other position surgery: the
 Phase 2 projection input class, enemy-editor states, and surgery bugs.
 
 The belt stays on; the game layer adjudicates — bare armies and kingless
-armies both. This is a result-level carve-out in the §2 crumble family: every
+armies both.
+
+## REVERSAL: bare-army moved IN-GRAMMAR (the native config)
+
+The game-layer verdict above did not survive designer review, and the
+designer was right. The game-layer route left the ENGINE rule-blind, with a
+measurable pathology: on K+R vs k+p the shipped config's engine recommended
+a king shuffle at mate-7 while the actual best move — capture the pawn,
+army extinct, win NOW — went unrecommended (it surfaced live in Cheater
+Mode hints as "why is it telling me to push a pawn instead of taking the
+strip-win"). That also means every ply figure in the tables above was
+measured by an engine playing a slightly different game than the one
+shipped. The blocker that had justified game-layer-only — the kingless
+zombie — is itself game-layer-adjudicated since this session, dissolving
+the objection.
+
+**The native baseline** (now in `lib/variant.mjs` + `play/js/variant.mjs`):
+`extinctionValue=loss`, `extinctionPieceTypes=*`, `extinctionPieceCount=1`,
+`extinctionPseudoRoyal=false`. Decisive probe, K+R vs k+p, white to move:
+
+| config | engine bestmove | score |
+|---|---|---|
+| shipped (k/0/pseudo-royal) | a1b2 — a king shuffle | mate 7 |
+| native (*/1/false) | c2c5 — takes the pawn | **mate 1** |
+
+Defender's view under native: mate −1 (knows bareness is death). The king
+stays fully royal (spike 4 finding 5); check/checkmate/stalemate untouched.
+
+**Revalidation:** `lib/selftest.mjs` PASS (perft parity unchanged — movegen
+is identical in live positions); spike 04 25/25; spike 10 32/32 (A-prime
+no-draw behavior intact: honest evals through loops, no repetition-chasing,
+no adjudication). Four spike fixtures needed un-baring — bare-king "victim"
+positions are decided at load under the native rule, a trap future tests
+must avoid (CLAUDE.md rule 4).
+
+**What remains game-layer:** exactly one adjudication — kingless states
+(surgery-only; extinction on totals cannot see them). The bare-army
+game-layer check was deleted as dead code (a bared side now has zero legal
+moves, so the standard mover-loses protocol covers it); terminations label
+as `army-extinct`/`bare-king` when the loser is bare. The crumble guard
+(never collapse a last piece) is now UNCONDITIONAL — under the native
+config such a crumble would end the game by dice roll.
+
+**Cheater Mode is truthful for free:** hints and the eval bar are raw
+engine output, so strip-wins now surface as mate-1 arrows with no
+hint-layer special-casing.
+
+<!-- NATIVE-SWEEP -->
+ This is a result-level carve-out in the §2 crumble family: every
 position the engine sees remains FSF-pure, and under the no-draw config the
 adjudicated result matches the game-theoretic one (a bare king cannot win —
 only a filter-miss-grade anomaly could save it).

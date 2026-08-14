@@ -175,14 +175,16 @@ export async function playGame({ engine, ffish, arena, opts }) {
         crumbleEvent = rep;
       } else if (crumbler.pacingCrumbleDue(ply)) {
         // Re-roll random candidates through the §4.5 legality filter.
-        const counts = opts.bareKingLoses ? nonKingCounts(fenNow) : null;
+        // Unconditional: with bare-army in-grammar, a crumble eating a last
+        // piece would END the game by dice roll — always re-roll those.
+        const counts = nonKingCounts(fenNow);
         for (let tries = 0; tries < 60; tries++) {
           const sq = crumbler.randomSquare(files, ranks);
           const cell = findSquares(fenNow, (c, f, r) => `${String.fromCharCode(97 + f)}${r + 1}` === sq)[0]?.cell;
           if (cell === '*') continue; // already a pit
-          // Under bare-king adjudication a crumble must never strip a side's
-          // last piece — crumbles pressure games, they don't end them (§4.5).
-          if (counts && cell && cell !== 'K' && cell !== 'k') {
+          // A crumble must never strip a side's last piece — crumbles
+          // pressure games, they don't end them (§4.5).
+          if (cell && cell !== 'K' && cell !== 'k') {
             const owner = cell === cell.toUpperCase() ? 'white' : 'black';
             if (counts[owner] === 1) continue;
           }
@@ -248,7 +250,15 @@ export async function playGame({ engine, ffish, arena, opts }) {
       const whiteToMove = board.turn();
       record.result = whiteToMove ? '0-1' : '1-0';
       record.winner = whiteToMove ? 'black' : 'white';
-      record.termination = board.isCheck() ? 'checkmate' : 'stalemate-or-extinction';
+      const endFen = board.fen().split(' ')[0];
+      const loser = whiteToMove ? 'white' : 'black';
+      record.termination = !endFen.includes('K') || !endFen.includes('k')
+        ? 'king-capture'
+        : board.isCheck()
+          ? 'checkmate'
+          : nonKingCounts(board.fen())[loser] === 0
+            ? 'bare-king' // in-grammar extinction: army stripped, game over
+            : 'stalemate';
       record.ffishResult = board.result(false);
       if (record.ffishResult !== record.result && record.ffishResult !== '1/2-1/2') {
         record.anomalies.push(`ffish result(false)="${record.ffishResult}" disagrees with derived "${record.result}"`);

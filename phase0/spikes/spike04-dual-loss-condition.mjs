@@ -1,6 +1,10 @@
 // Spike 4 — Dual loss condition: checkmate OR king capture (§4.4, §9.4).
-// Expected config: extinctionValue=loss + extinctionPieceTypes=k +
-// extinctionPseudoRoyal=true (the pseudo-royal pattern shipped variants use).
+// Originally verified extinctionValue=loss + extinctionPieceTypes=k +
+// extinctionPseudoRoyal=true. The baseline has since moved to the NATIVE
+// bare-army config (types=* count=1 pseudoRoyal=false — the engine plays
+// for strips); fixtures were updated to give every "victim" a spare blocked
+// piece, because bare-king positions are now decided at load — the original
+// fixtures stopped testing mate/stalemate and started testing extinction.
 // Verifies exactly which chess king-safety semantics survive, what the
 // harness-facing game-end API is, and what happens in king-en-prise states
 // (spike 12's filter is supposed to prevent them — this documents the
@@ -62,13 +66,13 @@ console.log('\n--- 2. checkmate ---');
   // Back-rank style mate-in-1: white Ra7+Rb1, black Kg8 boxed by own pawns? Keep it simple:
   // white Qg7 mate supported by Kg5... use ladder: white Ra1 Rb2, black Kh8 -> Rb2-b8? blocked? empty board ladder mate:
   const fen = '7k/8/8/8/8/8/1R6/R5K1 w - - 0 1'; // Rb2-b8# (Ra1 guards rank 1? need rank 8 cut) — actually Rb8+ Kh7... use two-rook ladder: Ra1 on a-file cuts nothing. Choose Q+K mate:
-  const b = new ffish.Board('d4', '7k/8/6QK/8/8/8/8/8 w - - 0 1'); // Qg6-g7# (Kh6 guards g7)
+  const b = new ffish.Board('d4', '7k/p7/6QK/8/8/8/8/8 w - - 0 1'); // Qg6-g7# (Kh6 guards g7)
   const moves = legal(b);
   check('mate-in-1 available (g6g7 legal)', moves.includes('g6g7'), '');
   const san = b.sanMove('g6g7');
   check('SAN marks mate with #', san.endsWith('#'), `san=${san}`);
   engine.setoption('UCI_Variant', 'd4');
-  engine.position({ fen: '7k/8/6QK/8/8/8/8/8 w - - 0 1' });
+  engine.position({ fen: '7k/p7/6QK/8/8/8/8/8 w - - 0 1' });
   const res = await engine.go('depth 8');
   const score = engine.lastScore(res);
   check('engine finds mate 1', score?.type === 'mate' && score.value === 1 && res.bestmove === 'g6g7',
@@ -79,7 +83,7 @@ console.log('\n--- 2. checkmate ---');
   b.delete();
 
   // Black delivers mate (both-sides symmetry)
-  const bb = new ffish.Board('d4', '8/8/8/8/8/6qk/8/7K b - - 0 1'); // black Qg3-g2#? Kh1, qg3 kh3: g3g2 mate
+  const bb = new ffish.Board('d4', '8/8/8/8/8/6qk/P7/7K b - - 0 1'); // black Qg3-g2#? Kh1, qg3 kh3: g3g2 mate
   const bmoves = legal(bb);
   check('black mate-in-1 available (g3g2)', bmoves.includes('g3g2'));
   bb.push('g3g2');
@@ -91,7 +95,7 @@ console.log('\n--- 2. checkmate ---');
 console.log('\n--- 3. king capture (extinction) ---');
 {
   // Constructed king-en-prise: WHITE to move, black king attacked by Qd5->e_8? place Qe4 attacking Ke8 on open e-file
-  const fen = '4k3/8/8/8/4Q3/8/8/4K3 w - - 0 1';
+  const fen = '4k3/p7/8/8/4Q3/8/8/4K3 w - - 0 1';
   check('ffish accepts king-en-prise FEN (validateFen)', ffish.validateFen(fen, 'd4') === 1, `v=${ffish.validateFen(fen, 'd4')}`);
   const b = new ffish.Board('d4', fen);
   const moves = legal(b);
@@ -128,14 +132,14 @@ console.log('\n--- 3. king capture (extinction) ---');
 console.log('\n--- 4. stalemate as loss ---');
 {
   // Classic corner stalemate: black Ka8, white Kb6+Qc7 -> black to move has no moves, NOT in check
-  const fen = 'k7/2Q5/1K6/8/8/8/8/8 b - - 0 1';
+  const fen = 'k7/2Q5/1K6/8/7p/7P/8/8 b - - 0 1';
   const b = new ffish.Board('d4', fen);
   check('stalemate position: numberLegalMoves === 0', b.numberLegalMoves() === 0, `n=${b.numberLegalMoves()}`);
   check('stalemated side NOT in check', !b.isCheck());
   check('stalemate result 1-0 (loss for stalemated black)', b.result(false) === '1-0', `result=${b.result(false)}`);
   b.delete();
   // Mirror: white stalemated
-  const fen2 = '8/8/8/8/8/1k6/2q5/K7 w - - 0 1';
+  const fen2 = '8/8/8/7p/7P/1k6/2q5/K7 w - - 0 1';
   const b2 = new ffish.Board('d4', fen2);
   check('mirror stalemate result 0-1 (loss for stalemated white)', b2.numberLegalMoves() === 0 && b2.result(false) === '0-1', `result=${b2.result(false)}`);
   b2.delete();
@@ -144,19 +148,19 @@ console.log('\n--- 4. stalemate as loss ---');
   // position where stalemate-in-1 exists: white Kb6 Qh7, black Ka8. Qh7-c7? no that's from above.
   // Qh7->b7 would be mate-ish? Kb6+Qb7 is MATE (king adjacent). Use Kb6, Qh2, black Ka8:
   // Qh2-c7 gives the corner stalemate (not check, black king a8 has no moves).
-  engine.position({ fen: 'k7/8/1K6/8/8/8/7Q/8 w - - 0 1' });
+  engine.position({ fen: 'k7/8/1K6/8/7p/7P/7Q/8 w - - 0 1' });
   const res = await engine.go('depth 10');
   const score = engine.lastScore(res);
   check('engine scores stalemate-in-reach as mate-like win', score?.type === 'mate' && score.value > 0,
     `best=${res.bestmove} score=${JSON.stringify(score)}`);
   // Verify the engine's chosen line actually ends the game quickly
-  const b3 = new ffish.Board('d4', 'k7/8/1K6/8/8/8/7Q/8 w - - 0 1');
+  const b3 = new ffish.Board('d4', 'k7/8/1K6/8/7p/7P/7Q/8 w - - 0 1');
   check('engine bestmove legal in stalemate-steering position', legal(b3).includes(res.bestmove), `best=${res.bestmove}`);
   b3.delete();
   // Direct proof stalemate is scored as a WIN by search: restrict the engine
   // to ONLY the stalemating move (h2c7 reaches the corner stalemate verified
   // above) — it must report mate 1, i.e. stalemate delivery == mate delivery.
-  engine.position({ fen: 'k7/8/1K6/8/8/8/7Q/8 w - - 0 1' });
+  engine.position({ fen: 'k7/8/1K6/8/7p/7P/7Q/8 w - - 0 1' });
   const resSm = await engine.go('depth 6 searchmoves h2c7');
   const scoreSm = engine.lastScore(resSm);
   check('engine scores the stalemating move itself as mate 1',

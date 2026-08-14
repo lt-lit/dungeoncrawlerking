@@ -21,14 +21,14 @@ import { findSquares, getSquare } from './fen.mjs';
  * ffish's isGameOver()/result() draw-adjudicate bare-kings insufficient
  * material even under the no-draw config, so they must not drive the loop.
  *
- * Second end condition — bare-army adjudication: a side stripped to a bare
- * king loses immediately (the army IS the summoning; strip it and the duel
- * is decided — no lone-king chases). This is a result-level carve-out in
- * the crumble family: the engine plays the validated FSF-pure config
- * (in-grammar expression via extinctionPieceCount=1 exists but conflicts
- * with extinctionPseudoRoyal — see phase0 starter findings), the game layer
- * adjudicates. Crumbles never strip a last piece (guard in the pacing loop),
- * so only a capture can bare a side.
+ * The bare-army rule (a side stripped to a bare king loses — the army IS
+ * the summoning) is IN-GRAMMAR: the variant config carries
+ * extinctionPieceTypes=* + extinctionPieceCount=1 (+ pseudoRoyal=false), so
+ * the engine itself plays for strips (scores them mate-1) and a bared side
+ * has zero legal moves — mover-loses covers it with no game-layer check.
+ * The game layer keeps ONE adjudication: kingless states (reachable only
+ * through position surgery). Crumbles never strip a last piece (guard in
+ * the pacing loop), so only a capture can bare a side.
  */
 function gameEnded(board) {
   return board.numberLegalMoves() === 0;
@@ -42,14 +42,6 @@ function nonKingCounts(fen) {
     else if (/[a-z]/.test(ch) && ch !== 'k') counts.black++;
   }
   return counts;
-}
-
-/** 'white'|'black' if exactly that side is down to a bare king, else null. */
-function bareSide(fen) {
-  const { white, black } = nonKingCounts(fen);
-  if (white === 0 && black > 0) return 'white';
-  if (black === 0 && white > 0) return 'black';
-  return null;
 }
 
 /** 'white'|'black' if that side has NO KING (post-capture state), else null.
@@ -246,17 +238,12 @@ export class DuelController {
       return { ended: true };
     }
     // King-capture adjudication (§4.5 filter-miss safety net): a kingless
-    // side has lost — instantly, even if its army could still move.
+    // side has lost — instantly, even if its army could still move. (Bare
+    // armies need no game-layer check anymore: extinction is in-grammar,
+    // so a bared side has zero legal moves and gameEnded caught it above.)
     const kingless = kinglessSide(this.board.fen());
     if (kingless) {
       await this.#finish({ loser: kingless, termination: 'king-capture' });
-      return { ended: true };
-    }
-    // Bare-army adjudication — after the mover-loses check, so a mating
-    // capture still reads as checkmate.
-    const bare = bareSide(this.board.fen());
-    if (bare) {
-      await this.#finish({ loser: bare, termination: 'army-extinct' });
       return { ended: true };
     }
     if (this.ply >= MAX_PLIES) {
@@ -419,10 +406,13 @@ export class DuelController {
     this.record.winner = whiteToMove ? 'black' : 'white';
     const fen = this.board.fen();
     const kings = findSquares(fen, (c) => c === 'K' || c === 'k').map((s) => s.cell);
+    const loser = whiteToMove ? 'white' : 'black';
     if (!kings.includes('K') || !kings.includes('k')) {
       this.record.termination = 'king-capture';
     } else if (this.board.isCheck()) {
       this.record.termination = 'checkmate';
+    } else if (nonKingCounts(fen)[loser] === 0) {
+      this.record.termination = 'army-extinct'; // in-grammar extinction (types=*, count=1)
     } else {
       this.record.termination = 'stalemate'; // the floor gives way (§4.4)
     }
