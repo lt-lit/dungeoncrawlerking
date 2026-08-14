@@ -58,8 +58,9 @@ their default placement, 3 seeded games each — results in the table below
 | arena03-clipped-vault | 5×7 g3, clip + pillar | eliteR | 25, 49, 75 | PASS ×3 — fat tail, now capped by the strip |
 | arena04-long-stair | 3×8 g4 | scrapNB | 31, 33, 39 | PASS ×3 — after the wall fix below |
 
-(Numbers above are under bare-army adjudication — the shipped rule; 7 of 12
-games ended by it. Pre-rule runs were 19–25 / 40–46 / 35–103 / 35–45.)
+(Historical: those numbers were measured under the game-layer adjudication
+era. Current per-arena numbers under the NATIVE config are in the REVERSAL
+section below — tighter across the board.)
 
 Two lessons the linter earned its keep on, first run out:
 
@@ -183,7 +184,35 @@ config such a crumble would end the game by dice roll.
 engine output, so strip-wins now surface as mate-1 arrows with no
 hint-layer special-casing.
 
-<!-- NATIVE-SWEEP -->
+**The unpoisoned numbers** (`sweep-starter-native.jsonl`, same 90-game grid,
+third run of the series — plies med/mean/max):
+
+| gap | shipped (rule-blind) | game-layer adjudicated | NATIVE (engine-aware) |
+|---|---|---|---|
+| 2 | 24 / 23.3 / 29 | 19 / 19.0 / 29 | **15 / 15.5 / 26** |
+| 3 | 31 / 31.2 / 50 | 27 / 27.6 / 60 | **25 / 24.2 / 36** |
+| 4 | 35 / 43.4 / 121 | 35 / 42.1 / 156 | **32 / 31.9 / 46** |
+
+- **90/90 decisive, zero errors, zero starter losses.** The two
+  crumble-lottery losses from the game-layer run are gone — games end
+  before crumble onset ever arrives (zero crumbles fired in the entire
+  sweep, and in the arena verification below).
+- **The gap-4 grind was an artifact of the rule-blind engine.** Max ply at
+  gap 4 fell from 121–156 to 46: a strip-hunting winner closes before the
+  eliteR siege can develop. The "reserve gap 4 for pawnless enemies" knob
+  recorded earlier is largely obsolete — retained only as a soft preference.
+- **Sub-20-ply games: 5 → 29 → 37 of 90.** Terminations: 59 bare-king,
+  27 checkmate, 4 stalemate — stripping is the canonical duel ending, mate
+  the sharp exception, exactly the design fiction.
+- Arena verification under native: ALL PASS, dramatically tighter — first
+  duel 21/21/21 plies, ambush 26–30, clipped vault 27/27/27 (the fat tail
+  that once reached 103 is gone), long stair 27–33. Zero crumbles.
+
+Methodological lesson, recorded for §7: **calibration data is only valid if
+the sweep engine plays under the exact shipped ruleset.** Two full sweep
+generations were measured under rules that differed from the live game
+(rule-blind, then game-layer-adjudicated); both are superseded by
+`sweep-starter-native` and kept only as the before/after record.
  This is a result-level carve-out in the §2 crumble family: every
 position the engine sees remains FSF-pure, and under the no-draw config the
 adjudicated result matches the game-theoretic one (a bare king cannot win —
