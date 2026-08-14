@@ -64,8 +64,9 @@ player-side only — a 2-wide "scrub" army just leaves open lanes); gap
 (`ranks − 4`) capped at 4 — gaps 5–6 grind past 100 plies in every sweep,
 and the Phase 2 duel trigger will enforce the same ceiling; walls eat slots
 (a walled back-row slot suppresses that file's pawn too — under the default
-automatic pawn row); `pieceSet` excludes the king (always in the placement
-pool). The optional per-side `"pawns"` array (file letters) authors a SPARSE
+automatic pawn row); never wall a 3-file arena (one wall costs a third of a
+rank's cross-section — the linter caught a walled 3×8 turning into an enemy
+fortress); `pieceSet` excludes the king (always in the placement pool). The optional per-side `"pawns"` array (file letters) authors a SPARSE
 pawn row instead of §4.2's automatic full-patch row (`[]` = pawnless).
 `loadArena` rejects out-of-catalog dims, patch violations, a walled
 enemy-king slot, and arenas whose walls sever the two formations.

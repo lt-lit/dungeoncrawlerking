@@ -51,4 +51,27 @@ best-play conversion lengths — the "if you know what you're doing" number).
 their default placement, 3 seeded games each — results in the table below
 (engine-vs-engine; PASS = decisive, error-free, player side wins).
 
-<!-- ARENA-VERIFY -->
+| arena | board | enemy | plies (3 games) | verdict |
+|---|---|---|---|---|
+| arena01-first-duel | 4×6 g2 | scrubN | 19, 21, 25 | PASS ×3 — the teaching puzzle |
+| arena02-ambush | 5×7 g3, pillars | scrubB (moves first) | 40, 40, 46 | PASS ×3 — player converts as Black |
+| arena03-clipped-vault | 5×7 g3, clip + pillar | eliteR | 35, 41, 73 | PASS ×3 — fat tail (35–103 across runs) |
+| arena04-long-stair | 3×8 g4 | scrapNB | 35, 43, 45 | PASS ×3 — after the fix below |
+
+Two lessons the linter earned its keep on, first run out:
+
+- **arena04 as first authored had a center wall (b5) and the ENEMY WON a
+  seed** (178 plies, 15 crumbles, crumble-decided). A wall on a 3-file board
+  leaves two 1-file channels — near-crawlspace geometry a pawnless K+N+B holds
+  indefinitely. Removing the wall matches the sweep's clean wall-free cell
+  (35 plies). **Authoring rule: no walls on 3-file arenas** — one wall costs a
+  third of a rank's cross-section; the narrowest boards must stay open.
+- **Engine-vs-engine games are NOT replay-deterministic across runs** (the
+  crumble RNG is seeded, but `movetime` search is timing-sensitive), so
+  verifier plies are samples from a distribution, not fixed numbers —
+  arena03's tail showed 35–103 plies across two runs. Judge arenas on the
+  distribution over ≥3 games, and re-run before trusting a borderline verdict.
+
+Wins terminate as both `checkmate` and `stalemate-or-extinction` — the
+suffocation win (stalemateValue=loss) is doing real work in cramped small-army
+duels, exactly as the no-draw config intends.
