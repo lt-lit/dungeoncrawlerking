@@ -52,6 +52,21 @@ function bareSide(fen) {
   return null;
 }
 
+/** 'white'|'black' if that side has NO KING (post-capture state), else null.
+ *  Probed: ffish only auto-terminates a king capture when the victim had
+ *  nothing else; a kingless side with material keeps generating moves (and
+ *  can never be mated — no king). The engine understands (scores it as a
+ *  forced loss), but the game layer ends it NOW rather than letting a
+ *  zombie army shuffle for a few plies. */
+function kinglessSide(fen) {
+  const boardField = fen.split(' ')[0];
+  const hasWhiteK = boardField.includes('K');
+  const hasBlackK = boardField.includes('k');
+  if (!hasWhiteK && hasBlackK) return 'white';
+  if (!hasBlackK && hasWhiteK) return 'black';
+  return null;
+}
+
 // Backstop only: the crumble system guarantees termination (§4.5); a duel
 // that reaches this many plies is a bug, not a long game.
 const MAX_PLIES = 1000;
@@ -228,6 +243,13 @@ export class DuelController {
 
     if (gameEnded(this.board)) {
       await this.#finish();
+      return { ended: true };
+    }
+    // King-capture adjudication (§4.5 filter-miss safety net): a kingless
+    // side has lost — instantly, even if its army could still move.
+    const kingless = kinglessSide(this.board.fen());
+    if (kingless) {
+      await this.#finish({ loser: kingless, termination: 'king-capture' });
       return { ended: true };
     }
     // Bare-army adjudication — after the mover-loses check, so a mating

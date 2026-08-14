@@ -91,29 +91,52 @@ candidates that would strip a side's last piece are re-rolled.
 `extinctionPieceTypes = *` + `extinctionPieceCount = 1` genuinely is
 total-count bare-king semantics (probe: K+2P vs K+Q plays on; bare K
 adjudicates 0-1 — so `*` counts totals, unlike per-type letter lists, which
-fire instantly for any side missing a listed type). But it only fires with
-`extinctionPseudoRoyal = false`, and under that config an exposed-king
-position generates ZERO legal moves for the side to move — FSF offers no
-capture and no continuation (the engine, sharing that movegen, would return
-no bestmove), so our mover-loses protocol would charge the loss to the
-WRONG side, where spike 4's pseudo-royal config degrades gracefully
-(capture the king, correct result). Two more structural points, probed:
+fire instantly for any side missing a listed type). But the route fails for two probed reasons (a RETRACTION is folded in below):
 
-- **Crumbles cannot create exposed kings with standard pieces.** A collapsed
-  square becomes a wall, and walls only ever BLOCK slider lines (probed: a
-  rook behind a fresh pit stops at the pit; an open file attacks through).
-  Removing a piece removes attacks, never adds them. The §4.5 filter's
-  exposure clause is cheap insurance, not a live geometric threat — the real
-  sources of exposed-king states are OTHER position surgery: the Phase 2
-  projection input class (materialization can put a king on an attacker's
-  open line), enemy-editor states, and surgery bugs. Its instant-mate /
-  instant-stalemate clauses ARE live (walls delete escape squares).
-- **The extinction options are a single rule set**, so `types=*`/`count=1`
-  REPLACES `types=k`/`count=0` — the in-grammar bare-king rule would forfeit
-  king capture (§4.4's dual condition) outright, independent of the
-  wrong-side-loss hazard.
+- **The count rule is inert under the validated pseudo-royal config.** With
+  `extinctionPseudoRoyal = true` (spike 4's shipped trio), a bare king under
+  (`*`, 1) simply plays on — "the last extinction piece is treated like a
+  royal piece" suppresses the adjudication. Making it fire requires
+  `extinctionPseudoRoyal = false`.
+- **The extinction options are a single (types, count) pair, and the two
+  rules need different measurements.** `types=k` counts KINGS — it cannot
+  see bareness (a bare king still counts 1). `types=*` counts TOTALS — it
+  cannot see king capture (probed: under (`*`,1,false), capturing a king
+  whose army still stands satisfies NO rule; the kingless, unmateable army
+  plays on — a "kingless zombie" — and the game can only end by grinding it
+  to ≤1 piece). One slot, two incompatible metrics: adopting bare-king
+  in-grammar forfeits §4.4's king-capture terminal.
 
-The belt stays on; the harness adjudicates. This is a result-level carve-out in the §2 crumble family: every
+**Retraction:** an earlier revision claimed the (`*`,1,false) config charged
+exposed-king losses to the WRONG side via empty movegen. That was an
+artifact of a contaminated probe (the test position's king was accidentally
+bare, so its zero legal moves were the bareness adjudication — correctly
+scored 1-0 — not movegen breakage). Re-probed cleanly: exposed-king movegen
+is IDENTICAL in both configs, king capture included, and spike 4 finding 5
+already recorded that `pseudoRoyal=false` does not de-royalize the chess
+template's king. The refutation of the in-grammar route is the two bullets
+above, not wrong-side scoring.
+
+**Discovered while correcting — the shipped config has a milder zombie of
+its own:** spike 4 verified "capture ends the game immediately" only for a
+victim with a bare king. Probed with material remaining: after RxK, ffish
+answers `result(false) = *` and the kingless side keeps generating moves.
+The ENGINE is sound here (scores kingless as a forced loss, mate-in-a-few,
+and plays toward it), so self-play converges — but both game loops now
+adjudicate kingless positions IMMEDIATELY at the game layer (termination
+`king-capture`), making the §4.5 filter-miss terminal instant at every
+material count.
+
+Also probed, standing: **crumbles cannot create exposed kings with standard
+pieces** — a collapsed square becomes a wall, and walls only ever BLOCK
+slider lines; removing a piece removes attacks, never adds them. The §4.5
+filter's exposure clause is cheap insurance; its instant-mate /
+instant-stalemate clauses are the live ones (walls delete escape squares).
+The real sources of exposed-king states are other position surgery: the
+Phase 2 projection input class, enemy-editor states, and surgery bugs.
+
+The belt stays on; the game layer adjudicates — bare armies and kingless
+armies both. This is a result-level carve-out in the §2 crumble family: every
 position the engine sees remains FSF-pure, and under the no-draw config the
 adjudicated result matches the game-theoretic one (a bare king cannot win —
 only a filter-miss-grade anomaly could save it).

@@ -58,8 +58,11 @@ run one sweep at a time.
    `isGameOver()`/`result()` to drive or label game end — both mislabel
    bare-kings states as draws under our config. The in-grammar route
    (`extinctionPieceTypes=*` + `extinctionPieceCount=1` — real total-count
-   semantics) is refuted for us: it requires `extinctionPseudoRoyal=false`,
-   which turns exposed-king states into wrong-side losses (see
+   semantics) is refuted for us: the count rule is inert under the validated
+   pseudo-royal config, and the single (types, count) slot means watching
+   totals forfeits watching kings — a captured king with material left then
+   satisfies NO end rule (kingless zombie). Kingless positions are therefore
+   adjudicated at the game layer too, termination `king-capture` (see
    `phase0/results/sweep-starter-findings.md`).
 5. **Search calls need runaway guards**: pair limits (`go depth 60 movetime N`)
    and send `stop` if a movetime search overruns (~1.5s grace). Fortress

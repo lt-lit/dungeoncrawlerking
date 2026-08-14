@@ -137,6 +137,21 @@ export async function playGame({ engine, ffish, arena, opts }) {
 
       if (gameEnded(board)) break;
 
+      // King-capture adjudication (unconditional): a kingless side has lost.
+      // Probed: ffish only self-terminates a capture that leaves the victim
+      // with nothing; with material remaining the kingless side keeps
+      // generating moves and can never be mated.
+      {
+        const bf = board.fen().split(' ')[0];
+        const kingless = !bf.includes('K') && bf.includes('k') ? 'white' : !bf.includes('k') && bf.includes('K') ? 'black' : null;
+        if (kingless) {
+          record.result = kingless === 'white' ? '0-1' : '1-0';
+          record.winner = kingless === 'white' ? 'black' : 'white';
+          record.termination = 'king-capture';
+          break;
+        }
+      }
+
       // Bare-army adjudication (after the mover-loses check so a mating
       // capture still records as checkmate): the stripped side loses now
       // instead of being king-chased to the inevitable no-draw end.
