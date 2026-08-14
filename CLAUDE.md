@@ -48,9 +48,10 @@ run one sweep at a time.
    `loadEngine()` (they hide global `fetch` during Emscripten init on Node 18+,
    and the engine package has no `main`).
 3. **Duel rules come from `makeDuelVariantIni`** — its baseline carries the
-   A-prime no-draw config (`nFoldRule=0` + `nFoldValue=loss`), the extinction
-   trio, per-color promotion AND double-step regions. Hand-written variant
-   blocks silently lose these (unknown keys are silently ignored — validate).
+   A-prime no-draw config (`nFoldRule=0` + `nFoldValue=loss`), the native
+   bare-army extinction quartet (rule 4), per-color promotion AND double-step
+   regions. Hand-written variant blocks silently lose these (unknown keys are
+   silently ignored — validate).
 4. **Game end = `numberLegalMoves() === 0`, and the side to move LOSES** —
    and the **bare-army rule is IN-GRAMMAR**: the baseline carries
    `extinctionPieceTypes=*` + `extinctionPieceCount=1` +

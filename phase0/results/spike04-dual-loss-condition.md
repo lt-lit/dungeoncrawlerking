@@ -1,5 +1,15 @@
 # Spike 4 — Dual loss condition: checkmate OR king capture
 
+> **Superseded post-Phase-1:** the shipped baseline is now the native
+> bare-army quartet (`extinctionPieceTypes=*`, `extinctionPieceCount=1`,
+> `extinctionPseudoRoyal=false`) — army extinction replaced king capture as
+> the second loss condition, and the engine plays for strips. The spike was
+> re-run 25/25 under the new config (fixtures un-bared — bare-king victims
+> are decided at load). Finding 3's "capture ends the game immediately" was
+> also found to hold only for bare victims; kingless-with-material states
+> are adjudicated at the game layer. See
+> `results/sweep-starter-findings.md`. Historical record below.
+
 **Question (§9.4):** "Find the cleanest config (check rules vs. extinction-style king
 capture) and verify the engine plays sanely under it. Expected answer:
 `extinctionValue = loss` + `extinctionPieceTypes = k` + `extinctionPseudoRoyal = true`."
