@@ -766,6 +766,9 @@ async function onEnd({ result, winner, termination }) {
       : {
           checkmate: playerWon ? 'Checkmate — the enemy king falls.' : 'Checkmate — your king falls. The run is over.',
           'king-capture': playerWon ? 'The enemy king is taken.' : 'Your king is taken. The run is over.',
+          'army-extinct': playerWon
+            ? 'The enemy army falls — with nothing left to summon, the barrier claims its king.'
+            : 'Your army falls — your summoning is broken. The run is over.',
           stalemate: playerWon
             ? 'The enemy king has nowhere left to stand — the floor gives way beneath him.'
             : 'Your king has nowhere left to stand — the floor gives way.',

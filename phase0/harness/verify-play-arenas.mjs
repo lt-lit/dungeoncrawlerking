@@ -94,6 +94,7 @@ for (const arena of arenas) {
         crumble: { onsetPly: arena.crumble.onsetPly, cadence: arena.crumble.cadence },
         seed: arena.crumble.seed + g,
         evalDeadband: 50,
+        bareKingLoses: true, // the live rule (play/js/duel.mjs adjudicates)
       },
     });
     const playerWon = record.winner === arena.playerColor;

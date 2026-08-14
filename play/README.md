@@ -33,9 +33,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   bottom in FEN terms; the UI flips the view when the player is Black.
 - `js/duel.mjs` — the live game loop, a structural port of
   `phase0/harness/game.mjs`: ffish is the source of truth, game end is
-  `numberLegalMoves() === 0` → side to move loses, engine repetition history
-  resets via bare `position fen` after every crumble, plus an engine-stall
-  recovery ladder (recycle instance, retry at reduced depth).
+  `numberLegalMoves() === 0` → side to move loses, PLUS bare-army
+  adjudication (a side stripped to a bare king loses immediately — no
+  lone-king chases; crumbles are guarded so they can never strip a last
+  piece), engine repetition history resets via bare `position fen` after
+  every crumble, plus an engine-stall recovery ladder (recycle instance,
+  retry at reduced depth).
 - `js/board-ui.mjs`, `style.css` — board/tray/promotion rendering, absolute
   `data-square` addressing, fits 3×6–12×10 boards on a 390×844 viewport.
 - `js/main.mjs` — boot, menu, placement flow (§4.3), duel driving, win/loss.

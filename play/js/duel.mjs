@@ -15,14 +15,41 @@ import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { findSquares, getSquare } from './fen.mjs';
 
 /**
- * Game-end check per spike 11: numberLegalMoves()===0 is the ONLY end
+ * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
  * condition, and the side to move LOSES (checkmate, stalemate-as-loss and
  * post-king-capture states all reduce to mover-loses under the duel config).
  * ffish's isGameOver()/result() draw-adjudicate bare-kings insufficient
  * material even under the no-draw config, so they must not drive the loop.
+ *
+ * Second end condition — bare-army adjudication: a side stripped to a bare
+ * king loses immediately (the army IS the summoning; strip it and the duel
+ * is decided — no lone-king chases). This is a result-level carve-out in
+ * the crumble family: the engine plays the validated FSF-pure config
+ * (in-grammar expression via extinctionPieceCount=1 exists but conflicts
+ * with extinctionPseudoRoyal — see phase0 starter findings), the game layer
+ * adjudicates. Crumbles never strip a last piece (guard in the pacing loop),
+ * so only a capture can bare a side.
  */
 function gameEnded(board) {
   return board.numberLegalMoves() === 0;
+}
+
+/** Non-king piece counts per color from a FEN's board field. */
+function nonKingCounts(fen) {
+  const counts = { white: 0, black: 0 };
+  for (const ch of fen.split(' ')[0]) {
+    if (/[A-Z]/.test(ch) && ch !== 'K') counts.white++;
+    else if (/[a-z]/.test(ch) && ch !== 'k') counts.black++;
+  }
+  return counts;
+}
+
+/** 'white'|'black' if exactly that side is down to a bare king, else null. */
+function bareSide(fen) {
+  const { white, black } = nonKingCounts(fen);
+  if (white === 0 && black > 0) return 'white';
+  if (black === 0 && white > 0) return 'black';
+  return null;
 }
 
 // Backstop only: the crumble system guarantees termination (§4.5); a duel
@@ -203,6 +230,13 @@ export class DuelController {
       await this.#finish();
       return { ended: true };
     }
+    // Bare-army adjudication — after the mover-loses check, so a mating
+    // capture still reads as checkmate.
+    const bare = bareSide(this.board.fen());
+    if (bare) {
+      await this.#finish({ loser: bare, termination: 'army-extinct' });
+      return { ended: true };
+    }
     if (this.ply >= MAX_PLIES) {
       return this.#fail(`max-plies backstop (${MAX_PLIES}) reached — crumble config failed to terminate`);
     }
@@ -217,9 +251,18 @@ export class DuelController {
       crumbleEvent = rep;
     } else if (this.crumbler.pacingCrumbleDue(this.ply)) {
       // Re-roll random candidates through the §4.5 legality filter.
+      const counts = nonKingCounts(fenNow);
       for (let tries = 0; tries < 60; tries++) {
         const sq = this.crumbler.randomSquare(this.files, this.ranks);
-        if (getSquare(fenNow, sq) === '*') continue; // already a pit
+        const cell = getSquare(fenNow, sq);
+        if (cell === '*') continue; // already a pit
+        // A crumble must never strip a side's last piece — under bare-army
+        // adjudication that would end the game by dice roll (§4.5: crumbles
+        // pressure games, they don't end them).
+        if (cell && cell !== 'K' && cell !== 'k') {
+          const owner = cell === cell.toUpperCase() ? 'white' : 'black';
+          if (counts[owner] === 1) continue;
+        }
         const v = validateCrumbleCandidate(this.ffish, this.variantName, fenNow, sq);
         if (v.ok) {
           crumbleEvent = { type: 'pacing', square: sq, rerolls: tries };
@@ -336,8 +379,19 @@ export class DuelController {
     this.crumbler.recordPosition(postFen);
   }
 
-  /** Derive the result directly: the side to move LOSES (see gameEnded). */
-  async #finish() {
+  /** Derive the result: the side to move LOSES (see gameEnded), unless an
+   *  adjudication ({ loser, termination }) names the loser directly. */
+  async #finish(adjudicated = null) {
+    if (adjudicated) {
+      this.record.result = adjudicated.loser === 'white' ? '0-1' : '1-0';
+      this.record.winner = adjudicated.loser === 'white' ? 'black' : 'white';
+      this.record.termination = adjudicated.termination;
+      this.state = 'ended';
+      if (this.hooks.onEnd) {
+        await this.hooks.onEnd({ result: this.record.result, winner: this.record.winner, termination: this.record.termination });
+      }
+      return;
+    }
     const whiteToMove = this.board.turn();
     this.record.result = whiteToMove ? '0-1' : '1-0';
     this.record.winner = whiteToMove ? 'black' : 'white';

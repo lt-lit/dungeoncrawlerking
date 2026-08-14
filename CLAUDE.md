@@ -51,9 +51,16 @@ run one sweep at a time.
    A-prime no-draw config (`nFoldRule=0` + `nFoldValue=loss`), the extinction
    trio, per-color promotion AND double-step regions. Hand-written variant
    blocks silently lose these (unknown keys are silently ignored — validate).
-4. **Game end = `numberLegalMoves() === 0`, and the side to move LOSES.**
-   Never use ffish `isGameOver()`/`result()` to drive or label game end — both
-   mislabel bare-kings states as draws under our config.
+4. **Game end = `numberLegalMoves() === 0`, and the side to move LOSES** —
+   plus **bare-army adjudication**: a side stripped to a bare king loses
+   immediately (game-layer rule, engine unaware; crumble candidates that
+   would strip a last piece are re-rolled). Never use ffish
+   `isGameOver()`/`result()` to drive or label game end — both mislabel
+   bare-kings states as draws under our config. The in-grammar route
+   (`extinctionPieceTypes=*` + `extinctionPieceCount=1` — real total-count
+   semantics) is refuted for us: it requires `extinctionPseudoRoyal=false`,
+   which turns exposed-king states into wrong-side losses (see
+   `phase0/results/sweep-starter-findings.md`).
 5. **Search calls need runaway guards**: pair limits (`go depth 60 movetime N`)
    and send `stop` if a movetime search overruns (~1.5s grace). Fortress
    positions otherwise hit MAX_PLY and never return (`lib/load.mjs.go()` has

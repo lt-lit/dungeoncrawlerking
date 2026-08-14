@@ -116,6 +116,13 @@ export function loadArena(json) {
   const enemyPawnFiles = parsePawns(enemy, 'enemy');
   const playerPawnFiles = parsePawns(player, 'player');
 
+  // Bare-army adjudication (duel.mjs): a side with no non-king material has
+  // already lost — an arena must give BOTH sides at least one unit.
+  const enemyUnits = eRank.filter((p) => p && p !== 'K').length + (enemyPawnFiles ? enemyPawnFiles.length : eRank.length);
+  if (enemyUnits < 1) bad(id, 'enemy army has no non-king material (instant loss under bare-army adjudication)');
+  const playerUnits = pieceSet.length + (playerPawnFiles ? playerPawnFiles.length : width);
+  if (playerUnits < 1) bad(id, 'player army has no non-king material (instant loss under bare-army adjudication)');
+
   const arena = {
     id,
     title: json.title,
