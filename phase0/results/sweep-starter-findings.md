@@ -93,11 +93,27 @@ total-count bare-king semantics (probe: K+2P vs K+Q plays on; bare K
 adjudicates 0-1 — so `*` counts totals, unlike per-type letter lists, which
 fire instantly for any side missing a listed type). But it only fires with
 `extinctionPseudoRoyal = false`, and under that config an exposed-king
-position (the crumble-filter-miss class) generates ZERO legal moves for the
-side to move — our mover-loses protocol would then charge the loss to the
+position generates ZERO legal moves for the side to move — FSF offers no
+capture and no continuation (the engine, sharing that movegen, would return
+no bestmove), so our mover-loses protocol would charge the loss to the
 WRONG side, where spike 4's pseudo-royal config degrades gracefully
-(capture the king, correct result). The belt stays on; the harness
-adjudicates. This is a result-level carve-out in the §2 crumble family: every
+(capture the king, correct result). Two more structural points, probed:
+
+- **Crumbles cannot create exposed kings with standard pieces.** A collapsed
+  square becomes a wall, and walls only ever BLOCK slider lines (probed: a
+  rook behind a fresh pit stops at the pit; an open file attacks through).
+  Removing a piece removes attacks, never adds them. The §4.5 filter's
+  exposure clause is cheap insurance, not a live geometric threat — the real
+  sources of exposed-king states are OTHER position surgery: the Phase 2
+  projection input class (materialization can put a king on an attacker's
+  open line), enemy-editor states, and surgery bugs. Its instant-mate /
+  instant-stalemate clauses ARE live (walls delete escape squares).
+- **The extinction options are a single rule set**, so `types=*`/`count=1`
+  REPLACES `types=k`/`count=0` — the in-grammar bare-king rule would forfeit
+  king capture (§4.4's dual condition) outright, independent of the
+  wrong-side-loss hazard.
+
+The belt stays on; the harness adjudicates. This is a result-level carve-out in the §2 crumble family: every
 position the engine sees remains FSF-pure, and under the no-draw config the
 adjudicated result matches the game-theoretic one (a bare king cannot win —
 only a filter-miss-grade anomaly could save it).
@@ -118,6 +134,12 @@ only a filter-miss-grade anomaly could save it).
   puzzle target is now the common case at gap 2, not the lower tail.
 - **Gap 4 is untouched** — its grind happens while both sides still have
   material, before any strip. The rule cuts chases, not sieges.
+- **The engine chases no phantom outcomes under the adjudication** (probed):
+  K+N vs bare K under the duel config reads **mate-in-11** to the engine —
+  walls + stalemate-as-loss make even chess's "book draw" endings forced
+  wins in-grammar, so there is no insufficient-material draw-scoring path.
+  The engine's rulebook and the adjudicated game disagree only about WHEN a
+  stripped side dies, never about who is winning.
 
 **The two starter losses (2/90, both g4 vs eliteR) are crumble-lottery, not
 rule artifacts:** in both, a pacing crumble ate the STARTER'S ROOK (R@a2
