@@ -23,10 +23,10 @@ export const COMPS = {
   full4: ['Q', 'R', 'B', 'N'],
 };
 
-export function compValue(comp, width) {
+export function compValue(comp, pawnCount) {
   const pieces = COMPS[comp] ?? comp;
   const pieceSum = pieces.reduce((s, p) => s + PIECE_VALUES[p.toLowerCase()], 0);
-  return pieceSum + width; // pawn row spans the patch width (§4.2)
+  return pieceSum + pawnCount; // default pawn row spans the patch width (§4.2)
 }
 
 /**
@@ -150,23 +150,56 @@ function connected(board, files, ranks) {
 /**
  * Build an arena from a sweep config point.
  * cfg = { width, gap, wallDensity, white: {comp, arch}, black: {comp, arch} }
+ * Per-side extensions (all optional, default = legacy shared-width behavior):
+ *   side.width — this side's patch width (2–5; 2 = the small-army floor for
+ *     scrub encounters — the §4.2 width-3 floor is player-side only now),
+ *   side.pawns — pawn COUNT for a sparse row (files picked nearest the king;
+ *     omit for the automatic full-width §4.2 row),
+ *   side.label — display name used in summaries instead of the comp string.
+ * files = max(3, widths) — catalog floor stays 3; narrower patches center.
  * Returns { variantName, files, ranks, ini, startFen, meta }.
  */
 export function buildArena(cfg, seed) {
-  const { width, gap, wallDensity = 0 } = cfg;
-  if (width < 3 || width > 5) throw new Error(`patch width ${width} outside [3,5] (§4.2)`);
+  const { gap, wallDensity = 0 } = cfg;
+  const side = (s) => ({ ...s, width: s.width ?? cfg.width, pawns: s.pawns });
+  const w = side(cfg.white);
+  const b = side(cfg.black);
+  const perSide = cfg.white.width !== undefined || cfg.black.width !== undefined ||
+    cfg.white.pawns !== undefined || cfg.black.pawns !== undefined;
+  for (const s of [w, b]) {
+    const lo = perSide ? 2 : 3; // legacy configs keep the strict §4.2 floor
+    if (s.width < lo || s.width > 5) throw new Error(`patch width ${s.width} outside [${lo},5] (§4.2)`);
+    if (s.pawns !== undefined && (s.pawns < 0 || s.pawns > s.width)) {
+      throw new Error(`pawn count ${s.pawns} outside [0,${s.width}]`);
+    }
+  }
   if (gap < 2 || gap > 6) throw new Error(`gap ${gap} outside [2,6] (§4.4)`);
-  const files = width;
+  const files = Math.max(3, w.width, b.width); // variant catalog floor: 3 files
   const ranks = 4 + gap;
-  const rng = mulberry32(childSeed(seed, `arena-${width}-${gap}-${wallDensity}`));
+  // Legacy configs must keep the exact Phase 0 seed string (smoke/tiny and
+  // spikes 07/08 replay byte-identically); per-side configs get their own.
+  const seedTag = perSide
+    ? `arena-${w.width}p${w.pawns ?? 'a'}v${b.width}p${b.pawns ?? 'a'}-${gap}-${wallDensity}`
+    : `arena-${cfg.width}-${gap}-${wallDensity}`;
+  const rng = mulberry32(childSeed(seed, seedTag));
 
-  const mkRow = (side) => {
-    const comp = COMPS[side.comp] ?? side.comp;
-    const arch = ARCHETYPES[side.arch ?? 'balanced'];
-    return arch(comp, width, rng);
+  const mkRow = (s) => {
+    const comp = COMPS[s.comp] ?? s.comp;
+    const arch = ARCHETYPES[s.arch ?? 'balanced'];
+    return arch(comp, s.width, rng);
   };
-  const whiteRow = mkRow(cfg.white);
-  const blackRow = mkRow(cfg.black);
+  const whiteRow = mkRow(w);
+  const blackRow = mkRow(b);
+  const startOf = (s) => Math.floor((files - s.width) / 2); // center narrow patches
+  // Sparse pawn rows: `pawns` files nearest the king (ties break left) —
+  // the screen a summoner raises first is the one in front of the throne.
+  const pawnFilesFor = (s, row, start) => {
+    if (s.pawns === undefined) return undefined; // automatic full-width row
+    const kingFile = start + row.indexOf('K');
+    const patchFiles = Array.from({ length: s.width }, (_, i) => start + i);
+    patchFiles.sort((p, q) => Math.abs(p - kingFile) - Math.abs(q - kingFile) || p - q);
+    return patchFiles.slice(0, s.pawns).sort((p, q) => p - q);
+  };
 
   // Wall placement in the gap band only (ranks 2..ranks-3 from bottom, 0-based)
   let board = null;
@@ -182,8 +215,18 @@ export function buildArena(cfg, seed) {
       files,
       ranks,
       walls,
-      white: { backRank: whiteRow, backRankStart: 0, row: 0 },
-      black: { backRank: blackRow, backRankStart: 0, row: ranks - 1 },
+      white: {
+        backRank: whiteRow,
+        backRankStart: startOf(w),
+        row: 0,
+        pawnFiles: pawnFilesFor(w, whiteRow, startOf(w)),
+      },
+      black: {
+        backRank: blackRow,
+        backRankStart: startOf(b),
+        row: ranks - 1,
+        pawnFiles: pawnFilesFor(b, blackRow, startOf(b)),
+      },
     });
     if (wallDensity === 0 || connected(candidate, files, ranks)) {
       board = candidate;
@@ -206,8 +249,8 @@ export function buildArena(cfg, seed) {
       ranks,
       whiteRow,
       blackRow,
-      whiteValue: compValue(cfg.white.comp, width),
-      blackValue: compValue(cfg.black.comp, width),
+      whiteValue: compValue(w.comp, w.pawns ?? w.width),
+      blackValue: compValue(b.comp, b.pawns ?? b.width),
       wallRerolls,
     },
   };
