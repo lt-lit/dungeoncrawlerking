@@ -17,6 +17,7 @@ const KNOWN_INI_KEYS = new Set([
   'nFoldValue',
   'extinctionValue',
   'extinctionPieceTypes',
+  'extinctionPieceCount',
   'extinctionPseudoRoyal',
   'promotionRegionWhite',
   'promotionRegionBlack',
@@ -51,10 +52,16 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     nMoveRule: '0',
     nFoldRule: '0',
     nFoldValue: 'loss',
-    // Dual loss condition: checkmate OR king capture (§4.4, spike 4)
+    // Loss conditions beyond checkmate (§4.4): bare-army IN-GRAMMAR — a side
+    // down to 1 total piece (its king) loses, and the engine plays for it
+    // (strip-wins score mate-1; hints/eval bar are truthful automatically).
+    // pseudoRoyal=false is required for the count rule to fire; the king
+    // stays royal (spike 4 finding 5), so check semantics are untouched.
+    // Kingless states (surgery-only) are adjudicated in duel.mjs.
     extinctionValue: 'loss',
-    extinctionPieceTypes: 'k',
-    extinctionPseudoRoyal: 'true',
+    extinctionPieceTypes: '*',
+    extinctionPieceCount: '1',
+    extinctionPseudoRoyal: 'false',
     // Promotion region = enemy back rank (§4.4, spike 5)
     promotionRegionWhite: `*${ranks}`,
     promotionRegionBlack: '*1',

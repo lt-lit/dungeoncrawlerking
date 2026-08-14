@@ -48,12 +48,27 @@ run one sweep at a time.
    `loadEngine()` (they hide global `fetch` during Emscripten init on Node 18+,
    and the engine package has no `main`).
 3. **Duel rules come from `makeDuelVariantIni`** — its baseline carries the
-   A-prime no-draw config (`nFoldRule=0` + `nFoldValue=loss`), the extinction
-   trio, per-color promotion AND double-step regions. Hand-written variant
-   blocks silently lose these (unknown keys are silently ignored — validate).
-4. **Game end = `numberLegalMoves() === 0`, and the side to move LOSES.**
-   Never use ffish `isGameOver()`/`result()` to drive or label game end — both
-   mislabel bare-kings states as draws under our config.
+   A-prime no-draw config (`nFoldRule=0` + `nFoldValue=loss`), the native
+   bare-army extinction quartet (rule 4), per-color promotion AND double-step
+   regions. Hand-written variant blocks silently lose these (unknown keys are
+   silently ignored — validate).
+4. **Game end = `numberLegalMoves() === 0`, and the side to move LOSES** —
+   and the **bare-army rule is IN-GRAMMAR**: the baseline carries
+   `extinctionPieceTypes=*` + `extinctionPieceCount=1` +
+   `extinctionPseudoRoyal=false` (total-count semantics: down to your bare
+   king = you lose), so the ENGINE plays for strips (scores them mate-1)
+   and a bared side has zero legal moves — no game-layer check needed. The
+   king stays fully royal (spike 4 finding 5); check/checkmate/stalemate
+   are untouched; spikes 04+10 and selftest re-validated 25/25 + 32/32
+   under this config. Consequences: (a) crumble candidates that would strip
+   a side's LAST piece must be re-rolled (a crumble would instantly end the
+   game); (b) test/spike fixtures must never use bare-king "victims" — such
+   positions are decided at load (this bit four fixtures already); (c) the
+   one state extinction cannot see — a captured king with material left
+   (surgery-only) — is adjudicated at the game layer, termination
+   `king-capture`. Never use ffish `isGameOver()`/`result()` to drive game
+   end (see `phase0/results/sweep-starter-findings.md` for the full config
+   history).
 5. **Search calls need runaway guards**: pair limits (`go depth 60 movetime N`)
    and send `stop` if a movetime search overruns (~1.5s grace). Fortress
    positions otherwise hit MAX_PLY and never return (`lib/load.mjs.go()` has

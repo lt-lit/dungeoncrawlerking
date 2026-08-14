@@ -1,5 +1,16 @@
 # Phase 0 — Spikes + harness skeleton: results
 
+> **Post-Phase-1 config supersession:** the duel baseline moved from spike 4's
+> pseudo-royal trio (`extinctionPieceTypes=k`, `extinctionPseudoRoyal=true`)
+> to the NATIVE bare-army quartet (`extinctionPieceTypes=*`,
+> `extinctionPieceCount=1`, `extinctionPseudoRoyal=false`) so the engine
+> plays the real win condition (a side stripped to a bare king loses).
+> Spikes 04 and 10 and both selftests were re-validated in full under the
+> new baseline (25/25, 32/32); four bare-king-victim fixtures needed
+> un-baring. Full history, probes, and sweep data:
+> `results/sweep-starter-findings.md`. Everything below is the Phase 0
+> record as written.
+
 Phase 0 per brief §10: everything in §9, plus a calibration harness able to run
 one sweep end-to-end. **Status: complete.** All 12 spikes have runnable,
 deterministic scripts under `spikes/` (each exits 0 on pass) and per-spike

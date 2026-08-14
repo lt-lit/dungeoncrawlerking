@@ -19,6 +19,24 @@ function gameEnded(board) {
   return board.numberLegalMoves() === 0;
 }
 
+/** Non-king piece counts per color from a FEN's board field. */
+export function nonKingCounts(fen) {
+  const counts = { white: 0, black: 0 };
+  for (const ch of fen.split(' ')[0]) {
+    if (/[A-Z]/.test(ch) && ch !== 'K') counts.white++;
+    else if (/[a-z]/.test(ch) && ch !== 'k') counts.black++;
+  }
+  return counts;
+}
+
+/** 'white'|'black' if exactly that side is down to a bare king, else null. */
+function bareSide(fen) {
+  const { white, black } = nonKingCounts(fen);
+  if (white === 0 && black > 0) return 'white';
+  if (black === 0 && white > 0) return 'black';
+  return null; // both armed — or both bare, which the crumble guard prevents
+}
+
 const MATE_SENTINEL = 100000;
 
 /** Normalize an engine score ({type, value}, mover POV) to a white-POV number. */
@@ -43,6 +61,11 @@ const sign = (v, deadband) => (v > deadband ? 1 : v < -deadband ? -1 : 0);
  *   crumble: { onsetPly, cadence },   // omit/cadence 0 to disable pacing
  *   seed,
  *   evalDeadband: 50,                 // cp band treated as "equal" for flip detection
+ *   bareKingLoses: false,             // harness adjudication: a side stripped to a
+ *                                     // bare king loses immediately (the summoning
+ *                                     // fails with the army). Result-level carve-out
+ *                                     // in the crumble family — the engine plays the
+ *                                     // FSF-pure rules; the harness ends the game.
  * }
  * Returns a game record (JSON-serializable).
  */
@@ -114,6 +137,34 @@ export async function playGame({ engine, ffish, arena, opts }) {
 
       if (gameEnded(board)) break;
 
+      // King-capture adjudication (unconditional): a kingless side has lost.
+      // Probed: ffish only self-terminates a capture that leaves the victim
+      // with nothing; with material remaining the kingless side keeps
+      // generating moves and can never be mated.
+      {
+        const bf = board.fen().split(' ')[0];
+        const kingless = !bf.includes('K') && bf.includes('k') ? 'white' : !bf.includes('k') && bf.includes('K') ? 'black' : null;
+        if (kingless) {
+          record.result = kingless === 'white' ? '0-1' : '1-0';
+          record.winner = kingless === 'white' ? 'black' : 'white';
+          record.termination = 'king-capture';
+          break;
+        }
+      }
+
+      // Bare-army adjudication (after the mover-loses check so a mating
+      // capture still records as checkmate): the stripped side loses now
+      // instead of being king-chased to the inevitable no-draw end.
+      if (opts.bareKingLoses) {
+        const bare = bareSide(board.fen());
+        if (bare) {
+          record.result = bare === 'white' ? '0-1' : '1-0';
+          record.winner = bare === 'white' ? 'black' : 'white';
+          record.termination = 'bare-king';
+          break;
+        }
+      }
+
       // --- crumble phase (between plies) ---
       const fenNow = board.fen();
       const occurrences = crumbler.recordPosition(fenNow);
@@ -124,10 +175,19 @@ export async function playGame({ engine, ffish, arena, opts }) {
         crumbleEvent = rep;
       } else if (crumbler.pacingCrumbleDue(ply)) {
         // Re-roll random candidates through the §4.5 legality filter.
+        // Unconditional: with bare-army in-grammar, a crumble eating a last
+        // piece would END the game by dice roll — always re-roll those.
+        const counts = nonKingCounts(fenNow);
         for (let tries = 0; tries < 60; tries++) {
           const sq = crumbler.randomSquare(files, ranks);
           const cell = findSquares(fenNow, (c, f, r) => `${String.fromCharCode(97 + f)}${r + 1}` === sq)[0]?.cell;
           if (cell === '*') continue; // already a pit
+          // A crumble must never strip a side's last piece — crumbles
+          // pressure games, they don't end them (§4.5).
+          if (cell && cell !== 'K' && cell !== 'k') {
+            const owner = cell === cell.toUpperCase() ? 'white' : 'black';
+            if (counts[owner] === 1) continue;
+          }
           const v = validateCrumbleCandidate(ffish, variantName, fenNow, sq);
           if (v.ok) {
             crumbleEvent = { type: 'pacing', square: sq, rerolls: tries };
@@ -177,6 +237,8 @@ export async function playGame({ engine, ffish, arena, opts }) {
 
     if (record.error) {
       // engine/ffish desync — already recorded
+    } else if (record.result) {
+      // bare-king adjudication already recorded result/winner/termination
     } else if (gameEnded(board)) {
       // Under the duel config, numberLegalMoves()===0 always means the side
       // to move LOSES: checkmate (mover mated), stalemate (stalemateValue=
@@ -188,7 +250,15 @@ export async function playGame({ engine, ffish, arena, opts }) {
       const whiteToMove = board.turn();
       record.result = whiteToMove ? '0-1' : '1-0';
       record.winner = whiteToMove ? 'black' : 'white';
-      record.termination = board.isCheck() ? 'checkmate' : 'stalemate-or-extinction';
+      const endFen = board.fen().split(' ')[0];
+      const loser = whiteToMove ? 'white' : 'black';
+      record.termination = !endFen.includes('K') || !endFen.includes('k')
+        ? 'king-capture'
+        : board.isCheck()
+          ? 'checkmate'
+          : nonKingCounts(board.fen())[loser] === 0
+            ? 'bare-king' // in-grammar extinction: army stripped, game over
+            : 'stalemate';
       record.ffishResult = board.result(false);
       if (record.ffishResult !== record.result && record.ffishResult !== '1/2-1/2') {
         record.anomalies.push(`ffish result(false)="${record.ffishResult}" disagrees with derived "${record.result}"`);

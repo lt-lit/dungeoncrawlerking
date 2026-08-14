@@ -15,14 +15,48 @@ import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { findSquares, getSquare } from './fen.mjs';
 
 /**
- * Game-end check per spike 11: numberLegalMoves()===0 is the ONLY end
+ * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
  * condition, and the side to move LOSES (checkmate, stalemate-as-loss and
  * post-king-capture states all reduce to mover-loses under the duel config).
  * ffish's isGameOver()/result() draw-adjudicate bare-kings insufficient
  * material even under the no-draw config, so they must not drive the loop.
+ *
+ * The bare-army rule (a side stripped to a bare king loses — the army IS
+ * the summoning) is IN-GRAMMAR: the variant config carries
+ * extinctionPieceTypes=* + extinctionPieceCount=1 (+ pseudoRoyal=false), so
+ * the engine itself plays for strips (scores them mate-1) and a bared side
+ * has zero legal moves — mover-loses covers it with no game-layer check.
+ * The game layer keeps ONE adjudication: kingless states (reachable only
+ * through position surgery). Crumbles never strip a last piece (guard in
+ * the pacing loop), so only a capture can bare a side.
  */
 function gameEnded(board) {
   return board.numberLegalMoves() === 0;
+}
+
+/** Non-king piece counts per color from a FEN's board field. */
+function nonKingCounts(fen) {
+  const counts = { white: 0, black: 0 };
+  for (const ch of fen.split(' ')[0]) {
+    if (/[A-Z]/.test(ch) && ch !== 'K') counts.white++;
+    else if (/[a-z]/.test(ch) && ch !== 'k') counts.black++;
+  }
+  return counts;
+}
+
+/** 'white'|'black' if that side has NO KING (post-capture state), else null.
+ *  Probed: ffish only auto-terminates a king capture when the victim had
+ *  nothing else; a kingless side with material keeps generating moves (and
+ *  can never be mated — no king). The engine understands (scores it as a
+ *  forced loss), but the game layer ends it NOW rather than letting a
+ *  zombie army shuffle for a few plies. */
+function kinglessSide(fen) {
+  const boardField = fen.split(' ')[0];
+  const hasWhiteK = boardField.includes('K');
+  const hasBlackK = boardField.includes('k');
+  if (!hasWhiteK && hasBlackK) return 'white';
+  if (!hasBlackK && hasWhiteK) return 'black';
+  return null;
 }
 
 // Backstop only: the crumble system guarantees termination (§4.5); a duel
@@ -203,6 +237,15 @@ export class DuelController {
       await this.#finish();
       return { ended: true };
     }
+    // King-capture adjudication (§4.5 filter-miss safety net): a kingless
+    // side has lost — instantly, even if its army could still move. (Bare
+    // armies need no game-layer check anymore: extinction is in-grammar,
+    // so a bared side has zero legal moves and gameEnded caught it above.)
+    const kingless = kinglessSide(this.board.fen());
+    if (kingless) {
+      await this.#finish({ loser: kingless, termination: 'king-capture' });
+      return { ended: true };
+    }
     if (this.ply >= MAX_PLIES) {
       return this.#fail(`max-plies backstop (${MAX_PLIES}) reached — crumble config failed to terminate`);
     }
@@ -217,9 +260,18 @@ export class DuelController {
       crumbleEvent = rep;
     } else if (this.crumbler.pacingCrumbleDue(this.ply)) {
       // Re-roll random candidates through the §4.5 legality filter.
+      const counts = nonKingCounts(fenNow);
       for (let tries = 0; tries < 60; tries++) {
         const sq = this.crumbler.randomSquare(this.files, this.ranks);
-        if (getSquare(fenNow, sq) === '*') continue; // already a pit
+        const cell = getSquare(fenNow, sq);
+        if (cell === '*') continue; // already a pit
+        // A crumble must never strip a side's last piece — under bare-army
+        // adjudication that would end the game by dice roll (§4.5: crumbles
+        // pressure games, they don't end them).
+        if (cell && cell !== 'K' && cell !== 'k') {
+          const owner = cell === cell.toUpperCase() ? 'white' : 'black';
+          if (counts[owner] === 1) continue;
+        }
         const v = validateCrumbleCandidate(this.ffish, this.variantName, fenNow, sq);
         if (v.ok) {
           crumbleEvent = { type: 'pacing', square: sq, rerolls: tries };
@@ -336,17 +388,31 @@ export class DuelController {
     this.crumbler.recordPosition(postFen);
   }
 
-  /** Derive the result directly: the side to move LOSES (see gameEnded). */
-  async #finish() {
+  /** Derive the result: the side to move LOSES (see gameEnded), unless an
+   *  adjudication ({ loser, termination }) names the loser directly. */
+  async #finish(adjudicated = null) {
+    if (adjudicated) {
+      this.record.result = adjudicated.loser === 'white' ? '0-1' : '1-0';
+      this.record.winner = adjudicated.loser === 'white' ? 'black' : 'white';
+      this.record.termination = adjudicated.termination;
+      this.state = 'ended';
+      if (this.hooks.onEnd) {
+        await this.hooks.onEnd({ result: this.record.result, winner: this.record.winner, termination: this.record.termination });
+      }
+      return;
+    }
     const whiteToMove = this.board.turn();
     this.record.result = whiteToMove ? '0-1' : '1-0';
     this.record.winner = whiteToMove ? 'black' : 'white';
     const fen = this.board.fen();
     const kings = findSquares(fen, (c) => c === 'K' || c === 'k').map((s) => s.cell);
+    const loser = whiteToMove ? 'white' : 'black';
     if (!kings.includes('K') || !kings.includes('k')) {
       this.record.termination = 'king-capture';
     } else if (this.board.isCheck()) {
       this.record.termination = 'checkmate';
+    } else if (nonKingCounts(fen)[loser] === 0) {
+      this.record.termination = 'army-extinct'; // in-grammar extinction (types=*, count=1)
     } else {
       this.record.termination = 'stalemate'; // the floor gives way (§4.4)
     }

@@ -34,8 +34,12 @@ export function loadArena(json) {
   const { files, ranks } = json;
   if (!Number.isInteger(files) || files < 3 || files > 12) bad(id, `files ${files} outside catalog range 3–12`);
   if (!Number.isInteger(ranks) || ranks < 6 || ranks > 10) bad(id, `ranks ${ranks} outside catalog range 6–10`);
+  // Gap cap 4: gaps 5–6 produced 100+-ply grinds with near-certain
+  // crumble-flips in every Phase 0/starter sweep — duels are puzzles now, and
+  // the duel trigger will enforce the same ceiling. (Catalog still carries
+  // 9/10-rank variants; arenas just may not use them.)
   const gap = ranks - 4;
-  if (gap < 2 || gap > 6) bad(id, `gap ${gap} outside [2,6] (§4.4 gap math)`);
+  if (gap < 2 || gap > 4) bad(id, `gap ${gap} outside [2,4] (§4.4 gap math + puzzle-pacing cap)`);
 
   const walls = json.walls ?? [];
   const wallSet = new Set();
@@ -55,9 +59,12 @@ export function loadArena(json) {
 
   // Enemy formation: fixed, authored (§4.3).
   const enemy = json.enemy ?? {};
+  // Enemy patch floor is 2 (small-army encounters: king + one piece). The
+  // §4.2 width-3 floor is a PLAYER-side rule — the arena itself never drops
+  // below 3 files, so a 2-wide enemy just leaves open lanes.
   const eRank = enemy.backRank;
-  if (!Array.isArray(eRank) || eRank.length < 3 || eRank.length > 5) {
-    bad(id, `enemy.backRank must be a 3–5 slot array (§4.2 patch width)`);
+  if (!Array.isArray(eRank) || eRank.length < 2 || eRank.length > 5) {
+    bad(id, `enemy.backRank must be a 2–5 slot array (§4.2 patch width; enemy floor 2)`);
   }
   const eStart = enemy.backRankStart ?? 0;
   if (!Number.isInteger(eStart) || eStart < 0 || eStart + eRank.length > files) {
@@ -108,6 +115,13 @@ export function loadArena(json) {
   };
   const enemyPawnFiles = parsePawns(enemy, 'enemy');
   const playerPawnFiles = parsePawns(player, 'player');
+
+  // Bare-army adjudication (duel.mjs): a side with no non-king material has
+  // already lost — an arena must give BOTH sides at least one unit.
+  const enemyUnits = eRank.filter((p) => p && p !== 'K').length + (enemyPawnFiles ? enemyPawnFiles.length : eRank.length);
+  if (enemyUnits < 1) bad(id, 'enemy army has no non-king material (instant loss under bare-army adjudication)');
+  const playerUnits = pieceSet.length + (playerPawnFiles ? playerPawnFiles.length : width);
+  if (playerUnits < 1) bad(id, 'player army has no non-king material (instant loss under bare-army adjudication)');
 
   const arena = {
     id,

@@ -178,7 +178,10 @@ async function main() {
     // Classic corner stalemate, black to move, on the catalog 8x8 board.
     // ffish result()/isGameOver() mislabel such states under our config —
     // the ONLY game-end signal is numberLegalMoves()===0, side to move loses.
-    const staleFen = '7k/8/6Q1/8/8/8/8/K7 b - - 0 1';
+    // Black keeps an inert blocked pawn (a4 vs Pa3): a BARE king is decided
+    // at load under the native bare-army config, which would make this test
+    // pass for the wrong reason (extinction, not the stalemate protocol).
+    const staleFen = '7k/8/6Q1/8/p7/P7/8/K7 b - - 0 1';
     const name = catalogVariantName(8, 8);
     if (ffish.validateFen(staleFen, name) !== 1) throw new Error('stalemate FEN rejected by validateFen');
     const b = new ffish.Board(name, staleFen);

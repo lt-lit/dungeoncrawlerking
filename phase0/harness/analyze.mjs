@@ -4,9 +4,18 @@ import fs from 'fs';
 
 export function summarize(records) {
   const byConfig = new Map();
+  // Per-side labels (harness arena.mjs extensions): `label` names the side in
+  // summaries; width/pawns overrides are appended so rows self-document.
+  const sideName = (s) => {
+    if (s.label) return s.label;
+    const base = `${Array.isArray(s.comp) ? s.comp.join('') || 'K' : s.comp}/${s.arch ?? 'balanced'}`;
+    const mods = [s.width !== undefined ? `w${s.width}` : null, s.pawns !== undefined ? `p${s.pawns}` : null]
+      .filter(Boolean);
+    return mods.length ? `${base}[${mods.join(',')}]` : base;
+  };
   for (const r of records) {
     const m = r.arena;
-    const key = `w${m.width} g${m.gap} d${m.wallDensity} ${m.white.comp}/${m.white.arch ?? 'balanced'} vs ${m.black.comp}/${m.black.arch ?? 'balanced'}`;
+    const key = `w${m.width} g${m.gap} d${m.wallDensity} ${sideName(m.white)} vs ${sideName(m.black)}`;
     if (!byConfig.has(key)) {
       byConfig.set(key, {
         key,

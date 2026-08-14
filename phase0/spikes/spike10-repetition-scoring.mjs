@@ -35,7 +35,10 @@ const CYCLE_FROM_A = ['a8b8', 'b6d7', 'b8a8', 'd7b6']; // A' -> W1 -> B1 -> S ->
 const QUEEN_FEN = '6k1/6p1/8/8/1r6/8/4Q2K/q7 w - - 0 1';
 const QENTRY = 'e2e8';
 
-const KQK_FEN = '8/8/8/1Q6/2K5/8/8/7k w - - 0 1'; // White Kc4 Qb5 vs Black Kh1, wtm
+// White Kc4 Qb5 vs Black Kh1 + an inert blocked pawn (a3, blocked by Pa2):
+// under the native bare-army baseline a BARE king is decided at load, so the
+// "winning side mates normally" fixtures need the victim un-bared.
+const KQK_FEN = '8/8/8/1Q6/2K5/p7/P7/7k w - - 0 1';
 
 const checks = [];
 function check(id, desc, pass, detail = '') {

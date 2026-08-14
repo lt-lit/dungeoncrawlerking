@@ -2,12 +2,12 @@
   "schema": 1,
   "id": "arena03-clipped-vault",
   "title": "The Clipped Vault",
-  "intro": "A collapsed vault clips your ground — one of your slots is rubble, and only three of your pieces will fit. The warden fields twin rooks.",
-  "files": 8,
+  "intro": "A collapsed vault clips your ground — the center slot of your line is rubble. The warden fields a rook, and he knows how to use it.",
+  "files": 5,
   "ranks": 7,
-  "walls": ["e1", "c4", "f4", "d6"],
-  "enemy": { "backRank": ["R", null, "K", null, "R"], "backRankStart": 2, "pawns": ["c", "e", "g"] },
-  "player": { "pieceSet": ["Q", "R", "B", "N"], "backRankStart": 2, "patchWidth": 5, "pawns": ["c", "d", "f"] },
+  "walls": ["c1", "c4"],
+  "enemy": { "backRank": ["R", "K"], "backRankStart": 2, "pawns": ["c", "d"] },
+  "player": { "pieceSet": ["R", "N"], "backRankStart": 1, "patchWidth": 3, "pawns": ["b", "c", "d"] },
   "initiative": "player",
-  "crumble": { "onsetPly": 50, "cadence": 10, "seed": 303 }
+  "crumble": { "onsetPly": 40, "cadence": 10, "seed": 303 }
 }

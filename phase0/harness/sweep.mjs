@@ -103,6 +103,7 @@ for (const job of jobs) {
     crumble: cfg.crumble,
     seed: job.seed,
     evalDeadband: cfg.evalDeadband ?? 50,
+    bareKingLoses: cfg.bareKingLoses ?? false,
   };
   let record;
   for (let attempt = 0; attempt < 2; attempt++) {

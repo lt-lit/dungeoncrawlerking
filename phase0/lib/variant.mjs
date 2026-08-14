@@ -26,10 +26,21 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     nMoveRule: '0',
     nFoldRule: '0',
     nFoldValue: 'loss',
-    // Dual loss condition: checkmate OR king capture (§4.4, spike 4)
+    // Loss conditions beyond checkmate (§4.4): bare-army IN-GRAMMAR.
+    // extinctionPieceTypes=* + extinctionPieceCount=1 is real total-count
+    // semantics (probed): a side down to 1 total piece (its king) loses, and
+    // the ENGINE understands — it plays strip-wins as mate-1 instead of
+    // king-shuffling toward a longer mate (the shipped-config pathology).
+    // pseudoRoyal must be false for the count rule to fire; the chess
+    // template's king stays fully royal regardless (spike 4 finding 5), so
+    // check/checkmate/stalemate semantics are untouched. King capture is NOT
+    // expressible alongside this (single (types,count) slot) — kingless
+    // states (surgery-only: the §4.5 filter re-rolls exposures, and crumbles
+    // cannot geometrically create them) are adjudicated at the game layer.
     extinctionValue: 'loss',
-    extinctionPieceTypes: 'k',
-    extinctionPseudoRoyal: 'true',
+    extinctionPieceTypes: '*',
+    extinctionPieceCount: '1',
+    extinctionPseudoRoyal: 'false',
     // Promotion region = enemy back rank (§4.4, spike 5)
     promotionRegionWhite: `*${ranks}`,
     promotionRegionBlack: '*1',
@@ -54,11 +65,16 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
  * spec = {
  *   files, ranks,
  *   walls: ['c3', ...],                      // wall squares from terrain
- *   white: { backRank: ['R','N','K',...], backRankStart: 0, row: 0 },  // row = rank from bottom
+ *   white: { backRank: ['R','N','K',...], backRankStart: 0, row: 0,  // row = rank from bottom
+ *            pawnFiles: [0, 2] },            // optional: explicit pawn files
  *   black: { backRank: [...], backRankStart: 0, row: ranks-1 },
  * }
- * Pawn rows are stamped automatically in front of each back row (§4.2),
- * spanning the patch width, skipping wall squares.
+ * Pawn rows are stamped in front of each back row (§4.2). Default: automatic,
+ * spanning the patch width; a walled back-row slot then suppresses BOTH the
+ * piece and that file's pawn (walls eat slots — the semantics every Phase 0
+ * sweep shipped with). With explicit `pawnFiles` (0-based file indices) only
+ * those files get pawns, decoupled from back-row wall clipping — the arena
+ * author owns the pawn count. Walled pawn squares stay empty either way.
  */
 export function buildDuelBoard(spec) {
   const { files, ranks } = spec;
@@ -76,15 +92,20 @@ export function buildDuelBoard(spec) {
     const row = side.row ?? (isWhite ? 0 : ranks - 1);
     const pawnRow = isWhite ? row + 1 : row - 1;
     const start = side.backRankStart ?? 0;
+    const pawnAt = (file) => {
+      if (file < 0 || file >= files) return;
+      if (board[ranks - 1 - pawnRow][file] !== '*') {
+        put(file, pawnRow, isWhite ? 'P' : 'p');
+      }
+    };
     side.backRank.forEach((piece, i) => {
       const file = start + i;
       if (file >= files) return; // clipped by board edge
       if (board[ranks - 1 - row][file] === '*') return; // walls eat slots (§4.2)
       if (piece) put(file, row, isWhite ? piece.toUpperCase() : piece.toLowerCase());
-      if (board[ranks - 1 - pawnRow][file] !== '*') {
-        put(file, pawnRow, isWhite ? 'P' : 'p');
-      }
+      if (!side.pawnFiles) pawnAt(file); // automatic full-width row (§4.2 default)
     });
+    if (side.pawnFiles) for (const f of side.pawnFiles) pawnAt(f);
   };
   stamp(spec.white, true);
   stamp(spec.black, false);

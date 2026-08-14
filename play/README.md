@@ -33,9 +33,14 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   bottom in FEN terms; the UI flips the view when the player is Black.
 - `js/duel.mjs` — the live game loop, a structural port of
   `phase0/harness/game.mjs`: ffish is the source of truth, game end is
-  `numberLegalMoves() === 0` → side to move loses, engine repetition history
-  resets via bare `position fen` after every crumble, plus an engine-stall
-  recovery ladder (recycle instance, retry at reduced depth).
+  `numberLegalMoves() === 0` → side to move loses. The bare-army rule (a
+  side stripped to a bare king loses — no lone-king chases) is IN-GRAMMAR
+  (`extinctionPieceTypes=*`, `extinctionPieceCount=1`), so the engine plays
+  for strips and hint arrows/eval bar are truthful about them; crumbles are
+  guarded so they can never strip a last piece. The game layer adjudicates
+  only kingless states (surgery-only). Engine repetition history resets via
+  bare `position fen` after every crumble, plus an engine-stall recovery
+  ladder (recycle instance, retry at reduced depth).
 - `js/board-ui.mjs`, `style.css` — board/tray/promotion rendering, absolute
   `data-square` addressing, fits 3×6–12×10 boards on a 390×844 viewport.
 - `js/main.mjs` — boot, menu, placement flow (§4.3), duel driving, win/loss.
@@ -49,23 +54,27 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 {
   "schema": 1, "id": "arena01-first-duel", "title": "First Duel",
   "intro": "1–2 lines of flavor",
-  "files": 5, "ranks": 8,
-  "walls": ["c4"],
-  "enemy":  { "backRank": [null, "R", "K", "N", null], "backRankStart": 0, "pawns": ["b", "d"] },
-  "player": { "pieceSet": ["Q", "R", "B"], "backRankStart": 0, "patchWidth": 5, "pawns": ["b", "c", "d"] },
+  "files": 4, "ranks": 6,
+  "walls": [],
+  "enemy":  { "backRank": ["N", "K"], "backRankStart": 1, "pawns": ["b", "c"] },
+  "player": { "pieceSet": ["R", "N"], "backRankStart": 0, "patchWidth": 3, "pawns": ["a", "b", "c"] },
   "initiative": "player",
-  "crumble": { "onsetPly": 60, "cadence": 12, "seed": 101 }
+  "crumble": { "onsetPly": 40, "cadence": 10, "seed": 101 }
 }
 ```
 
-Absolute board coordinates; `backRank` arrays are file-ascending; patch
-widths 3–5 (§4.2); walls eat slots (a walled back-row slot suppresses that
-file's pawn too — under the default automatic pawn row); `pieceSet` excludes
-the king (always in the placement pool). The optional per-side `"pawns"`
-array (file letters) authors a SPARSE pawn row instead of §4.2's automatic
-full-patch row — the shipped arenas use 1–3 pawns per side. `loadArena`
-rejects out-of-catalog dims, patch violations, a walled enemy-king slot, and
-arenas whose walls sever the two formations.
+Absolute board coordinates; `backRank` arrays are file-ascending; player
+patch width 3–5 (§4.2), enemy patch width 2–5 (the width-3 floor is
+player-side only — a 2-wide "scrub" army just leaves open lanes); gap
+(`ranks − 4`) capped at 4 — gaps 5–6 grind past 100 plies in every sweep,
+and the Phase 2 duel trigger will enforce the same ceiling; walls eat slots
+(a walled back-row slot suppresses that file's pawn too — under the default
+automatic pawn row); never wall a 3-file arena (one wall costs a third of a
+rank's cross-section — the linter caught a walled 3×8 turning into an enemy
+fortress); `pieceSet` excludes the king (always in the placement pool). The optional per-side `"pawns"` array (file letters) authors a SPARSE
+pawn row instead of §4.2's automatic full-patch row (`[]` = pawnless).
+`loadArena` rejects out-of-catalog dims, patch violations, a walled
+enemy-king slot, and arenas whose walls sever the two formations.
 
 Placement (deliberately looser than §4.2's patch): the arena's
 `backRankStart`/`patchWidth`/`pawns` define only the DEFAULT arrangement.
@@ -76,7 +85,12 @@ count.
 
 Balance philosophy (§13, §2.2): the engine is always full strength, so
 arenas hand the PLAYER a decisive material edge — difficulty tuning happens
-entirely in these JSON files.
+entirely in these JSON files. The shipped arenas follow the puzzle vision:
+the player fields the 3×2 starter army (K+R+N + 3 pawns) against small
+armies (K + one or two pieces, 0–2 pawns), targeting mates in roughly 10–20
+plies under good play while staying ~2 blunders from a loss. Engine-vs-engine
+plies per arena are measured by `phase0/harness/verify-play-arenas.mjs`
+(encounter linter v0 — run it after editing any arena).
 
 ## Options / Cheater Mode
 

@@ -2,12 +2,12 @@
   "schema": 1,
   "id": "arena01-first-duel",
   "title": "First Duel",
-  "intro": "An open hall, and you carry far the heavier steel. You caught the summoner's eye — the barrier is yours to spring.",
-  "files": 5,
-  "ranks": 8,
+  "intro": "A cramped guardroom, and a lone knight-summoner caught napping. Your rook wants an open file — give it one.",
+  "files": 4,
+  "ranks": 6,
   "walls": [],
-  "enemy": { "backRank": [null, "R", "K", "N", null], "backRankStart": 0, "pawns": ["b", "d"] },
-  "player": { "pieceSet": ["Q", "R", "B"], "backRankStart": 0, "patchWidth": 5, "pawns": ["b", "c", "d"] },
+  "enemy": { "backRank": ["N", "K"], "backRankStart": 1, "pawns": ["b", "c"] },
+  "player": { "pieceSet": ["R", "N"], "backRankStart": 0, "patchWidth": 3, "pawns": ["a", "b", "c"] },
   "initiative": "player",
-  "crumble": { "onsetPly": 60, "cadence": 12, "seed": 101 }
+  "crumble": { "onsetPly": 40, "cadence": 10, "seed": 101 }
 }

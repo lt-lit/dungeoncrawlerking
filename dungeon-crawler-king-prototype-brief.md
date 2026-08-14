@@ -57,12 +57,22 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 ### 4.2 Formations `[LOCKED]`
 
 - Each side's formation is **2 ranks deep**: a back row (king + pieces) and a pawn row in front of it. Like chess.
-- **Patch = N×2, N ∈ [3, 5].** Width cap of 5 (5 pawns, king + up to 4 pieces). Minimum 3 (3 pawns, king + 2 pieces).
+- **Patch = N×2. Player: N ∈ [3, 5]; enemy floor is 2.** Width cap of 5 (5 pawns, king + up to 4 pieces). The width-3 minimum is PLAYER-side only — 2-wide "scrub" armies (king + one piece) are the standard early encounter, and the arena itself never drops below 3 files, so a narrow enemy just leaves open lanes. `[REVISED with the small-army/puzzle vision.]`
+- **The pawn row is authorable and sparse** (0–N pawns; pawnless piece-scraps are legal). The §4.2 automatic full-width row is only the default. `[REVISED — Phase 1 arenas ship 0–3 pawns per side.]`
+- **The player's opening kit is a 3×2 army — K+R+N + 3 pawns** `[PROVISIONAL in composition]` — and the army's bounding box GROWS through the run (3×2 → 4×2 → 5×2, 6 → 8 → 10 units), terminating at the patch cap (§8). Keep a major piece in the kit: rook mates work at any arena width; minors-only armies grind on wide boards.
 - **Clip rule:** the patch is anchored to the king's projected overworld position (king can be anywhere in his back row — no centering requirement), shifted inward only if he'd clip a wall. Walls eat slots. What survives is what you fight with.
 - Pawn row is **automatic, pawns only**, spanning the patch width. Pawn direction: toward the enemy along the duel axis (canonical orientation comes from the alignment axis).
 - Formations spawn whole. **No hands/pockets by default** — all material starts on the board. Early-game deployment turns were judged a drag; materializing the whole army *is* the summoning.
 
-### 4.3 Player placement at duel start `[LOCKED]`
+### 4.3 Player placement at duel start `[SUPERSEDED by the army-avatar pivot — see §5.1]`
+
+`[The per-duel placement screen is retired with Phase 2: the player customizes
+a persistent MARCHING PATTERN (the Phase 1 placement UI relives as its
+editor), and at duel start the pattern is stamped into the patch — v1 rule:
+the army auto-faces the enemy; facing/flanking consequences are deferred
+(§11). Pre-duel rearrangement returns as an in-game upgrade on the §8 shelf.
+The Phase 1 slice keeps the placement screen until the overworld exists. The
+original clauses below stand only for that interim and as design record.]`
 
 - After the barrier drops, the player sees **everything** — real patch shape, walls carried in, the enemy's complete formation — then places their back-row pieces into the surviving slots.
 - When collection size > available slots (clipped duels), placement includes **selection**: choose which pieces deploy.
@@ -72,7 +82,7 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 
 ### 4.4 Duel rules `[LOCKED unless noted]`
 
-- **Win/loss (both sides): checkmate or king capture.** Player king falls → run over. Enemy king falls → duel won. (Exact FSF config for the dual condition is a spike item — see §9.)
+- **Win/loss (both sides): checkmate, stalemate, or ARMY EXTINCTION — stripped to a bare king, the summoning fails.** Player loses → run over. All conditions live IN-GRAMMAR, so the engine plays for strips (scores them mate-1) and duels never degenerate into lone-king chases. `[RESOLVED post-Phase-1, superseding spike 4's config: the extinction quartet is `extinctionValue=loss`, `extinctionPieceTypes=*`, `extinctionPieceCount=1`, `extinctionPseudoRoyal=false` — total-count semantics. King capture as a separate rule is gone (the single extinction slot can watch kings or totals, not both); the king stays fully royal, and the game layer keeps one three-line backstop: a kingless board — unreachable outside position surgery — is an immediate loss. Config history, probes, and sweep data: `phase0/results/sweep-starter-findings.md`.]`
 - **No draws, ever `[LOCKED]`.** Every duel ends in a win or a loss. The config closes every draw door FSF knows about:
   - `stalemateValue = loss` — a king with no legal moves loses, both sides: the floor gives way beneath him (§4.5).
   - `nMoveRule = 0` — no move-count draw clock.
@@ -83,7 +93,7 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 - If a **player** move creates legal alignment with multiple roamers simultaneously, the player chooses their opponent.
 - **capturesToHand:** believed variant-wide only (not per-color) — if so, it is **not** a general rule. At most a symmetric boss modifier ("the Necromancer"). `[PROVISIONAL, pending spike]`
 - **Reserve slot** (single piece in hand, droppable on own back ranks) is a possible high-tier upgrade, not a core mechanic. `[OPEN]`
-- **Gap math:** formations are 2 deep each → 4 ranks of formation; FSF's 10-rank cap gives gap ∈ [0, 6]; the trigger condition enforces gap ≥ 2. Gap 2 = ambush-sharp, 3–4 = standard (4 = classic chess spacing), 5–6 = ranged/rider-friendly. One ruleset across the whole band.
+- **Gap math:** formations are 2 deep each → 4 ranks of formation; the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]`
 
 ### 4.5 The crumble system `[LOCKED in shape, PROVISIONAL in numbers]`
 
@@ -97,7 +107,7 @@ Two triggers:
 Rules of the pit:
 
 - **A king's own square collapses only via the stalemate rule** (§4.4): run out of legal moves and the floor takes you. Pacing crumbles never target kings.
-- **Legality filter:** every random candidate square is validated with ffish.js before it collapses. Re-roll any candidate that would expose the side-not-to-move's king (an illegal position under king-capture rules — a duel must never be decided by a dice roll in one ply) or that would instantly end the game by mate or stalemate. Crumbles pressure games; they don't end them.
+- **Legality filter:** every random candidate square is validated with ffish.js before it collapses. Re-roll any candidate that would expose the side-not-to-move's king (a duel must never be decided by a dice roll in one ply), that would instantly end the game by mate or stalemate, **or that would strip a side's LAST piece** (under in-grammar army extinction, §4.4, such a crumble ends the game outright). Crumbles pressure games; they don't end them.
 - **En-passant rights are cleared on every crumble.** Stale ep squares against rewritten geometry are a bug factory.
 - **Termination guarantee:** every repetition crumble permanently removes a square and the board is finite, so with no draw rules left (§4.4) every duel provably ends. No adjudication exists anywhere.
 
@@ -115,8 +125,8 @@ Notes:
 
 ### 5.1 Basics
 
-- Turn-based, tile grid. Player is a king. `[PROVISIONAL: player moves 1 tile/turn, 8-directional — speed parity with hunters assumed but not settled]`
-- **Roamers are kings/summoners only.** No non-king pieces on the overworld (armies exist only inside duels). What a summoner *looks like* telegraphs their book/level.
+- Turn-based, tile grid. **The army IS the avatar** `[REVISED — the army-avatar pivot]`: the player moves their whole formation as ONE unit — a flexible blob that holds the customized marching pattern where the ground allows and deforms through narrow gaps and around holes. `[PROVISIONAL: 1 tile/turn, 8-directional — speed parity with hunters assumed but not settled]`
+- **Enemy summoners' armies are likewise visible while roaming** — what they have is what you see (scouting = shopping, §8; level telegraphing is literal). The old "roamers are kings only" rule is repealed; armies still materialize into the §4.2 patch when the barrier drops (v1: both formations stamped auto-facing each other; facing/flanking consequences deferred — §11).
 - Roamers are **finite per floor, no respawns** — kills the farming incentive, makes clearing a floor mean something.
 - **Two terrain classes:** *walls* block movement and LOS; *holes* (crumble scars, §4.5) block movement but not LOS — you can see across a pit. Both project into duels identically as `*` wall squares, and the linter (§6) counts both when clipping patches.
 - Patrol behavior while roaming: `[OPEN — routes vs. random walk]`
@@ -141,7 +151,7 @@ HUNT ──(LOS broken)──► move to player's last known position
 A duel starts when, after any move, all of the following hold between a hunting summoner and the player:
 
 1. Their prospective patches are **aligned along one axis** (band alignment — king anywhere in his back row; no strict colinearity).
-2. Kings are **≥ 5 tiles apart** along that axis (guarantees gap ≥ 2).
+2. Kings are **5–7 tiles apart** along that axis (guarantees gap ∈ [2, 4] — the ≥ 5 floor keeps duels legal, the ≤ 7 cap keeps them out of grind territory, §4.4).
 3. Both endpoint patches are **placeable at ≥ 3 wide** after terrain clipping.
 4. The resulting arena fits FSF limits (side barriers added only if required).
 
@@ -172,12 +182,13 @@ While hunted, highlight the tiles where a duel could legally complete, shaded by
 
 The central unknown of the whole design is **material budget**. It is empirically answerable and nearly everything downstream (progression, enemy levels, rewards, the 3-vs-5 width floor) hangs off it. Do this early.
 
-- Engine-vs-engine self-play sweeps over: material budgets & compositions, patch widths 3–5, gaps 2–6, terrain/wall densities, player-arrangement archetypes (balanced, queen-corner, rook-flanks, knight-core).
-- Log result distributions and **game length in plies**. Pacing target: duels resolve in roughly **20–40 plies** `[PROVISIONAL]`. Expect a curve, not a line — bare-bones positions can grind while moderate sharp material mates fastest.
+- Engine-vs-engine self-play sweeps over: material budgets & compositions, per-side patch widths (player 3–5, enemy 2–5) and pawn counts, gaps 2–4, terrain/wall densities, player-arrangement archetypes (balanced, queen-corner, rook-flanks, knight-core).
+- Log result distributions and **game length in plies**. **Puzzle pacing target** `[REVISED from 20–40 plies]`: mates in roughly **10–20 plies at gap 2** under best play (native-config starter sweep: median 15), ≤ ~35 at gap 4, with the player ~2 blunders (≈ a 5–6 point material edge) from losing. **No mirror matches, ever** — the engine is superhuman; every encounter hands the player a decisive material edge, and difficulty tuning lives in that edge.
+- **Sweep validity rule (hard-won):** calibration data counts only if the harness engine plays the EXACT shipped ruleset — two sweep generations were invalidated by an engine that couldn't see the bare-army win condition (`results/sweep-starter-findings.md`).
 - Human-winnability estimation via weakened-FSF proxy opponent (calibration only — never in live play).
 - MultiPV on enemy move selection for run-to-run variety (carryover idea; validate it doesn't tank strength unacceptably).
 - Sweeps must simulate the crumble system (§4.5) — which requires the same mid-game position-surgery mechanism as live play (spike 11). Crumble RNG seeded per game for exact replays.
-- **Crumble alarm metric:** fraction of games where a crumble flips the eval sign. Target ≈ 0 in balanced configs — if crumbles decide games, onset is too early or cadence too fast, and the design intent ("late and rare") is being violated.
+- **Crumble alarm metric:** fraction of games where a crumble flips the eval sign. Target ≈ 0 in balanced configs — if crumbles decide games, onset is too early or cadence too fast, and the design intent ("late and rare") is being violated. `[Status: at puzzle pacing under the native config, games end before onset — the native starter sweep fired ZERO crumbles in 90 games. Crumbles are now purely the anti-fortress failsafe.]`
 - Outputs: the material-budget curve that defines the enemy **level** scale and player progression pacing; crumble onset/cadence numbers (P, k in §4.5).
 
 ---
@@ -187,7 +198,8 @@ The central unknown of the whole design is **material budget**. It is empiricall
 - **Collection:** the player accumulates pieces; back-row slots are filled from the collection at placement time.
 - **No attrition `[LOCKED]`:** pieces captured during a duel — by the enemy or by a collapsing floor — are restored after a win. Duels are all-or-nothing: win and the army walks out whole; lose and the run is over. The only stake is everything.
 - **Promotions do not persist `[LOCKED]`:** promoted pawns revert on restoration. Promotion is tactical, in-duel only — no queen farming in easy fights.
-- **Enemy level = visible material budget.** Simple number on the summoner. Fancier telegraphing later.
+- **Enemy level = visible material budget — now literal:** the army roams in the open (§5.1), so the telegraph IS the army. Small enemies are defined by their single piece (knight-guy forks, bishop-guy wants diagonals, rook-guy harasses — the monster taxonomy comes free).
+- **Army growth is the primary progression axis:** bounding box 3×2 → 4×2 → 5×2 (§4.2); piece quality within a width is the second axis. Pre-duel rearrangement (the retired §4.3 screen) joins the upgrade shelf.
 - **Reward candidate:** a beaten summoner drops a piece from their own formation (you saw it fight; scouting = shopping). Sizing waits on the sweep.
 - **Pawn-type upgrades:** the screen stays pawns-only, but *what your pawns are* is a build axis (Berolina, triple-step, etc. — repurposed from the prior project's gimmick pool, pending spikes).
 - **Boss-modifier shelf:** symmetric capturesToHand ("Necromancer"), king with open space behind him ("Errant King" — the exception that proves the backs-to-walls default).
@@ -198,7 +210,7 @@ The central unknown of the whole design is **material budget**. It is empiricall
 
 ## 9. Phase 0 Spike List
 
-**Status: all 12 spikes complete and verified — verdicts, configs, and the findings the design must absorb are in `phase0/PHASE0-RESULTS.md`.** The list below is preserved as originally written; where a spike's "expected answer" was wrong, the results doc wins (notably spike 10 — see §4.4).
+**Status: all 12 spikes complete and verified — verdicts, configs, and the findings the design must absorb are in `phase0/PHASE0-RESULTS.md`.** The list below is preserved as originally written; where a spike's "expected answer" was wrong, the results doc wins (notably spike 10 — see §4.4). Spike 4's config was additionally superseded POST-Phase-0 by the native bare-army quartet (§4.4); spikes 04/10 and the selftests were re-validated in full under it.
 
 Cheap fairyground / ffish.js checks. All load-bearing — do these before building systems on top of them.
 
@@ -220,15 +232,16 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 ## 10. Build Phases
 
 - **Phase 0 — Spikes + harness skeleton.** Everything in §9; harness able to run one sweep end-to-end. **✅ Done — `phase0/PHASE0-RESULTS.md`.**
-- **Phase 1 — Duel vertical slice.** Hand-authored arena JSON → variant config + FEN → playable duel vs. engine on a phone. Placement UI, win/loss, promotion. No overworld.
-- **Phase 2 — Exploration slice.** One hand-built map, two summoners with different levels. LOS/hunt/pursuit state machine, threat display, trigger → barrier → FEN pipeline proven end to end.
+- **Phase 1 — Duel vertical slice.** Hand-authored arena JSON → variant config + FEN → playable duel vs. engine on a phone. Placement UI, win/loss, promotion. No overworld. **✅ Done — `play/`; subsequently re-aligned to the puzzle vision (3×2 starter vs small armies, in-grammar win con, gap ≤ 4) with all arenas engine-verified.**
+- **Phase 2 — Exploration slice.** One hand-built map, two summoners with different levels. Army-as-avatar movement (blob + marching pattern, visible enemy armies), LOS/hunt/pursuit state machine, threat display, trigger → barrier → FEN pipeline proven end to end.
 - **Phase 3 — The loop.** Rewards, collection, level scaling from sweep data, floor transitions. First full runs.
 
 ---
 
 ## 11. Open Questions
 
-- Player overworld movement rules; speed parity with hunters.
+- Player overworld movement rules; speed parity with hunters; blob deformation/reformation rules (how the marching pattern squeezes through crawlspaces and reforms).
+- Facing & flanking: v1 auto-faces both armies at duel start; how rear/side ambushes should degrade the stamped formation is deferred, as is the marching-pattern edit-lock rule (proposal on record: editing locks while any enemy holds LOS/HUNT on you).
 - LOS range cap and occlusion rules.
 - Duel escape valve: none for now (to the death, both sides) — revisit if runs feel too brutal.
 - Promotion piece targets (fixed? collection-based?).
