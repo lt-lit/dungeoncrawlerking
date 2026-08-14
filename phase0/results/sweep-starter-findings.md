@@ -53,10 +53,13 @@ their default placement, 3 seeded games each — results in the table below
 
 | arena | board | enemy | plies (3 games) | verdict |
 |---|---|---|---|---|
-| arena01-first-duel | 4×6 g2 | scrubN | 19, 21, 25 | PASS ×3 — the teaching puzzle |
-| arena02-ambush | 5×7 g3, pillars | scrubB (moves first) | 40, 40, 46 | PASS ×3 — player converts as Black |
-| arena03-clipped-vault | 5×7 g3, clip + pillar | eliteR | 35, 41, 73 | PASS ×3 — fat tail (35–103 across runs) |
-| arena04-long-stair | 3×8 g4 | scrapNB | 35, 43, 45 | PASS ×3 — after the fix below |
+| arena01-first-duel | 4×6 g2 | scrubN | 17, 25, 25 | PASS ×3 — the teaching puzzle |
+| arena02-ambush | 5×7 g3, pillars | scrubB (moves first) | 36, 36, 42 | PASS ×3 — player converts as Black |
+| arena03-clipped-vault | 5×7 g3, clip + pillar | eliteR | 25, 49, 75 | PASS ×3 — fat tail, now capped by the strip |
+| arena04-long-stair | 3×8 g4 | scrapNB | 31, 33, 39 | PASS ×3 — after the wall fix below |
+
+(Numbers above are under bare-army adjudication — the shipped rule; 7 of 12
+games ended by it. Pre-rule runs were 19–25 / 40–46 / 35–103 / 35–45.)
 
 Two lessons the linter earned its keep on, first run out:
 
@@ -75,3 +78,55 @@ Two lessons the linter earned its keep on, first run out:
 Wins terminate as both `checkmate` and `stalemate-or-extinction` — the
 suffocation win (stalemateValue=loss) is doing real work in cramped small-army
 duels, exactly as the no-draw config intends.
+
+## Bare-army adjudication ("a side stripped to a bare king loses")
+
+**Rule:** the moment a side has no non-king material, it loses — no lone-king
+chases. Shipped as a game-layer adjudication (harness `opts.bareKingLoses`,
+always-on in `play/js/duel.mjs`, termination `army-extinct`), ordered after
+the mover-loses check so mating captures still read as checkmate. Crumble
+candidates that would strip a side's last piece are re-rolled.
+
+**Why not in the variant config (probed, refuted):** FSF's
+`extinctionPieceTypes = *` + `extinctionPieceCount = 1` genuinely is
+total-count bare-king semantics (probe: K+2P vs K+Q plays on; bare K
+adjudicates 0-1 — so `*` counts totals, unlike per-type letter lists, which
+fire instantly for any side missing a listed type). But it only fires with
+`extinctionPseudoRoyal = false`, and under that config an exposed-king
+position (the crumble-filter-miss class) generates ZERO legal moves for the
+side to move — our mover-loses protocol would then charge the loss to the
+WRONG side, where spike 4's pseudo-royal config degrades gracefully
+(capture the king, correct result). The belt stays on; the harness
+adjudicates. This is a result-level carve-out in the §2 crumble family: every
+position the engine sees remains FSF-pure, and under the no-draw config the
+adjudicated result matches the game-theoretic one (a bare king cannot win —
+only a filter-miss-grade anomaly could save it).
+
+**Measured effect** (`sweep-starter-bk.jsonl`, same 90-game grid):
+
+| gap | plies med/mean/max (old) | plies med/mean/max (bare-king) |
+|---|---|---|
+| 2 | 24 / 23.3 / 29 | **19 / 19.0** / 29 |
+| 3 | 31 / 31.2 / 50 | **27 / 27.6** / 60 |
+| 4 | 35 / 43.4 / 121 | 35 / 42.1 / 156 |
+
+- **64/90 games ended by the adjudication** — stripping the army is now the
+  normal way duels end, which is exactly the fiction (the army IS the
+  summoning).
+- **Sub-20-ply games went from 5/90 to 29/90.** Pawnless scraps die fastest
+  (one game: 5 plies — rook eats both pieces, done). The under-10-moves
+  puzzle target is now the common case at gap 2, not the lower tail.
+- **Gap 4 is untouched** — its grind happens while both sides still have
+  material, before any strip. The rule cuts chases, not sieges.
+
+**The two starter losses (2/90, both g4 vs eliteR) are crumble-lottery, not
+rule artifacts:** in both, a pacing crumble ate the STARTER'S ROOK (R@a2
+ply 64; r@b6 ply 40) and the eval flipped to mate-against on the spot; one
+game then ended by adjudication, the other by the classic path. Cause:
+onset 40 is "late and rare" for a 25-ply puzzle but MID-GAME for a gap-4
+rook fight. Knobs, designer's choice: (a) reserve gap 4 for pawnless/light
+enemies (the shipped arena04 matchup is clean there — pawnless armies
+can't outlive onset), keeping rook-bearing enemies at gap ≤ 3 (shipped
+arena03 already is); (b) scale crumble onset with gap in Phase 2's
+generated duels (e.g. onset ≈ 40 + 10·(gap−2)); (c) tighten the trigger cap
+to gap ≤ 3 and drop the long-gap encounter class entirely.
