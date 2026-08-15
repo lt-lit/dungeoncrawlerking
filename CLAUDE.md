@@ -7,11 +7,12 @@ summarizes 12 verified spikes and the sweep results. **Phase 1 — the duel
 vertical slice — is built and lives in `play/`** (hand-authored arena →
 playable duel vs engine on a phone; placement UI, win/loss, promotion, live
 Earthquakes; no overworld). See `play/README.md` for its layout and the arena
-JSON schema. **NOTE: `play/` now runs the experimental Board State Director**
-(`play/js/director.mjs` — Earthquakes: symmetric displacement + rare rising
-crumbles, NO repetition rules), superseding the brief's §4.5 crumble system
-in the build; reconcile the brief once playtesting ratifies the design.
-Next per brief §10: **Phase 2 — exploration slice**.
+JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON**
+— Earthquakes (symmetric displacement + rare rising crumbles, NO repetition
+rules) replaced the old crumble system in both the build and brief §4.5.
+Next per brief §10: **Phase 1.5 — Director calibration** (port
+`harness/game.mjs` off the retired crumble system, add the §6 promotion
+lint, settle ramp numbers), then **Phase 2 — exploration slice**.
 
 ## Layout
 
@@ -27,7 +28,10 @@ Next per brief §10: **Phase 2 — exploration slice**.
   pass). `crumbleFilter.mjs` is production-bound (validated §4.5 filter).
   `spike08-mobile/` is a static phone benchmark page (vendored WASM).
 - `phase0/harness/` — §7 calibration harness: `sweep.mjs <config.json>` plays
-  engine-vs-engine games with the full crumble system, JSONL + summary out.
+  engine-vs-engine games, JSONL + summary out. **Still runs the RETIRED
+  crumble system (`harness/crumble.mjs`, repetition + fixed-cadence pacing),
+  not the shipped Director — porting it is Phase 1.5. Sweep numbers about
+  arena regeneration are not trustworthy until that lands.**
 - `phase0/results/` — per-spike results docs + sweep outputs.
 
 ## Running things
@@ -65,7 +69,7 @@ run one sweep at a time.
    king stays fully royal (spike 4 finding 5); check/checkmate/stalemate
    are untouched; spikes 04+10 and selftest re-validated 25/25 + 32/32
    under this config. Consequences: (a) crumble candidates that would strip
-   a side's LAST piece must be re-rolled (a crumble would instantly end the
+   a side's LAST piece must be excluded (a crumble would instantly end the
    game); (b) test/spike fixtures must never use bare-king "victims" — such
    positions are decided at load (this bit four fixtures already); (c) the
    one state extinction cannot see — a captured king with material left
@@ -73,10 +77,10 @@ run one sweep at a time.
    `king-capture`. Never use ffish `isGameOver()`/`result()` to drive game
    end (see `phase0/results/sweep-starter-findings.md` for the full config
    history).
-5. **Search calls need runaway guards**: pair limits (`go depth 60 movetime N`)
-   and send `stop` if a movetime search overruns (~1.5s grace). Fortress
-   positions otherwise hit MAX_PLY and never return (`lib/load.mjs.go()` has
-   the watchdog).
+5. **Search calls need runaway guards**: pair limits (`go depth 22 movetime N`
+   — see rule 11) and send `stop` if a movetime search overruns (~1.5s
+   grace). Fortress positions otherwise hit MAX_PLY and never return
+   (`lib/load.mjs.go()` has the watchdog).
 6. **Recycle the engine instance every ~40 games / between duels** — the WASM
    instance corrupts under sustained multi-game use. Never call `quit()` in
    Node (Emscripten kills the whole process); drop the reference.
@@ -84,9 +88,23 @@ run one sweep at a time.
    dims-keyed catalog pattern: `duel_<files>x<ranks>`, all 50 loaded once at
    boot; everything else varies via FEN.
 8. **Parse UCI squares with a regex** — rank-10 squares are 3 chars (`f10`).
-9. **Crumble surgery**: rewrite FEN (`setSquare` → `*`, `clearEp`), validate via
-   `spikes/crumbleFilter.mjs`, then bare `position fen <new>` — that alone
-   resets engine repetition history.
+9. **Quake surgery**: rewrite FEN (`setSquare` → `*` for a crumble, or
+   from/to for a displacement; always `clearEp`), validate via
+   `crumbleFilter.mjs`, then bare `position fen <new>` with `movesSinceBase`
+   reset — the bare position alone resets engine history. Enumerate
+   candidates EXHAUSTIVELY, never by random re-roll: sampling starves on
+   late walled boards (3 observed failures in a 32-game sweep) and a full
+   board sweep costs ~12 ms.
 10. **Browser deployment**: pthread build needs SharedArrayBuffer →
     coi-serviceworker required, and it must sit NEXT TO index.html (service
     worker scope), not in a subdirectory. Ship `Threads=1`.
+11. **Engine searches: cap at `depth 22`.** `movetime` does NOT bind on 4–6
+    file arenas — the engine reaches depth 55+ and ultra-deep searches
+    crash this WASM build's pthread (`index out of bounds`). Measured: d60
+    crashed 1/30 searches, d22 crashed 0/110 and still returns <200 ms.
+    Not a handicap; live play was reaching d22–23 anyway.
+12. **Any long-lived auxiliary search needs its own recovery.** The duel's
+    stall ladder only fires on the duel's own searches — the cheat/hint
+    MultiPV probe had none and died permanently and silently when its
+    instance went bad. Every search path needs a visible failure and a way
+    back.
