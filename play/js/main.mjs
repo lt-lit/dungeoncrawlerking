@@ -14,6 +14,8 @@
 //   &go=<uci go args>  override engine search (e.g. "depth 60 movetime 80")
 //   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=
 //     override the Director config (see director.mjs DIRECTOR_DEFAULTS)
+//   &fx=<scale>      animation speed multiplier; 0 disables motion entirely
+//                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { parseSquare, findSquares } from './fen.mjs';
@@ -36,11 +38,25 @@ const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, p: 1, k: 0 };
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
 const params = new URLSearchParams(location.search);
 
+// Animation budget. Every duration in this file is multiplied through FX(),
+// so `?fx=0` collapses the whole thing to instant (headless drivers want
+// that — animations run inside app.busy, so waitIdle() waits them out), and
+// the OS reduced-motion setting does the same by default.
+const FX_SCALE = (() => {
+  const raw = parseFloat(params.get('fx') ?? '');
+  if (Number.isFinite(raw) && raw >= 0) return raw;
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : 1;
+})();
+const FX = (ms) => Math.round(ms * FX_SCALE);
+const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
 const app = {
   ffish: null,
   engine: null,
   catalog: null,
   cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength}
+  quakeMarks: null, // {from:[], to:[], pit} — the last quake's residue, held
+  // on the board through the enemy's reply and cleared when the player moves
   enemySetup: {}, // square -> piece letter for the enemy formation (editable in cheat mode)
   enemySelected: null, // enemy editor: selected enemy square
   arenas: [], // loaded arena objects, menu order
@@ -386,6 +402,7 @@ async function doUndo() {
   app.phase = 'playing';
   app.selectedSquare = null;
   app.cheatArrows = [];
+  app.quakeMarks = null; // the rewound timeline's quake never happened
   app.boardUI.setPosition(duel.fen());
   renderPlayMarks();
   log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'crumble');
@@ -667,6 +684,7 @@ async function beginDuel() {
     seed: intParam('seed', arena.crumble?.seed ?? 1, 1),
   };
   app.cheatArrows = [];
+  app.quakeMarks = null;
   $('eval-fill').style.width = '50%';
   $('eval-text').textContent = '';
   if (app.duel) app.duel.destroy();
@@ -718,7 +736,15 @@ async function driveTurn() {
 
 /** Compose all in-play board marks (selection, last move, check, arrows). */
 function renderPlayMarks() {
-  const marks = { lastMove: lastMoveMarks(), check: checkMark(), arrows: app.cheatArrows };
+  const q = app.quakeMarks;
+  const marks = {
+    lastMove: lastMoveMarks(),
+    check: checkMark(),
+    arrows: app.cheatArrows,
+    quakeFrom: q?.from ?? [],
+    quakeTo: q?.to ?? [],
+    pit: q?.pit ?? null,
+  };
   if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
     marks.selected = app.selectedSquare;
     marks.targets = targetsFor(app.selectedSquare);
@@ -791,8 +817,20 @@ async function playPlayerMove(from, to, matches) {
 
 let lastEngineInfo = null;
 
-async function onMove({ san, mover, ply }) {
+async function onMove({ uci, san, mover, ply }) {
+  const duel = app.duel;
   app.cheatArrows = []; // stale the moment the position changes
+  // duel.#push mutates its own board but renders nothing, so the DOM still
+  // holds the PRE-move position here — which is exactly what the FLIP clone
+  // needs to slide from. The engine's reply gets the longer slide: the player
+  // did not choose it and has to read it.
+  const parts = uci.match(UCI_MOVE_RE);
+  if (parts) {
+    await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: true });
+    if (app.duel !== duel || !duel.board) return; // abandoned mid-slide
+  }
+  // The player has answered the gods; their residue has served its purpose.
+  if (mover === 'player') app.quakeMarks = null;
   app.boardUI.setPosition(app.duel.fen());
   renderPlayMarks();
   const n = Math.ceil(ply / 2);
@@ -809,18 +847,44 @@ function checkMark() {
   return findSquares(app.duel.fen(), (c) => c === target)[0]?.name ?? null;
 }
 
+/**
+ * The quake, in three beats. The old version fired the board shake, the
+ * square flashes and the teleport into one 450 ms window — so the piece
+ * jumped while its own 700 ms cue was still playing, and nothing on the
+ * board said which way it went. Now: rumble, then motion, then a settle
+ * before the enemy's reply is allowed to land on top of it.
+ */
 async function onQuake({ displacements, crumble, endedGame, postFen }) {
   const duel = app.duel;
   const ui = app.boardUI;
+  const board = $('board');
   setStatus(crumble ? 'the arena shudders — the floor gives!' : 'the arena shudders…');
-  $('board').classList.add('quaking');
-  for (const d of displacements) ui.markScoot?.(d.from, d.to);
-  if (crumble) await ui.animateCrumble(crumble.square);
-  else await new Promise((r) => setTimeout(r, 450));
-  $('board').classList.remove('quaking');
+
+  // Beat 1 — the rumble, alone, so the eye is on the board before anything moves.
+  board.style.setProperty('--fx-ms', `${FX(280)}ms`);
+  board.classList.add('quaking');
+  await wait(FX(280));
+  board.classList.remove('quaking');
+  board.style.removeProperty('--fx-ms');
+  if (app.duel !== duel) return;
+
+  // Beat 2 — the motion. A quake is displacement-only OR crumble-only
+  // (director.quake() returns as soon as it has displacements, and only
+  // reaches the crumble leg with none), so these never contend for frames.
+  if (displacements.length) await ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) });
+  else if (crumble) await ui.animateCrumble(crumble.square, FX(450));
   if (app.duel !== duel) return; // user backed out mid-animation
+
+  // Beat 3 — commit and mark. These marks outlive the enemy's reply.
   ui.setPosition(postFen);
+  app.quakeMarks = {
+    from: displacements.map((d) => d.from),
+    to: displacements.map((d) => d.to),
+    pit: crumble ? crumble.square : null,
+  };
   renderPlayMarks();
+  await wait(FX(240)); // settle: the reply does not land in the same breath
+  if (app.duel !== duel) return;
   const bits = [];
   for (const d of displacements) {
     const yours = (d.piece === d.piece.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;

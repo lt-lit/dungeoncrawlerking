@@ -30,9 +30,20 @@
 //    displacement targets only empty squares, quakes never give check and
 //    never leave the non-mover in check, a crumble never strips a side's
 //    last piece.
+//  - Displacements never hand out material. `[Phase 1.1 stopgap]` The guards
+//    above are all KING-safety guards; ordinary piece safety went unchecked,
+//    so a "symmetric" quake could step a piece onto an already-attacked
+//    square and gift it (observed: arena03, black rook a7->b7 into a white
+//    rook bearing down the open b-file, with White to move). Symmetric meant
+//    symmetric in COUNT, not in CONSEQUENCE. Landing squares now go through
+//    an SEE check (threat.mjs). The full rule — a quake may create no new
+//    winning capture for EITHER side, judged on the composite post-quake
+//    position — is Phase 1.3; see that module's header for what this
+//    narrower guard still misses (discovered attacks, rescues, pins).
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { getSquare, setSquare, clearEp, splitFen, joinFen } from './fen.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
+import { landingIsSafe } from './threat.mjs';
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
 
@@ -162,7 +173,8 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
  *   B — lowers the board's stuck-piece count.
  *   C — cosmetic (legal, changes little) — the camouflage tier.
  * Rejected: kings, occupied/wall/offboard targets, pawn to rank 1 or the
- * promotion rank, any check either way, any zero-legal-move result.
+ * promotion rank, any check either way, any zero-legal-move result, and any
+ * landing square where the opponent wins material (threat.mjs).
  */
 export function displacementCandidates(ffish, variant, fen, files, ranks) {
   const A = [];
@@ -183,6 +195,16 @@ export function displacementCandidates(ffish, variant, fen, files, ranks) {
         if (nf < 0 || nf >= files || nr < 0 || nr >= ranks) continue;
         if (isPawn && (nr === 0 || nr === ranks - 1)) continue;
         if (g0[nr][nf] !== null) continue;
+        // Landing safety (Phase 1.1 stopgap): the gods hand out no free
+        // material. Mutate-and-restore on the grid we already have — no FEN
+        // round-trip — and run it BEFORE the ffish probes below, so unsafe
+        // candidates cost a few array walks instead of four ffish Boards.
+        g0[r][f] = null;
+        g0[nr][nf] = occ;
+        const safeLanding = landingIsSafe(g0, nf, nr, files, ranks);
+        g0[r][f] = occ;
+        g0[nr][nf] = null;
+        if (!safeLanding) continue;
         const to = SQ(nf, nr);
         let moved;
         try {
@@ -214,12 +236,30 @@ export function displacementCandidates(ffish, variant, fen, files, ranks) {
   return { A, B, C };
 }
 
-function bestTierForSide(tiers, white) {
+function bestTierForSide(tiers, white, extraOk = null) {
   for (const t of [tiers.A, tiers.B, tiers.C]) {
-    const side = t.filter((c) => c.white === white);
+    const side = t.filter((c) => c.white === white && (!extraOk || extraOk(c)));
     if (side.length) return side;
   }
   return [];
+}
+
+/**
+ * Does this second-leg displacement leave the FIRST leg's landing square
+ * materially safe?
+ *
+ * Each leg is filtered for its own landing safety during enumeration, and
+ * the second leg is enumerated on the first leg's board — so leg 1's effect
+ * on leg 2 is already covered. The reverse was not, and it is not a corner
+ * case: on the arena03 position that prompted this work, the pair
+ * (ra7->a6, Rb5->a5) parks the white rook on a5 attacking the black rook it
+ * had just relocated to a6 — the same gift as the reported bug, reached
+ * through the other ordering. Symmetry has to hold on the COMPOSITE board.
+ */
+function leavesFirstLegSafe(cand, firstTo, files, ranks) {
+  const tf = firstTo.charCodeAt(0) - 97;
+  const tr = parseInt(firstTo.slice(1), 10) - 1;
+  return landingIsSafe(fenGrid(cand.fen, files, ranks), tf, tr, files, ranks);
 }
 
 export const DIRECTOR_DEFAULTS = {
@@ -304,7 +344,7 @@ export class Director {
       if (p1.length) {
         const c1 = this.pick(p1);
         const tiers2 = displacementCandidates(ffish, variant, c1.fen, files, ranks);
-        const p2 = bestTierForSide(tiers2, !firstWhite);
+        const p2 = bestTierForSide(tiers2, !firstWhite, (c) => leavesFirstLegSafe(c, c1.to, files, ranks));
         if (p2.length) {
           // symmetric: one piece per side — the arena breaks locks evenly
           const c2 = this.pick(p2);

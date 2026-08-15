@@ -11,6 +11,8 @@ const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const CELL = 10; // SVG units per cell (viewBox space)
 
+const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
 export class BoardUI {
   constructor(container, { files, ranks, flipped = false, onSquareTap = null } = {}) {
     this.container = container;
@@ -53,6 +55,14 @@ export class BoardUI {
     this.svg.setAttribute('viewBox', `0 0 ${files * CELL} ${ranks * CELL}`);
     this.svg.setAttribute('preserveAspectRatio', 'none');
     container.appendChild(this.svg);
+
+    // FX overlay: FLIP clones slide across it so pieces travel between
+    // squares instead of teleporting. Also absolute, so it stays out of the
+    // grid flow; the board's own overflow:hidden clips it, which is fine
+    // because every slide is cell-to-adjacent-cell.
+    this.fx = document.createElement('div');
+    this.fx.className = 'fx-layer';
+    container.appendChild(this.fx);
   }
 
   /** Center of a square in viewBox units (flip-aware). */
@@ -137,41 +147,104 @@ export class BoardUI {
   }
 
   /** Replace ALL marks. Absent keys clear their mark class; `arrows` feeds
-   *  the SVG overlay (see setArrows). */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], arrows = [] } = {}) {
+   *  the SVG overlay (see setArrows).
+   *
+   *  `quakeFrom`/`quakeTo`/`pit` are the gods' residue: they outlive the
+   *  animation and the enemy's reply, and clear only when the player moves,
+   *  so "what just happened" is answerable from the board instead of the log.
+   *  from and to are marked DIFFERENTLY — the old cue flashed both with one
+   *  class, which showed that something moved but never which way. */
+  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], arrows = [], quakeFrom = [], quakeTo = [], pit = null } = {}) {
     const targetSet = new Set(targets);
     const lastSet = new Set(lastMove);
     const slotSet = new Set(slots);
+    const quakeFromSet = new Set(quakeFrom);
+    const quakeToSet = new Set(quakeTo);
     for (const [sq, cell] of this.cells) {
       cell.classList.toggle('sel', sq === selected);
       cell.classList.toggle('target', targetSet.has(sq));
       cell.classList.toggle('last', lastSet.has(sq));
       cell.classList.toggle('check', sq === check);
       cell.classList.toggle('slot', slotSet.has(sq));
+      cell.classList.toggle('quake-from', quakeFromSet.has(sq));
+      cell.classList.toggle('quake-to', quakeToSet.has(sq));
+      cell.classList.toggle('fresh-pit', sq === pit);
     }
     this.setArrows(arrows);
   }
 
   /** Floor-gives-way animation; caller follows with setPosition(postFen). */
-  async animateCrumble(square) {
+  async animateCrumble(square, ms = 450) {
     const cell = this.cells.get(square);
-    if (!cell) return;
+    if (!cell || !ms) return;
+    cell.style.setProperty('--fx-ms', `${ms}ms`);
     cell.classList.add('crumbling');
-    await new Promise((r) => setTimeout(r, 450));
+    await wait(ms);
     cell.classList.remove('crumbling');
+    cell.style.removeProperty('--fx-ms');
   }
 
-  /** Quake displacement cue: flash the vacated and landing squares. The
-   *  actual piece move lands with the following setPosition. */
-  markScoot(from, to) {
-    for (const sq of [from, to]) {
-      const cell = this.cells.get(sq);
-      if (!cell) continue;
-      cell.classList.remove('scooting'); // restart the animation if re-marked
-      void cell.offsetWidth;
-      cell.classList.add('scooting');
-      setTimeout(() => cell.classList.remove('scooting'), 700);
+  /**
+   * Slide one piece from → to as a FLIP clone on the fx layer, so the eye can
+   * follow it. The DOM still holds the PRE-move position when this is called;
+   * the caller commits with setPosition() once it resolves.
+   *
+   * `fade` dissolves a piece standing on the destination (a capture) during
+   * the slide. Resolves immediately when ms is 0 (reduced motion / ?fx=0).
+   */
+  async animateSlide(from, to, { ms = 240, fade = false } = {}) {
+    const src = this.cells.get(from);
+    const dst = this.cells.get(to);
+    if (!ms || !src || !dst) return;
+    const glyph = src.querySelector('.piece');
+    if (!glyph) return;
+    const base = this.container.getBoundingClientRect();
+    const a = src.getBoundingClientRect();
+    const b = dst.getBoundingClientRect();
+    const clone = glyph.cloneNode(true);
+    clone.classList.add('fx-piece');
+    // .piece sizes itself with 78cqmin against its CELL's container context.
+    // The clone lives on the fx layer, which establishes no such context, so
+    // the query unit would resolve against the viewport and render the glyph
+    // enormous. Pin the resolved size instead.
+    clone.style.fontSize = getComputedStyle(glyph).fontSize;
+    clone.style.left = `${a.left - base.left}px`;
+    clone.style.top = `${a.top - base.top}px`;
+    clone.style.width = `${a.width}px`;
+    clone.style.height = `${a.height}px`;
+    clone.style.transitionDuration = `${ms}ms`;
+    this.fx.appendChild(clone);
+    glyph.style.visibility = 'hidden';
+    const victim = fade ? dst.querySelector('.piece') : null;
+    if (victim) {
+      victim.style.transitionDuration = `${ms}ms`;
+      victim.classList.add('fx-captured');
     }
+    void clone.offsetWidth; // commit the start frame before transitioning
+    clone.style.transform = `translate(${b.left - a.left}px, ${b.top - a.top}px)`;
+    await wait(ms);
+    clone.remove();
+    // Restore BEFORE the caller's setPosition: it reuses existing .piece
+    // elements per cell, so a still-hidden glyph would render an empty square.
+    glyph.style.visibility = '';
+    if (victim) {
+      victim.classList.remove('fx-captured');
+      victim.style.removeProperty('transition-duration');
+    }
+  }
+
+  /**
+   * Slide several pieces at once, offset by `stagger` so a symmetric quake
+   * reads as two events rather than one blur. Resolves when the last lands.
+   */
+  async animateSlides(moves, { ms = 340, stagger = 120 } = {}) {
+    if (!ms) return;
+    await Promise.all(
+      moves.map(async ({ from, to }, i) => {
+        if (i && stagger) await wait(i * stagger);
+        await this.animateSlide(from, to, { ms });
+      })
+    );
   }
 
   setInteractive(enabled) {

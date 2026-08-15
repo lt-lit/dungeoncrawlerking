@@ -239,17 +239,45 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   100% { transform: translateY(60%) rotate(8deg) scale(.6); opacity: 0; }
 }
 
-.cell.crumbling { animation: cell-darken .45s ease-in forwards; }
+.cell.crumbling { animation: cell-darken var(--fx-ms, .45s) ease-in forwards; }
 .cell.crumbling .piece,
-.cell.crumbling::before { animation: crumble-fall .45s ease-in forwards; }
+.cell.crumbling::before { animation: crumble-fall var(--fx-ms, .45s) ease-in forwards; }
 
 @keyframes cell-darken {
   to { background: var(--pit); box-shadow: inset 0 3px 8px #000; }
 }
 
+/* ---------- piece motion (FLIP clones on the fx layer) ---------- */
+
+.fx-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4; /* above the arrow layer, so a sliding piece is never occluded */
+}
+
+/* font-size is pinned inline by animateSlide — see the note there. */
+.fx-piece {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(.3, .8, .35, 1); /* duration set inline per slide */
+  will-change: transform;
+}
+
+/* A piece being captured dissolves under the incoming one. */
+.piece.fx-captured {
+  transition-property: opacity, transform;
+  transition-timing-function: ease-in;
+  opacity: 0;
+  transform: scale(.65);
+}
+
 /* ---------- earthquakes (the Board State Director) ---------- */
 
-#board.quaking { animation: board-quake .45s ease-in-out; }
+#board.quaking { animation: board-quake var(--fx-ms, .45s) ease-in-out; }
 
 @keyframes board-quake {
   0%, 100% { transform: translate(0, 0); }
@@ -259,11 +287,33 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   75% { transform: translate(2px, 1px) rotate(.15deg); }
 }
 
-.cell.scooting { animation: scoot-flash .7s ease-out; }
+/* The gods' residue — persists through the enemy's reply, clears when the
+   player moves. from and to read differently so direction is legible at a
+   glance: the vacated square is a hollow outline, the landing square is
+   filled and ringed. */
+.cell.quake-from {
+  box-shadow: inset 0 0 0 2px #d7b46a55;
+  background-image: radial-gradient(circle at 50% 50%, #d7b46a18 0%, transparent 65%);
+}
 
-@keyframes scoot-flash {
-  0% { box-shadow: inset 0 0 0 3px var(--gold); }
-  100% { box-shadow: inset 0 0 0 0 transparent; }
+.cell.quake-to {
+  box-shadow: inset 0 0 0 3px var(--gold);
+  background-image: radial-gradient(circle at 50% 50%, #d7b46a30 0%, transparent 70%);
+}
+
+.cell.fresh-pit {
+  box-shadow: inset 0 3px 8px #000, inset 0 0 0 3px #b4553aaa;
+}
+
+/* Respect the OS setting: no motion, marks only. ?fx=0 does the same thing
+   from the driver side (main.mjs), which is also what keeps E2E fast. */
+@media (prefers-reduced-motion: reduce) {
+  .fx-piece,
+  .piece.fx-captured { transition: none; }
+  #board.quaking,
+  .cell.crumbling,
+  .cell.crumbling .piece,
+  .cell.crumbling::before { animation: none; }
 }
 
 /* ---------- tray + placement ---------- */
