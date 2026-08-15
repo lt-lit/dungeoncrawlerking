@@ -10,9 +10,18 @@ Earthquakes; no overworld). See `play/README.md` for its layout and the arena
 JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON**
 — Earthquakes (symmetric displacement + rare rising crumbles, NO repetition
 rules) replaced the old crumble system in both the build and brief §4.5.
-Next per brief §10: **Phase 1.5 — Director calibration** (port
-`harness/game.mjs` off the retired crumble system, add the §6 promotion
-lint, settle ramp numbers), then **Phase 2 — exploration slice**.
+Next per brief §10, a three-step Gods track before calibration resumes:
+**Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
+beats, persistent quake marks, + the landing-safety stopgap in
+`play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay** (roll trace
+with reason codes, candidate census, RNG-free probability getters, engine
+eval delta per quake — build the instrument BEFORE changing what it
+measures); **Phase 1.3 — redefine "symmetric"** (promote the stopgap to
+"no new winning capture for either side", retune). Then **Phase 1.5 —
+Director calibration** (port `harness/game.mjs` off the retired crumble
+system, add the §6 promotion lint, settle ramp numbers) — gated behind 1.3
+so the sweeps are not burned twice — and finally **Phase 2 — exploration
+slice**.
 
 ## Layout
 
@@ -108,3 +117,22 @@ run one sweep at a time.
     MultiPV probe had none and died permanently and silently when its
     instance went bad. Every search path needs a visible failure and a way
     back.
+13. **The Director's guards are KING-safety guards — piece safety is
+    separate, and it is per-COMPOSITE, not per-leg.** "No check given, no
+    side left in check, no zero-legal-move result" says nothing about
+    ordinary material, so a quake the code called symmetric handed over a
+    free rook in live play (arena03: enemy rook stepped to b7 into a white
+    rook on the open b-file). Symmetric meant symmetric in *count*.
+    `play/js/threat.mjs` now prices every landing square by static exchange
+    — and note the second half, which is the part that bites: filtering each
+    leg on its own board is NOT enough. Leg 2 is enumerated on leg 1's
+    board, so leg 1 → leg 2 is covered, but leg 2 → leg 1 is not; on the
+    same position the pair (r a7→a6, R b5→a5) recreated the identical gift
+    through the other ordering. Any new quake mechanic must be judged on the
+    board the player actually receives.
+14. **`director.quake()` is expensive and synchronous** — measured 300–720 ms
+    per quake on 4×6–6×8 arenas (Node). It calls `displacementCandidates`
+    twice, and that builds ~4 ffish Boards per candidate (`stuckCount` alone
+    is 2, and only ever distinguishes tier B from tier C). Cheap filters
+    belong BEFORE the ffish probes — that is why the landing-safety check
+    runs on the grid. Do not add per-candidate ffish work without measuring.

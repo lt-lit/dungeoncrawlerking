@@ -25,7 +25,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 
 - `index.html` — the game. Debug/E2E query params (see `js/main.mjs` header):
   `?arena=<id>&autoplace=1&autobegin=1&go=…` plus Director overrides
-  `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=`.
+  `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=` and `&fx=<scale>`
+  (animation speed; **`fx=0` disables motion entirely — drivers want this**,
+  since animations run inside `app.busy` and `waitIdle()` waits them out).
+  `prefers-reduced-motion` does the same by default.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
   50-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
   must read PASS.
@@ -45,7 +48,23 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   + debt cap (termination guarantee), seeded RNG, `setFavor()` hook.
   Kings are never displaced; pawns never land on rank 1/promotion rank;
   quakes never give check, never leave a side in check, never end the game
-  except through the terminal-crumble path.
+  except through the terminal-crumble path, and — **Phase 1.1** — never hand
+  out material (see `js/threat.mjs`).
+- `js/threat.mjs` — **landing safety.** Attack chains + a simplified static
+  exchange evaluation over the FEN grid; pure, no ffish, no engine. Exists
+  because every other displacement guard is a *king*-safety guard, so a
+  "symmetric" quake could step a piece onto an already-attacked square and
+  gift it (observed on arena03: enemy rook a7→b7 into a white rook on the
+  open b-file, White to move). Two guards use it: each candidate's landing
+  square must be materially safe, and a paired second leg must leave the
+  first leg's landing square safe too — filtering legs independently is not
+  enough, since only leg 1 → leg 2 is covered by enumeration order.
+  Verified: 420 seeded quakes over 7 realistic positions, zero gifts;
+  it rejects ~11% of grid-legal steps overall (0% from opening positions,
+  25–35% once files open), and 411/420 quakes still paired symmetrically.
+  Known gaps, deliberately left to Phase 1.3: discovered attacks from the
+  vacated square, rescues of already-hanging pieces, pins, and crumbles
+  (which pick uniformly and so may swallow a queen as readily as air).
 - `js/variant.mjs` — Phase 0 port + the fixed 50-variant catalog
   (`duel_3x6`…`duel_12x10`, loaded ONCE at boot — variant names are
   single-use) and a variants.ini key allowlist (unknown keys are silently
@@ -68,6 +87,16 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   ladder (recycle instance, retry at reduced depth).
 - `js/board-ui.mjs`, `style.css` — board/tray/promotion rendering, absolute
   `data-square` addressing, fits 3×6–12×10 boards on a 390×844 viewport.
+  **Phase 1.1 motion:** pieces travel between squares as FLIP clones on an
+  `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
+  — used by both the engine's replies and quake displacements, with captures
+  dissolving under the incoming piece. Quakes play as three beats (rumble →
+  motion → settle) rather than one 450 ms window, and leave **directional**
+  marks (`quake-from` hollow, `quake-to` filled, `fresh-pit`) that persist
+  through the enemy's reply and clear when the player moves. The old cue
+  flashed both squares with one class, so it showed *that* something moved
+  but never *which way* — and its 700 ms flash outlived the 450 ms wait, so
+  the piece teleported mid-flash.
 - `js/main.mjs` — boot, menu, placement flow (§4.3), duel driving, win/loss.
 - `arenas/*.json` — the authored arenas (schema documented below).
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,

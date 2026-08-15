@@ -13,6 +13,8 @@ import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
+import { fenGrid } from './director.mjs';
+import { captureLoss } from './threat.mjs';
 
 const out = document.getElementById('out');
 const summaryEl = document.getElementById('summary');
@@ -171,6 +173,45 @@ async function main() {
       throw new Error(`expected king_square rejection, got ok=${v.ok} reason=${v.reason}`);
     }
     return 'e1 rejected (king_square)';
+  });
+
+  // --- Displacement landing safety (threat.mjs, Phase 1.1) ---
+  // Pure static exchange evaluation, no ffish — the Director's guard against
+  // quakes that hand out free material. The headline case is the observed
+  // arena03 bug: a "symmetric" quake stepped the enemy rook onto b7, into a
+  // white rook already bearing down the open b-file, with White to move.
+  await check('landing safety — the observed arena03 gift is priced', () => {
+    const F = (c) => c.charCodeAt(0) - 97;
+    const at = (fen, sq, files, ranks) =>
+      captureLoss(fenGrid(fen, files, ranks), F(sq[0]), parseInt(sq.slice(1), 10) - 1, files, ranks);
+    // arena03 (5x7, walls c1/c4) after 11...Ra7, White to move.
+    const pre = 'r4/3P1/1R3/2*1k/1N3/2KP1/2*2 w - - 0 12';
+    if (at(pre, 'a7', 5, 7) !== 0) throw new Error('rook on a7 should be safe before the quake');
+    // leg 1 of the observed quake: the enemy rook displaced a7 -> b7
+    const gift = '1r3/3P1/1R3/2*1k/1N3/2KP1/2*2 w - - 0 12';
+    const loss = at(gift, 'b7', 5, 7);
+    if (loss !== 500) throw new Error(`expected a 500cp loss on b7, got ${loss}`);
+    return 'b7 priced at 500cp (free rook) — rejected by the Director';
+  });
+
+  await check('landing safety — SEE mechanics', () => {
+    const F = (c) => c.charCodeAt(0) - 97;
+    const at = (fen, sq) => captureLoss(fenGrid(fen, 8, 8), F(sq[0]), parseInt(sq.slice(1), 10) - 1, 8, 8);
+    const cases = [
+      ['undefended pawn', '8/8/8/3p4/8/8/8/3R4 w - - 0 1', 'd5', 100],
+      ['even trade allowed', '8/8/2p5/3r4/8/8/8/3R4 w - - 0 1', 'd5', 0],
+      ['NxR then PxN', '8/8/8/3R4/2P5/2n5/8/8 w - - 0 1', 'd5', 180],
+      ['x-ray: doubled rooks', '3R4/3R4/8/3r4/8/1p6/8/8 w - - 0 1', 'd5', 500],
+      ['blocker shuts the ray', '8/8/8/3p4/8/3N4/8/3R4 w - - 0 1', 'd5', 0],
+      ['a wall blocks a slider', '8/8/8/3p4/8/3*4/8/3R4 w - - 0 1', 'd5', 0],
+      ['a knight leaps walls', '8/8/8/3p4/2**4/2N5/8/8 w - - 0 1', 'd5', 100],
+      ['king declines a defended pawn', '8/1b6/8/3p4/3K4/8/8/8 w - - 0 1', 'd5', 0],
+    ];
+    for (const [label, fen, sq, want] of cases) {
+      const got = at(fen, sq);
+      if (got !== want) throw new Error(`${label}: expected ${want}, got ${got}`);
+    }
+    return `${cases.length} SEE cases (walls block sliders, leapers jump them)`;
   });
 
   // --- Game-end protocol (rule 4): numberLegalMoves()===0, mover loses ---
