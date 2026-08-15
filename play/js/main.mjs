@@ -211,18 +211,26 @@ function applyOptions() {
  *  turn, feeding the hint marks and/or the eval bar. Runs on the shared
  *  engine while it is otherwise idle; MultiPV is always restored to 1 so the
  *  engine's own replies stay full-strength single-PV searches (§2.2). */
-const cheat = { seq: 0, active: null };
+const cheat = { seq: 0, active: null, engine: null, failures: 0 };
 
 async function cancelCheatSearch() {
   cheat.seq++;
   if (cheat.active) {
     try {
-      app.engine.send('stop');
+      // stop the instance the probe actually RUNS on — after an engine
+      // recycle app.engine is a different object, and stopping that one
+      // leaves the real search running.
+      (cheat.engine ?? app.engine).send('stop');
     } catch {
       /* dead engine */
     }
-    await cheat.active;
+    // A dead instance never emits bestmove, so its promise only settles on
+    // the go() timeout. Never block the player's move on that: give the stop
+    // a moment to land, then move on and let the stale probe expire alone
+    // (its seq guard makes it inert).
+    await Promise.race([cheat.active, new Promise((r) => setTimeout(r, 300))]);
     cheat.active = null;
+    cheat.engine = null;
   }
 }
 
@@ -235,22 +243,37 @@ async function runCheatSearch() {
   const engine = app.engine;
   const mySeq = ++cheat.seq;
   const n = cheatHints() ? options.hintN : 1;
-  engine.setoption('MultiPV', String(n));
-  engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
-  const p = engine.go('depth 22 movetime 450', { timeout: 12000 }).finally(() => {
-    try {
-      engine.setoption('MultiPV', '1');
-    } catch {
-      /* dead engine */
-    }
-  });
+  let p;
+  try {
+    engine.setoption('MultiPV', String(n));
+    engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
+    // Timeout matched to the search (movetime + 4 s), not 12 s: a probe that
+    // is going to fail should fail before the player has moved on.
+    p = engine.go('depth 22 movetime 450', { timeout: 4450 }).finally(() => {
+      try {
+        engine.setoption('MultiPV', '1');
+      } catch {
+        /* dead engine */
+      }
+    });
+  } catch (e) {
+    await cheatProbeFailed(engine, e); // postMessage threw — instance is gone
+    return;
+  }
   cheat.active = p.catch(() => {});
+  cheat.engine = engine;
   let res;
   try {
     res = await p;
-  } catch {
-    return; // stalled probe — the duel's own recovery ladder owns engine health
+  } catch (e) {
+    // A probe failure used to be silent AND unrecoverable: the duel's ladder
+    // only fires when the duel's OWN search fails, so an instance that dies
+    // while idle on the player's turn left hints dead for the rest of the
+    // duel with nothing on screen to say why.
+    if (mySeq === cheat.seq) await cheatProbeFailed(engine, e);
+    return;
   }
+  cheat.failures = 0;
   if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing') return; // stale
   const pvs = parseMultiPv(res.infoLines, n);
   if (!pvs.length) return;
@@ -276,6 +299,40 @@ async function runCheatSearch() {
     app.cheatArrows = arrows;
     renderPlayMarks();
     setStatus(`your move · ${sans.join(' · ')}`);
+  }
+}
+
+/** A hint probe failed. Say so on screen (silence here is what made this
+ *  undiagnosable), and recycle the engine so hints come back — the duel's own
+ *  ladder can't help, it only fires on the duel's searches. Recycling is safe
+ *  here: probes only run on the player's turn with the engine otherwise idle. */
+async function cheatProbeFailed(deadEngine, err) {
+  cheat.active = null;
+  cheat.engine = null;
+  cheat.failures++;
+  app.cheatArrows = [];
+  if (app.duel && app.phase === 'playing') renderPlayMarks();
+  if (cheat.failures > 3) {
+    setStatus('your move · hints unavailable');
+    return; // stop thrashing the engine if recycling is not helping
+  }
+  log($('duel-log'), `⚠ hint probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
+  if (app.engine !== deadEngine) return; // someone already replaced it
+  try {
+    const fresh = await createEngine();
+    await fresh.loadVariantsIni(app.catalog);
+    app.engine = fresh;
+    app.duelsOnEngine = 1;
+    app.enginePending = null;
+    if (app.duel && app.duel.state === 'playing') {
+      app.duel.engine = fresh;
+      fresh.send('ucinewgame');
+      fresh.setoption('UCI_Variant', app.arena.variantName);
+      await fresh.isready();
+      if (app.duel.turnColor() === app.arena.playerColor && !app.busy) void runCheatSearch();
+    }
+  } catch {
+    setStatus('your move · hints unavailable');
   }
 }
 
