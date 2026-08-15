@@ -8,13 +8,15 @@
 
 ## 1. Concept
 
-A dungeon crawler roguelike where the player is a **king (summoner)** exploring a turn-based tile dungeon. Enemy summoners (also kings) roam the map. When a duel triggers, a magical barrier conjures a chess arena out of the local dungeon geometry, both sides' armies materialize in formation, and the fight is a small-scale chess game — **mini-chess, not crazyhouse** — played against a full-strength engine. Checkmate (or king capture) ends it. Exploration and combat are one continuous system: where you stand, what terrain surrounds you, and who caught whom all project directly into the chess position.
+A dungeon crawler roguelike where the player is a **king (summoner)** exploring a turn-based tile dungeon. Enemy summoners (also kings) roam the map. When a duel triggers, a magical barrier conjures a chess arena out of the local dungeon geometry, both sides' armies materialize in formation, and the fight is a small-scale chess game — **mini-chess, not crazyhouse** — played against a full-strength engine. Checkmate, or stripping the enemy army to a bare king, ends it. Exploration and combat are one continuous system: where you stand, what terrain surrounds you, and who caught whom all project directly into the chess position.
+
+And the arena is not neutral ground. **The gods watch, and they get bored.** A duel that grinds toward stalemate starts to shake: pieces slide, the floor opens, and the position the engine had solved is a different position now. This is the **Board State Director** (§4.5) — the design's answer to the fact that a perfect opponent plus a small board plus terrain produces a lot of dead games. It is not a difficulty knob and not a handicap; it is the dungeon refusing to let a fight be boring.
 
 ---
 
 ## 2. Hard Constraints `[LOCKED]`
 
-1. **The Prime Directive:** every duel state must be fully evaluable by Fairy-Stockfish. All duel mechanics must be expressible as **variant config (variants.ini options) + FEN**. If a mechanic can't be expressed in FSF's grammar, it does not go in the duel layer. (The exploration layer lives entirely outside FSF — that's fine and by design.) One sanctioned boundary case: **crumble events (§4.5)** are arena *regeneration*, not a duel mechanic — the harness rewrites the FEN between plies and play continues from the new position. Every state the engine ever sees is FSF-pure; only the transition is harness-owned, exactly like duel generation itself.
+1. **The Prime Directive:** every duel state must be fully evaluable by Fairy-Stockfish. All duel mechanics must be expressible as **variant config (variants.ini options) + FEN**. If a mechanic can't be expressed in FSF's grammar, it does not go in the duel layer. (The exploration layer lives entirely outside FSF — that's fine and by design.) One sanctioned boundary case: **Earthquakes — the Board State Director (§4.5)** — are arena *regeneration*, not a duel mechanic: the harness rewrites the FEN between plies (moving a piece, collapsing a square) and play continues from the new position. Every state the engine ever sees is FSF-pure; only the transition is harness-owned, exactly like duel generation itself.
 2. **Full-strength engine, always.** No UCI_Elo weakening during live play. Difficulty comes from asymmetric material, position, and terrain — never from engine handicapping.
 3. **Classical evaluation only.** This game is a pile of user-defined variants with per-duel board dimensions and wall squares; no NNUE net exists or will exist for them. FSF's handcrafted classical eval is the opponent — it's what FSF's reputation for master-level play on user-defined variants is built on. Do not rely on NNUE-specific behavior or restrictions anywhere.
 4. **Tech stack:** vanilla JS, no build tools, static hosting on GitHub Pages, mobile-first UI. Fairy-Stockfish WASM (UCI engine) + ffish.js (rules/legality/FEN/SAN) run client-side. `coi-serviceworker` if threading is needed (standard static-hosting workaround — see §13 for provenance).
@@ -52,7 +54,7 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 - The barrier is a rectangle along the **alignment axis** between the two kings, spawned from their **standing positions** (kings are never teleported/rearranged).
 - Barrier walls sit at both kings' backs. Backs-to-the-wall is the default for every duel — it's what makes mating patterns work.
 - **Width = local room width**, up to FSF's max files. Side barriers are only added when needed to fit FSF limits. Board caps: 12 files × 10 ranks (largeboard build).
-- **Overworld terrain inside the barrier carries into the duel as static wall squares (`*` in FEN).** This is the entire point of the dynamic-arena design: pillars, wall stubs, and room edges shape every fight. Walls and crumble holes (§4.5, §5.1) project identically.
+- **Overworld terrain inside the barrier carries into the duel as static wall squares (`*` in FEN).** This is the entire point of the dynamic-arena design: pillars, wall stubs, and room edges shape every fight. Walls and Earthquake holes (§4.5, §5.1) project identically.
 
 ### 4.2 Formations `[LOCKED]`
 
@@ -84,10 +86,11 @@ original clauses below stand only for that interim and as design record.]`
 
 - **Win/loss (both sides): checkmate, stalemate, or ARMY EXTINCTION — stripped to a bare king, the summoning fails.** Player loses → run over. All conditions live IN-GRAMMAR, so the engine plays for strips (scores them mate-1) and duels never degenerate into lone-king chases. `[RESOLVED post-Phase-1, superseding spike 4's config: the extinction quartet is `extinctionValue=loss`, `extinctionPieceTypes=*`, `extinctionPieceCount=1`, `extinctionPseudoRoyal=false` — total-count semantics. King capture as a separate rule is gone (the single extinction slot can watch kings or totals, not both); the king stays fully royal, and the game layer keeps one three-line backstop: a kingless board — unreachable outside position surgery — is an immediate loss. Config history, probes, and sweep data: `phase0/results/sweep-starter-findings.md`.]`
 - **No draws, ever `[LOCKED]`.** Every duel ends in a win or a loss. The config closes every draw door FSF knows about:
-  - `stalemateValue = loss` — a king with no legal moves loses, both sides: the floor gives way beneath him (§4.5).
+  - `stalemateValue = loss` — a king with no legal moves loses, both sides: the floor gives way beneath him (§4.5). This is also the mechanism by which an Earthquake can end a duel, and the reason it is the *only* such mechanism.
   - `nMoveRule = 0` — no move-count draw clock.
-  - `nFoldRule = 0` **+ `nFoldValue = loss`** — repetition never adjudicates a result. Repetition is handled *physically* by the crumble system (§4.5). `[RESOLVED by spike 10 — "A-prime":` `nFoldRule = 0` alone is insufficient (the engine privately draw-scores repetition lines in search); adding `nFoldValue = loss` disables that scoring path while rule 0 keeps adjudication dead. The spike's Plan B as written below is refuted — do not ship it (parity exploit: a losing engine chases repetitions as wins). Crumble still fires on the 3rd occurrence. Details: `phase0/results/spike10-repetition-scoring.md`.`]`
-  - Insufficient-material and fortress states resolve via §4.5: arenas that can't produce a result stop existing.
+  - `nFoldRule = 0` **+ `nFoldValue = loss`** — repetition never adjudicates a result, and is not punished by any other mechanic either (§4.5 repealed the repetition crumble). `[RESOLVED by spike 10 — "A-prime":` `nFoldRule = 0` alone is insufficient (the engine privately draw-scores repetition lines in search); adding `nFoldValue = loss` disables that scoring path while rule 0 keeps adjudication dead. The spike's Plan B as written below is refuted — do not ship it (parity exploit: a losing engine chases repetitions as wins; re-measured post-Phase-1 at cp −707 → "mate 3"). Details: `phase0/results/spike10-repetition-scoring.md`.`]`
+  - Insufficient-material and fortress states resolve via §4.5: the Board State Director reopens what it can and closes the board when it cannot — arenas that can't produce a result stop existing.
+  - **Cost of no repetition bound:** nothing caps how long a shuffle can persist, so iterative deepening can race to MAX_PLY in a fortress and hard-crash the WASM pthread. The duel layer needs a stall-recovery ladder (recycle instance, retry at reduced depth) and a depth cap; both ship in `play/`. Track the stall rate as a first-class metric (§7).
 - **Promotion region = enemy back rank** (per-color `promotionRegion`). March a pawn onto their home row and it transforms. Promotion piece targets `[OPEN]`.
 - **Initiative:** whichever side's move *completes* the legal duel condition plays White. Ambusher moves first; a player who deliberately steps into alignment holds White.
 - If a **player** move creates legal alignment with multiple roamers simultaneously, the player chooses their opponent.
@@ -95,29 +98,58 @@ original clauses below stand only for that interim and as design record.]`
 - **Reserve slot** (single piece in hand, droppable on own back ranks) is a possible high-tier upgrade, not a core mechanic. `[OPEN]`
 - **Gap math:** formations are 2 deep each → 4 ranks of formation; the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]`
 
-### 4.5 The crumble system `[LOCKED in shape, PROVISIONAL in numbers]`
+### 4.5 The Board State Director — Earthquakes `[LOCKED in shape, PROVISIONAL in numbers — REPLACES the crumble system]`
 
-Late in a duel, the conjured arena begins to fail: squares collapse into pits and become wall squares (`*`). Crumbles are **orchestration-layer arena regeneration** — the harness rewrites the FEN between plies and play continues (see the Prime Directive carve-out, §2). The engine never anticipates a crumble; it replans perfectly after each one. That asymmetry is acceptable *because crumbles are late and rare* — if sweep games are routinely decided by crumbles, the tuning is wrong (§7).
+The dungeon has opinions. As a duel runs long, **THE GODS** stir the arena: the screen shakes, a few pieces scoot to neighbouring squares, and sometimes the floor gives way and a square becomes a pit (`*`). Collectively these events are **Earthquakes**, and the system that chooses them is the **Board State Director**.
 
-Two triggers:
+The Director is **orchestration-layer arena regeneration** — the harness rewrites the FEN between plies and play continues (the Prime Directive carve-out, §2). Every state the engine sees is FSF-pure; only the transition is ours. The engine never anticipates an Earthquake and replans perfectly after each one.
 
-1. **Repetition crumble `[LOCKED]`.** The third occurrence of any position collapses the square the loop-closing piece just moved *from*. That square is empty by construction (the piece left it) and is never a king's current square — repetition crumbles can't kill pieces, no special-casing required. Position history resets after every crumble (new walls = new positions), so each loop costs exactly one square.
-2. **Pacing crumble `[LOCKED in shape]`.** Past an onset ply P, a random square collapses every k plies (P, k `[PROVISIONAL]` — calibrate in §7). **Pure random, no telegraph.** Both kings' current squares are excluded; every other square is fair game, occupied squares included — a piece standing on a collapsing square is lost. (Player pieces lost this way are restored on a win like any other capture — §8.)
+**Its job is not pacing. Its job is to make the board more fun.** A duel that has gone inert — blockaded pawns, a fortress, nothing either side can profitably do — is the failure the Director exists to prevent. It reaches for the smallest intervention that reopens the position, and only escalates to destruction when nothing else is left.
 
-Rules of the pit:
+`[SUPERSEDES the two-trigger crumble system (repetition crumble + pacing crumble), which shipped through Phase 1. Rationale and measurements throughout this section come from the 2026-08 walled-arena prototype sweeps; the shipped implementation is `play/js/director.mjs`.]`
 
-- **A king's own square collapses only via the stalemate rule** (§4.4): run out of legal moves and the floor takes you. Pacing crumbles never target kings.
-- **Legality filter:** every random candidate square is validated with ffish.js before it collapses. Re-roll any candidate that would expose the side-not-to-move's king (a duel must never be decided by a dice roll in one ply), that would instantly end the game by mate or stalemate, **or that would strip a side's LAST piece** (under in-grammar army extinction, §4.4, such a crumble ends the game outright). Crumbles pressure games; they don't end them.
-- **En-passant rights are cleared on every crumble.** Stale ep squares against rewritten geometry are a bug factory.
-- **Termination guarantee:** every repetition crumble permanently removes a square and the board is finite, so with no draw rules left (§4.4) every duel provably ends. No adjudication exists anywhere.
+**Repetition is not punished. At all. `[REVISED — repeals the repetition crumble]`** Shuffle as much as you like. Two independent findings killed it:
 
-Notes:
+- The old rule let a player shuttle a piece to demolish a *chosen* square for free, and — because repetition crumbles bypassed the legality filter — a player could dig away an enemy king's last flight square and win on the spot. The engine can never understand or counter this, and no engine-vs-engine sweep can surface it.
+- The obvious fix (make repetition cost the repeating piece) cannot be made visible to the engine. `nFoldRule = 3` turns repetition into a **win** the losing side chases: measured, a dead-lost engine went from an honest cp −707 to claiming *mate 3* and playing for it. `moveRepetitionIllegal` is a no-op in these builds. And piece-centric repetition at threshold 3 would have fired in **46% of games** (69 firings across 90, 30 of them kings) — a core mechanic, not a failsafe.
+
+#### The two moves the Director can make
+
+1. **Displacement `[LOCKED in shape]`** — a piece slides to an adjacent empty square. This is the Director's primary tool and the *only* mechanic that can reopen a locked position. Measured: a crumble frees a terrain-locked pawn **0 times in 7,073** instances (it cannot — the block *is* a wall and a crumble only adds walls); displacing that pawn works 12.7% of the time. Mean effect on total legal moves: displacement **+0.08**, crumble **−1.55**.
+   - **Symmetric-preferred `[LOCKED]`.** Each quake tries to move one piece **per side**. If the arena has to break a deadlock it must break it evenly — one-sided stirs hand whole games away (measured: the median one-sided eval flip was a *mate-score transition*). If only one side has a candidate, the Director waits; its patience runs out on its own ramp as the duel drags, after which it will settle for one-sided.
+   - **Tiered selection.** Frees a terrain-locked pawn → unsticks a piece with no legal moves → cosmetic. The cosmetic tier is not filler: if pieces only ever scooted when something was stuck, an attentive player would learn to read it. Cosmetic stirs are camouflage.
+   - **Kings are never displaced.** They anchor all mate geometry, and "the earthquake moved my king into check" is the worst outcome in the design.
+2. **Crumble `[LOCKED in shape]`** — a square collapses into a pit, taking any occupant with it. Rare in the midgame, rising to certain late. Crumbles are **the clock**: they are the only monotonic force in the system and the whole termination guarantee rests on them.
+
+#### Timing
+
+**A rising hazard, never a fixed cadence `[REVISED]`.** Each ply past an onset, `P(quake)` ramps from ~0 toward 1; within a quake, `P(crumble)` rides its own, much slower ramp. No onset cliff, nothing to count, and — load-bearing — **no parity bias.** A fixed cadence fires on plies of one parity, so the same colour is always the side to move when the arena acts. Under a system where a collapse can immobilize the mover, that made exactly one colour quake-mortal. Random intervals hit both sides evenly.
+
+All Director RNG is **seeded per duel** so harness sweeps replay exactly.
+
+#### Rules of the quake
+
+- **Candidates are enumerated exhaustively, never sampled.** The old 60-random-rolls approach *starved* — 3 observed failures in a 32-game walled sweep, each leaving the board untouched in precisely the late, sparse position where termination depends on it. A full board sweep costs ~12 ms; randomness lives in choosing *within* a tier. Zero starvations across 80 prototype games since.
+- **A quake never gives check, and never leaves a side in check.** Displacements that would do either are rejected outright. Quakes are quiet.
+- **A crumble never strips a side's last piece.** Under in-grammar extinction (§4.4) that would end the duel by dice roll, and it would cheapen a win condition the player is supposed to earn.
+- **Pawns never land on rank 1 or a promotion rank.** Undefined state; excluded.
+- **A crumble cannot create an attack — proven, not assumed.** A wall blocks exactly what a piece blocks, so blocking is monotonically non-decreasing and the attacker set monotonically non-increasing. Verified exhaustively: **0 exposures and 0 created checks in 46,048 candidates.** The exposure filter exists for *displacements*, which genuinely can open lines.
+- **En-passant rights are cleared on every quake.** Stale ep squares against rewritten geometry are a bug factory.
+
+#### How a duel can end by Earthquake
+
+**Only one way: the arena runs out of room.** When *every* remaining collapse would leave the side to move with no legal moves — i.e. no neutral candidate exists anywhere on the board — the Director takes one anyway and the floor claims them (termination `earthquake`; §4.4's stalemate-as-loss, wearing the arena's name). This is the arena finishing a duel that had already closed, not deciding one. A quake never ends a duel by stripping a last piece, and displacement can never end one at all.
+
+**Termination guarantee `[LOCKED]`.** Free squares only ever decrease; a debt cap forces a crumble after a bounded run of displacement-only quakes; kings need free squares to move. The board therefore closes, and stalemate-as-loss ends it. No adjudication exists anywhere. (In practice this backstop has never been reached: **0 terminal crumbles across every prototype run.**)
+
+#### Notes
 
 - **FSF wall semantics already match pit fiction:** sliders are blocked (a rook can't roll across a pit), nothing may stand there, and leapers jump clean over. Cavalry leaps the pit for free.
-- **Deliberate repetition is a siege tool.** A repetition needs both sides to recreate the position — which is exactly what a passive, fortressed engine does. A player who understands the rule can shuttle a piece to demolish a *chosen* square (the one they vacate), sealing an enemy king's escape or cracking fortress geometry. The engine can't plan this back: asymmetric knowledge, per the difficulty philosophy (§13). The fortress problem's real answer is player skill, not RNG.
-- **Crumble-sight** — telegraphing upcoming collapse squares — is deliberately *not* a base rule. Pure randomness mildly favors the side that replans perfectly (the engine), so the sight upgrade buys back real value on the §8 shelf.
+- **Favor of the Gods `[OPEN]`** — a runtime multiplier on quake probability (`setFavor()` in the shipped module). 0 silences them, 1 is baseline, >1 angers them. In-game effects — items, shrines, shrine-desecration, taunting the dungeon — move it during a run. Theme and economy TBD; the hook is live.
+- **Quake-sight** — telegraphing what the gods are about to do — is deliberately *not* a base rule, and remains an §8 upgrade.
+- **The Director is tunable in-game** (Options → The Gods: Calm / Restless / Wrathful / Custom / Off). This is a playtest instrument first, but temperament-as-difficulty-axis is a live design option.
 - **Holes persist after the duel** as overworld terrain (§5.1). Persistence policy vs map guarantees is open (§11).
-- Crumble RNG is **seeded per duel** so harness sweeps replay exactly.
+- **Walls are forever.** Letting rubble refill a pit would be the single best anti-boring tool available and it would destroy the termination guarantee — free squares would stop decreasing monotonically. Ruled out on purpose; do not re-invent it.
 
 ---
 
@@ -128,7 +160,7 @@ Notes:
 - Turn-based, tile grid. **The army IS the avatar** `[REVISED — the army-avatar pivot]`: the player moves their whole formation as ONE unit — a flexible blob that holds the customized marching pattern where the ground allows and deforms through narrow gaps and around holes. `[PROVISIONAL: 1 tile/turn, 8-directional — speed parity with hunters assumed but not settled]`
 - **Enemy summoners' armies are likewise visible while roaming** — what they have is what you see (scouting = shopping, §8; level telegraphing is literal). The old "roamers are kings only" rule is repealed; armies still materialize into the §4.2 patch when the barrier drops (v1: both formations stamped auto-facing each other; facing/flanking consequences deferred — §11).
 - Roamers are **finite per floor, no respawns** — kills the farming incentive, makes clearing a floor mean something.
-- **Two terrain classes:** *walls* block movement and LOS; *holes* (crumble scars, §4.5) block movement but not LOS — you can see across a pit. Both project into duels identically as `*` wall squares, and the linter (§6) counts both when clipping patches.
+- **Two terrain classes:** *walls* block movement and LOS; *holes* (Earthquake scars, §4.5) block movement but not LOS — you can see across a pit. Both project into duels identically as `*` wall squares, and the linter (§6) counts both when clipping patches.
 - Patrol behavior while roaming: `[OPEN — routes vs. random walk]`
 
 ### 5.2 Detection & pursuit state machine `[LOCKED]`
@@ -175,6 +207,9 @@ While hunted, highlight the tiles where a duel could legally complete, shaded by
 - **Region-level guarantees:** every region contains duel-capable ground; hunters can path to duel-completing squares; no geometry permits infinite consequence-free camping; crawlspaces are scarce.
 - **Encounter enumerability:** because the trigger is deterministic, every (roamer, spotting geometry) → arena instance is knowable at map-gen time. Generated maps can have sampled arenas validated (winnability + pacing) before acceptance. **v1 sidesteps this with hand-built maps.**
 - **Runtime erosion:** persistent holes (§4.5) accumulate after map-gen, so a floor's duels can slowly erode the gen-time guarantees — enough scars could manufacture the safe hallways §5.3 forbids. The linter counts holes as walls and will *know*; what it's allowed to tolerate is an open policy question (§11).
+- **Pawn promotion reachability `[NEW — unbuilt]`.** The linter checks that walls don't sever the two formations; it does **not** check that pawns can reach a promotion rank. They frequently can't: 5 of 18 pawns across the shipped Phase 1 arenas are push-blocked from move one, and at generated wall densities 0.15–0.3, **95.6% of positions carry at least one terrain-locked pawn** (mean 4.18). This is the single largest source of inert boards, and the Director can only paper over it — displacement frees such a pawn 12.7% of the time per attempt, so clearing a board's worth costs more Earthquakes than the design can afford (§7).
+  - **This lint reduces the problem; it can never eliminate it.** Real duels take the terrain where the fight happens — there is no re-roll — and Earthquakes themselves create new locks (measured: 8.1% of crumbles do). Locked starts are a permanent feature of the game and **must stay in the test set**; the lint is for the generator's benefit, not the harness's.
+  - Policy `[OPEN]`: require every pawn to have a clear push path (strictest — expect heavy re-rolls at density 0.3), at least one per side (guarantees each side a live promotion threat), or player-side only.
 
 ---
 
@@ -187,9 +222,14 @@ The central unknown of the whole design is **material budget**. It is empiricall
 - **Sweep validity rule (hard-won):** calibration data counts only if the harness engine plays the EXACT shipped ruleset — two sweep generations were invalidated by an engine that couldn't see the bare-army win condition (`results/sweep-starter-findings.md`).
 - Human-winnability estimation via weakened-FSF proxy opponent (calibration only — never in live play).
 - MultiPV on enemy move selection for run-to-run variety (carryover idea; validate it doesn't tank strength unacceptably).
-- Sweeps must simulate the crumble system (§4.5) — which requires the same mid-game position-surgery mechanism as live play (spike 11). Crumble RNG seeded per game for exact replays.
-- **Crumble alarm metric:** fraction of games where a crumble flips the eval sign. Target ≈ 0 in balanced configs — if crumbles decide games, onset is too early or cadence too fast, and the design intent ("late and rare") is being violated. `[Status: at puzzle pacing under the native config, games end before onset — the native starter sweep fired ZERO crumbles in 90 games. Crumbles are now purely the anti-fortress failsafe.]`
-- Outputs: the material-budget curve that defines the enemy **level** scale and player progression pacing; crumble onset/cadence numbers (P, k in §4.5).
+- Sweeps must simulate the Board State Director (§4.5) — which requires the same mid-game position-surgery mechanism as live play (spike 11). Director RNG seeded per game for exact replays. **`harness/game.mjs` still runs the retired crumble system and must be ported to `director.mjs` before any Director numbers are trustworthy `[TODO]`.**
+- **Alarm metric:** fraction of games where an Earthquake flips the eval sign. `[REVISED — the old ≈0 target was never actually met; it was an artifact.]` The wall-free native sweep reported 0 only because crumbles *never fired* (6 events in 90 games — games ended before onset). The moment arena regeneration actually engages in a walled arena, every configuration measured lands between **31% and 75%** of games — including the old crumble-only system at 44%, and the shipped Phase 1 pacing at 0.5–1.0.
+  - The reason is structural, not tuning: **a locked position has no natural winner, so whatever breaks the lock decides it.** Flip rate tracks event volume almost perfectly, and the volume needed to reopen a board (tens of quakes per duel) is an order of magnitude above what a ≈0 target permits (~4). Symmetric displacement is the mitigation that works — it halves one-sided swings — but it does not abolish the trade.
+  - **New target `[PROVISIONAL]`:** minimize flips *per unit of un-sticking achieved*, and treat the metric as a comparison between configs rather than an absolute bar. A metric that can distinguish "the dice picked a winner" from "the dungeon reopened a dead game and someone then won it" would be worth more than tightening the number, and does not yet exist `[OPEN]`.
+- **Termination-by-Earthquake rate:** should be low but non-zero. Zero means the Director never mattered; high means it is deciding duels.
+- **Engine stall rate** (searches that hang or crash the WASM pthread, per 100 engine plies) — first-class now that no repetition bound exists (§4.4). Baseline measured: ~2.5/100 on the pre-Director build at `depth 60`; the shipped `depth 22` cap took it to ~0.
+- **Locked-pawn trajectory:** mean terrain-locked pawns per position, start vs end. The Director's actual job, measured directly.
+- Outputs: the material-budget curve that defines the enemy **level** scale and player progression pacing; Director ramp numbers (onset, quake ramp, crumble ramp, debt cap — §4.5).
 
 ---
 
@@ -203,14 +243,15 @@ The central unknown of the whole design is **material budget**. It is empiricall
 - **Reward candidate:** a beaten summoner drops a piece from their own formation (you saw it fight; scouting = shopping). Sizing waits on the sweep.
 - **Pawn-type upgrades:** the screen stays pawns-only, but *what your pawns are* is a build axis (Berolina, triple-step, etc. — repurposed from the prior project's gimmick pool, pending spikes).
 - **Boss-modifier shelf:** symmetric capturesToHand ("Necromancer"), king with open space behind him ("Errant King" — the exception that proves the backs-to-walls default).
-- **Upgrade shelf:** **crumble-sight** (telegraphs upcoming collapse squares, §4.5) — the base game keeps crumbles unreadable, so the sight upgrade buys real value.
+- **Upgrade shelf:** **quake-sight** (telegraphs what the gods are about to do, §4.5) — the base game keeps Earthquakes unreadable, so the sight upgrade buys real value. **Favor of the Gods** (§4.5) is the other axis: anything that raises or lowers quake frequency mid-run is a build decision, and a player who *wants* chaos is a legitimate build.
+- **Reward tiering by termination `[NEW]`:** checkmate should pay more than an army-extinction strip — it is measurably the harder win (the engine scores a strip as mate-1 and takes it whenever it is shorter, so mates happen when the player engineers them). Stalemate tiers *with* checkmate: same constriction work, and thematically the same king-death. An `earthquake` termination pays the floor rate — you did not earn it. **Decay total reward with ply count**, so the mate bonus can't be farmed by stalling. `[The engine cannot be made to prefer mates: every result-shaped variants.ini option is ternary win/loss/draw, extinction resolves to the identical mate score, and a non-ternary value silently disables the rule. Reward tiering is a game-layer concern, permanently.]`
 - Standard roguelike content — floors, exits, shops, shrines, chests, traps, bosses — is expected and **deferred** until the core loop is playable.
 
 ---
 
 ## 9. Phase 0 Spike List
 
-**Status: all 12 spikes complete and verified — verdicts, configs, and the findings the design must absorb are in `phase0/PHASE0-RESULTS.md`.** The list below is preserved as originally written; where a spike's "expected answer" was wrong, the results doc wins (notably spike 10 — see §4.4). Spike 4's config was additionally superseded POST-Phase-0 by the native bare-army quartet (§4.4); spikes 04/10 and the selftests were re-validated in full under it.
+**Status: all 12 spikes complete and verified — verdicts, configs, and the findings the design must absorb are in `phase0/PHASE0-RESULTS.md`.** The list below is preserved as originally written; where a spike's "expected answer" was wrong, the results doc wins (notably spike 10 — see §4.4). Spike 4's config was additionally superseded POST-Phase-0 by the native bare-army quartet (§4.4); spikes 04/10 and the selftests were re-validated in full under it. Spikes 11 and 12 remain load-bearing under the Board State Director — position surgery and the legality filter are exactly what Earthquakes are built from — but note that spike 12's filter is now called on an **exhaustive** enumeration rather than sampled re-rolls (§4.5), and its `reason` strings mislabel last-piece strips as `instant_checkmate`/`instant_stalemate` (harmless to the accept/reject verdict, load-bearing if you key tier logic off the reason — the Director pre-filters strips itself).
 
 Cheap fairyground / ffish.js checks. All load-bearing — do these before building systems on top of them.
 
@@ -232,7 +273,8 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 ## 10. Build Phases
 
 - **Phase 0 — Spikes + harness skeleton.** Everything in §9; harness able to run one sweep end-to-end. **✅ Done — `phase0/PHASE0-RESULTS.md`.**
-- **Phase 1 — Duel vertical slice.** Hand-authored arena JSON → variant config + FEN → playable duel vs. engine on a phone. Placement UI, win/loss, promotion. No overworld. **✅ Done — `play/`; subsequently re-aligned to the puzzle vision (3×2 starter vs small armies, in-grammar win con, gap ≤ 4) with all arenas engine-verified.**
+- **Phase 1 — Duel vertical slice.** Hand-authored arena JSON → variant config + FEN → playable duel vs. engine on a phone. Placement UI, win/loss, promotion. No overworld. **✅ Done — `play/`; subsequently re-aligned to the puzzle vision (3×2 starter vs small armies, in-grammar win con, gap ≤ 4) with all arenas engine-verified, then re-based onto the Board State Director (§4.5) with in-game tuning knobs.**
+- **Phase 1.5 — Director calibration `[NEW, in progress]`.** Port `harness/game.mjs` from the retired crumble system to `director.mjs` so §7 sweeps measure the shipped rules; add the promotion-reachability lint (§6); playtest the temperament presets and settle the ramp numbers. The Director is committed as canon on the strength of prototype sweeps and hands-on play — the numbers are not settled and are expected to move.
 - **Phase 2 — Exploration slice.** One hand-built map, two summoners with different levels. Army-as-avatar movement (blob + marching pattern, visible enemy armies), LOS/hunt/pursuit state machine, threat display, trigger → barrier → FEN pipeline proven end to end.
 - **Phase 3 — The loop.** Rewards, collection, level scaling from sweep data, floor transitions. First full runs.
 
@@ -248,16 +290,19 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 - Progression axes final shape (slot unlocks vs. pawn types vs. reserve slot vs. …).
 - Multi-hunter dynamics beyond the initiative rule (aggro sharing, converging patrols).
 - Frozen vs. live world during duels.
-- Persistent-hole policy (§4.5/§6): cap per region, dungeon heals, or bless erosion as a diggable resource — deliberate moat-digging is an exploit or a strategy; choose on purpose.
-- Crumble onset ply P and cadence k (post-sweep numbers).
-- Reward economy sizing (post-sweep).
+- Persistent-hole policy (§4.5/§6): cap per region, dungeon heals, or bless erosion as a diggable resource. `[Note: the player can no longer aim holes — the repetition crumble that allowed deliberate moat-digging is repealed. This is now purely a map-integrity question, not an exploit question.]`
+- Director ramp numbers — onset, quake ramp, crumble ramp, debt cap, one-sided patience (§4.5), post-sweep, and only after `harness/game.mjs` runs the Director.
+- Favor of the Gods (§4.5): what moves it, how far, and whether temperament is a difficulty axis, a build axis, or both.
+- Pawn promotion-reachability lint policy (§6).
+- An alarm metric that separates "the arena picked the winner" from "the arena reopened a dead game" (§7).
+- Reward economy sizing (post-sweep), including the checkmate/strip tier ratio and the speed-decay curve (§8).
 - Title collision / availability check before any public release (title itself is locked).
 
 ---
 
 ## 12. Non-Goals (v1)
 
-- No NNUE. No engine handicapping. No duel mechanics outside FSF's grammar (auras, HP, hidden info, multi-move turns). Randomness touches a duel only through the crumble system (§4.5) — arena regeneration at the harness layer — never inside the move rules the engine reasons about.
+- No NNUE. No engine handicapping. No duel mechanics outside FSF's grammar (auras, HP, hidden info, multi-move turns). Randomness touches a duel only through the Board State Director (§4.5) — arena regeneration at the harness layer — never inside the move rules the engine reasons about. (The `depth 22` search cap is a WASM-stability measure, not handicapping: the engine was reaching depth 22–23 in live play regardless, and deeper searches crash the pthread.)
 - No hands/pockets as a core economy (upgrade path only).
 - No procedural map gen in v1 (hand-built maps; linter still applies).
 - No meta-progression between runs, no art/sound polish, no desktop-first layout.

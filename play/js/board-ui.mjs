@@ -161,6 +161,19 @@ export class BoardUI {
     cell.classList.remove('crumbling');
   }
 
+  /** Quake displacement cue: flash the vacated and landing squares. The
+   *  actual piece move lands with the following setPosition. */
+  markScoot(from, to) {
+    for (const sq of [from, to]) {
+      const cell = this.cells.get(sq);
+      if (!cell) continue;
+      cell.classList.remove('scooting'); // restart the animation if re-marked
+      void cell.offsetWidth;
+      cell.classList.add('scooting');
+      setTimeout(() => cell.classList.remove('scooting'), 700);
+    }
+  }
+
   setInteractive(enabled) {
     this.interactive = enabled;
     this.container.classList.toggle('inactive', !enabled);

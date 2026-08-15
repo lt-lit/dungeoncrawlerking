@@ -12,7 +12,8 @@
 //   &autoplace=1     accept the default placement immediately
 //   &autobegin=1     also begin the duel
 //   &go=<uci go args>  override engine search (e.g. "depth 60 movetime 80")
-//   &onset=N&cadence=N&seed=N  override the arena's crumble config
+//   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=
+//     override the Director config (see director.mjs DIRECTOR_DEFAULTS)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { parseSquare, findSquares } from './fen.mjs';
@@ -122,13 +123,29 @@ function defaultPlacement(arena) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false };
+const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false, godPreset: 'restless', godCustom: null };
+
+// The Gods (Board State Director) — tuning presets. Numbers are plies.
+// 'restless' is the sweep-validated baseline; custom exposes every knob.
+const GOD_PRESETS = {
+  calm: { onsetPly: 20, quakeRamp: 100, crumbleRamp: 160, debtCap: 12, asymOnsetPly: 70, asymRamp: 80 },
+  restless: { onsetPly: 8, quakeRamp: 60, crumbleRamp: 100, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 },
+  wrathful: { onsetPly: 4, quakeRamp: 25, crumbleRamp: 50, debtCap: 6, asymOnsetPly: 30, asymRamp: 30 },
+  off: { onsetPly: Infinity, quakeRamp: 60, crumbleRamp: 100, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 },
+};
+const GOD_KNOBS = ['onsetPly', 'quakeRamp', 'crumbleRamp', 'debtCap', 'asymOnsetPly', 'asymRamp'];
+
+function godConfig() {
+  if (options.godPreset === 'custom' && options.godCustom) return { ...GOD_PRESETS.restless, ...options.godCustom };
+  return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
+}
 
 function loadOptions() {
   try {
     const saved = JSON.parse(localStorage.getItem(OPT_KEY) ?? '{}');
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
+    if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
   } catch {
     /* defaults */
   }
@@ -155,6 +172,14 @@ function syncOptionsUI() {
   $('optEval').checked = options.evalBar;
   $('optEnemyEdit').checked = options.enemyEdit;
   $('cheat-opts').classList.toggle('disabled', !options.cheat);
+  $('optGodPreset').value = options.godPreset;
+  const cfg = godConfig();
+  for (const k of GOD_KNOBS) {
+    const el = $(`god_${k}`);
+    el.value = Number.isFinite(cfg[k]) ? String(cfg[k]) : '';
+    el.disabled = options.godPreset !== 'custom';
+  }
+  $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
 }
 
 function refreshCheatUI() {
@@ -186,18 +211,26 @@ function applyOptions() {
  *  turn, feeding the hint marks and/or the eval bar. Runs on the shared
  *  engine while it is otherwise idle; MultiPV is always restored to 1 so the
  *  engine's own replies stay full-strength single-PV searches (§2.2). */
-const cheat = { seq: 0, active: null };
+const cheat = { seq: 0, active: null, engine: null, failures: 0 };
 
 async function cancelCheatSearch() {
   cheat.seq++;
   if (cheat.active) {
     try {
-      app.engine.send('stop');
+      // stop the instance the probe actually RUNS on — after an engine
+      // recycle app.engine is a different object, and stopping that one
+      // leaves the real search running.
+      (cheat.engine ?? app.engine).send('stop');
     } catch {
       /* dead engine */
     }
-    await cheat.active;
+    // A dead instance never emits bestmove, so its promise only settles on
+    // the go() timeout. Never block the player's move on that: give the stop
+    // a moment to land, then move on and let the stale probe expire alone
+    // (its seq guard makes it inert).
+    await Promise.race([cheat.active, new Promise((r) => setTimeout(r, 300))]);
     cheat.active = null;
+    cheat.engine = null;
   }
 }
 
@@ -210,22 +243,37 @@ async function runCheatSearch() {
   const engine = app.engine;
   const mySeq = ++cheat.seq;
   const n = cheatHints() ? options.hintN : 1;
-  engine.setoption('MultiPV', String(n));
-  engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
-  const p = engine.go('depth 60 movetime 450', { timeout: 12000 }).finally(() => {
-    try {
-      engine.setoption('MultiPV', '1');
-    } catch {
-      /* dead engine */
-    }
-  });
+  let p;
+  try {
+    engine.setoption('MultiPV', String(n));
+    engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
+    // Timeout matched to the search (movetime + 4 s), not 12 s: a probe that
+    // is going to fail should fail before the player has moved on.
+    p = engine.go('depth 22 movetime 450', { timeout: 4450 }).finally(() => {
+      try {
+        engine.setoption('MultiPV', '1');
+      } catch {
+        /* dead engine */
+      }
+    });
+  } catch (e) {
+    await cheatProbeFailed(engine, e); // postMessage threw — instance is gone
+    return;
+  }
   cheat.active = p.catch(() => {});
+  cheat.engine = engine;
   let res;
   try {
     res = await p;
-  } catch {
-    return; // stalled probe — the duel's own recovery ladder owns engine health
+  } catch (e) {
+    // A probe failure used to be silent AND unrecoverable: the duel's ladder
+    // only fires when the duel's OWN search fails, so an instance that dies
+    // while idle on the player's turn left hints dead for the rest of the
+    // duel with nothing on screen to say why.
+    if (mySeq === cheat.seq) await cheatProbeFailed(engine, e);
+    return;
   }
+  cheat.failures = 0;
   if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing') return; // stale
   const pvs = parseMultiPv(res.infoLines, n);
   if (!pvs.length) return;
@@ -251,6 +299,40 @@ async function runCheatSearch() {
     app.cheatArrows = arrows;
     renderPlayMarks();
     setStatus(`your move · ${sans.join(' · ')}`);
+  }
+}
+
+/** A hint probe failed. Say so on screen (silence here is what made this
+ *  undiagnosable), and recycle the engine so hints come back — the duel's own
+ *  ladder can't help, it only fires on the duel's searches. Recycling is safe
+ *  here: probes only run on the player's turn with the engine otherwise idle. */
+async function cheatProbeFailed(deadEngine, err) {
+  cheat.active = null;
+  cheat.engine = null;
+  cheat.failures++;
+  app.cheatArrows = [];
+  if (app.duel && app.phase === 'playing') renderPlayMarks();
+  if (cheat.failures > 3) {
+    setStatus('your move · hints unavailable');
+    return; // stop thrashing the engine if recycling is not helping
+  }
+  log($('duel-log'), `⚠ hint probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
+  if (app.engine !== deadEngine) return; // someone already replaced it
+  try {
+    const fresh = await createEngine();
+    await fresh.loadVariantsIni(app.catalog);
+    app.engine = fresh;
+    app.duelsOnEngine = 1;
+    app.enginePending = null;
+    if (app.duel && app.duel.state === 'playing') {
+      app.duel.engine = fresh;
+      fresh.send('ucinewgame');
+      fresh.setoption('UCI_Variant', app.arena.variantName);
+      await fresh.isready();
+      if (app.duel.turnColor() === app.arena.playerColor && !app.busy) void runCheatSearch();
+    }
+  } catch {
+    setStatus('your move · hints unavailable');
   }
 }
 
@@ -572,10 +654,17 @@ async function beginDuel() {
   app.selectedSquare = null;
   await ensureEngineReady();
 
-  const crumble = {
-    onsetPly: intParam('onset', arena.crumble.onsetPly, 1),
-    cadence: intParam('cadence', arena.crumble.cadence, 0),
-    seed: intParam('seed', arena.crumble.seed, 1),
+  // Director config: settings preset (or custom knobs) + the arena's seed
+  // for determinism; every knob overridable via query param (test-only).
+  const god = godConfig();
+  const director = {
+    onsetPly: intParam('onset', god.onsetPly, 1),
+    quakeRamp: intParam('qramp', god.quakeRamp, 1),
+    crumbleRamp: intParam('cramp', god.crumbleRamp, 1),
+    debtCap: intParam('debt', god.debtCap, 1),
+    asymOnsetPly: intParam('asymonset', god.asymOnsetPly, 1),
+    asymRamp: intParam('asymramp', god.asymRamp, 1),
+    seed: intParam('seed', arena.crumble?.seed ?? 1, 1),
   };
   app.cheatArrows = [];
   $('eval-fill').style.width = '50%';
@@ -588,9 +677,17 @@ async function beginDuel() {
     startFen,
     files: arena.files,
     ranks: arena.ranks,
-    crumble,
-    go: params.get('go') ?? 'depth 60 movetime 500',
-    hooks: { onMove, onCrumble, onEnd, onEngineInfo, onEngineStall },
+    director,
+    // depth 22, NOT 60: on 4–6-file arenas movetime 500 rips past depth 55,
+    // and ultra-deep searches are what probabilistically crash this WASM
+    // build's pthread ("index out of bounds" — the stall the recovery ladder
+    // catches). Measured: d60 crashed 1/30 searches at d55+; d22 crashed
+    // 0/50 and still returns in <200 ms. On big boards movetime binds first
+    // either way, so this costs nothing (the engine was reaching d22-23 in
+    // live play). Full strength per §13 is untouched — this is a stability
+    // cap, not a handicap.
+    go: params.get('go') ?? 'depth 22 movetime 500',
+    hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall },
   });
   await app.duel.start();
   app.boardUI.setPosition(app.duel.fen());
@@ -712,22 +809,33 @@ function checkMark() {
   return findSquares(app.duel.fen(), (c) => c === target)[0]?.name ?? null;
 }
 
-async function onCrumble({ square, type, pieceLost, endedGame, postFen }) {
+async function onQuake({ displacements, crumble, endedGame, postFen }) {
   const duel = app.duel;
   const ui = app.boardUI;
-  setStatus(type === 'repetition' ? 'the repeated ground gives way!' : 'the arena is crumbling…');
-  await ui.animateCrumble(square);
+  setStatus(crumble ? 'the arena shudders — the floor gives!' : 'the arena shudders…');
+  $('board').classList.add('quaking');
+  for (const d of displacements) ui.markScoot?.(d.from, d.to);
+  if (crumble) await ui.animateCrumble(crumble.square);
+  else await new Promise((r) => setTimeout(r, 450));
+  $('board').classList.remove('quaking');
   if (app.duel !== duel) return; // user backed out mid-animation
   ui.setPosition(postFen);
   renderPlayMarks();
-  let line = `⚠ ${type} crumble — ${square} collapses`;
-  if (pieceLost) {
-    const color = pieceLost === pieceLost.toUpperCase() ? 'white' : 'black';
-    const yours = color === app.arena.playerColor;
-    line += ` · ${yours ? 'your' : 'enemy'} ${pieceName(pieceLost)} is swallowed`;
+  const bits = [];
+  for (const d of displacements) {
+    const yours = (d.piece === d.piece.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;
+    bits.push(`${yours ? 'your' : 'enemy'} ${pieceName(d.piece)} ${d.from}→${d.to}`);
   }
-  if (endedGame) line += ' · nowhere left to stand';
-  log($('duel-log'), line, 'crumble');
+  if (crumble) {
+    let c = `${crumble.square} collapses`;
+    if (crumble.pieceLost && crumble.pieceLost !== '*') {
+      const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;
+      c += ` · ${yours ? 'your' : 'enemy'} ${pieceName(crumble.pieceLost)} is swallowed`;
+    }
+    bits.push(c);
+  }
+  if (endedGame) bits.push('nowhere left to stand');
+  log($('duel-log'), `⚠ the gods stir — ${bits.join(' · ')}`, 'crumble');
 }
 
 function pieceName(letter) {
@@ -772,6 +880,9 @@ async function onEnd({ result, winner, termination }) {
           stalemate: playerWon
             ? 'The enemy king has nowhere left to stand — the floor gives way beneath him.'
             : 'Your king has nowhere left to stand — the floor gives way.',
+          earthquake: playerWon
+            ? 'The gods end it — the arena collapses around the enemy king.'
+            : 'The gods end it — the arena collapses around your king. The run is over.',
         }[termination] ?? `${result}`;
   $('overlay-title').textContent = title;
   $('overlay-detail').textContent = detail;
@@ -824,6 +935,20 @@ $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
 });
+$('optGodPreset').addEventListener('change', (e) => {
+  options.godPreset = e.target.value;
+  if (options.godPreset === 'custom' && !options.godCustom) options.godCustom = { ...GOD_PRESETS.restless };
+  applyOptions();
+});
+for (const k of GOD_KNOBS) {
+  $(`god_${k}`).addEventListener('change', (e) => {
+    const v = parseInt(e.target.value, 10);
+    if (!Number.isInteger(v) || v < 1) return syncOptionsUI(); // reject, restore
+    options.godCustom = { ...(options.godCustom ?? GOD_PRESETS.restless), [k]: v };
+    options.godPreset = 'custom';
+    applyOptions();
+  });
+}
 $('btnAgain').addEventListener('click', () => {
   $('overlay').hidden = true;
   openArena(app.arena);
@@ -841,6 +966,11 @@ window.__DCK = {
   get record() {
     return app.duel?.record ?? null;
   },
+  // Favor of the Gods — runtime tuning hook (theme TBD). Scales quake
+  // probability mid-duel: 0 silences the gods, 1 baseline, >1 angers them.
+  // In-game effects (items, shrines, taunts) will call this; exposed here
+  // so it can be exercised from the console / E2E today.
+  setFavor: (mult) => app.duel?.director.setFavor(mult),
   ready: null,
   openArenaById: (id) => {
     const a = app.arenas.find((x) => x.id === id);
