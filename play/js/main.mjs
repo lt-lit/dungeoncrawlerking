@@ -237,7 +237,7 @@ async function runCheatSearch() {
   const n = cheatHints() ? options.hintN : 1;
   engine.setoption('MultiPV', String(n));
   engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
-  const p = engine.go('depth 60 movetime 450', { timeout: 12000 }).finally(() => {
+  const p = engine.go('depth 22 movetime 450', { timeout: 12000 }).finally(() => {
     try {
       engine.setoption('MultiPV', '1');
     } catch {
@@ -621,7 +621,15 @@ async function beginDuel() {
     files: arena.files,
     ranks: arena.ranks,
     director,
-    go: params.get('go') ?? 'depth 60 movetime 500',
+    // depth 22, NOT 60: on 4–6-file arenas movetime 500 rips past depth 55,
+    // and ultra-deep searches are what probabilistically crash this WASM
+    // build's pthread ("index out of bounds" — the stall the recovery ladder
+    // catches). Measured: d60 crashed 1/30 searches at d55+; d22 crashed
+    // 0/50 and still returns in <200 ms. On big boards movetime binds first
+    // either way, so this costs nothing (the engine was reaching d22-23 in
+    // live play). Full strength per §13 is untouched — this is a stability
+    // cap, not a handicap.
+    go: params.get('go') ?? 'depth 22 movetime 500',
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall },
   });
   await app.duel.start();

@@ -77,7 +77,7 @@ export class DuelController {
    *   variantName, startFen, files, ranks,
    *   director: { onsetPly, quakeRamp, crumbleRamp, debtCap,
    *               asymOnsetPly, asymRamp, seed },   // see DIRECTOR_DEFAULTS
-   *   go: 'depth 60 movetime 500',         // paired limits (CLAUDE.md rule 5)
+   *   go: 'depth 22 movetime 500',         // paired limits (CLAUDE.md rule 5; 22 is a WASM-stability cap, see main.mjs)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
    *     onQuake({ displacements, crumble, endedGame, postFen }),  // awaited (UI animates)
@@ -93,7 +93,7 @@ export class DuelController {
     this.startFen = opts.startFen;
     this.files = opts.files;
     this.ranks = opts.ranks;
-    this.go = opts.go ?? 'depth 60 movetime 500';
+    this.go = opts.go ?? 'depth 22 movetime 500';
     this.hooks = opts.hooks ?? {};
     this.director = new Director(opts.director ?? {});
     this.board = null;
@@ -202,7 +202,11 @@ export class DuelController {
   #search(goArgs) {
     this.engine.position({ fen: this.baseFen, moves: this.movesSinceBase });
     const mt = goArgs.match(/movetime (\d+)/);
-    const timeout = mt ? parseInt(mt[1], 10) * 2 + 8000 : 60000;
+    // A healthy overrun emits bestmove right after the go() watchdog's `stop`
+    // (movetime + 1500 ms); anything still silent past that is a dead pthread,
+    // so surface the stall fast — the recovery ladder is the fix, and the
+    // player is staring at "the enemy is thinking…" the whole time.
+    const timeout = mt ? parseInt(mt[1], 10) + 4000 : 60000;
     const p = this.engine.go(goArgs, { timeout });
     this.activeSearch = p.catch(() => {});
     return p;
