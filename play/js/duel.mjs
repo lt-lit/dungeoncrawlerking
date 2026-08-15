@@ -1,18 +1,24 @@
-// Live human-vs-engine duel controller with the crumble system (brief §4.5).
+// Live human-vs-engine duel controller with the Board State Director
+// (Earthquakes — the crumble system's successor; see director.mjs).
 //
 // Structural port of phase0/harness/game.mjs (the reference implementation of
 // the whole loop) with the synchronous engine-vs-engine loop split into
 // driver-called steps: main.mjs calls playerMove()/engineMove() depending on
-// whose seat is on turn; the post-move pipeline (game-end check + crumble
-// phase) is identical to the harness's.
+// whose seat is on turn; the post-move pipeline (game-end check + quake
+// phase) mirrors the harness's.
+//
+// Repetition is NOT punished (Director design): no position tracking, no
+// repetition crumble. Termination rests on the Director's crumbles (debt cap
+// guarantees they keep landing) + stalemate-as-loss.
 //
 // The ffish Board is the source of truth for legality and game end; the
-// engine is queried per ply with `position fen <base> moves <since-base>` so
-// its repetition history matches ours — a bare `position fen` after every
-// crumble resets engine repetition history (spike 10/11, CLAUDE.md rule 9).
-import { CrumbleController, applyCrumble } from './crumble.mjs';
-import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { findSquares, getSquare } from './fen.mjs';
+// engine is queried per ply with `position fen <base> moves <since-base>`,
+// and a bare `position fen` after every quake resets engine repetition
+// history (spike 10/11, CLAUDE.md rule 9) — load-bearing here, since with
+// no repetition rules a stale engine history could never adjudicate anyway,
+// but the reset also clears TT-adjacent state after surgery.
+import { Director } from './director.mjs';
+import { findSquares } from './fen.mjs';
 
 /**
  * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
@@ -59,8 +65,9 @@ function kinglessSide(fen) {
   return null;
 }
 
-// Backstop only: the crumble system guarantees termination (§4.5); a duel
-// that reaches this many plies is a bug, not a long game.
+// Backstop only: the Director guarantees termination (debt-capped crumbles
+// shrink the board monotonically); a duel that reaches this many plies is a
+// bug, not a long game.
 const MAX_PLIES = 1000;
 
 export class DuelController {
@@ -68,11 +75,12 @@ export class DuelController {
    * opts = {
    *   ffish, engine,                       // initialized modules (catalog loaded)
    *   variantName, startFen, files, ranks,
-   *   crumble: { onsetPly, cadence, seed },
+   *   director: { onsetPly, quakeRamp, crumbleRamp, debtCap,
+   *               asymOnsetPly, asymRamp, seed },   // see DIRECTOR_DEFAULTS
    *   go: 'depth 60 movetime 500',         // paired limits (CLAUDE.md rule 5)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
-   *     onCrumble({ square, type, pieceLost, endedGame, postFen }),  // awaited (UI animates)
+   *     onQuake({ displacements, crumble, endedGame, postFen }),  // awaited (UI animates)
    *     onEnd({ result, winner, termination }),
    *     onEngineInfo({ score, depth }),
    *   },
@@ -87,17 +95,13 @@ export class DuelController {
     this.ranks = opts.ranks;
     this.go = opts.go ?? 'depth 60 movetime 500';
     this.hooks = opts.hooks ?? {};
-    this.crumbler = new CrumbleController({
-      onsetPly: opts.crumble?.onsetPly ?? Infinity,
-      cadence: opts.crumble?.cadence ?? 0,
-      seed: opts.crumble?.seed ?? 1,
-    });
+    this.director = new Director(opts.director ?? {});
     this.board = null;
     this.baseFen = opts.startFen;
     this.movesSinceBase = [];
     this.ply = 0;
     this.state = 'idle'; // idle | playing | ended | error
-    this.record = { moves: [], sans: [], crumbles: [], anomalies: [], result: null, winner: null, termination: null, error: null };
+    this.record = { moves: [], sans: [], quakes: [], anomalies: [], result: null, winner: null, termination: null, error: null };
     this.snapshots = []; // undo support (cheat feature) — one per playable state
   }
 
@@ -107,7 +111,6 @@ export class DuelController {
     this.engine.send('ucinewgame');
     this.engine.setoption('UCI_Variant', this.variantName);
     await this.engine.isready();
-    this.crumbler.recordPosition(this.board.fen());
     this.state = 'playing';
     if (gameEnded(this.board)) {
       // Arena validation should make this impossible; degrade gracefully.
@@ -247,67 +250,35 @@ export class DuelController {
       return { ended: true };
     }
     if (this.ply >= MAX_PLIES) {
-      return this.#fail(`max-plies backstop (${MAX_PLIES}) reached — crumble config failed to terminate`);
+      return this.#fail(`max-plies backstop (${MAX_PLIES}) reached — director config failed to terminate`);
     }
 
-    // --- crumble phase (between plies, after EVERY completed ply) ---
+    // --- quake phase (between plies, after EVERY completed ply) ---
     const fenNow = this.board.fen();
-    const occurrences = this.crumbler.recordPosition(fenNow);
+    const quake = this.director.quake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply);
 
-    let crumbleEvent = null;
-    const rep = this.crumbler.repetitionCrumble(occurrences, uci);
-    if (rep) {
-      crumbleEvent = rep;
-    } else if (this.crumbler.pacingCrumbleDue(this.ply)) {
-      // Re-roll random candidates through the §4.5 legality filter.
-      const counts = nonKingCounts(fenNow);
-      for (let tries = 0; tries < 60; tries++) {
-        const sq = this.crumbler.randomSquare(this.files, this.ranks);
-        const cell = getSquare(fenNow, sq);
-        if (cell === '*') continue; // already a pit
-        // A crumble must never strip a side's last piece — under bare-army
-        // adjudication that would end the game by dice roll (§4.5: crumbles
-        // pressure games, they don't end them).
-        if (cell && cell !== 'K' && cell !== 'k') {
-          const owner = cell === cell.toUpperCase() ? 'white' : 'black';
-          if (counts[owner] === 1) continue;
-        }
-        const v = validateCrumbleCandidate(this.ffish, this.variantName, fenNow, sq);
-        if (v.ok) {
-          crumbleEvent = { type: 'pacing', square: sq, rerolls: tries };
-          break;
-        }
-      }
-      this.crumbler.markPacingFired(this.ply); // fired or exhausted — don't retry every ply
-      if (!crumbleEvent) this.record.anomalies.push(`ply ${this.ply}: pacing crumble found no legal candidate in 60 rolls`);
-    }
-
-    if (crumbleEvent) {
-      const { postFen, pieceLost } = applyCrumble(fenNow, crumbleEvent.square);
-      if (this.ffish.validateFen(postFen, this.variantName) < 0) {
-        this.record.anomalies.push(`ply ${this.ply}: crumble ${crumbleEvent.type}@${crumbleEvent.square} produced invalid FEN — skipped`);
+    if (quake) {
+      if (this.ffish.validateFen(quake.postFen, this.variantName) !== 1) {
+        this.record.anomalies.push(`ply ${this.ply}: quake produced invalid FEN — skipped`);
       } else {
-        const next = new this.ffish.Board(this.variantName, postFen);
-        if (next.numberLegalMoves() === 0) {
-          if (crumbleEvent.type === 'repetition') {
-            // Repetition crumbles are deterministic and may legitimately end
-            // things via stalemate-as-loss (§4.5 termination guarantee).
-            this.#adoptPostCrumble(next, postFen);
-            const ev = { ply: this.ply, ...crumbleEvent, pieceLost, endedGame: true, postFen };
-            this.record.crumbles.push(ev);
-            if (this.hooks.onCrumble) await this.hooks.onCrumble(ev);
-            if (this.state !== 'playing') return { ended: true };
-            await this.#finish();
+        const next = new this.ffish.Board(this.variantName, quake.postFen);
+        if (next.numberLegalMoves() === 0 && !quake.endsGame) {
+          next.delete();
+          this.record.anomalies.push(`ply ${this.ply}: quake would end game instantly — skipped (director should have caught)`);
+        } else {
+          this.#adoptPostQuake(next, quake.postFen);
+          const ev = { ply: this.ply, displacements: quake.displacements, crumble: quake.crumble, endedGame: quake.endsGame, postFen: quake.postFen };
+          this.record.quakes.push(ev);
+          if (this.hooks.onQuake) await this.hooks.onQuake(ev);
+          if (this.state !== 'playing') return { ended: true };
+          if (quake.endsGame) {
+            // Terminal crumble: the board had closed (no neutral candidate
+            // anywhere) — the collapse immobilizes the side to move, and the
+            // floor takes them. Normal mover-loses flow derives the result;
+            // termination is named for what did it.
+            await this.#finish({ termination: 'earthquake' });
             return { ended: true };
           }
-          next.delete();
-          this.record.anomalies.push(`ply ${this.ply}: crumble would end game instantly — skipped (filter should have caught)`);
-        } else {
-          this.#adoptPostCrumble(next, postFen);
-          const ev = { ply: this.ply, ...crumbleEvent, pieceLost, endedGame: false, postFen };
-          this.record.crumbles.push(ev);
-          if (this.hooks.onCrumble) await this.hooks.onCrumble(ev);
-          if (this.state !== 'playing') return { ended: true };
         }
       }
     }
@@ -317,10 +288,10 @@ export class DuelController {
 
   // ---- undo (cheat feature) ----------------------------------------------
 
-  /** Full restorable state after a completed pipeline step. The crumble RNG
-   *  stream is deliberately NOT restored — after an undo, future pacing
+  /** Full restorable state after a completed pipeline step. The Director's
+   *  RNG stream is deliberately NOT restored — after an undo, future quake
    *  rolls differ from the abandoned timeline, which is fine for a cheat
-   *  tool (crumble determinism matters for harness replays, not take-backs). */
+   *  tool (quake determinism matters for harness replays, not take-backs). */
   #takeSnapshot() {
     this.snapshots.push({
       turn: this.board.turn() ? 'w' : 'b',
@@ -328,11 +299,10 @@ export class DuelController {
       baseFen: this.baseFen,
       moves: [...this.movesSinceBase],
       ply: this.ply,
-      counts: new Map(this.crumbler.positionCounts),
-      lastPacingPly: this.crumbler.lastPacingPly,
+      debt: this.director.debt,
       lens: {
         moves: this.record.moves.length,
-        crumbles: this.record.crumbles.length,
+        quakes: this.record.quakes.length,
         anomalies: this.record.anomalies.length,
       },
     });
@@ -362,11 +332,10 @@ export class DuelController {
     this.baseFen = s.baseFen;
     this.movesSinceBase = [...s.moves];
     this.ply = s.ply;
-    this.crumbler.positionCounts = new Map(s.counts);
-    this.crumbler.lastPacingPly = s.lastPacingPly;
+    this.director.debt = s.debt;
     this.record.moves.length = s.lens.moves;
     this.record.sans.length = s.lens.moves;
-    this.record.crumbles.length = s.lens.crumbles;
+    this.record.quakes.length = s.lens.quakes;
     this.record.anomalies.length = s.lens.anomalies;
     this.record.result = null;
     this.record.winner = null;
@@ -377,21 +346,21 @@ export class DuelController {
     // `position fen <baseFen> moves …` from the restored protocol state.
   }
 
-  /** Swap in the post-crumble board and reset both repetition histories
-   *  (ours via resetHistory, the engine's via the next bare `position fen`). */
-  #adoptPostCrumble(next, postFen) {
+  /** Swap in the post-quake board. The next engine query sends a bare
+   *  `position fen <postFen>` (movesSinceBase reset), which also resets the
+   *  engine's internal history after surgery (CLAUDE.md rule 9). */
+  #adoptPostQuake(next, postFen) {
     this.board.delete();
     this.board = next;
     this.baseFen = postFen;
     this.movesSinceBase = [];
-    this.crumbler.resetHistory();
-    this.crumbler.recordPosition(postFen);
   }
 
   /** Derive the result: the side to move LOSES (see gameEnded), unless an
-   *  adjudication ({ loser, termination }) names the loser directly. */
+   *  adjudication names the loser directly ({ loser, termination }) or just
+   *  the termination ({ termination } — loser stays the side to move). */
   async #finish(adjudicated = null) {
-    if (adjudicated) {
+    if (adjudicated && adjudicated.loser) {
       this.record.result = adjudicated.loser === 'white' ? '0-1' : '1-0';
       this.record.winner = adjudicated.loser === 'white' ? 'black' : 'white';
       this.record.termination = adjudicated.termination;
@@ -407,7 +376,9 @@ export class DuelController {
     const fen = this.board.fen();
     const kings = findSquares(fen, (c) => c === 'K' || c === 'k').map((s) => s.cell);
     const loser = whiteToMove ? 'white' : 'black';
-    if (!kings.includes('K') || !kings.includes('k')) {
+    if (adjudicated?.termination) {
+      this.record.termination = adjudicated.termination; // e.g. 'earthquake' — loser is still the mover
+    } else if (!kings.includes('K') || !kings.includes('k')) {
       this.record.termination = 'king-capture';
     } else if (this.board.isCheck()) {
       this.record.termination = 'checkmate';

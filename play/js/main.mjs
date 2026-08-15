@@ -12,7 +12,8 @@
 //   &autoplace=1     accept the default placement immediately
 //   &autobegin=1     also begin the duel
 //   &go=<uci go args>  override engine search (e.g. "depth 60 movetime 80")
-//   &onset=N&cadence=N&seed=N  override the arena's crumble config
+//   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=
+//     override the Director config (see director.mjs DIRECTOR_DEFAULTS)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { parseSquare, findSquares } from './fen.mjs';
@@ -122,13 +123,29 @@ function defaultPlacement(arena) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false };
+const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false, godPreset: 'restless', godCustom: null };
+
+// The Gods (Board State Director) — tuning presets. Numbers are plies.
+// 'restless' is the sweep-validated baseline; custom exposes every knob.
+const GOD_PRESETS = {
+  calm: { onsetPly: 20, quakeRamp: 100, crumbleRamp: 160, debtCap: 12, asymOnsetPly: 70, asymRamp: 80 },
+  restless: { onsetPly: 8, quakeRamp: 60, crumbleRamp: 100, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 },
+  wrathful: { onsetPly: 4, quakeRamp: 25, crumbleRamp: 50, debtCap: 6, asymOnsetPly: 30, asymRamp: 30 },
+  off: { onsetPly: Infinity, quakeRamp: 60, crumbleRamp: 100, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 },
+};
+const GOD_KNOBS = ['onsetPly', 'quakeRamp', 'crumbleRamp', 'debtCap', 'asymOnsetPly', 'asymRamp'];
+
+function godConfig() {
+  if (options.godPreset === 'custom' && options.godCustom) return { ...GOD_PRESETS.restless, ...options.godCustom };
+  return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
+}
 
 function loadOptions() {
   try {
     const saved = JSON.parse(localStorage.getItem(OPT_KEY) ?? '{}');
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
+    if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
   } catch {
     /* defaults */
   }
@@ -155,6 +172,14 @@ function syncOptionsUI() {
   $('optEval').checked = options.evalBar;
   $('optEnemyEdit').checked = options.enemyEdit;
   $('cheat-opts').classList.toggle('disabled', !options.cheat);
+  $('optGodPreset').value = options.godPreset;
+  const cfg = godConfig();
+  for (const k of GOD_KNOBS) {
+    const el = $(`god_${k}`);
+    el.value = Number.isFinite(cfg[k]) ? String(cfg[k]) : '';
+    el.disabled = options.godPreset !== 'custom';
+  }
+  $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
 }
 
 function refreshCheatUI() {
@@ -572,10 +597,17 @@ async function beginDuel() {
   app.selectedSquare = null;
   await ensureEngineReady();
 
-  const crumble = {
-    onsetPly: intParam('onset', arena.crumble.onsetPly, 1),
-    cadence: intParam('cadence', arena.crumble.cadence, 0),
-    seed: intParam('seed', arena.crumble.seed, 1),
+  // Director config: settings preset (or custom knobs) + the arena's seed
+  // for determinism; every knob overridable via query param (test-only).
+  const god = godConfig();
+  const director = {
+    onsetPly: intParam('onset', god.onsetPly, 1),
+    quakeRamp: intParam('qramp', god.quakeRamp, 1),
+    crumbleRamp: intParam('cramp', god.crumbleRamp, 1),
+    debtCap: intParam('debt', god.debtCap, 1),
+    asymOnsetPly: intParam('asymonset', god.asymOnsetPly, 1),
+    asymRamp: intParam('asymramp', god.asymRamp, 1),
+    seed: intParam('seed', arena.crumble?.seed ?? 1, 1),
   };
   app.cheatArrows = [];
   $('eval-fill').style.width = '50%';
@@ -588,9 +620,9 @@ async function beginDuel() {
     startFen,
     files: arena.files,
     ranks: arena.ranks,
-    crumble,
+    director,
     go: params.get('go') ?? 'depth 60 movetime 500',
-    hooks: { onMove, onCrumble, onEnd, onEngineInfo, onEngineStall },
+    hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall },
   });
   await app.duel.start();
   app.boardUI.setPosition(app.duel.fen());
@@ -712,22 +744,33 @@ function checkMark() {
   return findSquares(app.duel.fen(), (c) => c === target)[0]?.name ?? null;
 }
 
-async function onCrumble({ square, type, pieceLost, endedGame, postFen }) {
+async function onQuake({ displacements, crumble, endedGame, postFen }) {
   const duel = app.duel;
   const ui = app.boardUI;
-  setStatus(type === 'repetition' ? 'the repeated ground gives way!' : 'the arena is crumbling…');
-  await ui.animateCrumble(square);
+  setStatus(crumble ? 'the arena shudders — the floor gives!' : 'the arena shudders…');
+  $('board').classList.add('quaking');
+  for (const d of displacements) ui.markScoot?.(d.from, d.to);
+  if (crumble) await ui.animateCrumble(crumble.square);
+  else await new Promise((r) => setTimeout(r, 450));
+  $('board').classList.remove('quaking');
   if (app.duel !== duel) return; // user backed out mid-animation
   ui.setPosition(postFen);
   renderPlayMarks();
-  let line = `⚠ ${type} crumble — ${square} collapses`;
-  if (pieceLost) {
-    const color = pieceLost === pieceLost.toUpperCase() ? 'white' : 'black';
-    const yours = color === app.arena.playerColor;
-    line += ` · ${yours ? 'your' : 'enemy'} ${pieceName(pieceLost)} is swallowed`;
+  const bits = [];
+  for (const d of displacements) {
+    const yours = (d.piece === d.piece.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;
+    bits.push(`${yours ? 'your' : 'enemy'} ${pieceName(d.piece)} ${d.from}→${d.to}`);
   }
-  if (endedGame) line += ' · nowhere left to stand';
-  log($('duel-log'), line, 'crumble');
+  if (crumble) {
+    let c = `${crumble.square} collapses`;
+    if (crumble.pieceLost && crumble.pieceLost !== '*') {
+      const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;
+      c += ` · ${yours ? 'your' : 'enemy'} ${pieceName(crumble.pieceLost)} is swallowed`;
+    }
+    bits.push(c);
+  }
+  if (endedGame) bits.push('nowhere left to stand');
+  log($('duel-log'), `⚠ the gods stir — ${bits.join(' · ')}`, 'crumble');
 }
 
 function pieceName(letter) {
@@ -772,6 +815,9 @@ async function onEnd({ result, winner, termination }) {
           stalemate: playerWon
             ? 'The enemy king has nowhere left to stand — the floor gives way beneath him.'
             : 'Your king has nowhere left to stand — the floor gives way.',
+          earthquake: playerWon
+            ? 'The gods end it — the arena collapses around the enemy king.'
+            : 'The gods end it — the arena collapses around your king. The run is over.',
         }[termination] ?? `${result}`;
   $('overlay-title').textContent = title;
   $('overlay-detail').textContent = detail;
@@ -824,6 +870,20 @@ $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
 });
+$('optGodPreset').addEventListener('change', (e) => {
+  options.godPreset = e.target.value;
+  if (options.godPreset === 'custom' && !options.godCustom) options.godCustom = { ...GOD_PRESETS.restless };
+  applyOptions();
+});
+for (const k of GOD_KNOBS) {
+  $(`god_${k}`).addEventListener('change', (e) => {
+    const v = parseInt(e.target.value, 10);
+    if (!Number.isInteger(v) || v < 1) return syncOptionsUI(); // reject, restore
+    options.godCustom = { ...(options.godCustom ?? GOD_PRESETS.restless), [k]: v };
+    options.godPreset = 'custom';
+    applyOptions();
+  });
+}
 $('btnAgain').addEventListener('click', () => {
   $('overlay').hidden = true;
   openArena(app.arena);
@@ -841,6 +901,11 @@ window.__DCK = {
   get record() {
     return app.duel?.record ?? null;
   },
+  // Favor of the Gods — runtime tuning hook (theme TBD). Scales quake
+  // probability mid-duel: 0 silences the gods, 1 baseline, >1 angers them.
+  // In-game effects (items, shrines, taunts) will call this; exposed here
+  // so it can be exercised from the console / E2E today.
+  setFavor: (mult) => app.duel?.director.setFavor(mult),
   ready: null,
   openArenaById: (id) => {
     const a = app.arenas.find((x) => x.id === id);

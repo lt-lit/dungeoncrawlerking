@@ -62,6 +62,26 @@
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
       <label class="opt sub"><input type="checkbox" id="optEnemyEdit"> Edit enemy pieces</label>
     </div>
+    <h2>The Gods</h2>
+    <p class="opt-hint">Earthquakes stir the arena as duels run long: pieces scoot,
+      squares collapse. Applies from the next duel.</p>
+    <label class="opt">Temperament
+      <select id="optGodPreset">
+        <option value="calm">Calm</option>
+        <option value="restless" selected>Restless</option>
+        <option value="wrathful">Wrathful</option>
+        <option value="custom">Custom&#8230;</option>
+        <option value="off">Off (testing)</option>
+      </select>
+    </label>
+    <div id="god-knobs">
+      <label class="opt sub">First stir (ply) <input type="number" id="god_onsetPly" min="1" step="1"></label>
+      <label class="opt sub">Quake ramp (plies to certain) <input type="number" id="god_quakeRamp" min="1" step="1"></label>
+      <label class="opt sub">Collapse ramp (plies to certain) <input type="number" id="god_crumbleRamp" min="1" step="1"></label>
+      <label class="opt sub">Max quakes between collapses <input type="number" id="god_debtCap" min="1" step="1"></label>
+      <label class="opt sub">One-sided stirs allowed after (ply) <input type="number" id="god_asymOnsetPly" min="1" step="1"></label>
+      <label class="opt sub">One-sided patience ramp <input type="number" id="god_asymRamp" min="1" step="1"></label>
+    </div>
     <button id="btnOptionsClose" class="primary">Done</button>
   </div>
 </div>

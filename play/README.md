@@ -1,8 +1,20 @@
 # Phase 1 — duel vertical slice
 
 Hand-authored arena JSON → variant config + FEN → playable duel vs the engine
-on a phone (brief §10). Placement UI, win/loss, promotion, live crumble
-system. No overworld. Vanilla JS ES modules, no build step, GitHub Pages.
+on a phone (brief §10). Placement UI, win/loss, promotion, live Earthquakes
+(the Board State Director). No overworld. Vanilla JS ES modules, no build
+step, GitHub Pages.
+
+**This build replaces the §4.5 crumble system with the Board State Director
+("THE GODS")** — the experimental arena-regeneration design from the 2026-08
+prototype sweeps. Repetition is no longer punished at all (no repetition
+crumble, no position tracking). Instead, past a rising hazard ramp the arena
+quakes: pieces scoot to adjacent squares (displacement — symmetric-preferred,
+one piece per side) and, increasingly late, squares collapse (crumbles).
+Displacements un-stick terrain-locked positions; crumbles shrink the board so
+duels provably end. Tune it in Options → **The Gods** (Calm / Restless /
+Wrathful / Custom / Off); `window.__DCK.setFavor(m)` is the runtime tuning
+hook for future in-game effects (Favor of the Gods).
 
 ## Running
 
@@ -12,15 +24,28 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 `index.html` — service-worker scope) injects them after one self-reload.
 
 - `index.html` — the game. Debug/E2E query params (see `js/main.mjs` header):
-  `?arena=<id>&autoplace=1&autobegin=1&go=…&onset=…&cadence=…&seed=…`.
+  `?arena=<id>&autoplace=1&autobegin=1&go=…` plus Director overrides
+  `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=`.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
   50-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
   must read PASS.
 
 ## Layout
 
-- `js/fen.mjs`, `js/prng.mjs`, `js/crumble.mjs`, `js/crumbleFilter.mjs` —
-  verbatim ports of the validated Phase 0 modules (import paths only).
+- `js/fen.mjs`, `js/prng.mjs`, `js/crumbleFilter.mjs` — verbatim ports of the
+  validated Phase 0 modules (import paths only). (`js/crumble.mjs` — the old
+  repetition+pacing controller — is deleted; `phase0/harness/crumble.mjs`
+  remains the historical record.)
+- `js/director.mjs` — **the Board State Director.** Exhaustive crumble
+  candidate enumeration (neutral vs terminal — terminal fires only when the
+  board has closed, termination `earthquake`), tiered displacement
+  (A frees a terrain-locked pawn / B unsticks a piece / C cosmetic
+  camouflage), symmetric-preferred pairing with a patience ramp for
+  one-sided stirs, rising `P(quake)` + slower squared `P(crumble|quake)`
+  + debt cap (termination guarantee), seeded RNG, `setFavor()` hook.
+  Kings are never displaced; pawns never land on rank 1/promotion rank;
+  quakes never give check, never leave a side in check, never end the game
+  except through the terminal-crumble path.
 - `js/variant.mjs` — Phase 0 port + the fixed 50-variant catalog
   (`duel_3x6`…`duel_12x10`, loaded ONCE at boot — variant names are
   single-use) and a variants.ini key allowlist (unknown keys are silently
@@ -36,10 +61,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `numberLegalMoves() === 0` → side to move loses. The bare-army rule (a
   side stripped to a bare king loses — no lone-king chases) is IN-GRAMMAR
   (`extinctionPieceTypes=*`, `extinctionPieceCount=1`), so the engine plays
-  for strips and hint arrows/eval bar are truthful about them; crumbles are
+  for strips and hint arrows/eval bar are truthful about them; quakes are
   guarded so they can never strip a last piece. The game layer adjudicates
-  only kingless states (surgery-only). Engine repetition history resets via
-  bare `position fen` after every crumble, plus an engine-stall recovery
+  only kingless states (surgery-only). Engine history resets via bare
+  `position fen` after every quake, plus an engine-stall recovery
   ladder (recycle instance, retry at reduced depth).
 - `js/board-ui.mjs`, `style.css` — board/tray/promotion rendering, absolute
   `data-square` addressing, fits 3×6–12×10 boards on a 390×844 viewport.
@@ -62,6 +87,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   "crumble": { "onsetPly": 40, "cadence": 10, "seed": 101 }
 }
 ```
+
+The `crumble` block is legacy-shaped: **only `seed` is read by this build**
+(the Director's pacing comes from the settings preset / query params);
+`onsetPly`/`cadence` are validated but ignored.
 
 Absolute board coordinates; `backRank` arrays are file-ascending; player
 patch width 3–5 (§4.2), enemy patch width 2–5 (the width-3 floor is
@@ -100,7 +129,7 @@ on the player's turn — lichess-style arrows whose width/opacity scale with
 how close each move is to the best one, + SANs in the status line; MultiPV
 is always reset to 1 before the engine's own replies, which stay
 full-strength), **Allow undo** (snapshot-based rewind to the player's
-previous turn, usable from the loss screen; the crumble RNG stream is not
+previous turn, usable from the loss screen; the Director RNG stream is not
 rewound), **Show eval bar** (player-POV score from the engine's replies and
 the cheat probes), and **Edit enemy pieces** (testing tool: during
 placement, tap an enemy piece to pick it up, tap a square to move it, tap it

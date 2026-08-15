@@ -6,8 +6,12 @@ Phase 0 (spikes + calibration harness) is **complete** — read
 summarizes 12 verified spikes and the sweep results. **Phase 1 — the duel
 vertical slice — is built and lives in `play/`** (hand-authored arena →
 playable duel vs engine on a phone; placement UI, win/loss, promotion, live
-crumbles; no overworld). See `play/README.md` for its layout and the arena
-JSON schema. Next per brief §10: **Phase 2 — exploration slice**.
+Earthquakes; no overworld). See `play/README.md` for its layout and the arena
+JSON schema. **NOTE: `play/` now runs the experimental Board State Director**
+(`play/js/director.mjs` — Earthquakes: symmetric displacement + rare rising
+crumbles, NO repetition rules), superseding the brief's §4.5 crumble system
+in the build; reconcile the brief once playtesting ratifies the design.
+Next per brief §10: **Phase 2 — exploration slice**.
 
 ## Layout
 
