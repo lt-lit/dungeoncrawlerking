@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test04-sundered-court",
+  "title": "The Sundered Court",
+  "intro": "A walled inner court with three broken gates. There is a killing ground in the middle of this room and both of you have to cross it.",
+  "files": 7,
+  "ranks": 8,
+  "walls": ["b3", "c3", "e3", "f3", "b6", "c6", "e6", "f6"],
+  "enemy": { "backRank": ["R", "K", "N"], "backRankStart": 2, "pawns": ["c", "d", "e"] },
+  "player": { "pieceSet": ["R", "B", "N"], "backRankStart": 2, "patchWidth": 3, "pawns": ["c", "d", "e"] },
+  "initiative": "enemy",
+  "crumble": { "seed": 1104 }
+}

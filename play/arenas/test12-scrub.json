@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test12-scrub",
+  "title": "Scrub",
+  "intro": "The smallest muster the barrier will raise: a king, one rider, two levies. Two-by-two, the floor of the whole system.",
+  "files": 5,
+  "ranks": 6,
+  "walls": [],
+  "enemy": { "backRank": ["B", "K"], "backRankStart": 2, "pawns": ["c", "d"] },
+  "player": { "pieceSet": ["N"], "backRankStart": 1, "patchWidth": 2, "pawns": ["b", "c"] },
+  "initiative": "player",
+  "crumble": { "seed": 1112 }
+}

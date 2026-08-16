@@ -1,0 +1,15 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test10-wardens-court",
+  "title": "The Warden's Court",
+  "intro": "You walked into a full court with a rook and a rider. The warden has his queen, his guard, and every pawn he owns. This one is not a puzzle — it is a lesson.",
+  "files": 8,
+  "ranks": 8,
+  "walls": [],
+  "enemy": { "backRank": ["R", "B", "Q", "K", "N"], "backRankStart": 1, "pawns": ["b", "c", "d", "e", "f"] },
+  "player": { "pieceSet": ["R", "N"], "backRankStart": 2, "patchWidth": 3, "pawns": ["c", "d", "e"] },
+  "initiative": "enemy",
+  "expect": "enemy",
+  "crumble": { "seed": 1110 }
+}

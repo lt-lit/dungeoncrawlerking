@@ -30,6 +30,15 @@ slice**.
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
   `play/index.html` (rule 10). `play/selftest.html` is the in-browser infra
   cross-check — keep it PASSing.
+  `play/arenas/` holds the campaign ladder (`arena01`–`arena04`) and the test
+  shelf (`test01`–`test15`: terrain structure, army shapes, and the scale
+  extremes — 8×8 literal chess and the 12×10 FSF ceiling). **Arena validation
+  is deliberately two-speed:** `loadArena` throws ONLY for what the engine or
+  our own code cannot survive, and everything we merely believe about pacing
+  and balance is a warning on `arena.warnings`. See the policy comment on
+  `loadArena` before adding a check — the §4.2 patch caps and the gap cap were
+  authoring guesses hardened into throws, and the gap cap was resting on
+  retired-crumble-system sweep data this file already disowns.
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)
@@ -49,6 +58,9 @@ slice**.
 cd phase0                      # npm deps live here (node_modules gitignored)
 npm install                    # ffish + fairy-stockfish-nnue.wasm
 node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
+node harness/verify-arena-schema.mjs              # arena schema + validator policy (~50 ms, no engine)
+node harness/verify-play-arenas.mjs               # encounter linter, campaign arenas (GATING)
+node harness/verify-play-arenas.mjs --all         # + the 15 test scenarios (slow, informational)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/sweep.mjs harness/sweeps/tiny.json   # 2-game harness check
 ```
@@ -130,9 +142,24 @@ run one sweep at a time.
     same position the pair (r a7→a6, R b5→a5) recreated the identical gift
     through the other ordering. Any new quake mechanic must be judged on the
     board the player actually receives.
-14. **`director.quake()` is expensive and synchronous** — measured 300–720 ms
-    per quake on 4×6–6×8 arenas (Node). It calls `displacementCandidates`
-    twice, and that builds ~4 ffish Boards per candidate (`stuckCount` alone
-    is 2, and only ever distinguishes tier B from tier C). Cheap filters
-    belong BEFORE the ffish probes — that is why the landing-safety check
-    runs on the grid. Do not add per-candidate ffish work without measuring.
+14. **`director.quake()` is expensive and synchronous, and the cost is PIECE
+    COUNT, not board area** — measured 300–720 ms per quake on 4×6–6×8
+    arenas, but 956 ms on 8×8 with a classic 8×2 army and **1.46 s on 12×10
+    with 12-wide armies**; a 12×10 board with a 3-piece army is back down to
+    416 ms. It calls `displacementCandidates` twice, and that builds ~4 ffish
+    Boards per candidate (`stuckCount` alone is 2, and only ever distinguishes
+    tier B from tier C). Cheap filters belong BEFORE the ffish probes — that
+    is why the landing-safety check runs on the grid. Do not add
+    per-candidate ffish work without measuring. On a phone the big test
+    scenarios will visibly freeze the UI mid-quake; `test13`/`test14`/`test15`
+    exist partly to keep that number honest, and Phase 1.2's overlay is the
+    instrument that should be reporting it.
+15. **12×10 is the FSF largeboard ceiling, and exceeding it fails SILENTLY.**
+    `loadVariantConfig` accepts an oversized `maxFile`/`maxRank` block without
+    throwing, then omits the variant from `variants()`; the failure only
+    surfaces as `memory access out of bounds` when a Board is constructed
+    (verified for 13×10, 12×11, 14×12, 16×16). Same silent-failure family as
+    rules 6 and 7. `makeDuelVariantIni`'s range check is the only guard —
+    keep it. The catalog now spans the full supported range, files 2–12 ×
+    ranks 2–10 (99 variants, 33 KB, 10.4 ms to load — the old 50-variant
+    3–12 × 6–10 floor was ours, not FSF's, and cost 9.1 ms).

@@ -1,0 +1,24 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test13-full-muster",
+  "title": "Full Muster",
+  "intro": "Five wide and three deep — the largest formation the patch rules will carry. Ten pieces stacked two ranks deep behind a thin line of levies: the back rank cannot see daylight, and neither can you.",
+  "files": 8,
+  "ranks": 8,
+  "walls": [],
+  "enemy": {
+    "rows": [["R", "B", "K", "N", "R"], [null, "N", "B", null, null]],
+    "backRankStart": 1,
+    "pawns": ["b", "c", "d", "e", "f"]
+  },
+  "player": {
+    "rows": [["R", "N", "K", "N", "R"], ["B", "R", "Q", "R", "B"]],
+    "pieceRows": 2,
+    "backRankStart": 1,
+    "patchWidth": 5,
+    "pawns": ["b", "c", "d", "e", "f"]
+  },
+  "initiative": "player",
+  "crumble": { "seed": 1113 }
+}

@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test07-broken-queen",
+  "title": "The Broken Queen",
+  "intro": "No pawns. No shield. One queen, one king, and a warden with a rook and two spears. She is worth more than everything he owns — and she is the only thing you can lose.",
+  "files": 6,
+  "ranks": 7,
+  "walls": [],
+  "enemy": { "backRank": ["R", "K"], "backRankStart": 3, "pawns": ["d", "e"] },
+  "player": { "pieceSet": ["Q"], "backRankStart": 1, "patchWidth": 3, "pawns": [] },
+  "initiative": "player",
+  "crumble": { "seed": 1107 }
+}

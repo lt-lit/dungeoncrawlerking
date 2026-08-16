@@ -1,7 +1,7 @@
 // Browser infra selftest for the duel slice. Ports every check from
 // phase0/lib/selftest.mjs (FEN round-trip, wall setSquare, validateFen,
 // ffish-vs-engine perft-1 legality cross-check, engine bestmove legality) and
-// adds the Phase 1 boot-path checks: the full 50-variant catalog loaded ONCE
+// adds the Phase 1 boot-path checks: the full variant catalog loaded ONCE
 // into BOTH libraries (variant names are single-use — rule 7), the §4.5
 // crumble filter, and the game-end protocol (rule 4: numberLegalMoves()===0
 // and the mover loses — never ffish isGameOver()/result()).
@@ -10,7 +10,7 @@
 // window.__SELFTEST = { done, passed, failed, lines } (done set LAST) so a
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
-import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
+import { makeCatalogIni, catalogSize, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid } from './director.mjs';
@@ -81,18 +81,37 @@ async function main() {
     return wallFen.split(' ')[0];
   });
 
-  // --- Full 50-variant catalog into BOTH libraries (rule 7: load once at boot) ---
+  // --- Full catalog into BOTH libraries (rule 7: load once at boot) ---
   const catalogIni = makeCatalogIni();
+  const catalogN = catalogSize();
   await check('catalog load (ffish)', async () => {
     const blocks = (catalogIni.match(/^\[duel_/gm) || []).length;
-    if (blocks !== 50) throw new Error(`expected 50 catalog variants in ini, got ${blocks}`);
+    if (blocks !== catalogN) throw new Error(`expected ${catalogN} catalog variants in ini, got ${blocks}`);
     ffish.loadVariantConfig(catalogIni);
-    return '50 variants registered';
+    return `${catalogN} variants registered`;
   });
   await check('catalog load (engine)', async () => {
     await engine.loadVariantsIni(catalogIni); // the FULL catalog text, same as boot
-    return '50 variants written to /variants.ini, readyok';
+    return `${catalogN} variants written to /variants.ini, readyok`;
   });
+  // The catalog corners: the FSF largeboard ceiling, and the smallest board the
+  // widened catalog now allows. Both must produce a usable Board — one rank
+  // past the ceiling (13x10 / 12x11) crashes this WASM build's heap, and
+  // loadVariantConfig does NOT reject it, so only a real Board proves the size.
+  for (const [f, r] of [[12, 10], [2, 2]]) {
+    await check(`catalog corner ${f}x${r}`, async () => {
+      const name = catalogVariantName(f, r);
+      // King + rook a side, so neither is bare (rule 4 would decide it at load).
+      const pad = f > 2 ? String(f - 2) : '';
+      const ranks = [`kr${pad}`, ...Array.from({ length: r - 2 }, () => String(f)), `KR${pad}`];
+      const board = new ffish.Board(name, `${ranks.join('/')} w - - 0 1`);
+      const moves = board.numberLegalMoves();
+      const fen = board.fen();
+      board.delete();
+      if (!moves) throw new Error(`no legal moves on ${name} — ${fen}`);
+      return `${moves} legal moves, ${fen}`;
+    });
+  }
 
   // --- Catalog extremes: smallest and largest boards construct and move ---
   const extremeSpecs = [

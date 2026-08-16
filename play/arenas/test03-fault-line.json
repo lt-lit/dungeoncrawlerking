@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test03-fault-line",
+  "title": "Fault Line",
+  "intro": "An old quake tore this hall corner to corner. Your queen has one long diagonal and a staircase of rubble to work around — the warden's rook has the other half of the room.",
+  "files": 8,
+  "ranks": 8,
+  "walls": ["b3", "c3", "c4", "d4", "d5", "e5", "e6", "f6"],
+  "enemy": { "backRank": ["R", "B", "K"], "backRankStart": 4, "pawns": ["f", "g"] },
+  "player": { "pieceSet": ["Q", "N"], "backRankStart": 0, "patchWidth": 3, "pawns": ["a", "b", "c"] },
+  "initiative": "player",
+  "crumble": { "seed": 1103 }
+}

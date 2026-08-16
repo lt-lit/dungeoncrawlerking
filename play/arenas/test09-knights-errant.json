@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test09-knights-errant",
+  "title": "Knights Errant",
+  "intro": "Four riders and not one straight line between them. The brief says minors grind on wide boards; this hall is ten files across and intends to find out.",
+  "files": 10,
+  "ranks": 8,
+  "walls": [],
+  "enemy": { "backRank": ["R", "K", "B"], "backRankStart": 4, "pawns": ["e", "f", "g"] },
+  "player": { "pieceSet": ["N", "N", "N", "N"], "backRankStart": 3, "patchWidth": 5, "pawns": ["d", "e", "f", "g", "h"] },
+  "initiative": "player",
+  "crumble": { "seed": 1109 }
+}

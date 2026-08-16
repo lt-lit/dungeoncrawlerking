@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test02-causeway",
+  "title": "The Causeway",
+  "intro": "Two flooded halls joined by a two-tile span of dry stone. Whoever holds the causeway holds the duel — and whoever loses it may not get back across.",
+  "files": 10,
+  "ranks": 8,
+  "walls": ["a4", "b4", "c4", "d4", "g4", "h4", "i4", "j4", "a5", "b5", "c5", "d5", "g5", "h5", "i5", "j5"],
+  "enemy": { "backRank": ["R", "K", "N"], "backRankStart": 4, "pawns": ["e", "f"] },
+  "player": { "pieceSet": ["R", "R", "N"], "backRankStart": 3, "patchWidth": 4, "pawns": ["d", "e", "f", "g"] },
+  "initiative": "player",
+  "crumble": { "seed": 1102 }
+}

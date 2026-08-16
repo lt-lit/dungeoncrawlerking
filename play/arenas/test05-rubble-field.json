@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test05-rubble-field",
+  "title": "Rubble Field",
+  "intro": "The ceiling came down here a long time ago and nobody cleared it. Twelve heaps of broken masonry, no two lines alike.",
+  "files": 10,
+  "ranks": 8,
+  "walls": ["b3", "e3", "h3", "c4", "f4", "i4", "a5", "d5", "g5", "j5", "c6", "f6"],
+  "enemy": { "backRank": ["R", "B", "K", "N"], "backRankStart": 3, "pawns": ["d", "e", "f", "g"] },
+  "player": { "pieceSet": ["R", "N", "B", "N"], "backRankStart": 2, "patchWidth": 5, "pawns": ["c", "d", "e", "f", "g"] },
+  "initiative": "player",
+  "crumble": { "seed": 1105 }
+}

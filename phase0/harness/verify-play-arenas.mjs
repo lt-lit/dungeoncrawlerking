@@ -1,26 +1,41 @@
-// Encounter linter v0: verify the Phase 1 arenas produce puzzle-band duels.
+// Encounter linter v1: report what the arenas actually produce.
 //
 // For each play/arenas/*.json: load + validate (play/js/arena.mjs), stamp the
-// DEFAULT placement (same algorithm as play/js/main.mjs), and play seeded
-// engine-vs-engine games from the resulting startFen. Engine-vs-engine plies
-// approximate "plies to mate under best play both sides" — the number an
-// encounter's puzzle difficulty is stated in. Exit 0 iff every game is
-// decisive, error-free, and the favored side (the player) wins.
+// DEFAULT placement (the shared defaultPlacement() the game itself uses), and
+// play seeded engine-vs-engine games from the resulting startFen.
+// Engine-vs-engine plies approximate "plies to mate under best play both
+// sides" — the number an encounter's puzzle difficulty is stated in.
 //
-// Usage: cd phase0 && node harness/verify-play-arenas.mjs [--games 3]
+// Each arena declares what it EXPECTS (arena JSON `expect`, defaulted by
+// section in arena.mjs):
+//   "player" — the §13 balance philosophy: the arena favors the player.
+//   "enemy"  — a deliberately inverted encounter.
+//   "any"    — only has to be decisive and error-free. Test scenarios exist to
+//              be extreme; asserting a winner on them would be asserting a
+//              belief we have not measured.
+//
+// Two scopes, because the test shelf is far too slow to gate on:
+//   --campaign  (default) campaign arenas only. This is the gating run.
+//   --all       every arena including the test shelf. Informational; a
+//               nonzero exit here still means something is genuinely broken
+//               (an error or a non-decisive game), not merely unbalanced.
+//
+// CAVEAT (CLAUDE.md, Phase 1.5): playGame() still drives the RETIRED crumble
+// system (harness/crumble.mjs — repetition + fixed cadence), NOT the shipped
+// Board State Director. Ply counts and termination rates here therefore
+// describe arena GEOMETRY and MATERIAL faithfully, but not how the live game
+// paces or ends. A max-plies non-termination in particular says the old
+// system could not close that board; it does not predict the Director. Porting
+// the harness is Phase 1.5.
+//
+// Usage: cd phase0 && node harness/verify-play-arenas.mjs [--games 3] [--all]
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadFfish, loadEngine } from '../lib/load.mjs';
 import { playGame } from './game.mjs';
-import {
-  loadArena,
-  buildStartFen,
-  playerSlotSquares,
-  defaultPawnSquares,
-} from '../../play/js/arena.mjs';
+import { loadArena, buildStartFen, defaultPlacement } from '../../play/js/arena.mjs';
 import { makeDuelVariantIni } from '../../play/js/variant.mjs';
-import { parseSquare } from '../../play/js/fen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARENA_DIR = path.resolve(HERE, '../../play/arenas');
@@ -28,47 +43,34 @@ const GAMES = (() => {
   const i = process.argv.indexOf('--games');
   return i >= 0 ? parseInt(process.argv[i + 1], 10) : 3;
 })();
-
-const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, k: 0, p: 1 };
-
-/** Default placement — mirror of play/js/main.mjs defaultPlacement(). */
-function defaultPlacement(arena) {
-  const slots = playerSlotSquares(arena);
-  const placement = {};
-  const mid = (arena.player.backRankStart * 2 + arena.player.patchWidth - 1) / 2;
-  const byMid = slots
-    .slice()
-    .sort((a, b) => Math.abs(parseSquare(a).file - mid) - Math.abs(parseSquare(b).file - mid));
-  placement[byMid[0]] = 'K';
-  const rest = byMid.slice(1);
-  const pieces = arena.player.pieceSet
-    .slice()
-    .sort((a, b) => PIECE_VALUES[b.toLowerCase()] - PIECE_VALUES[a.toLowerCase()]);
-  pieces.slice(0, rest.length).forEach((p, i) => {
-    placement[rest[i]] = p;
-  });
-  for (const sq of defaultPawnSquares(arena)) {
-    if (!placement[sq]) placement[sq] = 'P';
-  }
-  return placement;
-}
+const SCOPE = process.argv.includes('--all') ? 'all' : 'campaign';
 
 const files = fs.readdirSync(ARENA_DIR).filter((f) => f.endsWith('.json')).sort();
-const arenas = files.map((f) => {
-  const arena = loadArena(JSON.parse(fs.readFileSync(path.join(ARENA_DIR, f), 'utf8')));
-  const { startFen } = buildStartFen(arena, defaultPlacement(arena));
-  return {
-    variantName: arena.variantName,
-    files: arena.files,
-    ranks: arena.ranks,
-    ini: makeDuelVariantIni({ name: arena.variantName, files: arena.files, ranks: arena.ranks }),
-    startFen,
-    meta: { id: arena.id, playerColor: arena.playerColor, crumble: arena.crumble },
-    playerColor: arena.playerColor,
-    crumble: arena.crumble,
-    id: arena.id,
-  };
-});
+const arenas = files
+  .map((f) => {
+    const arena = loadArena(JSON.parse(fs.readFileSync(path.join(ARENA_DIR, f), 'utf8')));
+    const { startFen } = buildStartFen(arena, defaultPlacement(arena));
+    return {
+      variantName: arena.variantName,
+      files: arena.files,
+      ranks: arena.ranks,
+      ini: makeDuelVariantIni({ name: arena.variantName, files: arena.files, ranks: arena.ranks }),
+      startFen,
+      meta: { id: arena.id, playerColor: arena.playerColor, crumble: arena.crumble },
+      playerColor: arena.playerColor,
+      crumble: arena.crumble,
+      id: arena.id,
+      section: arena.section,
+      expect: arena.expect,
+      warnings: arena.warnings ?? [],
+    };
+  })
+  .filter((a) => SCOPE === 'all' || a.section === 'campaign');
+
+console.log(`scope: ${SCOPE} — ${arenas.length} arena(s) x ${GAMES} games\n`);
+for (const a of arenas) {
+  for (const w of a.warnings) console.log(`  WARN ${a.id}: ${w}`);
+}
 
 const ffish = await loadFfish();
 const catalogIni = [...new Map(arenas.map((a) => [a.variantName, a.ini])).values()].join('\n');
@@ -80,7 +82,9 @@ await engine.loadVariantsIni(catalogIni);
 
 let failures = 0;
 for (const arena of arenas) {
-  console.log(`\n=== ${arena.id} (${arena.variantName}, player=${arena.playerColor}) ===`);
+  console.log(
+    `\n=== ${arena.id} (${arena.variantName}, player=${arena.playerColor}, expect=${arena.expect}) ===`
+  );
   for (let g = 0; g < GAMES; g++) {
     engine.setoption('UCI_Variant', arena.variantName);
     await engine.isready();
@@ -98,16 +102,22 @@ for (const arena of arenas) {
       },
     });
     const playerWon = record.winner === arena.playerColor;
-    const ok = !record.error && record.winner && playerWon;
+    // Every arena must be decisive and error-free. WHO wins is only asserted
+    // when the arena claims to know.
+    const decisive = !record.error && !!record.winner;
+    const asExpected =
+      arena.expect === 'any' || (arena.expect === 'player' ? playerWon : !playerWon);
+    const ok = decisive && asExpected;
     if (!ok) failures++;
     console.log(
       `  ${ok ? 'PASS' : 'FAIL'} seed ${arena.crumble.seed + g}: ${record.result ?? 'ERR'} ` +
         `(${record.winner ?? '-'} = ${playerWon ? 'player' : 'enemy'}) in ${record.plies} plies, ` +
         `${record.termination ?? '?'}, ${record.crumbles.length} crumbles` +
+        (!decisive ? ' [NOT DECISIVE]' : !asExpected ? ` [expected ${arena.expect} to win]` : '') +
         (record.error ? ` ERROR: ${record.error}` : '')
     );
   }
 }
 
-console.log(`\n${failures === 0 ? 'ALL PASS' : `${failures} FAILURES`} across ${arenas.length} arenas x ${GAMES} games`);
+console.log(`\n${failures === 0 ? 'ALL PASS' : `${failures} FAILURES`} across ${arenas.length} arenas x ${GAMES} games (scope: ${SCOPE})`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test11-mirror-match",
+  "title": "Mirror Match",
+  "intro": "Identical formations, identical steel. Nothing separates the two of you but the initiative — and the Gods, when they get bored.",
+  "files": 7,
+  "ranks": 8,
+  "walls": [],
+  "enemy": { "backRank": ["R", "B", "N", "K"], "backRankStart": 2, "pawns": ["c", "d", "e"] },
+  "player": { "pieceSet": ["R", "B", "N"], "backRankStart": 2, "patchWidth": 4, "pawns": ["c", "d", "e"] },
+  "initiative": "player",
+  "crumble": { "seed": 1111 }
+}

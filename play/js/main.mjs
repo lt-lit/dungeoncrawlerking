@@ -18,14 +18,14 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
-import { parseSquare, findSquares } from './fen.mjs';
+import { findSquares } from './fen.mjs';
 import {
   ARENA_MANIFEST,
   fetchArena,
   playerSlotSquares,
   playerPawnSquares,
   playerPool,
-  defaultPawnSquares,
+  defaultPlacement,
   defaultEnemySetup,
   buildStartFen,
   buildPreviewFen,
@@ -34,7 +34,6 @@ import { BoardUI, Tray, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 
 const $ = (id) => document.getElementById(id);
-const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, p: 1, k: 0 };
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
 const params = new URLSearchParams(location.search);
 
@@ -111,30 +110,8 @@ function savePlacement(arena, placement) {
   }
 }
 
-/** Default placement — the authored formation: king nearest the patch
- *  middle, pieces by value outward (the harness's "balanced" archetype, §7),
- *  pawns at their authored squares. */
-function defaultPlacement(arena) {
-  const slots = playerSlotSquares(arena); // file-ascending
-  if (!slots.length) return {};
-  const placement = {};
-  const mid = (arena.player.backRankStart * 2 + arena.player.patchWidth - 1) / 2;
-  const byMid = slots
-    .slice()
-    .sort((a, b) => Math.abs(parseSquare(a).file - mid) - Math.abs(parseSquare(b).file - mid));
-  placement[byMid[0]] = 'K';
-  const rest = byMid.slice(1);
-  const pieces = arena.player.pieceSet
-    .slice()
-    .sort((a, b) => PIECE_VALUES[b.toLowerCase()] - PIECE_VALUES[a.toLowerCase()]);
-  pieces.slice(0, rest.length).forEach((p, i) => {
-    placement[rest[i]] = p;
-  });
-  for (const sq of defaultPawnSquares(arena)) {
-    if (!placement[sq]) placement[sq] = 'P';
-  }
-  return placement;
-}
+// defaultPlacement now lives in arena.mjs so the game and the encounter linter
+// cannot drift apart on what the authored formation actually is.
 
 // ------------------------------------------------------- options (cheat mode)
 
@@ -437,8 +414,14 @@ async function boot() {
   setStatus('loading arenas…');
   const fetched = await Promise.allSettled(ARENA_MANIFEST.map((url) => fetchArena(url)));
   fetched.forEach((r, i) => {
-    if (r.status === 'fulfilled') app.arenas.push(r.value);
-    else log(bootLog, `arena ${ARENA_MANIFEST[i]} failed to load: ${r.reason.message}`, 'bad');
+    if (r.status === 'fulfilled') {
+      app.arenas.push(r.value);
+      // Advisory lint output (pacing, balance, clipping, connectivity). These
+      // never block loading — see the validation policy in arena.mjs.
+      for (const w of r.value.warnings ?? []) log(bootLog, `arena ${r.value.id}: ${w}`, 'warn');
+    } else {
+      log(bootLog, `arena ${ARENA_MANIFEST[i]} failed to load: ${r.reason.message}`, 'bad');
+    }
   });
   renderMenu();
   app.phase = 'menu';
@@ -451,21 +434,46 @@ async function boot() {
   }
 }
 
+/** Menu order: campaign encounters first, then the test-scenario shelf under
+ *  its own heading. `section` is presentation only — it gates nothing. */
 function renderMenu() {
   const list = $('arena-list');
   list.textContent = '';
-  for (const arena of app.arenas) {
-    const card = document.createElement('button');
-    card.className = 'arena-card';
-    card.innerHTML =
-      `<span class="arena-title"></span><span class="arena-dims"></span><span class="arena-intro"></span>`;
-    card.querySelector('.arena-title').textContent = arena.title;
-    card.querySelector('.arena-dims').textContent =
-      `${arena.files}×${arena.ranks} · ${arena.initiative === 'player' ? 'you hold the initiative' : 'AMBUSH — the enemy moves first'}`;
-    card.querySelector('.arena-intro').textContent = arena.intro;
-    card.addEventListener('click', () => openArena(arena));
-    list.appendChild(card);
+  const sections = [
+    { key: 'campaign', label: null },
+    { key: 'test', label: 'Test scenarios', note: 'Terrain, army-shape and scale coverage. Several are deliberately unbalanced.' },
+  ];
+  for (const section of sections) {
+    const arenas = app.arenas.filter((a) => a.section === section.key);
+    if (!arenas.length) continue;
+    if (section.label) {
+      const head = document.createElement('div');
+      head.className = 'arena-section';
+      head.innerHTML = `<span class="arena-section-title"></span><span class="arena-section-note"></span>`;
+      head.querySelector('.arena-section-title').textContent = section.label;
+      head.querySelector('.arena-section-note').textContent = section.note ?? '';
+      list.appendChild(head);
+    }
+    for (const arena of arenas) {
+      const card = document.createElement('button');
+      card.className = 'arena-card';
+      card.innerHTML =
+        `<span class="arena-title"></span><span class="arena-dims"></span><span class="arena-intro"></span>`;
+      card.querySelector('.arena-title').textContent = arena.title;
+      card.querySelector('.arena-dims').textContent =
+        `${arena.files}×${arena.ranks} · ${armySummary(arena)} · ${arena.initiative === 'player' ? 'you hold the initiative' : 'AMBUSH — the enemy moves first'}`;
+      card.querySelector('.arena-intro').textContent = arena.intro;
+      card.addEventListener('click', () => openArena(arena));
+      list.appendChild(card);
+    }
   }
+}
+
+/** "you 6 v 3" — unit counts, so the scale of a scenario reads off the card. */
+function armySummary(arena) {
+  const you = playerPool(arena).length;
+  const them = Object.keys(defaultEnemySetup(arena)).length;
+  return `you ${you} v ${them}`;
 }
 
 // ----------------------------------------------------------------- placement

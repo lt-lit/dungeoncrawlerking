@@ -100,6 +100,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .log:empty { display: none; }
 .log .ok { color: var(--ok); }
 .log .bad { color: var(--bad); }
+.log .warn { color: var(--gold); }
 .log .crumble { color: var(--gold); }
 
 /* ---------- menu ---------- */
@@ -122,6 +123,23 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .arena-title { font-weight: 600; }
 .arena-dims { font-size: .75rem; color: var(--gold); }
 .arena-intro { font-size: .8rem; color: var(--muted); }
+
+.arena-section {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  margin-top: .5rem;
+  padding-top: .6rem;
+  border-top: 1px solid #333;
+}
+.arena-section-title {
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.arena-section-note { font-size: .75rem; color: var(--muted); }
 
 /* ---------- duel screen ---------- */
 

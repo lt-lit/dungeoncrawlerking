@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test08-pawn-storm",
+  "title": "Pawn Storm",
+  "intro": "You summoned five levies and forgot the officers. Somewhere at the far end of this hall is a promotion square, and it is the only plan you have.",
+  "files": 7,
+  "ranks": 8,
+  "walls": [],
+  "enemy": { "backRank": ["N", "K"], "backRankStart": 3, "pawns": ["d", "e"] },
+  "player": { "pieceSet": [], "backRankStart": 1, "patchWidth": 5, "pawns": ["b", "c", "d", "e", "f"] },
+  "initiative": "player",
+  "crumble": { "seed": 1108 }
+}

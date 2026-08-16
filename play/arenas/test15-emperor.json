@@ -1,0 +1,22 @@
+{
+  "schema": 2,
+  "section": "test",
+  "id": "test15-emperor",
+  "title": "The Emperor",
+  "intro": "Twelve files by ten ranks — the largest board Fairy-Stockfish can hold, filled edge to edge on both sides. Everything here sits at its ceiling: the arena, the armies, and the time the Gods need to think.",
+  "files": 12,
+  "ranks": 10,
+  "walls": [],
+  "enemy": {
+    "backRank": ["R", "N", "B", "Q", "K", "B", "N", "R", "R", "N", "B", "R"],
+    "backRankStart": 0
+  },
+  "player": {
+    "rows": [["R", "N", "B", "Q", "K", "B", "N", "R", "R", "B", "N", "R"]],
+    "backRankStart": 0,
+    "patchWidth": 12,
+    "pawns": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]
+  },
+  "initiative": "player",
+  "crumble": { "seed": 1115 }
+}

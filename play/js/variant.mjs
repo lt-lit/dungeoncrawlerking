@@ -90,19 +90,39 @@ export function catalogVariantName(files, ranks) {
   return `duel_${files}x${ranks}`;
 }
 
+/** Catalog bounds. The upper bounds are the FSF largeboard ceiling and are
+ *  REAL: 13x10 / 12x11 crash this WASM build ("memory access out of bounds")
+ *  the moment a Board is constructed, and `loadVariantConfig` does NOT throw
+ *  on the oversized block — it silently drops the variant (same silent-failure
+ *  family as rules 6/7). The lower bounds are ours and are set as low as FSF
+ *  will go, deliberately: the old 3x6 floor was an authoring guess that had
+ *  hardened into a throw. */
+export const CATALOG_FILES = { min: 2, max: 12 };
+export const CATALOG_RANKS = { min: 2, max: 10 };
+
 /**
- * The fixed 50-variant catalog: duel_<files>x<ranks> for files 3–12 × ranks
- * 6–10 (spikes 1/3/8). Loaded ONCE at boot into both ffish and the engine;
- * every duel thereafter varies only via FEN.
+ * The fixed 99-variant catalog: duel_<files>x<ranks> over the full range FSF
+ * supports (files 2–12 × ranks 2–10). Loaded ONCE at boot into both ffish and
+ * the engine; every duel thereafter varies only via FEN.
+ *
+ * Widened from the old 50 (files 3–12 × ranks 6–10) so that board size stops
+ * being an authoring constraint. Measured cost of the extra 49 variants:
+ * 33 KB of ini and 10.4 ms in `loadVariantConfig`, against 16 KB / 9.1 ms for
+ * the old catalog — i.e. free.
  */
 export function makeCatalogIni() {
   const blocks = [];
-  for (let files = 3; files <= 12; files++) {
-    for (let ranks = 6; ranks <= 10; ranks++) {
+  for (let files = CATALOG_FILES.min; files <= CATALOG_FILES.max; files++) {
+    for (let ranks = CATALOG_RANKS.min; ranks <= CATALOG_RANKS.max; ranks++) {
       blocks.push(makeDuelVariantIni({ name: catalogVariantName(files, ranks), files, ranks }));
     }
   }
   return blocks.join('\n');
+}
+
+/** Number of variants makeCatalogIni() emits. */
+export function catalogSize() {
+  return (CATALOG_FILES.max - CATALOG_FILES.min + 1) * (CATALOG_RANKS.max - CATALOG_RANKS.min + 1);
 }
 
 /**
@@ -111,16 +131,33 @@ export function makeCatalogIni() {
  * spec = {
  *   files, ranks,
  *   walls: ['c3', ...],                      // wall squares from terrain
- *   white: { backRank: ['R','N','K',...], backRankStart: 0, row: 0,  // row = rank from bottom
+ *   white: { rows: [['R','N','K'], [null,'B',null]],  // rows[0] = back rank
+ *            backRankStart: 0, row: 0,       // row = rank from bottom
  *            pawnFiles: [0, 2] },            // optional: explicit pawn files
- *   black: { backRank: [...], backRankStart: 0, row: ranks-1 },
+ *   black: { rows: [[...]], backRankStart: 0, row: ranks-1 },
  * }
- * Pawn rows are stamped in front of each back row (§4.2). Default: automatic,
- * spanning the patch width; a walled back-row slot then suppresses BOTH the
- * piece and that file's pawn (walls eat slots — the semantics every Phase 0
- * sweep shipped with). With explicit `pawnFiles` (0-based file indices) only
- * those files get pawns, decoupled from back-row wall clipping — the arena
- * author owns the pawn count. Walled pawn squares stay empty either way.
+ *
+ * A formation is N piece rows plus ONE pawn row. `rows[0]` is the back rank
+ * (furthest from the enemy) and each later entry steps one rank toward the
+ * enemy; the pawn row sits in front of the last piece row. An N×M army in §4.2
+ * bounding-box terms is therefore `M-1` piece rows + 1 pawn row — 8×2 is the
+ * classic chess army, 5×3 is two piece rows of 5 over 5 pawns.
+ *
+ * `backRank` (a single array) is still accepted as shorthand for `rows: [.]`.
+ *
+ * Pawn rows default to automatic, spanning the piece-row width; a walled
+ * back-row slot then suppresses BOTH the piece and that file's pawn (walls eat
+ * slots — the semantics every Phase 0 sweep shipped with). With explicit
+ * `pawnFiles` (0-based file indices) only those files get pawns, decoupled
+ * from back-row wall clipping — the arena author owns the pawn count. Walled
+ * pawn squares stay empty either way.
+ *
+ * NOTE (double-step): the variant's doubleStepRegion is `*2` / `*{ranks-1}`,
+ * i.e. literally the rank one step in front of the back rank. A formation with
+ * TWO piece rows puts its pawns a rank further out, so those pawns have no
+ * double step. This is symmetric between the sides (both formations are the
+ * same depth from their own edge), so it is a pacing quirk, not an imbalance —
+ * deep armies simply advance slower than they look.
  */
 export function buildDuelBoard(spec) {
   const { files, ranks } = spec;
@@ -135,27 +172,43 @@ export function buildDuelBoard(spec) {
   }
   const stamp = (side, isWhite) => {
     if (!side) return;
-    const row = side.row ?? (isWhite ? 0 : ranks - 1);
-    const pawnRow = isWhite ? row + 1 : row - 1;
+    const pieceRows = sideRows(side);
+    const back = side.row ?? (isWhite ? 0 : ranks - 1);
+    const dir = isWhite ? 1 : -1; // toward the enemy
+    const pawnRow = back + dir * pieceRows.length;
     const start = side.backRankStart ?? 0;
+    const onBoard = (rb) => rb >= 0 && rb < ranks;
     const pawnAt = (file) => {
-      if (file < 0 || file >= files) return;
+      if (file < 0 || file >= files || !onBoard(pawnRow)) return;
       if (board[ranks - 1 - pawnRow][file] !== '*') {
         put(file, pawnRow, isWhite ? 'P' : 'p');
       }
     };
-    side.backRank.forEach((piece, i) => {
-      const file = start + i;
-      if (file >= files) return; // clipped by board edge
-      if (board[ranks - 1 - row][file] === '*') return; // walls eat slots (§4.2)
-      if (piece) put(file, row, isWhite ? piece.toUpperCase() : piece.toLowerCase());
-      if (!side.pawnFiles) pawnAt(file); // automatic full-width row (§4.2 default)
+    const autoPawnFiles = new Set();
+    pieceRows.forEach((rowPieces, depth) => {
+      const rb = back + dir * depth;
+      if (!onBoard(rb)) return; // clipped by board edge
+      rowPieces.forEach((piece, i) => {
+        const file = start + i;
+        if (file >= files) return; // clipped by board edge
+        if (board[ranks - 1 - rb][file] === '*') return; // walls eat slots (§4.2)
+        if (piece) put(file, rb, isWhite ? piece.toUpperCase() : piece.toLowerCase());
+        if (depth === 0) autoPawnFiles.add(file); // automatic row follows the BACK rank
+      });
     });
     if (side.pawnFiles) for (const f of side.pawnFiles) pawnAt(f);
+    else for (const f of autoPawnFiles) pawnAt(f); // §4.2 default
   };
   stamp(spec.white, true);
   stamp(spec.black, false);
   return board;
+}
+
+/** A side's piece rows, accepting the `backRank` single-row shorthand. */
+export function sideRows(side) {
+  if (side.rows) return side.rows;
+  if (side.backRank) return [side.backRank];
+  return [];
 }
 
 /** Serialize a duel board + turn into a full startFen. */
