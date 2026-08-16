@@ -6,9 +6,10 @@
   "intro": "No pawns. No shield. One queen against a rook and two spears, in a room with just enough standing stone to spoil her lines. She is worth more than everything he owns — and she is the only thing you can lose.",
   "files": 6,
   "ranks": 7,
-  "walls": ["a3", "b2", "c3", "c5", "d4", "f4"],
-  "enemy": { "backRank": ["R", "K"], "backRankStart": 3, "pawns": ["d", "e"] },
+  "walls": ["a3", "b2", "b3", "c3", "c5", "d4", "d5", "e4", "e5", "f4"],
+  "enemy": { "backRank": ["R", "K"], "backRankStart": 3, "pawns": [] },
   "player": { "pieceSet": ["Q"], "backRankStart": 1, "patchWidth": 3, "pawns": [] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1107 }
 }

@@ -3,12 +3,13 @@
   "section": "test",
   "id": "test08-pawn-storm",
   "title": "Pawn Storm",
-  "intro": "You summoned five levies and forgot the officers. Somewhere past the rubble is a promotion square, and it is the only plan you have.",
+  "intro": "Five levies and one officer to drive them. Somewhere past the rubble is a promotion square, and it is very nearly the whole plan.",
   "files": 7,
   "ranks": 8,
-  "walls": ["a3", "a5", "b4", "b5", "b8", "c1", "c7", "c8", "f1", "g1", "g2", "g7"],
-  "enemy": { "backRank": ["N", "K"], "backRankStart": 3, "pawns": ["d", "e"] },
-  "player": { "pieceSet": [], "backRankStart": 1, "patchWidth": 5, "pawns": ["b", "c", "d", "e", "f"] },
+  "walls": ["a3", "d5", "d6", "g4", "g5", "g6"],
+  "enemy": { "backRank": ["N", "K"], "backRankStart": 3, "pawns": [] },
+  "player": { "pieceSet": ["R"], "backRankStart": 1, "patchWidth": 5, "pawns": ["b", "c", "d", "e", "f"] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1108 }
 }

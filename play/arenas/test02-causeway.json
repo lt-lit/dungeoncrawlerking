@@ -6,9 +6,10 @@
   "intro": "Two fallen walls stand between you and the enemy, and the gaps in them do not line up. Whatever crosses first crosses alone.",
   "files": 10,
   "ranks": 8,
-  "walls": ["b3", "b5", "c3", "c5", "d3", "d5", "e3", "f5", "g3", "g5", "h3", "h5", "i3", "j3"],
-  "enemy": { "backRank": ["R", "K", "N"], "backRankStart": 4, "pawns": ["e", "f"] },
+  "walls": ["a4", "b3", "b4", "c3", "c4", "c5", "d3", "d4", "d5", "e3", "e4", "e5", "h3", "h5", "i3", "i4", "i5"],
+  "enemy": { "backRank": ["B", "K", "N"], "backRankStart": 4, "pawns": ["f"] },
   "player": { "pieceSet": ["R", "R", "N"], "backRankStart": 3, "patchWidth": 4, "pawns": ["d", "e", "f", "g"] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1102 }
 }

@@ -7,8 +7,9 @@
   "files": 8,
   "ranks": 8,
   "walls": ["d6", "d7", "d8", "e5", "e6", "e7", "f1", "f2", "f5", "g1", "g3", "h4"],
-  "enemy": { "backRank": ["R", "B", "K"], "backRankStart": 4, "pawns": ["f", "g"] },
+  "enemy": { "backRank": ["R", "K"], "backRankStart": 5, "pawns": ["f", "g"] },
   "player": { "pieceSet": ["Q", "N"], "backRankStart": 0, "patchWidth": 3, "pawns": ["a", "b", "c"] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1103 }
 }

@@ -6,9 +6,10 @@
   "intro": "Four riders and not one straight line in the room. A third of this floor is rubble, which suits them perfectly and suits the warden's rook not at all.",
   "files": 10,
   "ranks": 8,
-  "walls": ["a3", "a4", "b3", "d4", "d5", "d6", "e1", "e3", "e5", "f2", "f3", "g1", "g2", "g3", "g7", "g8", "h1", "h2", "h7", "h8", "i4", "i7", "j4", "j6"],
+  "walls": ["a3", "a4", "a5", "b2", "b3", "b4", "b5", "c1", "c3", "c5", "c8", "d3", "d8", "e4", "e6", "e7", "e8", "h1", "h4", "i1", "i2", "j2", "j7"],
   "enemy": { "backRank": ["R", "K", "B"], "backRankStart": 4, "pawns": ["e", "f", "g"] },
   "player": { "pieceSet": ["N", "N", "N", "N"], "backRankStart": 3, "patchWidth": 5, "pawns": ["d", "e", "f", "g", "h"] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1109 }
 }

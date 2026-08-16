@@ -6,10 +6,11 @@
   "intro": "Twelve files by ten ranks — the largest board Fairy-Stockfish can hold, filled edge to edge on both sides, with a seam of collapsed floor torn through the middle of it. Everything here sits at its ceiling: the arena, the armies, and the time the Gods need to think.",
   "files": 12,
   "ranks": 10,
-  "walls": ["c5", "d2", "d3", "d4", "d5", "d6", "d7", "e4", "g3", "g4", "h2", "h3", "h4", "h6", "h7", "i2", "i4", "i8"],
+  "walls": ["a5", "a6", "b2", "b5", "b6", "c4", "c5", "g4", "i2", "i3", "i5", "j2", "j5", "j8", "k2", "k5", "k6", "l5"],
   "enemy": {
-    "backRank": ["R", "N", "B", "Q", "K", "B", "N", "R", "R", "N", "B", "R"],
-    "backRankStart": 0
+    "backRank": ["R", "N", "B", "K", "N", "R"],
+    "backRankStart": 3,
+    "pawns": ["d", "e", "f", "g", "h", "i"]
   },
   "player": {
     "rows": [["R", "N", "B", "Q", "K", "B", "N", "R", "R", "B", "N", "R"]],
@@ -18,5 +19,6 @@
     "pawns": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]
   },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1115 }
 }

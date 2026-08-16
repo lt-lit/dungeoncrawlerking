@@ -196,14 +196,24 @@ pawns anywhere on their first two rows (FSF accepts back-rank pawns; they
 keep a single-step push). The pool is king + `pieceSet` + the authored pawn
 count.
 
-Balance philosophy (§13, §2.2): the engine is always full strength, so
-CAMPAIGN arenas hand the PLAYER a decisive material edge — difficulty tuning
-happens entirely in these JSON files. The campaign arenas follow the puzzle
-vision: the player fields the 3×2 starter army (K+R+N + 3 pawns) against small
-armies (K + one or two pieces, 0–2 pawns), targeting mates in roughly 10–20
-plies under good play while staying ~2 blunders from a loss. The test shelf is
-deliberately exempt — it exists to cover shapes the campaign does not, several
-of them unbalanced on purpose.
+Balance philosophy (§13, §2.2): the engine is always full strength, so **a human
+does not win a fair game** — every arena hands the PLAYER a decisive material
+edge, and difficulty tuning happens entirely in these JSON files. The campaign
+arenas follow the puzzle vision: the player fields the 3×2 starter army
+(K+R+N + 3 pawns) against small armies (K + one or two pieces, 0–2 pawns),
+targeting mates in roughly 10–20 plies under good play while staying ~2 blunders
+from a loss.
+
+**The test shelf follows the same rule.** It varies terrain, army *shape* and
+scale, not fairness. The edge is measured as a **ratio, not a difference** — +5
+is decisive against a 7-point army and noise against a 45-point one. The shelf
+runs **1.6×–3.4×** the enemy's material, the campaign ladder 1.6×–2.2×, and
+`verify-arena-schema.mjs` fails the build below 1.5×.
+
+`test14-classic` is the single deliberate exception: it is materially fair
+because it is the standard chess position, and its job is to be an
+engine-correctness fixture rather than a puzzle. It carries `expect: "any"`;
+every other arena carries `expect: "player"`.
 
 Engine-vs-engine plies per arena are measured by
 `phase0/harness/verify-play-arenas.mjs` (encounter linter v1 — run it after
@@ -242,7 +252,30 @@ Four dungeon-plausible shapes: `rubble` (clustered collapse with debris
 trails), `chambers` (room walls with doorways punched at irregular offsets),
 `fault` (a wandering fracture with spurs), `erosion` (Earthquake scars pulled
 toward the middle ranks). `--keepClear 0` lets terrain clip the formation rows,
-which is the §4.2 clip rule doing its job.
+which is the §4.2 clip rule doing its job — but see the boxed-king note below
+before using it on a narrow board.
+
+**Chokepoints are relaxed automatically.** `relaxChokes()` runs over generator
+output and removes walls (never adds) until every rank has at least
+`minFreePerRank(files)` free squares and no 1-wide doorways survive — brief
+§5.3: *"Width 1–2 passages are non-duelable crawlspaces — author them scarce."*
+Narrow passages made fortresses, not puzzles: the symmetric 2-wide causeway in
+the first pass was a 400-ply non-termination, and it resolved in 63 plies once
+its gaps were widened and offset. The shelf now has **zero** 1-wide doorways
+and no rank below the floor. Because relaxation *removes* walls, generate above
+your target density and let it settle.
+
+**Two traps this shelf walked into, both now pinned by the schema test:**
+
+- *Walls next to a king.* `test08` shipped a king with three walled neighbours
+  on top of its own pawn wall, and **a lone knight mated it in 8 plies**. A king
+  boxed by its own army is fine — that is the standard chess opening, where
+  every square around e1 is a friendly piece — because those pieces move. Walls
+  never do. The check counts walls only, and caps them at 2.
+- *Pawns versus density.* Any wall ahead of a pawn locks it (§6), so on a narrow
+  board a pawn-heavy army cannot carry band density and stay mobile. `test08`
+  sits at 0.107 deliberately; the density assertion is on the **median**, not
+  per-arena.
 
 The shelf sits at density **0.143–0.300** — the brief puts generated wall
 density at 0.15–0.3 — and **14 of 15 scenarios carry terrain-locked pawns (48

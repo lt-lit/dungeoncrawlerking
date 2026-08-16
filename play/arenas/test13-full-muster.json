@@ -3,14 +3,14 @@
   "section": "test",
   "id": "test13-full-muster",
   "title": "Full Muster",
-  "intro": "Five wide and three deep — the largest formation the patch rules will carry. Ten pieces stacked two ranks behind a thin line of levies, in a room that has already lost a corner.",
-  "files": 8,
+  "intro": "Five wide and three deep — the largest formation the patch rules will carry, ten pieces stacked two ranks behind a thin line of levies. Half your problem is the warden. The other half is your own back rank, which cannot see daylight.",
+  "files": 10,
   "ranks": 8,
-  "walls": ["a2", "a5", "a6", "d5", "f4", "g4", "h2", "h3", "h4", "h5"],
+  "walls": ["d4", "d5", "e4", "e5", "h2", "h3", "h4", "h6", "i2", "i4", "i5", "i6", "j5", "j6", "j7"],
   "enemy": {
-    "rows": [["R", "B", "K", "N", "R"], [null, "N", "B", null, null]],
-    "backRankStart": 1,
-    "pawns": ["b", "c", "d", "e", "f"]
+    "rows": [["R", "K", "N"], [null, "B", null]],
+    "backRankStart": 6,
+    "pawns": ["g", "h", "i"]
   },
   "player": {
     "rows": [["R", "N", "K", "N", "R"], ["B", "R", "Q", "R", "B"]],
@@ -20,5 +20,6 @@
     "pawns": ["b", "c", "d", "e", "f"]
   },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1113 }
 }

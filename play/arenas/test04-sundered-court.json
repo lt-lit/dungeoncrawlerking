@@ -6,9 +6,10 @@
   "intro": "Two courtyard walls, punched through where the masonry gave out rather than where a door was ever meant to be. Neither gap is where you want it.",
   "files": 7,
   "ranks": 8,
-  "walls": ["a4", "b4", "b6", "c6", "e4", "e6", "f4", "f6", "g4"],
-  "enemy": { "backRank": ["R", "K", "N"], "backRankStart": 2, "pawns": ["c", "d", "e"] },
+  "walls": ["a4", "b4", "b6", "e4", "e6", "f4", "f6"],
+  "enemy": { "backRank": ["R", "K"], "backRankStart": 3, "pawns": ["d"] },
   "player": { "pieceSet": ["R", "B", "N"], "backRankStart": 2, "patchWidth": 3, "pawns": ["c", "d", "e"] },
   "initiative": "enemy",
+  "expect": "player",
   "crumble": { "seed": 1104 }
 }

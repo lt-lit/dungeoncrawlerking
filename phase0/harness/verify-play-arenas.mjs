@@ -44,6 +44,11 @@ const GAMES = (() => {
   return i >= 0 ? parseInt(process.argv[i + 1], 10) : 3;
 })();
 const SCOPE = process.argv.includes('--all') ? 'all' : 'campaign';
+// --only <substr>: iterate on one arena without paying for the whole shelf.
+const ONLY = (() => {
+  const i = process.argv.indexOf('--only');
+  return i >= 0 ? process.argv[i + 1] : null;
+})();
 
 const files = fs.readdirSync(ARENA_DIR).filter((f) => f.endsWith('.json')).sort();
 const arenas = files
@@ -65,7 +70,7 @@ const arenas = files
       warnings: arena.warnings ?? [],
     };
   })
-  .filter((a) => SCOPE === 'all' || a.section === 'campaign');
+  .filter((a) => (SCOPE === 'all' || a.section === 'campaign') && (!ONLY || a.id.includes(ONLY)));
 
 console.log(`scope: ${SCOPE} — ${arenas.length} arena(s) x ${GAMES} games\n`);
 for (const a of arenas) {
@@ -75,10 +80,34 @@ for (const a of arenas) {
 const ffish = await loadFfish();
 const catalogIni = [...new Map(arenas.map((a) => [a.variantName, a.ini])).values()].join('\n');
 ffish.loadVariantConfig(catalogIni);
-const engine = await loadEngine();
-await engine.uci();
-engine.setoption('Use NNUE', 'false');
-await engine.loadVariantsIni(catalogIni);
+
+// CLAUDE.md rule 6: the WASM instance corrupts under sustained multi-game use,
+// so recycle it well before ~40 games. This used to run one instance for the
+// whole file, which was survivable at 4 campaign arenas x 3 games (12) and
+// crashed outright at 19 x 2 (38) — "memory access out of bounds" from inside
+// ffish, AFTER the last game's result printed. Never call quit() in Node
+// (Emscripten kills the process); just drop the reference.
+const RECYCLE_EVERY = 16;
+let engine = null;
+let gamesOnEngine = 0;
+async function freshEngine() {
+  const e = await loadEngine();
+  await e.uci();
+  e.setoption('Use NNUE', 'false'); // rule 1: defaults TRUE in this build
+  await e.loadVariantsIni(catalogIni);
+  return e;
+}
+async function engineFor(variantName) {
+  if (!engine || gamesOnEngine >= RECYCLE_EVERY) {
+    if (engine) console.log(`  … recycling engine instance after ${gamesOnEngine} games (rule 6)`);
+    engine = await freshEngine();
+    gamesOnEngine = 0;
+  }
+  engine.setoption('UCI_Variant', variantName);
+  await engine.isready();
+  gamesOnEngine++;
+  return engine;
+}
 
 let failures = 0;
 for (const arena of arenas) {
@@ -86,8 +115,7 @@ for (const arena of arenas) {
     `\n=== ${arena.id} (${arena.variantName}, player=${arena.playerColor}, expect=${arena.expect}) ===`
   );
   for (let g = 0; g < GAMES; g++) {
-    engine.setoption('UCI_Variant', arena.variantName);
-    await engine.isready();
+    const engine = await engineFor(arena.variantName);
     const record = await playGame({
       engine,
       ffish,

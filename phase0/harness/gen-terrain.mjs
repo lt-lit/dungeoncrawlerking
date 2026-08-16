@@ -131,12 +131,68 @@ function erosion(rng, files, ranks, band, target) {
 
 const SHAPES = { rubble, chambers, fault, erosion };
 
+/**
+ * Minimum free squares a rank may have. Brief §5.3: "Width 1-2 passages are
+ * non-duelable crawlspaces — author them scarce so they read as claustrophobic
+ * exceptions, not safe hallways." A rank narrower than this funnels the whole
+ * fight through a doorway, which produces fortresses rather than puzzles: the
+ * symmetric 2-wide causeway in the first pass was a 400-ply non-termination.
+ */
+export function minFreePerRank(files) {
+  return files <= 4 ? 2 : Math.max(3, Math.ceil(files / 3));
+}
+
+/**
+ * Widen chokepoints. Two passes, both removing walls (never adding):
+ *   1. any rank with fewer than minFreePerRank() free squares is opened up;
+ *   2. isolated 1-wide doorways — a free square with a wall either side in its
+ *      own rank — are widened by knocking out one flank.
+ * Runs on generator output so the SHAPE stays whatever the process produced;
+ * this only prevents it from sealing the board.
+ */
+export function relaxChokes(walls, files, ranks, rng = mulberry32(1)) {
+  const set = new Set(walls);
+  const free = (f, r) => !set.has(SQ(f, r));
+  const minFree = minFreePerRank(files);
+
+  for (let r = 0; r < ranks; r++) {
+    let open = [];
+    for (let f = 0; f < files; f++) if (free(f, r)) open.push(f);
+    while (open.length < minFree) {
+      const walled = [];
+      for (let f = 0; f < files; f++) if (!free(f, r)) walled.push(f);
+      if (!walled.length) break;
+      set.delete(SQ(walled[Math.floor(rng() * walled.length)], r));
+      open = [];
+      for (let f = 0; f < files; f++) if (free(f, r)) open.push(f);
+    }
+  }
+
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 1; f < files - 1; f++) {
+      if (free(f, r) && !free(f - 1, r) && !free(f + 1, r)) {
+        set.delete(SQ(rng() < 0.5 ? f - 1 : f + 1, r));
+      }
+    }
+  }
+  return [...set].sort();
+}
+
 /** Generate walls for a board, keeping clear of the formation rows by default. */
-export function generateWalls({ files, ranks, shape = 'rubble', seed = 1, density = 0.2, keepClear = 1 }) {
+export function generateWalls({
+  files,
+  ranks,
+  shape = 'rubble',
+  seed = 1,
+  density = 0.2,
+  keepClear = 1,
+  relax = true,
+}) {
   const rng = mulberry32(seed);
   const band = [keepClear, ranks - 1 - keepClear];
   const target = Math.round(files * ranks * density);
-  return (SHAPES[shape] ?? rubble)(rng, files, ranks, band, target).sort();
+  const raw = (SHAPES[shape] ?? rubble)(rng, files, ranks, band, target);
+  return relax ? relaxChokes(raw, files, ranks, rng) : raw.sort();
 }
 
 // ------------------------------------------------------------------- audit

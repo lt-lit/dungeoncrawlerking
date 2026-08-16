@@ -3,13 +3,13 @@
   "section": "test",
   "id": "test10-wardens-court",
   "title": "The Warden's Court",
-  "intro": "You walked into a full court with a rook and a rider. He has his queen, his guard, and the better half of a broken room. This one is not a puzzle — it is a lesson.",
+  "intro": "You came through the warden's door with a queen and a rider, and he was ready for you. He has his rook, his levy, and the first move.",
   "files": 8,
   "ranks": 8,
-  "walls": ["a4", "b4", "b6", "c4", "c6", "e4", "e6", "f4", "f6", "g4", "g6", "h4"],
-  "enemy": { "backRank": ["R", "B", "Q", "K", "N"], "backRankStart": 1, "pawns": ["b", "c", "d", "e", "f"] },
-  "player": { "pieceSet": ["R", "N"], "backRankStart": 2, "patchWidth": 3, "pawns": ["c", "d", "e"] },
+  "walls": ["a4", "b3", "b4", "b5", "c4", "c6", "e5", "f5", "g3", "g5", "h4", "h6"],
+  "enemy": { "backRank": ["R", "K"], "backRankStart": 3, "pawns": ["d", "e"] },
+  "player": { "pieceSet": ["Q", "N"], "backRankStart": 2, "patchWidth": 4, "pawns": ["c", "d", "e"] },
   "initiative": "enemy",
-  "expect": "enemy",
+  "expect": "player",
   "crumble": { "seed": 1110 }
 }

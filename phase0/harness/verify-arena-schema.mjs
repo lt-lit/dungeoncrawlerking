@@ -12,7 +12,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadArena, buildStartFen, defaultPlacement, playerPool } from '../../play/js/arena.mjs';
 import { makeDuelVariantIni, catalogSize } from '../../play/js/variant.mjs';
-import { lockedPawns } from '../../play/js/director.mjs';
+import { lockedPawns, fenGrid } from '../../play/js/director.mjs';
+import { minFreePerRank } from './gen-terrain.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARENA_DIR = path.resolve(HERE, '../../play/arenas');
@@ -234,14 +235,52 @@ check('at most one bare test scenario (test14-classic, deliberately)', () => {
   assert(bare.length <= 1 && (bare[0] ?? 'test14-classic') === 'test14-classic', `bare: ${bare.join(', ')}`);
   return `bare: ${bare.join(', ') || 'none'}`;
 });
-check('walled scenarios sit in the generated density band (0.12-0.32)', () => {
+check('shelf terrain density tracks the generated band (median 0.15-0.30)', () => {
   const out = shelf.filter((a) => a.walls.length);
+  const ds = out.map((a) => a.walls.length / (a.files * a.ranks)).sort((x, y) => x - y);
+  const median = ds[Math.floor(ds.length / 2)];
+  assert(median >= 0.15 && median <= 0.3, `median density ${median.toFixed(3)} outside 0.15-0.3`);
+  // A hard per-arena floor would be wrong: pawn-heavy armies and terrain are in
+  // direct tension. Any wall ahead of a pawn locks it (§6), so on a narrow
+  // board a pawn-storm scenario cannot carry band density AND keep its pawns
+  // mobile — test08 sits low deliberately. Assert the aggregate, and only that
+  // nothing is effectively bare.
   for (const a of out) {
     const d = a.walls.length / (a.files * a.ranks);
-    assert(d >= 0.12 && d <= 0.32, `${a.id} density ${d.toFixed(3)} outside the band`);
+    assert(d >= 0.09, `${a.id} density ${d.toFixed(3)} is effectively bare`);
   }
-  const ds = out.map((a) => a.walls.length / (a.files * a.ranks));
-  return `${out.length} arenas, ${Math.min(...ds).toFixed(3)}-${Math.max(...ds).toFixed(3)}`;
+  return `${out.length} arenas, ${ds[0].toFixed(3)}-${ds[ds.length - 1].toFixed(3)}, median ${median.toFixed(3)}`;
+});
+check('no king starts walled into a hole (<=2 adjacent wall squares)', () => {
+  // test08 shipped a king with THREE walled neighbours on top of its own
+  // pawn wall, and a LONE KNIGHT mated it in 8 plies. Count WALLS only:
+  // a king boxed by its own army is normal — that is the standard chess
+  // opening, where every neighbour of e1 is a friendly piece — and those
+  // pieces move. Walls never do.
+  const bad = [];
+  const all = fs
+    .readdirSync(ARENA_DIR)
+    .filter((x) => x.endsWith('.json'))
+    .map((f) => loadArena(JSON.parse(fs.readFileSync(path.join(ARENA_DIR, f), 'utf8'))));
+  for (const a of all) {
+    const { startFen } = buildStartFen(a, defaultPlacement(a));
+    const g = fenGrid(startFen, a.files, a.ranks);
+    for (const royal of ['K', 'k']) {
+      let kf = -1;
+      let kr = -1;
+      for (let r = 0; r < a.ranks; r++) for (let f = 0; f < a.files; f++) if (g[r][f] === royal) { kf = f; kr = r; }
+      if (kf < 0) continue;
+      let walls = 0;
+      for (const [df, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nf = kf + df;
+        const nr = kr + dr;
+        if (nf < 0 || nf >= a.files || nr < 0 || nr >= a.ranks) continue;
+        if (g[nr][nf] === '*') walls++;
+      }
+      if (walls > 2) bad.push(`${a.id} ${royal === 'K' ? 'white' : 'black'} king has ${walls} walled neighbours`);
+    }
+  }
+  assert(!bad.length, bad.join('; '));
 });
 check('the shelf carries terrain-locked pawns (§6: they must stay in the set)', () => {
   let withLocks = 0;
@@ -254,6 +293,64 @@ check('the shelf carries terrain-locked pawns (§6: they must stay in the set)',
   }
   assert(withLocks >= 12, `only ${withLocks} scenarios lock a pawn`);
   return `${withLocks}/${shelf.length} scenarios, ${total} locked pawns total`;
+});
+
+console.log('\n--- puzzle balance ---');
+// §2.2/§13: the engine is ALWAYS full strength, so a human does not win a fair
+// game. Every arena hands the player a decisive material edge, and the edge has
+// to be measured as a RATIO — +5 is decisive against a 7-point army and noise
+// against a 45-point one. The campaign ladder runs 1.6-2.2x; the shelf matches.
+const PIECE_VALUE = { q: 9, r: 5, b: 3, n: 3, p: 1, k: 0 };
+function material(arena) {
+  const { startFen } = buildStartFen(arena, defaultPlacement(arena));
+  let white = 0;
+  let black = 0;
+  for (const ch of startFen.split(' ')[0]) {
+    if (/[A-Z]/.test(ch)) white += PIECE_VALUE[ch.toLowerCase()] ?? 0;
+    else if (/[a-z]/.test(ch)) black += PIECE_VALUE[ch] ?? 0;
+  }
+  return arena.playerColor === 'white' ? { you: white, them: black } : { you: black, them: white };
+}
+check('every puzzle gives the player a decisive material edge (>=1.5x)', () => {
+  const bad = [];
+  for (const a of shelf) {
+    if (a.expect !== 'player') continue; // test14-classic is a fair fixture
+    const { you, them } = material(a);
+    if (you < them * 1.5) bad.push(`${a.id} ${you}/${them}`);
+  }
+  assert(!bad.length, `too close to fair: ${bad.join(', ')}`);
+  const rs = shelf.filter((a) => a.expect === 'player').map((a) => {
+    const m = material(a);
+    return m.you / m.them;
+  });
+  return `${rs.length} puzzles, ${Math.min(...rs).toFixed(2)}x-${Math.max(...rs).toFixed(2)}x`;
+});
+check('test14-classic is the only arena that is materially fair', () => {
+  const fair = shelf.filter((a) => {
+    const { you, them } = material(a);
+    return you === them;
+  });
+  assert(fair.length === 1 && fair[0].id === 'test14-classic', `fair: ${fair.map((a) => a.id).join(', ')}`);
+});
+check('no 1-wide chokepoints (§5.3: crawlspaces must be scarce)', () => {
+  const bad = [];
+  for (const a of shelf) {
+    const { startFen } = buildStartFen(a, defaultPlacement(a));
+    const g = fenGrid(startFen, a.files, a.ranks);
+    const floor = minFreePerRank(a.files);
+    for (let r = 0; r < a.ranks; r++) {
+      let free = 0;
+      for (let f = 0; f < a.files; f++) if (g[r][f] !== '*') free++;
+      if (free < floor) bad.push(`${a.id} rank ${r + 1} has ${free}/${a.files} free (floor ${floor})`);
+      // A free square walled on both sides in its own rank is a doorway.
+      for (let f = 1; f < a.files - 1; f++) {
+        if (g[r][f] !== '*' && g[r][f - 1] === '*' && g[r][f + 1] === '*') {
+          bad.push(`${a.id} 1-wide doorway at ${String.fromCharCode(97 + f)}${r + 1}`);
+        }
+      }
+    }
+  }
+  assert(!bad.length, bad.join('; '));
 });
 
 console.log('\n--- every shipped arena ---');

@@ -6,9 +6,10 @@
   "intro": "Identical formations, identical steel — on a floor that is nothing like symmetrical. Whatever ends up separating the two of you, it will not be the army.",
   "files": 7,
   "ranks": 8,
-  "walls": ["b7", "c7", "d1", "d2", "d4", "d5", "d6", "d7", "f5", "f7", "g8"],
-  "enemy": { "backRank": ["R", "B", "N", "K"], "backRankStart": 2, "pawns": ["c", "d", "e"] },
+  "walls": ["a6", "b3", "b5", "d2", "f3", "f7", "f8", "g1", "g2", "g3", "g4", "g6", "g7"],
+  "enemy": { "backRank": ["B", "N", "K"], "backRankStart": 2, "pawns": ["c", "d"] },
   "player": { "pieceSet": ["R", "B", "N"], "backRankStart": 2, "patchWidth": 4, "pawns": ["c", "d", "e"] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1111 }
 }

@@ -6,9 +6,10 @@
   "intro": "Your own muster ground caved in. You brought four pieces to a corner with three places left to stand — decide now which one stays in the bag.",
   "files": 6,
   "ranks": 7,
-  "walls": ["a1", "a2", "a3", "a6", "b1", "b2", "c1", "c2", "d3", "e3", "f3"],
+  "walls": ["b5", "c1", "c4", "c5", "d1", "d2", "d4", "e1", "e4", "e6", "f3", "f6"],
   "enemy": { "backRank": ["B", "K"], "backRankStart": 2, "pawns": ["c"] },
   "player": { "pieceSet": ["R", "N", "B"], "backRankStart": 1, "patchWidth": 4, "pawns": ["c", "d"] },
   "initiative": "player",
+  "expect": "player",
   "crumble": { "seed": 1106 }
 }
