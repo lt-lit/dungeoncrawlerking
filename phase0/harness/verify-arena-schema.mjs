@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadArena, buildStartFen, defaultPlacement, playerPool } from '../../play/js/arena.mjs';
 import { makeDuelVariantIni, catalogSize } from '../../play/js/variant.mjs';
+import { lockedPawns } from '../../play/js/director.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARENA_DIR = path.resolve(HERE, '../../play/arenas');
@@ -203,6 +204,56 @@ check('makeDuelVariantIni still guards the FSF ceiling', () => {
     }
     assert(threw, `${f}x${r} should be rejected — loadVariantConfig accepts it silently and Board construction then crashes the heap`);
   }
+});
+
+console.log('\n--- test-shelf terrain ---');
+// The first pass of the shelf shipped nine scenarios with no walls at all and
+// three with perfect mirror symmetry, because hand-drawn "random" terrain is
+// neither. Real terrain is projected from a generated dungeon (§5.1/§6) at
+// density 0.15-0.3, and locked pawns are a permanent feature of it, not a
+// defect: "locked starts must stay in the test set" (§6). Pin all three.
+const shelf = fs
+  .readdirSync(ARENA_DIR)
+  .filter((x) => x.startsWith('test') && x.endsWith('.json'))
+  .sort()
+  .map((f) => loadArena(JSON.parse(fs.readFileSync(path.join(ARENA_DIR, f), 'utf8'))));
+const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
+const mirrored = (arena) => {
+  const set = new Set(arena.walls);
+  if (!arena.walls.length) return false;
+  const h = arena.walls.every((w) => set.has(SQ(arena.files - 1 - (w.charCodeAt(0) - 97), parseInt(w.slice(1), 10) - 1)));
+  const v = arena.walls.every((w) => set.has(SQ(w.charCodeAt(0) - 97, arena.ranks - parseInt(w.slice(1), 10))));
+  return h || v;
+};
+check('no test scenario has mirror-symmetric terrain', () => {
+  const bad = shelf.filter(mirrored).map((a) => a.id);
+  assert(!bad.length, `mirror-symmetric: ${bad.join(', ')}`);
+});
+check('at most one bare test scenario (test14-classic, deliberately)', () => {
+  const bare = shelf.filter((a) => !a.walls.length).map((a) => a.id);
+  assert(bare.length <= 1 && (bare[0] ?? 'test14-classic') === 'test14-classic', `bare: ${bare.join(', ')}`);
+  return `bare: ${bare.join(', ') || 'none'}`;
+});
+check('walled scenarios sit in the generated density band (0.12-0.32)', () => {
+  const out = shelf.filter((a) => a.walls.length);
+  for (const a of out) {
+    const d = a.walls.length / (a.files * a.ranks);
+    assert(d >= 0.12 && d <= 0.32, `${a.id} density ${d.toFixed(3)} outside the band`);
+  }
+  const ds = out.map((a) => a.walls.length / (a.files * a.ranks));
+  return `${out.length} arenas, ${Math.min(...ds).toFixed(3)}-${Math.max(...ds).toFixed(3)}`;
+});
+check('the shelf carries terrain-locked pawns (§6: they must stay in the set)', () => {
+  let withLocks = 0;
+  let total = 0;
+  for (const a of shelf) {
+    const { startFen } = buildStartFen(a, defaultPlacement(a));
+    const n = lockedPawns(startFen, a.files, a.ranks).length;
+    if (n) withLocks++;
+    total += n;
+  }
+  assert(withLocks >= 12, `only ${withLocks} scenarios lock a pawn`);
+  return `${withLocks}/${shelf.length} scenarios, ${total} locked pawns total`;
 });
 
 console.log('\n--- every shipped arena ---');

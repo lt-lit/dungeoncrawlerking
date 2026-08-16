@@ -3,7 +3,7 @@
   "section": "test",
   "id": "test14-classic",
   "title": "Classic",
-  "intro": "The old eight-by-two, both sides, on an eight-by-eight floor. It is chess — except the barrier permits no draws, a stalemated king dies like any other, and a stripped army loses on the spot.",
+  "intro": "The old eight-by-two, both sides, on an eight-by-eight floor with no terrain at all — the one bare room on the shelf, and bare on purpose. It is chess, except the barrier permits no draws, a stalemated king dies like any other, and a stripped army loses on the spot.",
   "files": 8,
   "ranks": 8,
   "walls": [],

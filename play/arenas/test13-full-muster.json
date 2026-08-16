@@ -3,10 +3,10 @@
   "section": "test",
   "id": "test13-full-muster",
   "title": "Full Muster",
-  "intro": "Five wide and three deep — the largest formation the patch rules will carry. Ten pieces stacked two ranks deep behind a thin line of levies: the back rank cannot see daylight, and neither can you.",
+  "intro": "Five wide and three deep — the largest formation the patch rules will carry. Ten pieces stacked two ranks behind a thin line of levies, in a room that has already lost a corner.",
   "files": 8,
   "ranks": 8,
-  "walls": [],
+  "walls": ["a2", "a5", "a6", "d5", "f4", "g4", "h2", "h3", "h4", "h5"],
   "enemy": {
     "rows": [["R", "B", "K", "N", "R"], [null, "N", "B", null, null]],
     "backRankStart": 1,

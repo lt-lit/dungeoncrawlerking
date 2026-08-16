@@ -39,6 +39,14 @@ slice**.
   `loadArena` before adding a check — the §4.2 patch caps and the gap cap were
   authoring guesses hardened into throws, and the gap cap was resting on
   retired-crumble-system sweep data this file already disowns.
+  **Shelf terrain is GENERATED (`harness/gen-terrain.mjs`), never hand-drawn** —
+  hand-drawn "random" walls come out symmetric, and the first pass proved it
+  (nine scenarios with no walls, three mirror-symmetric, and a "rubble field"
+  that was a period-3 lattice). The shelf holds density 0.143–0.300 and 48
+  terrain-locked pawns across 14 of 15 scenarios, both deliberate: brief §6 puts
+  generated density at 0.15–0.3 and says locked starts MUST stay in the test
+  set. `verify-arena-schema.mjs` pins all of that. Campaign arenas are
+  hand-tuned for a specific mate and are exempt.
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)

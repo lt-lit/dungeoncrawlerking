@@ -220,7 +220,42 @@ node harness/verify-play-arenas.mjs --games 5    # more seeds per arena
 `verify-arena-schema.mjs` pins the validation policy itself — it asserts that
 the shapes listed above as *warnings* still LOAD (2-wide patches, 12-wide
 patches, 8-piece pools, 12×10, 4×2, gap 6, severed formations) and that the
-engine-fatal ones still throw. Run it first; it is instant and needs no engine.
+engine-fatal ones still throw. It also pins the shelf's **terrain**: no mirror
+symmetry, at most one bare scenario, density inside the generated band, and
+locked pawns present. Run it first; it is instant and needs no engine.
+
+### Terrain
+
+Test-shelf walls are **generated, not drawn** — `phase0/harness/gen-terrain.mjs`.
+Hand-drawn "random" terrain is not random: the first pass of this shelf shipped
+nine scenarios with no walls at all, three with perfect mirror symmetry, and a
+"rubble field" that was in fact a period-3 diagonal lattice. Real walls are
+projected from a procedurally generated dungeon (§5.1/§6) and are lopsided —
+they clip one formation and not the other, and they lock pawns.
+
+```sh
+node harness/gen-terrain.mjs --audit                       # density/symmetry/locks per arena
+node harness/gen-terrain.mjs --files 9 --ranks 8 --shape rubble --seeds 8
+```
+
+Four dungeon-plausible shapes: `rubble` (clustered collapse with debris
+trails), `chambers` (room walls with doorways punched at irregular offsets),
+`fault` (a wandering fracture with spurs), `erosion` (Earthquake scars pulled
+toward the middle ranks). `--keepClear 0` lets terrain clip the formation rows,
+which is the §4.2 clip rule doing its job.
+
+The shelf sits at density **0.143–0.300** — the brief puts generated wall
+density at 0.15–0.3 — and **14 of 15 scenarios carry terrain-locked pawns (48
+total)**. That is deliberate: §6 records that 95.6% of positions at those
+densities have at least one locked pawn, and that *locked starts must stay in
+the test set*. `test02-causeway` locks every pawn on the board and
+`test09-knights-errant` locks all four; those are the extremes, kept on
+purpose. `test14-classic` is the one bare room, also on purpose — it is chess.
+
+The four campaign arenas are **not** generated. They are hand-tuned for a
+specific 10–20 ply mate and gated at `expect: "player"`; re-rolling their
+terrain would invalidate that tuning. `arena02`/`arena03` are consequently
+still mirror-symmetric, at density 0.057.
 
 Every arena must be decisive and error-free; *who* wins is asserted only when
 the arena's `expect` claims to know. The `--all` scope is slow (the 12×10 and
@@ -228,13 +263,19 @@ classic scenarios search wide boards with full armies), which is why it is not
 the default.
 
 **Known: `--all` currently exits nonzero.** 18 of the 19 arenas are decisive;
-`test02-causeway` hits the 400-ply cap with ~29 crumbles — its 2-wide bridge
-builds a fortress the crumble pacing cannot close. That is the case the
-scenario was authored to produce, and the number comes from the RETIRED crumble
+`test15-emperor` hits the 400-ply cap with ~29 crumbles. That is 12×10 with 48
+units on the board, so the likeliest reading is simply that `maxPlies` is too
+low for that scale rather than that the position is stuck — worth confirming
+before treating it as a finding. The number also comes from the RETIRED crumble
 system the harness still drives (see the caveat in the linter header), not from
-the Director. Retuning the arena until the old system can close it would be
-measuring against a system we do not ship. Recheck it after the Phase 1.5
-harness port; the campaign scope is the one that gates.
+the Director, so retuning the arena against it would be measuring a system we
+do not ship. Recheck after the Phase 1.5 port; the campaign scope is the one
+that gates.
+
+Terrain changed this result once already: with hand-drawn symmetric walls,
+`test02-causeway` was the arena that hit the cap — a 2-wide bridge dead centre
+built a fortress nothing could break. Regenerated with offset, irregular gaps
+it now resolves in 63 plies. Tidy terrain was producing the deadlock.
 
 ## Options / Cheater Mode
 
