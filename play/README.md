@@ -227,6 +227,15 @@ the arena's `expect` claims to know. The `--all` scope is slow (the 12×10 and
 classic scenarios search wide boards with full armies), which is why it is not
 the default.
 
+**Known: `--all` currently exits nonzero.** 18 of the 19 arenas are decisive;
+`test02-causeway` hits the 400-ply cap with ~29 crumbles — its 2-wide bridge
+builds a fortress the crumble pacing cannot close. That is the case the
+scenario was authored to produce, and the number comes from the RETIRED crumble
+system the harness still drives (see the caveat in the linter header), not from
+the Director. Retuning the arena until the old system can close it would be
+measuring against a system we do not ship. Recheck it after the Phase 1.5
+harness port; the campaign scope is the one that gates.
+
 ## Options / Cheater Mode
 
 The gear menu has a Cheater Mode toggle with four sub-options, persisted in
