@@ -9,7 +9,8 @@
 //   "go": "movetime 120",
 //   "maxPlies": 400,
 //   "evalDeadband": 50,
-//   "crumble": { "onsetPly": 40, "cadence": 8 },
+//   "director": { "onsetPly": 8, "quakeRamp": 60, "crumbleRamp": 100,
+//                 "debtCap": 10, "asymOnsetPly": 50, "asymRamp": 60 },
 //   "seeds": 3,
 //   "axes": {
 //     "widths": [3, 5],
@@ -52,7 +53,7 @@ for (const width of cfg.axes.widths) {
 }
 const totalGames = points.length * cfg.seeds;
 console.log(`sweep "${cfg.name}": ${points.length} config points x ${cfg.seeds} seeds = ${totalGames} games`);
-console.log(`go: ${cfg.go}; crumble: ${JSON.stringify(cfg.crumble ?? null)}; out: ${outPath}`);
+console.log(`go: ${cfg.go}; director: ${JSON.stringify(cfg.director ?? null)}; out: ${outPath}`);
 
 const ffish = await loadFfish();
 
@@ -100,7 +101,7 @@ for (const job of jobs) {
   const opts = {
     go: cfg.go,
     maxPlies: cfg.maxPlies ?? 400,
-    crumble: cfg.crumble,
+    director: cfg.director,
     seed: job.seed,
     evalDeadband: cfg.evalDeadband ?? 50,
     bareKingLoses: cfg.bareKingLoses ?? false,
@@ -118,7 +119,7 @@ for (const job of jobs) {
       if (attempt === 1) {
         record = {
           arena: job.arena.meta, variantName: job.arena.variantName, startFen: job.arena.startFen,
-          seed: job.seed, go: cfg.go, moves: [], evals: [], crumbles: [], anomalies: [],
+          seed: job.seed, go: cfg.go, moves: [], evals: [], quakes: [], anomalies: [],
           result: null, winner: null, plies: 0, error: `engine-crash: ${e.message.split('\n')[0]}`,
         };
       }
@@ -133,7 +134,7 @@ for (const job of jobs) {
   console.log(
     `[${done}/${totalGames}] w${job.point.width} g${job.point.gap} d${job.point.wallDensity} ` +
       `${job.point.white.comp}v${job.point.black.comp} seed${job.seed}: ` +
-      `${record.result ?? 'ERR'} in ${record.plies} plies, ${record.crumbles.length} crumbles ` +
+      `${record.result ?? 'ERR'} in ${record.plies} plies, ${record.quakes.length} quakes ` +
       `(${record.wallMs}ms, eta ${eta}s)` +
       (record.error ? ` ERROR: ${record.error}` : '')
   );

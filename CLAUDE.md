@@ -10,7 +10,8 @@ Earthquakes; no overworld). See `play/README.md` for its layout and the arena
 JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON**
 — Earthquakes (symmetric displacement + rare rising crumbles, NO repetition
 rules) replaced the old crumble system in both the build and brief §4.5.
-Next per brief §10, a three-step Gods track before calibration resumes:
+The §7 harness now runs the shipped Director, so its numbers describe the live
+rules. Next per brief §10, a three-step Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
 `play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay** (roll trace
@@ -18,10 +19,10 @@ with reason codes, candidate census, RNG-free probability getters, engine
 eval delta per quake — build the instrument BEFORE changing what it
 measures); **Phase 1.3 — redefine "symmetric"** (promote the stopgap to
 "no new winning capture for either side", retune). Then **Phase 1.5 —
-Director calibration** (port `harness/game.mjs` off the retired crumble
-system, add the §6 promotion lint, settle ramp numbers) — gated behind 1.3
-so the sweeps are not burned twice — and finally **Phase 2 — exploration
-slice**.
+Director calibration** (the `harness/game.mjs` port is DONE; what remains is
+the §6 promotion-reachability lint and settling the ramp numbers) — still gated
+behind 1.3 so the sweeps are not burned twice — and finally **Phase 2 —
+exploration slice**.
 
 ## Layout
 
@@ -54,10 +55,15 @@ slice**.
   pass). `crumbleFilter.mjs` is production-bound (validated §4.5 filter).
   `spike08-mobile/` is a static phone benchmark page (vendored WASM).
 - `phase0/harness/` — §7 calibration harness: `sweep.mjs <config.json>` plays
-  engine-vs-engine games, JSONL + summary out. **Still runs the RETIRED
-  crumble system (`harness/crumble.mjs`, repetition + fixed-cadence pacing),
-  not the shipped Director — porting it is Phase 1.5. Sweep numbers about
-  arena regeneration are not trustworthy until that lands.**
+  engine-vs-engine games, JSONL + summary out. **`game.mjs` drives the SHIPPED
+  Director (`play/js/director.mjs`) — it is a structural mirror of
+  `play/js/duel.mjs`'s pipeline, and must not diverge without a written
+  reason.** Sweep configs take a `director` block; records carry `quakes` (not
+  `crumbles`) plus the §7 metrics: quake eval-flip alarm rate, one-sided-stir
+  count, and the locked-pawn trajectory (start→end — the Director's actual job,
+  since only displacement can free a terrain-locked pawn).
+  `harness/crumble.mjs` is RETIRED and imported by nothing; it survives only as
+  the record of what the pre-Director sweeps in `results/` were measured under.
 - `phase0/results/` — per-spike results docs + sweep outputs.
 
 ## Running things
@@ -162,7 +168,23 @@ run one sweep at a time.
     scenarios will visibly freeze the UI mid-quake; `test13`/`test14`/`test15`
     exist partly to keep that number honest, and Phase 1.2's overlay is the
     instrument that should be reporting it.
-15. **12×10 is the FSF largeboard ceiling, and exceeding it fails SILENTLY.**
+15. **Crumbles are a REGRESSION-TO-PARITY force and they act against the
+    player.** Crumble candidates are picked uniformly over legal squares, so
+    the side with more pieces on the board absorbs proportionally more of them.
+    Measured at ply 0, expected material lost per crumble: `test14-classic`
+    (39v39, materially fair) **0.63 / 0.63 — exactly symmetric**; `arena01`
+    (11v5) 0.50/0.23; `test09` (17v5) 0.31/0.09; `test13` (46v12)
+    **0.73/0.19**. The damage ratio tracks the material ratio, which means
+    crumbles erode precisely the advantage §13 hands the player. Consequence
+    in play: results hold while a duel is short, and flip once ~20+ quakes
+    accumulate — campaign arenas pass 30/32 over 8 seeds, and BOTH failures
+    were long games (98 plies/61 quakes, 62 plies/29 quakes). This was
+    invisible while the harness ran the retired crumble system. `play/README`
+    already listed uniform crumble picking as a Phase 1.3 gap; it is not
+    neutral noise, it is directional. **Do not "fix" it by inflating arena
+    material** — the bleed is proportional, so a bigger edge bleeds faster in
+    absolute terms; what shortens games is what helps.
+16. **12×10 is the FSF largeboard ceiling, and exceeding it fails SILENTLY.**
     `loadVariantConfig` accepts an oversized `maxFile`/`maxRank` block without
     throwing, then omits the variant from `variants()`; the failure only
     surfaces as `memory access out of bounds` when a Board is constructed

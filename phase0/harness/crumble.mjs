@@ -1,3 +1,9 @@
+// RETIRED — the pre-Director crumble system (repetition tracking + fixed-cadence
+// pacing). NOTHING IMPORTS THIS. It is kept only as the historical record of
+// what the Phase 0 sweeps in results/ were measured under; the shipped rules
+// live in play/js/director.mjs, and harness/game.mjs drives that. Do not wire
+// this back in — brief §4.5 replaced it, repetition is no longer punished at
+// all, and any number produced by this file describes deleted rules.
 // Crumble system (brief §4.5): repetition crumbles + pacing crumbles as
 // orchestration-layer arena regeneration. The harness rewrites the FEN
 // between plies; every state the engine sees is FSF-pure.

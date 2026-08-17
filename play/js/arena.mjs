@@ -292,11 +292,12 @@ export function loadArena(json) {
   }
 
   // Gap: the empty ranks between the two formations. The old [2,4] cap is
-  // gone — it was calibrated against the RETIRED crumble system (CLAUDE.md
-  // disowns those sweep numbers until the Phase 1.5 harness port). Phase 1.5
-  // re-derives the real band; until then this reports and does not forbid.
+  // gone — it was calibrated against the retired crumble system. The harness
+  // now runs the shipped Director, so a real band CAN be derived; it has not
+  // been yet (the remaining Phase 1.5 work). Until then this reports and does
+  // not forbid — and note the shelf's wide-gap arenas resolve fine in practice.
   const gap = ranks - playerDepth - enemyDepth;
-  if (gap > 4) warn(`gap ${gap} is wide — gaps above 4 ground past 100 plies under the retired crumble system (unverified for the Director)`);
+  if (gap > 4) warn(`gap ${gap} is wide — the >4 pacing concern predates the Director and has not been re-derived under it`);
 
   // Disconnected arenas are a real §6 hazard (spike 2: finite eval, no progress
   // possible, no draw rule) — but a severed board is also exactly the fortress

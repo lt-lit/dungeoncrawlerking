@@ -27,12 +27,15 @@ export function summarize(records) {
         other: 0,
         errors: 0,
         plies: [],
+        quakes: 0,
+        displacements: 0,
         crumbles: 0,
-        repCrumbles: 0,
-        pacingCrumbles: 0,
+        oneSided: 0,
         piecesLostToCrumbles: 0,
-        crumbleFlipGames: 0,
-        gamesWithCrumbles: 0,
+        quakeFlipGames: 0,
+        gamesWithQuakes: 0,
+        lockedStart: 0,
+        lockedEnd: 0,
         anomalies: [],
       });
     }
@@ -43,12 +46,15 @@ export function summarize(records) {
     else if (r.winner === 'black') c.blackWins++;
     else c.other++;
     c.plies.push(r.plies);
-    c.crumbles += r.crumbles.length;
-    c.repCrumbles += r.crumbles.filter((x) => x.type === 'repetition').length;
-    c.pacingCrumbles += r.crumbles.filter((x) => x.type === 'pacing').length;
-    c.piecesLostToCrumbles += r.crumbles.filter((x) => x.pieceLost).length;
-    if (r.crumbles.length > 0) c.gamesWithCrumbles++;
-    if ((r.crumbleFlips ?? 0) > 0) c.crumbleFlipGames++;
+    c.quakes += r.quakes.length;
+    c.displacements += r.displacementCount ?? 0;
+    c.crumbles += r.crumbleCount ?? 0;
+    c.oneSided += r.oneSidedQuakes ?? 0;
+    c.piecesLostToCrumbles += r.piecesLostToCrumbles ?? 0;
+    c.lockedStart += r.lockedPawnsStart ?? 0;
+    c.lockedEnd += r.lockedPawnsEnd ?? 0;
+    if (r.quakes.length > 0) c.gamesWithQuakes++;
+    if ((r.quakeFlips ?? 0) > 0) c.quakeFlipGames++;
     c.anomalies.push(...(r.anomalies ?? []).map((a) => `[${key}] ${a}`));
   }
   return [...byConfig.values()].map((c) => {
@@ -61,8 +67,14 @@ export function summarize(records) {
       minPlies: sorted[0] ?? 0,
       maxPlies: sorted[sorted.length - 1] ?? 0,
       inPacingBand: c.plies.filter((p) => p >= 20 && p <= 40).length, // §7 target band
-      // §7 crumble alarm metric: fraction of games where a crumble flipped the eval sign
-      alarmRate: c.games ? +(c.crumbleFlipGames / c.games).toFixed(3) : 0,
+      // §7 alarm metric: fraction of games where a QUAKE flipped the eval sign.
+      // Displacement is the common case now, so this is measured per quake
+      // rather than per crumble.
+      alarmRate: c.games ? +(c.quakeFlipGames / c.games).toFixed(3) : 0,
+      // §7 locked-pawn trajectory — the Director's actual job, measured
+      // directly. Only displacement can free a terrain-locked pawn.
+      lockedMeanStart: c.games ? +(c.lockedStart / c.games).toFixed(2) : 0,
+      lockedMeanEnd: c.games ? +(c.lockedEnd / c.games).toFixed(2) : 0,
     };
   });
 }
@@ -71,15 +83,16 @@ export function renderSummary(cfg, summary) {
   const lines = [];
   lines.push(`# Sweep summary: ${cfg.name}`);
   lines.push('');
-  lines.push(`go: \`${cfg.go}\` · maxPlies: ${cfg.maxPlies ?? 400} · crumble: \`${JSON.stringify(cfg.crumble ?? null)}\` · seeds/config: ${cfg.seeds}`);
+  lines.push(`go: \`${cfg.go}\` · maxPlies: ${cfg.maxPlies ?? 400} · director: \`${JSON.stringify(cfg.director ?? null)}\` · seeds/config: ${cfg.seeds}`);
   lines.push('');
-  lines.push('| config | val W/B | games | W wins | B wins | err | plies mean/med (min-max) | in 20-40 | crumbles (rep/pace) | pieces lost | alarm rate |');
-  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
+  lines.push('| config | val W/B | games | W wins | B wins | err | plies mean/med (min-max) | in 20-40 | quakes (disp/crumb) | 1-sided | pieces lost | locked start→end | alarm rate |');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const c of summary) {
     lines.push(
       `| ${c.key} | ${c.whiteValue}/${c.blackValue} | ${c.games} | ${c.whiteWins} | ${c.blackWins} | ${c.errors} | ` +
         `${c.meanPlies}/${c.medianPlies} (${c.minPlies}-${c.maxPlies}) | ${c.inPacingBand}/${c.games} | ` +
-        `${c.crumbles} (${c.repCrumbles}/${c.pacingCrumbles}) | ${c.piecesLostToCrumbles} | ${c.alarmRate} |`
+        `${c.quakes} (${c.displacements}/${c.crumbles}) | ${c.oneSided} | ${c.piecesLostToCrumbles} | ` +
+        `${c.lockedMeanStart}→${c.lockedMeanEnd} | ${c.alarmRate} |`
     );
   }
   const anomalies = summary.flatMap((c) => c.anomalies);

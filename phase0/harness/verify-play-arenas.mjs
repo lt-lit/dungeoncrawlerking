@@ -20,13 +20,10 @@
 //               nonzero exit here still means something is genuinely broken
 //               (an error or a non-decisive game), not merely unbalanced.
 //
-// CAVEAT (CLAUDE.md, Phase 1.5): playGame() still drives the RETIRED crumble
-// system (harness/crumble.mjs — repetition + fixed cadence), NOT the shipped
-// Board State Director. Ply counts and termination rates here therefore
-// describe arena GEOMETRY and MATERIAL faithfully, but not how the live game
-// paces or ends. A max-plies non-termination in particular says the old
-// system could not close that board; it does not predict the Director. Porting
-// the harness is Phase 1.5.
+// playGame() drives the SHIPPED Board State Director at DIRECTOR_DEFAULTS (the
+// game's "Restless" preset), so ply counts and termination rates here describe
+// the rules the game actually plays. It used to run the retired crumble system,
+// which meant every number this file printed was about rules we had deleted.
 //
 // Usage: cd phase0 && node harness/verify-play-arenas.mjs [--games 3] [--all]
 import fs from 'fs';
@@ -36,6 +33,7 @@ import { loadFfish, loadEngine } from '../lib/load.mjs';
 import { playGame } from './game.mjs';
 import { loadArena, buildStartFen, defaultPlacement } from '../../play/js/arena.mjs';
 import { makeDuelVariantIni } from '../../play/js/variant.mjs';
+import { DIRECTOR_DEFAULTS } from '../../play/js/director.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARENA_DIR = path.resolve(HERE, '../../play/arenas');
@@ -123,7 +121,9 @@ for (const arena of arenas) {
       opts: {
         go: 'depth 60 movetime 150',
         maxPlies: 400,
-        crumble: { onsetPly: arena.crumble.onsetPly, cadence: arena.crumble.cadence },
+        // The SHIPPED Director at its default ramp — the same knobs the game's
+        // "Restless" preset uses. Ply counts here now describe the live rules.
+        director: DIRECTOR_DEFAULTS,
         seed: arena.crumble.seed + g,
         evalDeadband: 50,
         bareKingLoses: true, // the live rule (play/js/duel.mjs adjudicates)
@@ -140,7 +140,7 @@ for (const arena of arenas) {
     console.log(
       `  ${ok ? 'PASS' : 'FAIL'} seed ${arena.crumble.seed + g}: ${record.result ?? 'ERR'} ` +
         `(${record.winner ?? '-'} = ${playerWon ? 'player' : 'enemy'}) in ${record.plies} plies, ` +
-        `${record.termination ?? '?'}, ${record.crumbles.length} crumbles` +
+        `${record.termination ?? '?'}, ${record.quakes.length} quakes` +
         (!decisive ? ' [NOT DECISIVE]' : !asExpected ? ` [expected ${arena.expect} to win]` : '') +
         (record.error ? ` ERROR: ${record.error}` : '')
     );

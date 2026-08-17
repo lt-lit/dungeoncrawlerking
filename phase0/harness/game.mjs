@@ -1,13 +1,22 @@
-// One engine-vs-engine duel with the crumble system (brief §4.5, §7).
+// One engine-vs-engine duel driven by the SHIPPED Board State Director
+// (Earthquakes — brief §4.5, §7).
 //
-// The ffish Board is the source of truth for legality and game end; the
-// engine is queried per ply with `position fen <base> moves <since-base>` so
-// its repetition history matches the harness's (history resets on crumble).
-import { CrumbleController, applyCrumble } from './crumble.mjs';
-// Spike 12's validated filter (exposure via turn-flip + isCheck; instant-end
-// via numberLegalMoves===0 and result(false)) — see results/spike12-crumble-filter.md
-import { validateCrumbleCandidate } from '../spikes/crumbleFilter.mjs';
-import { findSquares } from '../lib/fen.mjs';
+// This is a structural mirror of play/js/duel.mjs's pipeline: same Director,
+// same guards, same post-quake protocol reset. It used to run the retired
+// crumble system (repetition tracking + fixed-cadence pacing), which meant
+// every §7 sweep and every encounter-linter ply count described rules the game
+// no longer had. Nothing here may diverge from duel.mjs without a reason
+// written down.
+//
+// The ffish Board is the source of truth for legality and game end; the engine
+// is queried per ply with `position fen <base> moves <since-base>`, and a bare
+// `position fen <postFen>` after every quake resets its history following
+// position surgery (CLAUDE.md rule 9).
+//
+// Repetition is NOT punished (Director design): no position tracking, no
+// repetition crumble. Termination rests on crumbles alone — free squares only
+// ever shrink, and the debt cap guarantees they keep landing.
+import { Director, DIRECTOR_DEFAULTS, lockedPawns } from '../../play/js/director.mjs';
 
 /**
  * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
@@ -58,14 +67,16 @@ const sign = (v, deadband) => (v > deadband ? 1 : v < -deadband ? -1 : 0);
  * opts = {
  *   go: 'movetime 120' | 'depth 6',
  *   maxPlies: 400,
- *   crumble: { onsetPly, cadence },   // omit/cadence 0 to disable pacing
+ *   director: { onsetPly, quakeRamp, crumbleRamp, debtCap,
+ *               asymOnsetPly, asymRamp },  // DIRECTOR_DEFAULTS if omitted;
+ *                                          // onsetPly: Infinity silences the gods
  *   seed,
  *   evalDeadband: 50,                 // cp band treated as "equal" for flip detection
  *   bareKingLoses: false,             // harness adjudication: a side stripped to a
- *                                     // bare king loses immediately (the summoning
- *                                     // fails with the army). Result-level carve-out
- *                                     // in the crumble family — the engine plays the
- *                                     // FSF-pure rules; the harness ends the game.
+ *                                     // bare king loses immediately. Belt-and-braces:
+ *                                     // the duel baseline carries the extinction
+ *                                     // quartet, so this is normally caught in
+ *                                     // grammar by numberLegalMoves()===0 first.
  * }
  * Returns a game record (JSON-serializable).
  */
@@ -79,7 +90,7 @@ export async function playGame({ engine, ffish, arena, opts }) {
     go: opts.go,
     moves: [],
     evals: [],
-    crumbles: [],
+    quakes: [],
     anomalies: [],
     result: null,
     winner: null,
@@ -87,23 +98,23 @@ export async function playGame({ engine, ffish, arena, opts }) {
     error: null,
   };
 
-  const crumbler = new CrumbleController({
-    onsetPly: opts.crumble?.onsetPly ?? Infinity,
-    cadence: opts.crumble?.cadence ?? 0,
-    seed: opts.seed,
-  });
+  const director = new Director({ ...DIRECTOR_DEFAULTS, ...(opts.director ?? {}), seed: opts.seed });
 
   let board = new ffish.Board(variantName, startFen);
   let baseFen = startFen;
   let movesSinceBase = [];
   let lastEval = null;
-  let pendingCrumbleEval = null; // crumble event awaiting its evalAfter
+  let pendingQuakeEval = null; // quake event awaiting its evalAfter
+
+  // §7 "locked-pawn trajectory": the Director's actual job, measured directly.
+  // Displacement is the ONLY mechanic that can free a terrain-locked pawn
+  // (a crumble measured 0 for 7073), so start-vs-end is the honest scoreboard.
+  record.lockedPawnsStart = lockedPawns(startFen, files, ranks).length;
 
   engine.send('ucinewgame');
   await engine.isready();
 
   try {
-    crumbler.recordPosition(board.fen());
     let ply = 0;
     while (ply < opts.maxPlies) {
       if (gameEnded(board)) break;
@@ -114,9 +125,9 @@ export async function playGame({ engine, ffish, arena, opts }) {
       const score = engine.lastScore(res);
       const evalWhite = whitePovScore(score, whiteToMove);
       record.evals.push(evalWhite);
-      if (pendingCrumbleEval) {
-        pendingCrumbleEval.evalAfter = evalWhite;
-        pendingCrumbleEval = null;
+      if (pendingQuakeEval) {
+        pendingQuakeEval.evalAfter = evalWhite;
+        pendingQuakeEval = null;
       }
 
       if (!res.bestmove || res.bestmove === '(none)') {
@@ -165,71 +176,45 @@ export async function playGame({ engine, ffish, arena, opts }) {
         }
       }
 
-      // --- crumble phase (between plies) ---
+      // --- quake phase (between plies, after EVERY completed ply) ---
+      // Structural mirror of duel.mjs. The Director owns candidate
+      // enumeration, the symmetric-displacement pairing, landing safety and
+      // the terminal-crumble path; the harness only applies the result.
       const fenNow = board.fen();
-      const occurrences = crumbler.recordPosition(fenNow);
+      const quake = director.quake(ffish, variantName, fenNow, files, ranks, ply);
 
-      let crumbleEvent = null;
-      const rep = crumbler.repetitionCrumble(occurrences, res.bestmove);
-      if (rep) {
-        crumbleEvent = rep;
-      } else if (crumbler.pacingCrumbleDue(ply)) {
-        // Re-roll random candidates through the §4.5 legality filter.
-        // Unconditional: with bare-army in-grammar, a crumble eating a last
-        // piece would END the game by dice roll — always re-roll those.
-        const counts = nonKingCounts(fenNow);
-        for (let tries = 0; tries < 60; tries++) {
-          const sq = crumbler.randomSquare(files, ranks);
-          const cell = findSquares(fenNow, (c, f, r) => `${String.fromCharCode(97 + f)}${r + 1}` === sq)[0]?.cell;
-          if (cell === '*') continue; // already a pit
-          // A crumble must never strip a side's last piece — crumbles
-          // pressure games, they don't end them (§4.5).
-          if (cell && cell !== 'K' && cell !== 'k') {
-            const owner = cell === cell.toUpperCase() ? 'white' : 'black';
-            if (counts[owner] === 1) continue;
-          }
-          const v = validateCrumbleCandidate(ffish, variantName, fenNow, sq);
-          if (v.ok) {
-            crumbleEvent = { type: 'pacing', square: sq, rerolls: tries };
-            break;
-          }
-        }
-        crumbler.markPacingFired(ply); // fired or exhausted — don't retry every ply
-        if (!crumbleEvent) record.anomalies.push(`ply ${ply}: pacing crumble found no legal candidate in 60 rolls`);
-      }
-
-      if (crumbleEvent) {
-        const { postFen, pieceLost } = applyCrumble(fenNow, crumbleEvent.square);
-        if (ffish.validateFen(postFen, variantName) < 0) {
-          record.anomalies.push(`ply ${ply}: crumble ${crumbleEvent.type}@${crumbleEvent.square} produced invalid FEN — skipped`);
+      if (quake) {
+        if (ffish.validateFen(quake.postFen, variantName) !== 1) {
+          record.anomalies.push(`ply ${ply}: quake produced invalid FEN — skipped`);
         } else {
-          const next = new ffish.Board(variantName, postFen);
-          if (next.numberLegalMoves() === 0) {
-            // Repetition crumbles are deterministic and may legitimately end
-            // things via stalemate-as-loss; record it and let the result stand.
-            if (crumbleEvent.type === 'repetition') {
-              board.delete();
-              board = next;
-              baseFen = postFen;
-              movesSinceBase = [];
-              crumbler.resetHistory();
-              crumbler.recordPosition(postFen);
-              const ev = { ply, ...crumbleEvent, pieceLost, evalBefore: lastEval, evalAfter: null, endedGame: true };
-              record.crumbles.push(ev);
-              break;
-            }
+          const next = new ffish.Board(variantName, quake.postFen);
+          if (next.numberLegalMoves() === 0 && !quake.endsGame) {
             next.delete();
-            record.anomalies.push(`ply ${ply}: crumble would end game instantly — skipped (filter should have caught)`);
+            record.anomalies.push(`ply ${ply}: quake would end game instantly — skipped (director should have caught)`);
           } else {
             board.delete();
             board = next;
-            baseFen = postFen;
+            baseFen = quake.postFen; // bare `position fen` next ply (rule 9)
             movesSinceBase = [];
-            crumbler.resetHistory();
-            crumbler.recordPosition(postFen);
-            const ev = { ply, ...crumbleEvent, pieceLost, evalBefore: lastEval, evalAfter: null };
-            record.crumbles.push(ev);
-            pendingCrumbleEval = ev;
+            const ev = {
+              ply,
+              displacements: quake.displacements,
+              crumble: quake.crumble,
+              pieceLost: quake.crumble?.pieceLost ?? null,
+              endedGame: !!quake.endsGame,
+              evalBefore: lastEval,
+              evalAfter: null,
+            };
+            record.quakes.push(ev);
+            if (quake.endsGame) {
+              // Terminal crumble: the board had already closed (no neutral
+              // candidate anywhere). The collapse immobilizes the side to
+              // move; the normal mover-loses flow below derives the result,
+              // and the termination is named for what did it.
+              record.terminalQuake = true;
+              break;
+            }
+            pendingQuakeEval = ev;
           }
         }
       }
@@ -252,13 +237,15 @@ export async function playGame({ engine, ffish, arena, opts }) {
       record.winner = whiteToMove ? 'black' : 'white';
       const endFen = board.fen().split(' ')[0];
       const loser = whiteToMove ? 'white' : 'black';
-      record.termination = !endFen.includes('K') || !endFen.includes('k')
-        ? 'king-capture'
-        : board.isCheck()
-          ? 'checkmate'
-          : nonKingCounts(board.fen())[loser] === 0
-            ? 'bare-king' // in-grammar extinction: army stripped, game over
-            : 'stalemate';
+      record.termination = record.terminalQuake
+        ? 'earthquake' // the floor closed on the side to move (§4.5 terminal crumble)
+        : !endFen.includes('K') || !endFen.includes('k')
+          ? 'king-capture'
+          : board.isCheck()
+            ? 'checkmate'
+            : nonKingCounts(board.fen())[loser] === 0
+              ? 'bare-king' // in-grammar extinction: army stripped, game over
+              : 'stalemate';
       record.ffishResult = board.result(false);
       if (record.ffishResult !== record.result && record.ffishResult !== '1/2-1/2') {
         record.anomalies.push(`ffish result(false)="${record.ffishResult}" disagrees with derived "${record.result}"`);
@@ -267,16 +254,26 @@ export async function playGame({ engine, ffish, arena, opts }) {
       record.error = `max-plies (${opts.maxPlies}) reached without termination`;
     }
 
-    // Crumble alarm metric input (§7): did any crumble flip the eval sign?
+    // Quake alarm metric input (§7): did any quake flip the eval sign? This is
+    // the Director's central risk — a "symmetric" stir that hands the game to
+    // one side. Measured per quake, not per crumble, because displacement is
+    // now the common case.
     const db = opts.evalDeadband ?? 50;
-    record.crumbleFlips = record.crumbles.filter(
-      (c) =>
-        c.evalBefore !== null &&
-        c.evalAfter !== null &&
-        sign(c.evalBefore, db) !== 0 &&
-        sign(c.evalAfter, db) !== 0 &&
-        sign(c.evalBefore, db) !== sign(c.evalAfter, db)
+    record.quakeFlips = record.quakes.filter(
+      (q) =>
+        q.evalBefore !== null &&
+        q.evalAfter !== null &&
+        sign(q.evalBefore, db) !== 0 &&
+        sign(q.evalAfter, db) !== 0 &&
+        sign(q.evalBefore, db) !== sign(q.evalAfter, db)
     ).length;
+    record.displacementCount = record.quakes.reduce((n, q) => n + (q.displacements?.length ?? 0), 0);
+    record.crumbleCount = record.quakes.filter((q) => q.crumble).length;
+    record.piecesLostToCrumbles = record.quakes.filter((q) => q.pieceLost).length;
+    // One-sided stirs: the patience ramp lets these through late, and they are
+    // exactly what the symmetric-preference exists to avoid early.
+    record.oneSidedQuakes = record.quakes.filter((q) => (q.displacements?.length ?? 0) === 1).length;
+    record.lockedPawnsEnd = lockedPawns(board.fen(), files, ranks).length;
   } finally {
     board.delete();
   }

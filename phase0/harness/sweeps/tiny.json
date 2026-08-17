@@ -3,7 +3,7 @@
   "go": "depth 60 movetime 80",
   "maxPlies": 300,
   "evalDeadband": 50,
-  "crumble": { "onsetPly": 30, "cadence": 6 },
+  "director": { "onsetPly": 4, "quakeRamp": 25, "crumbleRamp": 50, "debtCap": 6, "asymOnsetPly": 30, "asymRamp": 30 },
   "seeds": 1,
   "baseSeed": 1000,
   "axes": {

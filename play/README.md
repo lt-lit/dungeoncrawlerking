@@ -30,7 +30,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   since animations run inside `app.busy` and `waitIdle()` waits them out).
   `prefers-reduced-motion` does the same by default.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
-  50-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
+  99-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
   must read PASS.
 
 ## Layout
@@ -65,9 +65,16 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Known gaps, deliberately left to Phase 1.3: discovered attacks from the
   vacated square, rescues of already-hanging pieces, pins, and crumbles
   (which pick uniformly and so may swallow a queen as readily as air).
-- `js/variant.mjs` — Phase 0 port + the fixed 50-variant catalog
-  (`duel_3x6`…`duel_12x10`, loaded ONCE at boot — variant names are
-  single-use) and a variants.ini key allowlist (unknown keys are silently
+  **That last gap is now measured, and it is directional, not noise.**
+  Uniform picking means the side with more pieces absorbs proportionally more
+  crumbles, so crumbles systematically erode the player's §13 advantage.
+  Expected material lost per crumble at ply 0: `test14-classic` (39v39, the
+  materially fair control) **0.63/0.63 — exactly symmetric**; `test13` (46v12)
+  **0.73/0.19**; `arena01` (11v5) 0.50/0.23. Results hold while duels are
+  short and flip once ~20+ quakes accumulate. See CLAUDE.md rule 15.
+- `js/variant.mjs` — Phase 0 port + the fixed 99-variant catalog
+  (`duel_2x2`…`duel_12x10`, the full FSF-supported range, loaded ONCE at boot
+  — variant names are single-use) and a variants.ini key allowlist (unknown keys are silently
   ignored by both libraries).
 - `js/engine.mjs` — browser engine/ffish access; `UciEngine` is the Phase 0
   class verbatim, incl. the search watchdog. Boot always sets
@@ -75,8 +82,8 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `js/arena.mjs` — arena JSON validation/loading, §6 connectivity lint,
   placement → startFen. The initiative side plays White and sits at the
   bottom in FEN terms; the UI flips the view when the player is Black.
-- `js/duel.mjs` — the live game loop, a structural port of
-  `phase0/harness/game.mjs`: ffish is the source of truth, game end is
+- `js/duel.mjs` — the live game loop; `phase0/harness/game.mjs` is its
+  engine-vs-engine twin and mirrors this pipeline step for step: ffish is the source of truth, game end is
   `numberLegalMoves() === 0` → side to move loses. The bare-army rule (a
   side stripped to a bare king loses — no lone-king chases) is IN-GRAMMAR
   (`extinctionPieceTypes=*`, `extinctionPieceCount=1`), so the engine plays
@@ -102,12 +109,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `arena01`–`arena04` are the campaign ladder; `test01`–`test15` are the test
   shelf — terrain structure (pillar lattice, a 2-wide causeway, a diagonal
   fault, a walled court, a rubble field, a half-walled muster ground), army
-  shapes (K+Q alone, pawns-only, four knights, a mirror match, an outgunned
-  player, the 2×2 floor, a 5×3 double-rank formation), and the scale extremes
+  shapes (K+Q alone, a pawn storm, four knights, a near-mirror match, a
+  queen-and-knight mating attack, the 2×2 floor, a 5×3 double-rank formation),
+  and the scale extremes
   (`test14-classic` is literal 8×8 chess under duel rules — its startFen is
   `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR` with the expected 20 legal
   moves, which makes it the sharpest regression fixture in the set;
-  `test15-emperor` is 12×10, the FSF ceiling, with 24 units a side).
+  `test15-emperor` is 12×10, the FSF ceiling).
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
@@ -295,20 +303,23 @@ the arena's `expect` claims to know. The `--all` scope is slow (the 12×10 and
 classic scenarios search wide boards with full armies), which is why it is not
 the default.
 
-**Known: `--all` currently exits nonzero.** 18 of the 19 arenas are decisive;
-`test15-emperor` hits the 400-ply cap with ~29 crumbles. That is 12×10 with 48
-units on the board, so the likeliest reading is simply that `maxPlies` is too
-low for that scale rather than that the position is stuck — worth confirming
-before treating it as a finding. The number also comes from the RETIRED crumble
-system the harness still drives (see the caveat in the linter header), not from
-the Director, so retuning the arena against it would be measuring a system we
-do not ship. Recheck after the Phase 1.5 port; the campaign scope is the one
-that gates.
+The harness drives the **shipped Director** at `DIRECTOR_DEFAULTS` (the game's
+"Restless" preset), so these ply counts describe the rules the game actually
+plays. It used to run the retired crumble system, which meant every number it
+printed was about rules we had deleted.
 
-Terrain changed this result once already: with hand-drawn symmetric walls,
-`test02-causeway` was the arena that hit the cap — a 2-wide bridge dead centre
-built a fortress nothing could break. Regenerated with offset, irregular gaps
-it now resolves in 63 plies. Tidy terrain was producing the deadlock.
+**Current state under the Director:** campaign **30/32** over 8 seeds, shelf
+**56/57** over 3. Every failure is a long game — 98 plies/61 quakes, 62/29,
+and `test15-emperor` at 162/117 — which is the crumble-bias effect above, not
+an arena defect. Short duels are unaffected; nothing under ~50 plies has
+flipped. `test15-emperor` is left failing on that seed deliberately: it is the
+clearest demonstration of the effect at scale, and tuning it away would hide
+the thing Phase 1.3 needs to fix.
+
+Terrain has flipped this verdict once already: with hand-drawn symmetric walls,
+`test02-causeway` hit the 400-ply cap — a 2-wide bridge dead centre built a
+fortress nothing could break. Regenerated with offset, irregular gaps it
+resolves in ~40. Tidy terrain was producing the deadlock.
 
 ## Options / Cheater Mode
 
