@@ -261,10 +261,15 @@ async function cancelCheatSearch() {
 }
 
 async function runCheatSearch() {
-  if (!app.duel || app.duel.state !== 'playing') return;
+  if (!app.duel || app.duel.state !== 'playing' || app.busy) return;
   if (!(cheatHints() || cheatEval())) return;
   if (app.duel.turnColor() !== app.arena.playerColor) return;
   await cancelCheatSearch();
+  // Re-check after the await: the player's move can land in that gap (it
+  // sets app.busy BEFORE cancelling probes), and a probe launched past that
+  // fence would overlap the duel's reply search — two `go`s on one engine.
+  if (!app.duel || app.duel.state !== 'playing' || app.busy) return;
+  if (app.duel.turnColor() !== app.arena.playerColor) return;
   const duel = app.duel;
   const engine = app.engine;
   const mySeq = ++cheat.seq;
@@ -455,9 +460,14 @@ async function runEvalProbes() {
       evalProbe.queue.shift(); // stale job from an abandoned duel
       continue;
     }
+    // An escaped cheat-probe retry could still hold the engine (it runs
+    // outside the flight); a search under its MultiPV≠1 would also hand
+    // lastScore the WORST pv's score. Quiet it and pin MultiPV before probing.
+    if (cheat.active) await cancelCheatSearch();
     const mySeq = ++evalProbe.seq;
     const engine = app.engine;
     evalProbe.engine = engine;
+    engine.setoption('MultiPV', '1');
     let before;
     let after;
     const run = (async () => {
@@ -702,8 +712,11 @@ function renderGodsCensus() {
     return;
   }
   const side = (arr) => `${arr.filter((x) => x.white).length}w/${arr.filter((x) => !x.white).length}b`;
+  // unsafe_landing per side is the number the 1.3 starvation analysis reads.
+  const unsafe = c.tiers.rejected.filter((r) => r.reason === 'unsafe_landing');
   el.textContent =
-    `census @p${c.ply} (${c.ms} ms): displace A ${side(c.tiers.A)} · B ${side(c.tiers.B)} · C ${side(c.tiers.C)} · vetoed ${c.tiers.rejected.length}` +
+    `census @p${c.ply} (${c.ms} ms): displace A ${side(c.tiers.A)} · B ${side(c.tiers.B)} · C ${side(c.tiers.C)}` +
+    ` · vetoed ${c.tiers.rejected.length} (unsafe ${side(unsafe)})` +
     ` | crumble ok ${c.crumbles.neutral.length} · terminal ${c.crumbles.terminal.length} · vetoed ${c.crumbles.rejected.length}` +
     ` | locked pawns ${c.locked.length}`;
 }
@@ -733,16 +746,21 @@ function godsHeatOff() {
   syncHeatButton();
 }
 
+let censusPending = false;
+
 function godsCensusNow() {
   const duel = app.duel;
-  if (!duel || duel.state !== 'playing') return;
+  if (!duel || duel.state !== 'playing' || censusPending) return;
   if (app.busy || duel.turnColor() !== app.arena.playerColor) {
     setStatus('census: wait for your turn');
     return;
   }
+  censusPending = true; // a double-tap must not queue two 300–720 ms freezes
   setStatus('reading the gods…'); // paint first — the enumeration blocks the thread
   setTimeout(() => {
+    censusPending = false;
     if (app.duel !== duel || duel.state !== 'playing' || app.busy) return;
+    if (duel.turnColor() !== app.arena.playerColor) return; // turn moved on in the gap
     app.godsCensus = computeGodsCensus();
     renderGodsCensus();
     if (app.godsHeatOn && app.godsCensus) {
@@ -763,7 +781,10 @@ function godsExportData() {
     variant: d.variantName,
     startFen: d.startFen,
     seed: dir.seed,
+    config0: dir.config0, // starting config — what a replay constructs with
     config: {
+      // live config at export time (tunes applied); the tunes ledger maps
+      // one to the other, undo markers included
       onsetPly: dir.onsetPly,
       quakeRamp: dir.quakeRamp,
       crumbleRamp: dir.crumbleRamp,
@@ -862,6 +883,7 @@ async function openArena(arena) {
   app.arena = arena;
   app.phase = 'placement';
   app.busy = false;
+  refreshGodsUI(); // 'Play again' lands here with the ended duel still around — hide its panel
   showScreen('duel');
   $('title').textContent = arena.title;
   $('duel-log').textContent = '';
@@ -1256,8 +1278,10 @@ async function onQuake(ev) {
   const board = $('board');
   // Eval delta (Phase 1.2): queue the pre/post probe for the player's idle
   // window — `ev` IS the record.quakes entry, so the result lands on the
-  // ledger. Ended duels are not probed (the probe only runs while playing).
-  if (godsDebug() && !endedGame) {
+  // ledger. Ended duels are not probed (the probe only runs while playing),
+  // and a probe path that already failed past its recycle cap stays retired
+  // for the rest of the duel — no fresh jobs, no per-turn failure spam.
+  if (godsDebug() && !endedGame && evalProbe.failures <= 3) {
     evalProbe.queue.push({ duel, ev, preFen: ev.preFen, postFen: ev.postFen });
     if (evalProbe.queue.length > 8) evalProbe.queue.shift(); // bound the backlog
   }
@@ -1377,7 +1401,9 @@ $('btnBack').addEventListener('click', () => {
   const d = app.duel;
   app.duel = null;
   if (d) d.destroy(); // sends 'stop' to any in-flight search
-  // Fence: the next duel waits for every flushed bestmove before reusing the engine.
+  // Fence (best effort): stops are sent and given a beat; a truly dead
+  // instance can outlive this, which is why ensureEngineReady adds its own
+  // 4 s wait and force-recycles when the fence never goes quiet.
   app.enginePending = Promise.all([probesQuiet, d ? d.whenQuiet() : null]).then(() => {});
   app.busy = false;
   app.phase = 'menu';

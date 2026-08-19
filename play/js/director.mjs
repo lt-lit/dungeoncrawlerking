@@ -318,10 +318,22 @@ function countByReason(rejected) {
   return out;
 }
 
-/** Per-side tier counts + rejection reasons for one displacement enumeration. */
+/** Reason → {white, black} counts (displacement rejections carry a side —
+ *  `unsafe_landing` per side is the Phase 1.3 starvation-risk metric). */
+function countByReasonSide(rejected) {
+  const out = {};
+  for (const r of rejected) {
+    const bucket = (out[r.reason] ??= { white: 0, black: 0 });
+    bucket[r.white ? 'white' : 'black']++;
+  }
+  return out;
+}
+
+/** Per-side tier counts + per-side rejection reasons for one displacement
+ *  enumeration. */
 function censusOfTiers(tiers) {
   const side = (arr) => ({ white: arr.filter((c) => c.white).length, black: arr.filter((c) => !c.white).length });
-  return { A: side(tiers.A), B: side(tiers.B), C: side(tiers.C), rejected: countByReason(tiers.rejected) };
+  return { A: side(tiers.A), B: side(tiers.B), C: side(tiers.C), rejected: countByReasonSide(tiers.rejected) };
 }
 
 export const DIRECTOR_DEFAULTS = {
@@ -351,10 +363,21 @@ export class Director {
     this.debtCap = Math.max(1, c.debtCap);
     this.asymOnsetPly = c.asymOnsetPly;
     this.asymRamp = Math.max(1, c.asymRamp);
-    this.rng = mulberry32(childSeed(c.seed ?? 1, 'director'));
+    this.seed = c.seed ?? 1; // kept for the export — a trace without its seed cannot be replayed
+    this.rng = mulberry32(childSeed(this.seed, 'director'));
     this.debt = 0; // displacement-only quakes since the last crumble
     this.favor = 1;
     this.lastTrace = null; // roll trace of the most recent quake() call (Phase 1.2)
+    // Post-guard STARTING config, frozen — tune() mutates the live knobs, so
+    // an exported record needs this to reconstruct the duel from ply 0.
+    this.config0 = Object.freeze({
+      onsetPly: this.onsetPly,
+      quakeRamp: this.quakeRamp,
+      crumbleRamp: this.crumbleRamp,
+      debtCap: this.debtCap,
+      asymOnsetPly: this.asymOnsetPly,
+      asymRamp: this.asymRamp,
+    });
   }
 
   /** Active trace collector; set only for the duration of a quake() call. */
@@ -417,8 +440,11 @@ export class Director {
   }
 
   /** P(a lone displacement is accepted one-sided | its roll happens).
-   *  Pure — no RNG. */
+   *  Pure — no RNG. The Infinity-onset guard ('off' preset) matters for
+   *  DISPLAY only: (ply - (asym - Infinity)) is NaN, and rng() < NaN is
+   *  false exactly like rng() < 0, so the roll outcome is unchanged. */
   pOneSided(ply) {
+    if (!Number.isFinite(this.onsetPly)) return 0;
     return this.#ramp(ply - (this.asymOnsetPly - this.onsetPly), this.asymRamp);
   }
 
@@ -461,7 +487,10 @@ export class Director {
         for (let d = 0; d <= cap; d++) {
           const m = chainA[d];
           if (!m) continue;
-          const pc = this.pCrumble(k, d >= cap ? this.debtCap : d);
+          // pCrumble checks d >= this.debtCap itself, so the top bucket is
+          // forced exactly when cap === debtCap; under a >64 dial the chain
+          // just never forces (a mild under-estimate, not a wrong force).
+          const pc = this.pCrumble(k, d);
           next[d] += m * (1 - q);
           crumbleNow += m * q * pc;
           next[Math.min(d + 1, cap)] += m * q * (1 - pc);
@@ -475,7 +504,7 @@ export class Director {
         for (let d = 0; d <= cap; d++) {
           const m = chainB[d];
           if (!m) continue;
-          const pc = this.pCrumble(k, d >= cap ? this.debtCap : d);
+          const pc = this.pCrumble(k, d);
           next[d] += m * (1 - q);
           next[0] += m * q * pc;
           expCrumbles += m * q * pc;

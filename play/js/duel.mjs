@@ -390,6 +390,11 @@ export class DuelController {
     this.record.anomalies.length = s.lens.anomalies;
     // record.tunes stays — dial changes are config history, and (like the RNG
     // stream and favor) director config is deliberately NOT rewound by undo.
+    // But the rewind itself must be on the ledger: without a marker, an
+    // exported record shows tunes dated at plies the truncated traces revisit
+    // with the tune already live, and nothing reveals why (or that the RNG
+    // stream forked here and the record stopped being replayable).
+    this.record.tunes.push({ ply: s.ply, undo: true });
     this.record.result = null;
     this.record.winner = null;
     this.record.termination = null;

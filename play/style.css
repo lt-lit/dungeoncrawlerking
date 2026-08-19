@@ -183,6 +183,18 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .piece.white { color: #f4f0e4; text-shadow: 0 1px 1px #000, 0 0 3px #0008; }
 .piece.black { color: #17171c; text-shadow: 0 0 2px #888, 0 1px 1px #666; }
 
+/* ---------- Gods debug heat marks (Phase 1.2) ----------
+   Candidate census painted on the board: displacement landing squares by
+   tier (A gold / B blue / C dim), 't' = terminal crumble. Deliberately
+   BEFORE every game-mark rule below (selection, last-move, check, quake
+   residue): equal specificity, so on a shared square the live-game marks
+   win the cascade tie and the debug layer never masks play state. */
+
+.cell.heat-a { box-shadow: inset 0 0 0 3px #ffd75ac8; }
+.cell.heat-b { box-shadow: inset 0 0 0 3px #6cc3ff96; }
+.cell.heat-c { box-shadow: inset 0 0 0 2px #9a9daa55; }
+.cell.heat-t { box-shadow: inset 0 0 0 3px #ff5a5ac8; }
+
 /* marks */
 .cell.sel { outline: 3px solid var(--gold); outline-offset: -3px; z-index: 1; }
 
@@ -274,17 +286,6 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   opacity: 0;
   transform: scale(.65);
 }
-
-/* ---------- Gods debug heat marks (Phase 1.2) ----------
-   Candidate census painted on the board: displacement landing squares by
-   tier (A gold / B blue / C dim), 't' = terminal crumble. Deliberately
-   BEFORE the quake-residue rules below: same specificity, so on a shared
-   square the live-game marks win the cascade tie. */
-
-.cell.heat-a { box-shadow: inset 0 0 0 3px #ffd75ac8; }
-.cell.heat-b { box-shadow: inset 0 0 0 3px #6cc3ff96; }
-.cell.heat-c { box-shadow: inset 0 0 0 2px #9a9daa55; }
-.cell.heat-t { box-shadow: inset 0 0 0 3px #ff5a5ac8; }
 
 /* ---------- earthquakes (the Board State Director) ---------- */
 

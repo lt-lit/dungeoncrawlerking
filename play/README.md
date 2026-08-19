@@ -175,9 +175,10 @@ final position is FSF-validated at Begin).
 The Director's tuning instrument (brief §10): built BEFORE Phase 1.3 changes
 the rules it measures, so before/after comparisons run on one instrument.
 Toggle: Options → The Gods → **Debug overlay**, or `?godsdebug=1` (E2E/dev;
-not persisted). It is not gated on Cheater Mode — it is a debug tool, not a
-cheat. The panel renders under the duel log; everything it shows derives
-from `duel.record` plus the Director's pure getters.
+holds for the session, and is only written to storage if some option is
+changed afterwards). It is not gated on Cheater Mode — it is a debug tool,
+not a cheat. The panel renders under the duel log; everything it shows
+derives from `duel.record` plus the Director's pure getters.
 
 **The invariant everything hangs on:** the Director's three rolls share one
 seeded stream and the draw pattern is state-dependent (no draw before onset,
@@ -185,10 +186,14 @@ the debt cap skips the crumble roll, the displacement leg consumes a
 variable number of picks). So the overlay NEVER re-rolls to preview:
 probabilities come from RNG-free getters (`pQuake`/`pCrumble`/`pOneSided`/
 `forecast`, pure functions of ply+config+debt+favor), and rolls are recorded
-by instrumentation *inside* `quake()`. Tracing is unconditional, and the
-draw sequence is byte-identical to the pre-1.2 Director — `selftest.html`
-asserts a seeded quake sequence replays exactly with the overlay hammered
-between rolls.
+by instrumentation *inside* `quake()`. Tracing is unconditional. Two
+separate guarantees back this: byte-identity of the draw sequence to the
+pre-1.2 Director was verified at development time by a Node A/B harness
+(12 seeds × 24 plies × 2 fixtures, old vs new, getters/census/forecast
+hammered between rolls — identical, incl. 118 fall-throughs); and
+`selftest.html` permanently asserts the live half — a seeded quake
+sequence replays exactly whether or not the overlay is exercised between
+rolls, and the getters consume zero RNG.
 
 What the panel shows:
 
@@ -237,9 +242,12 @@ What the panel shows:
   recorded on `record.tunes` with their ply, so an exported trace explains
   itself. Without the overlay they keep their shipped meaning (next duel).
   Config changes never touch the RNG stream, debt, or favor.
-- **Export** (`copy trace`) — the full ledger as JSON (arena, seed, config,
-  tunes, moves, quakes + deltas, every roll trace) to the clipboard;
-  `__DCK.gods.export()` returns the same object.
+- **Export** (`copy trace`) — the full ledger as JSON to the clipboard:
+  arena, seed, `config0` (the starting config a replay constructs with),
+  the live config, tunes (undo drops a `{ply, undo: true}` marker on the
+  ledger, since an undo forks the RNG stream and ends replayability),
+  moves, quakes + deltas, every roll trace. `__DCK.gods.export()` returns
+  the same object.
 
 Console/E2E surface: `window.__DCK.gods` — `traces`, `quakes`, `tunes`,
 `probs()`, `forecast()`, `census()`, `tune(partial)`, `export()`.
