@@ -80,9 +80,12 @@ export class DuelController {
    *   go: 'depth 22 movetime 500',         // paired limits (CLAUDE.md rule 5; 22 is a WASM-stability cap, see main.mjs)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
-   *     onQuake({ displacements, crumble, endedGame, postFen }),  // awaited (UI animates)
+   *     onQuake({ displacements, crumble, endedGame, preFen, postFen, trace }),  // awaited (UI animates)
    *     onEnd({ result, winner, termination }),
    *     onEngineInfo({ score, depth }),
+   *     onDirectorTrace(trace),            // Phase 1.2: EVERY ply's roll trace,
+   *                                        // quake or not — fire-and-forget
+   *                                        // (never awaited; render-only)
    *   },
    * }
    */
@@ -101,7 +104,7 @@ export class DuelController {
     this.movesSinceBase = [];
     this.ply = 0;
     this.state = 'idle'; // idle | playing | ended | error
-    this.record = { moves: [], sans: [], quakes: [], anomalies: [], result: null, winner: null, termination: null, error: null };
+    this.record = { moves: [], sans: [], quakes: [], quakeTraces: [], tunes: [], anomalies: [], result: null, winner: null, termination: null, error: null };
     this.snapshots = []; // undo support (cheat feature) — one per playable state
   }
 
@@ -218,6 +221,23 @@ export class DuelController {
     return this.activeSearch ?? Promise.resolve();
   }
 
+  // ---- Phase 1.2: recorded Director tuning ---------------------------------
+
+  /** Live ramp dials: apply a partial Director config NOW and log it on the
+   *  duel's ledger (record.tunes), so an exported trace explains itself.
+   *  Returns the knobs actually applied (post-guard). */
+  tuneDirector(partial) {
+    const applied = this.director.tune(partial);
+    if (Object.keys(applied).length) this.record.tunes.push({ ply: this.ply, ...applied });
+    return applied;
+  }
+
+  /** Favor of the Gods, recorded. Same semantics as director.setFavor(). */
+  setFavor(mult) {
+    this.director.setFavor(mult);
+    this.record.tunes.push({ ply: this.ply, favor: this.director.favor });
+  }
+
   #assertPlaying() {
     if (this.state !== 'playing') throw new Error(`duel is ${this.state}, not playing`);
   }
@@ -261,29 +281,54 @@ export class DuelController {
     const fenNow = this.board.fen();
     const quake = this.director.quake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply);
 
+    // Duel-layer safety net first, so a veto is stamped on the trace BEFORE
+    // anyone renders it.
+    let adoptBoard = null;
+    const trace = this.director.lastTrace;
     if (quake) {
       if (this.ffish.validateFen(quake.postFen, this.variantName) !== 1) {
         this.record.anomalies.push(`ply ${this.ply}: quake produced invalid FEN — skipped`);
+        if (trace) trace.vetoed = 'invalid-fen'; // duel layer overrode the Director
       } else {
         const next = new this.ffish.Board(this.variantName, quake.postFen);
         if (next.numberLegalMoves() === 0 && !quake.endsGame) {
           next.delete();
           this.record.anomalies.push(`ply ${this.ply}: quake would end game instantly — skipped (director should have caught)`);
+          if (trace) trace.vetoed = 'instant-end'; // duel layer overrode the Director
         } else {
-          this.#adoptPostQuake(next, quake.postFen);
-          const ev = { ply: this.ply, displacements: quake.displacements, crumble: quake.crumble, endedGame: quake.endsGame, postFen: quake.postFen };
-          this.record.quakes.push(ev);
-          if (this.hooks.onQuake) await this.hooks.onQuake(ev);
-          if (this.state !== 'playing') return { ended: true };
-          if (quake.endsGame) {
-            // Terminal crumble: the board had closed (no neutral candidate
-            // anywhere) — the collapse immobilizes the side to move, and the
-            // floor takes them. Normal mover-loses flow derives the result;
-            // termination is named for what did it.
-            await this.#finish({ termination: 'earthquake' });
-            return { ended: true };
-          }
+          adoptBoard = next;
         }
+      }
+    }
+
+    // Phase 1.2: the Director traces EVERY roll (null returns included);
+    // the record keeps them all — this is the per-ply roll trace the debug
+    // overlay renders and the harness will export. Fire-and-forget hook:
+    // render-only, so no await and no post-hook state checks needed.
+    if (trace) {
+      this.record.quakeTraces.push(trace);
+      if (this.hooks.onDirectorTrace) {
+        try {
+          this.hooks.onDirectorTrace(trace);
+        } catch {
+          // render-only hook — a broken overlay must never break the duel
+        }
+      }
+    }
+
+    if (adoptBoard) {
+      this.#adoptPostQuake(adoptBoard, quake.postFen);
+      const ev = { ply: this.ply, displacements: quake.displacements, crumble: quake.crumble, endedGame: quake.endsGame, preFen: fenNow, postFen: quake.postFen, trace };
+      this.record.quakes.push(ev);
+      if (this.hooks.onQuake) await this.hooks.onQuake(ev);
+      if (this.state !== 'playing') return { ended: true };
+      if (quake.endsGame) {
+        // Terminal crumble: the board had closed (no neutral candidate
+        // anywhere) — the collapse immobilizes the side to move, and the
+        // floor takes them. Normal mover-loses flow derives the result;
+        // termination is named for what did it.
+        await this.#finish({ termination: 'earthquake' });
+        return { ended: true };
       }
     }
     this.#takeSnapshot();
@@ -307,6 +352,7 @@ export class DuelController {
       lens: {
         moves: this.record.moves.length,
         quakes: this.record.quakes.length,
+        quakeTraces: this.record.quakeTraces.length,
         anomalies: this.record.anomalies.length,
       },
     });
@@ -340,7 +386,10 @@ export class DuelController {
     this.record.moves.length = s.lens.moves;
     this.record.sans.length = s.lens.moves;
     this.record.quakes.length = s.lens.quakes;
+    this.record.quakeTraces.length = s.lens.quakeTraces ?? this.record.quakeTraces.length;
     this.record.anomalies.length = s.lens.anomalies;
+    // record.tunes stays — dial changes are config history, and (like the RNG
+    // stream and favor) director config is deliberately NOT rewound by undo.
     this.record.result = null;
     this.record.winner = null;
     this.record.termination = null;

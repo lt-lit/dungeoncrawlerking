@@ -49,7 +49,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Kings are never displaced; pawns never land on rank 1/promotion rank;
   quakes never give check, never leave a side in check, never end the game
   except through the terminal-crumble path, and — **Phase 1.1** — never hand
-  out material (see `js/threat.mjs`).
+  out material (see `js/threat.mjs`). **Phase 1.2:** instrumented from the
+  inside — every `quake()` call records a roll trace (`lastTrace`), the
+  enumerators return their rejections with reasons, and RNG-free getters
+  (`pQuake`/`pCrumble`/`pOneSided`/`forecast`) + live dials (`tune()`)
+  expose the math without touching the seeded stream (see the debug-overlay
+  section below).
 - `js/threat.mjs` — **landing safety.** Attack chains + a simplified static
   exchange evaluation over the FEN grid; pure, no ffish, no engine. Exists
   because every other displacement guard is a *king*-safety guard, so a
@@ -164,3 +169,77 @@ the cheat probes), and **Edit enemy pieces** (testing tool: during
 placement, tap an enemy piece to pick it up, tap a square to move it, tap it
 again to remove it — the enemy king can be moved but never removed, and the
 final position is FSF-validated at Begin).
+
+## The Gods debug overlay (Phase 1.2)
+
+The Director's tuning instrument (brief §10): built BEFORE Phase 1.3 changes
+the rules it measures, so before/after comparisons run on one instrument.
+Toggle: Options → The Gods → **Debug overlay**, or `?godsdebug=1` (E2E/dev;
+not persisted). It is not gated on Cheater Mode — it is a debug tool, not a
+cheat. The panel renders under the duel log; everything it shows derives
+from `duel.record` plus the Director's pure getters.
+
+**The invariant everything hangs on:** the Director's three rolls share one
+seeded stream and the draw pattern is state-dependent (no draw before onset,
+the debt cap skips the crumble roll, the displacement leg consumes a
+variable number of picks). So the overlay NEVER re-rolls to preview:
+probabilities come from RNG-free getters (`pQuake`/`pCrumble`/`pOneSided`/
+`forecast`, pure functions of ply+config+debt+favor), and rolls are recorded
+by instrumentation *inside* `quake()`. Tracing is unconditional, and the
+draw sequence is byte-identical to the pre-1.2 Director — `selftest.html`
+asserts a seeded quake sequence replays exactly with the overlay hammered
+between rolls.
+
+What the panel shows:
+
+- **Per-ply roll trace** — one line per completed ply (quiet plies dim),
+  from `record.quakeTraces`. Each trace carries every draw (value +
+  threshold), the RNG-free probabilities, the census of what the
+  enumerations produced, and an ordered reason-code path: `pre-onset` ·
+  `quake-roll-failed` · `quake` · `crumble-forced` · `crumble-roll-passed` ·
+  `crumble-roll-failed` · `no-first-leg` · `paired` · `unpaired-one-sided` ·
+  `unpaired-held` · `crumble-neutral` · `crumble-terminal` · `starved`.
+  `fellThrough` marks the case the nominal numbers hide — the displacement
+  leg came up empty (`no-first-leg` / `unpaired-held`) and the quake dropped
+  into the crumble leg anyway — which is why crumbles land MORE often than
+  `P(crumble|quake)` implies. A `VETOED` marker means the duel layer's
+  safety net overrode the Director (also logged to `record.anomalies`).
+- **Next-roll readout + forecast** — the getters at ply+1, debt/cap, favor,
+  plus median plies for next quake / first crumble / closure from
+  `director.forecast()`. The forecast is the NOMINAL model (it prices the
+  crumble roll, not the fall-through), deliberately: the gap between
+  forecast and trace is the fall-through effect, measured.
+- **Candidate census** (`census now`) — a full enumeration of the CURRENT
+  position: displacement tiers A/B/C per side with veto reasons
+  (`unsafe_landing` per side is the Phase 1.3 starvation-risk metric),
+  neutral/terminal crumble candidates with veto reasons (`last_piece`,
+  `exposes_king`, …), locked pawns. This is the one expensive act in the
+  overlay — a quake-scale enumeration, 300–720 ms synchronous (rule 14) —
+  so it only ever runs from the button (player's turn) or the `__DCK` hook,
+  never per-ply. Quake traces get their census for free from the
+  enumerations the quake itself ran.
+- **Board heat** (`heat: on`) — the census painted on the board: landing
+  squares by tier (A gold / B blue / C dim), terminal crumbles red. The
+  census describes one position, so heat switches itself off on any move or
+  quake instead of silently re-enumerating.
+- **Eval delta per quake** — the ground truth of "did the arena change who's
+  winning": two short probes (`depth 12 movetime 300`, paired limits) of the
+  quake's pre/post FENs, normalized to white POV, `flipped` when the sign
+  changed (mate scores count as ±∞ — SEE is blind to mate-net changes, which
+  the sweeps measured as the dominant flip mode). Probes run in the player's
+  idle window on the shared engine, sequenced with the cheat probe, and
+  carry their OWN staleness seq + visible failure + capped recycle
+  (rule 12 — the duel's stall ladder never fires for probes). Results land
+  on the `record.quakes` entry (`evalDelta`).
+- **Live dials** — while the overlay is on, Gods settings changes
+  (temperament preset / custom knobs) also retune the LIVE Director via
+  `director.tune()`, and the favor slider drives `setFavor()` — both
+  recorded on `record.tunes` with their ply, so an exported trace explains
+  itself. Without the overlay they keep their shipped meaning (next duel).
+  Config changes never touch the RNG stream, debt, or favor.
+- **Export** (`copy trace`) — the full ledger as JSON (arena, seed, config,
+  tunes, moves, quakes + deltas, every roll trace) to the clipboard;
+  `__DCK.gods.export()` returns the same object.
+
+Console/E2E surface: `window.__DCK.gods` — `traces`, `quakes`, `tunes`,
+`probs()`, `forecast()`, `census()`, `tune(partial)`, `export()`.

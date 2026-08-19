@@ -153,8 +153,13 @@ export class BoardUI {
    *  animation and the enemy's reply, and clear only when the player moves,
    *  so "what just happened" is answerable from the board instead of the log.
    *  from and to are marked DIFFERENTLY — the old cue flashed both with one
-   *  class, which showed that something moved but never which way. */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], arrows = [], quakeFrom = [], quakeTo = [], pit = null } = {}) {
+   *  class, which showed that something moved but never which way.
+   *
+   *  `heat` (Phase 1.2, Gods debug overlay) is a {square: 'a'|'b'|'c'|'t'}
+   *  map painting the Director's candidate census — displacement landing
+   *  squares by tier, 't' for terminal crumbles. Debug-only chrome: its CSS
+   *  sits before the quake marks so live-game marks win ties. */
+  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], arrows = [], quakeFrom = [], quakeTo = [], pit = null, heat = {} } = {}) {
     const targetSet = new Set(targets);
     const lastSet = new Set(lastMove);
     const slotSet = new Set(slots);
@@ -169,6 +174,11 @@ export class BoardUI {
       cell.classList.toggle('quake-from', quakeFromSet.has(sq));
       cell.classList.toggle('quake-to', quakeToSet.has(sq));
       cell.classList.toggle('fresh-pit', sq === pit);
+      const h = heat[sq];
+      cell.classList.toggle('heat-a', h === 'a');
+      cell.classList.toggle('heat-b', h === 'b');
+      cell.classList.toggle('heat-c', h === 'c');
+      cell.classList.toggle('heat-t', h === 't');
     }
     this.setArrows(arrows);
   }

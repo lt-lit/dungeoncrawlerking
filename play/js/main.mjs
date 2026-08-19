@@ -14,6 +14,7 @@
 //   &go=<uci go args>  override engine search (e.g. "depth 60 movetime 80")
 //   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=
 //     override the Director config (see director.mjs DIRECTOR_DEFAULTS)
+//   &godsdebug=1     force the Gods debug overlay on (Phase 1.2 instrument)
 //   &fx=<scale>      animation speed multiplier; 0 disables motion entirely
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
@@ -32,6 +33,7 @@ import {
 } from './arena.mjs';
 import { BoardUI, Tray, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
+import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid } from './director.mjs';
 
 const $ = (id) => document.getElementById(id);
 const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, p: 1, k: 0 };
@@ -71,6 +73,9 @@ const app = {
   busy: false, // gates input while the engine thinks / animations run
   enginePending: null, // whenQuiet() of an abandoned duel's in-flight search
   duelsOnEngine: 0, // rule 6: recycle the instance well before ~40 games
+  godsCensus: null, // last on-demand candidate census {ply, tiers, crumbles, locked, ms}
+  godsHeat: null, // {square: tier} heat marks painted from the census
+  godsHeatOn: false, // user wants heat; turns itself off when the board changes
 };
 
 // ---------------------------------------------------------------- utilities
@@ -139,7 +144,7 @@ function defaultPlacement(arena) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false, godPreset: 'restless', godCustom: null };
+const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false, godPreset: 'restless', godCustom: null, godsDebug: false };
 
 // The Gods (Board State Director) — tuning presets. Numbers are plies.
 // 'restless' is the sweep-validated baseline; custom exposes every knob.
@@ -179,6 +184,9 @@ const cheatHints = () => options.cheat && options.hints;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
 const cheatEnemyEdit = () => options.cheat && options.enemyEdit;
+// The Gods debug overlay (Phase 1.2) is a tuning instrument, not a cheat —
+// it gates on its own option so it can run without Cheater Mode.
+const godsDebug = () => options.godsDebug;
 
 function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
@@ -196,6 +204,7 @@ function syncOptionsUI() {
     el.disabled = options.godPreset !== 'custom';
   }
   $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
+  $('optGodsDebug').checked = options.godsDebug;
 }
 
 function refreshCheatUI() {
@@ -210,6 +219,7 @@ function applyOptions() {
   saveOptions();
   syncOptionsUI();
   refreshCheatUI();
+  refreshGodsUI();
   if (!cheatHints()) {
     app.cheatArrows = [];
     if (app.duel && app.phase !== 'placement') renderPlayMarks();
@@ -219,7 +229,7 @@ function applyOptions() {
     refreshPlacement();
   }
   if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.arena.playerColor) {
-    void runCheatSearch(); // options may have just enabled hints/eval mid-turn
+    void runIdleProbes(); // options may have just enabled hints/eval/overlay mid-turn
   }
 }
 
@@ -318,22 +328,12 @@ async function runCheatSearch() {
   }
 }
 
-/** A hint probe failed. Say so on screen (silence here is what made this
- *  undiagnosable), and recycle the engine so hints come back — the duel's own
- *  ladder can't help, it only fires on the duel's searches. Recycling is safe
- *  here: probes only run on the player's turn with the engine otherwise idle. */
-async function cheatProbeFailed(deadEngine, err) {
-  cheat.active = null;
-  cheat.engine = null;
-  cheat.failures++;
-  app.cheatArrows = [];
-  if (app.duel && app.phase === 'playing') renderPlayMarks();
-  if (cheat.failures > 3) {
-    setStatus('your move · hints unavailable');
-    return; // stop thrashing the engine if recycling is not helping
-  }
-  log($('duel-log'), `⚠ hint probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
-  if (app.engine !== deadEngine) return; // someone already replaced it
+/** Replace a dead idle-window engine instance and rebind the live duel
+ *  (never quit() — rule 6). Shared by the cheat and eval-delta probes;
+ *  safe because probes only run on the player's turn with the engine
+ *  otherwise idle. Returns whether a healthy instance is in place. */
+async function recycleIdleEngine(deadEngine) {
+  if (app.engine !== deadEngine) return true; // someone already replaced it
   try {
     const fresh = await createEngine();
     await fresh.loadVariantsIni(app.catalog);
@@ -345,11 +345,164 @@ async function cheatProbeFailed(deadEngine, err) {
       fresh.send('ucinewgame');
       fresh.setoption('UCI_Variant', app.arena.variantName);
       await fresh.isready();
-      if (app.duel.turnColor() === app.arena.playerColor && !app.busy) void runCheatSearch();
     }
+    return true;
   } catch {
-    setStatus('your move · hints unavailable');
+    return false;
   }
+}
+
+/** A hint probe failed. Say so on screen (silence here is what made this
+ *  undiagnosable), and recycle the engine so hints come back — the duel's own
+ *  ladder can't help, it only fires on the duel's searches. */
+async function cheatProbeFailed(deadEngine, err) {
+  cheat.active = null;
+  cheat.engine = null;
+  cheat.failures++;
+  app.cheatArrows = [];
+  if (app.duel && app.phase === 'playing') renderPlayMarks();
+  if (cheat.failures > 3) {
+    setStatus('your move · hints unavailable');
+    return; // stop thrashing the engine if recycling is not helping
+  }
+  log($('duel-log'), `⚠ hint probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
+  if (!(await recycleIdleEngine(deadEngine))) {
+    setStatus('your move · hints unavailable');
+    return;
+  }
+  if (app.duel && app.duel.state === 'playing' && app.duel.turnColor() === app.arena.playerColor && !app.busy) {
+    void runCheatSearch();
+  }
+}
+
+// ------------------------------------------------ eval delta probe (Phase 1.2)
+
+/** Eval delta per quake — the ground-truth "did the arena change who's
+ *  winning" (§10). Two short searches of the quake's pre/post FENs, run in
+ *  the player's idle window on the shared engine (the duel searches only on
+ *  the enemy's turn; runIdleProbes sequences this with the cheat probe so a
+ *  single `go` is ever in flight). Both FENs have the same side to move —
+ *  quakes never flip the turn — and scores are normalized to WHITE POV.
+ *
+ *  Rule 12: this is a new long-lived auxiliary search path, so it carries
+ *  its OWN staleness seq, visible failure, capped recycle — the duel's
+ *  stall ladder never fires for probes. */
+const evalProbe = { seq: 0, active: null, engine: null, failures: 0, queue: [] };
+
+const EVAL_PROBE_GO = 'depth 12 movetime 300'; // paired limits (rule 5); shallow is fine for a delta readout
+const EVAL_PROBE_TIMEOUT = 4300; // movetime + 4 s: a doomed probe fails before the player moves on
+
+async function cancelEvalProbe() {
+  evalProbe.seq++;
+  if (evalProbe.active) {
+    try {
+      (evalProbe.engine ?? app.engine).send('stop'); // stop the instance it RUNS on
+    } catch {
+      /* dead engine */
+    }
+    await Promise.race([evalProbe.active, new Promise((r) => setTimeout(r, 300))]);
+    evalProbe.active = null;
+    evalProbe.engine = null;
+  }
+}
+
+/** Everything that may hold the idle engine — call before the player's move
+ *  lands or the duel is abandoned. */
+async function cancelIdleProbes() {
+  await Promise.all([cancelCheatSearch(), cancelEvalProbe()]);
+}
+
+/** The player's-turn idle window: eval-delta probes first (they carry data
+ *  the overlay records), then the cheat probe. Strictly sequenced, and
+ *  NON-REENTRANT: driveTurn and applyOptions can both fire this in the same
+ *  window, and two flights would put two `go` commands on one engine. */
+let idleProbesFlight = null;
+function runIdleProbes() {
+  if (idleProbesFlight) return idleProbesFlight;
+  idleProbesFlight = (async () => {
+    try {
+      await runEvalProbes();
+      await runCheatSearch();
+    } finally {
+      idleProbesFlight = null;
+    }
+  })();
+  return idleProbesFlight;
+}
+
+/** One WHITE-POV eval of a bare FEN (mover-POV score negated for black). */
+async function probeEval(engine, fen) {
+  engine.position({ fen });
+  const res = await engine.go(EVAL_PROBE_GO, { timeout: EVAL_PROBE_TIMEOUT });
+  const score = engine.lastScore(res);
+  if (!score) throw new Error('eval probe returned no score');
+  return fen.split(' ')[1] === 'w' ? score : { type: score.type, value: -score.value };
+}
+
+const scoreSign = (s) => (s.value > 0 ? 1 : s.value < 0 ? -1 : 0);
+
+async function runEvalProbes() {
+  if (evalProbe.active) return; // a drain is already mid-probe — never overlap `go`s
+  while (evalProbe.queue.length) {
+    const duel = app.duel;
+    if (!duel || duel.state !== 'playing') {
+      evalProbe.queue.length = 0;
+      return;
+    }
+    if (duel.turnColor() !== app.arena.playerColor || app.busy) return; // window closed — resume next turn
+    const job = evalProbe.queue[0];
+    if (job.duel !== duel) {
+      evalProbe.queue.shift(); // stale job from an abandoned duel
+      continue;
+    }
+    const mySeq = ++evalProbe.seq;
+    const engine = app.engine;
+    evalProbe.engine = engine;
+    let before;
+    let after;
+    const run = (async () => {
+      before = await probeEval(engine, job.preFen);
+      if (mySeq !== evalProbe.seq) return;
+      after = await probeEval(engine, job.postFen);
+    })();
+    evalProbe.active = run.catch(() => {});
+    try {
+      await run;
+    } catch (e) {
+      if (mySeq === evalProbe.seq) {
+        evalProbe.active = null;
+        evalProbe.engine = null;
+        await evalProbeFailed(engine, e);
+      }
+      return;
+    }
+    if (mySeq !== evalProbe.seq) return; // cancelled mid-probe; the job stays queued
+    evalProbe.active = null;
+    evalProbe.engine = null;
+    if (!after) return;
+    evalProbe.failures = 0;
+    evalProbe.queue.shift();
+    // Attaching to the record.quakes entry itself: the ledger stays the one
+    // source the overlay, the export, and E2E all read.
+    job.ev.evalDelta = { before, after, pov: 'white', flipped: scoreSign(before) !== scoreSign(after) };
+    appendGodsDelta(job.ev);
+    renderGodsSummary();
+  }
+}
+
+/** An eval probe failed — make it visible and recover (rule 12), with a cap
+ *  so a truly dead path stops thrashing the engine. */
+async function evalProbeFailed(deadEngine, err) {
+  evalProbe.failures++;
+  if (evalProbe.failures > 3) {
+    log($('duel-log'), '⚠ eval-delta probe unavailable (repeated failures) — deltas stop here', 'crumble');
+    evalProbe.queue.length = 0;
+    return;
+  }
+  log($('duel-log'), `⚠ eval probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
+  await recycleIdleEngine(deadEngine);
+  // No immediate retry: this runs INSIDE the idle-probes flight, so a retry
+  // would just re-enter it. The queued jobs resume on the next player turn.
 }
 
 /** Last (deepest) info line per multipv rank → [{rank, move, score}]. */
@@ -391,7 +544,8 @@ async function doUndo() {
   const duel = app.duel;
   if (duel.state === 'playing' && duel.turnColor() !== app.arena.playerColor) return;
   app.busy = true;
-  await cancelCheatSearch();
+  await cancelIdleProbes();
+  evalProbe.queue.length = 0; // queued jobs belong to the abandoned timeline
   const did = duel.undoToTurn(app.arena.playerColor === 'white' ? 'w' : 'b');
   app.busy = false;
   if (!did) {
@@ -403,10 +557,238 @@ async function doUndo() {
   app.selectedSquare = null;
   app.cheatArrows = [];
   app.quakeMarks = null; // the rewound timeline's quake never happened
+  app.godsCensus = null;
+  godsHeatOff();
+  renderGodsCensus();
+  rerenderGodsTrace(); // ledger was truncated — re-derive the panel from it
+  refreshGodsUI();
   app.boardUI.setPosition(duel.fen());
   renderPlayMarks();
   log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'crumble');
   await driveTurn();
+}
+
+// ------------------------------------------ the Gods debug overlay (Phase 1.2)
+//
+// The Director's tuning instrument (§10): per-ply roll trace with reason
+// codes, candidate census + board heat, RNG-free probability readouts, a
+// nominal forecast, live dials, and the eval delta above. Everything renders
+// from duel.record (+ the pure Director getters) — the overlay never rolls,
+// never re-enumerates on its own, and never touches the seeded stream. The
+// one expensive act, the on-demand census, is an explicit button press
+// (rule 14: director-scale enumeration is 300–720 ms and synchronous).
+
+const pctOf = (x) => (x >= 1 ? '100%' : x <= 0 ? '0%' : x < 0.095 ? `${(x * 100).toFixed(1)}%` : `${Math.round(x * 100)}%`);
+
+function fmtScore(s) {
+  return s.type === 'mate' ? (s.value > 0 ? `M${s.value}` : `−M${-s.value}`) : (s.value >= 0 ? '+' : '') + (s.value / 100).toFixed(1);
+}
+
+function refreshGodsUI() {
+  const inDuel = !!app.duel && (app.phase === 'playing' || app.phase === 'ended');
+  const show = godsDebug() && inDuel;
+  $('gods-debug').hidden = !show;
+  if (show) renderGodsSummary();
+}
+
+function countFreeSquares(fen, files, ranks) {
+  let n = 0;
+  for (const row of fenGrid(fen, files, ranks)) for (const c of row) if (c === null) n++;
+  return n;
+}
+
+function renderGodsSummary() {
+  const duel = app.duel;
+  if (!duel || !duel.board) return;
+  const dir = duel.director;
+  const nextPly = duel.ply + 1;
+  const crumbleBit = dir.debt >= dir.debtCap ? 'FORCED (debt cap)' : pctOf(dir.pCrumble(nextPly));
+  $('gods-summary').textContent =
+    `next roll p${nextPly}: P(quake) ${pctOf(dir.pQuake(nextPly))} · P(crumble|q) ${crumbleBit} · ` +
+    `P(one-sided) ${pctOf(dir.pOneSided(nextPly))} · debt ${dir.debt}/${dir.debtCap} · favor ${dir.favor.toFixed(1)}`;
+  const free = countFreeSquares(duel.fen(), duel.files, duel.ranks);
+  const f = dir.forecast(duel.ply, { freeSquares: free });
+  const p = (v) => (v === null ? 'beyond horizon' : `~p${v}`);
+  $('gods-forecast').textContent =
+    `forecast (nominal — fall-through lands crumbles earlier): next quake ${p(f.nextQuake)} · ` +
+    `first crumble ${p(f.firstCrumble)} · closure ${p(f.closure)} · ${free} free squares`;
+}
+
+function godsTraceCls(t) {
+  if (t.outcome === 'quiet') return 'quiet';
+  if (t.outcome === 'crumble' || t.outcome === 'terminal' || t.vetoed) return 'crumble';
+  if (t.outcome === 'starved' || t.outcome === 'one-sided') return 'bad';
+  return 'ok';
+}
+
+/** One compact line per roll trace — the per-ply record, reason codes and all. */
+function godsTraceLine(t) {
+  if (t.outcome === 'quiet') {
+    const r = t.rolls.find((x) => x.roll === 'quake');
+    return `p${t.ply} · P(q) ${pctOf(t.p.quake)}${r ? ` roll ${r.value.toFixed(2)} — quiet` : ' — before onset'}`;
+  }
+  const bits = [`p${t.ply} QUAKE`];
+  bits.push(t.p.crumbleForced ? 'crumble FORCED (debt cap)' : `P(c|q) ${pctOf(t.p.crumble)} → ${t.path.includes('crumble-roll-passed') ? 'crumble leg' : 'displace leg'}`);
+  const c = t.census;
+  if (c?.displacement) {
+    const s = (x) => `${x.white}w/${x.black}b`;
+    bits.push(`cand A ${s(c.displacement.A)} B ${s(c.displacement.B)} C ${s(c.displacement.C)}`);
+    if (t.firstSide) bits.push(`first ${t.firstSide}`);
+  }
+  if (c && c.lockedPawns > 0) bits.push(`locked pawns ${c.lockedPawns}`);
+  const leg = (l) => `${l.piece} ${l.from}→${l.to} [${l.tier}]`;
+  if (t.outcome === 'paired') bits.push(`paired ${leg(t.chosen.leg1)} + ${leg(t.chosen.leg2)}`);
+  else if (t.outcome === 'one-sided') bits.push(`ONE-SIDED ${leg(t.chosen.leg1)} (P ${pctOf(t.p.oneSided)})`);
+  else if (t.outcome === 'crumble' || t.outcome === 'terminal') {
+    const via = t.fellThrough ? ` — FELL THROUGH (${t.path.includes('no-first-leg') ? 'no first leg' : 'unpairable, held'})` : '';
+    const cr = t.chosen?.crumble;
+    const pool = c?.crumble ? c.crumble.neutral + c.crumble.terminal : '?';
+    bits.push(`${t.outcome === 'terminal' ? 'TERMINAL ' : ''}crumble ${cr.square}${cr.pieceLost && cr.pieceLost !== '*' ? ` swallows ${cr.pieceLost}` : ''} of ${pool}${via}`);
+  } else if (t.outcome === 'starved') {
+    bits.push(`STARVED — no legal candidate anywhere${t.fellThrough ? ' (displace leg empty too)' : ''}`);
+  }
+  if (t.vetoed) bits.push(`VETOED by duel layer: ${t.vetoed}`);
+  return bits.join(' · ');
+}
+
+function appendGodsTrace(t) {
+  if (!godsDebug()) return;
+  log($('gods-trace'), godsTraceLine(t), godsTraceCls(t));
+}
+
+function appendGodsDelta(ev) {
+  if (!godsDebug() || !ev.evalDelta) return;
+  const d = ev.evalDelta;
+  log(
+    $('gods-trace'),
+    `p${ev.ply} Δeval (white POV) ${fmtScore(d.before)} → ${fmtScore(d.after)}${d.flipped ? ' — FLIP: the quake changed who is winning' : ''}`,
+    d.flipped ? 'bad' : 'ok'
+  );
+}
+
+/** Rebuild the whole trace log from the record — undo truncates the ledger,
+ *  so the DOM re-derives from it rather than trying to unpick lines. */
+function rerenderGodsTrace() {
+  const el = $('gods-trace');
+  el.textContent = '';
+  if (!app.duel) return;
+  const deltaByPly = new Map();
+  for (const ev of app.duel.record.quakes) if (ev.evalDelta) deltaByPly.set(ev.ply, ev);
+  for (const t of app.duel.record.quakeTraces) {
+    log(el, godsTraceLine(t), godsTraceCls(t));
+    if (deltaByPly.has(t.ply)) appendGodsDelta(deltaByPly.get(t.ply));
+  }
+}
+
+/** Full candidate census of the CURRENT position — the one deliberately
+ *  expensive overlay act (a quake-scale enumeration, rule 14), so it only
+ *  ever runs from an explicit button press or the __DCK test hook. */
+function computeGodsCensus() {
+  const d = app.duel;
+  if (!d || !d.board) return null;
+  const t0 = performance.now();
+  const fen = d.fen();
+  const tiers = displacementCandidates(app.ffish, d.variantName, fen, d.files, d.ranks);
+  const crumbles = crumbleCandidates(app.ffish, d.variantName, fen, d.files, d.ranks);
+  const locked = lockedPawns(fen, d.files, d.ranks);
+  return { ply: d.ply, tiers, crumbles, locked, ms: Math.round(performance.now() - t0) };
+}
+
+function renderGodsCensus() {
+  const c = app.godsCensus;
+  const el = $('gods-census');
+  if (!c) {
+    el.textContent = '';
+    return;
+  }
+  const side = (arr) => `${arr.filter((x) => x.white).length}w/${arr.filter((x) => !x.white).length}b`;
+  el.textContent =
+    `census @p${c.ply} (${c.ms} ms): displace A ${side(c.tiers.A)} · B ${side(c.tiers.B)} · C ${side(c.tiers.C)} · vetoed ${c.tiers.rejected.length}` +
+    ` | crumble ok ${c.crumbles.neutral.length} · terminal ${c.crumbles.terminal.length} · vetoed ${c.crumbles.rejected.length}` +
+    ` | locked pawns ${c.locked.length}`;
+}
+
+/** Heat map from a census: displacement landings by tier (A > B > C on
+ *  collisions), terminal crumbles marked 't'. */
+function buildHeat(c) {
+  const heat = {};
+  for (const t of c.crumbles.terminal) heat[t.sq] = 't';
+  for (const [cls, arr] of [['c', c.tiers.C], ['b', c.tiers.B], ['a', c.tiers.A]]) {
+    for (const cand of arr) heat[cand.to] = cls;
+  }
+  return heat;
+}
+
+function syncHeatButton() {
+  $('btnGodsHeat').textContent = app.godsHeatOn ? 'heat: on' : 'heat: off';
+  $('btnGodsHeat').classList.toggle('on', app.godsHeatOn);
+}
+
+/** The census describes ONE position; any move or quake invalidates it, and
+ *  heat switches itself off rather than silently re-enumerating (rule 14). */
+function godsHeatOff() {
+  if (!app.godsHeatOn && !app.godsHeat) return;
+  app.godsHeatOn = false;
+  app.godsHeat = null;
+  syncHeatButton();
+}
+
+function godsCensusNow() {
+  const duel = app.duel;
+  if (!duel || duel.state !== 'playing') return;
+  if (app.busy || duel.turnColor() !== app.arena.playerColor) {
+    setStatus('census: wait for your turn');
+    return;
+  }
+  setStatus('reading the gods…'); // paint first — the enumeration blocks the thread
+  setTimeout(() => {
+    if (app.duel !== duel || duel.state !== 'playing' || app.busy) return;
+    app.godsCensus = computeGodsCensus();
+    renderGodsCensus();
+    if (app.godsHeatOn && app.godsCensus) {
+      app.godsHeat = buildHeat(app.godsCensus);
+      renderPlayMarks();
+    }
+    setStatus('your move');
+  }, 30);
+}
+
+/** Everything a replay or offline analysis needs, from the one ledger. */
+function godsExportData() {
+  const d = app.duel;
+  if (!d) return null;
+  const dir = d.director;
+  return {
+    arena: app.arena?.id ?? null,
+    variant: d.variantName,
+    startFen: d.startFen,
+    seed: dir.seed,
+    config: {
+      onsetPly: dir.onsetPly,
+      quakeRamp: dir.quakeRamp,
+      crumbleRamp: dir.crumbleRamp,
+      debtCap: dir.debtCap,
+      asymOnsetPly: dir.asymOnsetPly,
+      asymRamp: dir.asymRamp,
+    },
+    favor: dir.favor,
+    tunes: d.record.tunes,
+    moves: d.record.moves,
+    sans: d.record.sans,
+    quakes: d.record.quakes.map(({ trace, ...rest }) => rest), // traces carried once, below
+    quakeTraces: d.record.quakeTraces,
+    anomalies: d.record.anomalies,
+    result: d.record.result,
+    termination: d.record.termination,
+  };
+}
+
+/** Per-ply hook from the duel (fire-and-forget): every Director roll lands
+ *  here, quake or quiet. */
+function onDirectorTrace(trace) {
+  if (!godsDebug()) return;
+  appendGodsTrace(trace);
+  renderGodsSummary();
 }
 
 // ---------------------------------------------------------------------- boot
@@ -687,6 +1069,16 @@ async function beginDuel() {
   app.quakeMarks = null;
   $('eval-fill').style.width = '50%';
   $('eval-text').textContent = '';
+  // Gods debug overlay: fresh duel, fresh ledger.
+  app.godsCensus = null;
+  godsHeatOff();
+  evalProbe.queue.length = 0;
+  evalProbe.seq++;
+  evalProbe.failures = 0; // fresh duel, fresh engine budget
+  $('gods-trace').textContent = '';
+  $('gods-census').textContent = '';
+  $('godsFavor').value = '1';
+  $('godsFavorVal').textContent = '1.0';
   if (app.duel) app.duel.destroy();
   app.duel = new DuelController({
     ffish: app.ffish,
@@ -705,11 +1097,12 @@ async function beginDuel() {
     // live play). Full strength per §13 is untouched — this is a stability
     // cap, not a handicap.
     go: params.get('go') ?? 'depth 22 movetime 500',
-    hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall },
+    hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
   await app.duel.start();
   app.boardUI.setPosition(app.duel.fen());
   app.boardUI.setMarks({});
+  refreshGodsUI();
   if (app.duel.state === 'playing') await driveTurn();
 }
 
@@ -723,7 +1116,7 @@ async function driveTurn() {
     app.boardUI.setInteractive(true);
     setStatus('your move');
     refreshCheatUI();
-    void runCheatSearch();
+    void runIdleProbes();
   } else {
     app.busy = true;
     app.boardUI.setInteractive(false);
@@ -744,6 +1137,7 @@ function renderPlayMarks() {
     quakeFrom: q?.from ?? [],
     quakeTo: q?.to ?? [],
     pit: q?.pit ?? null,
+    heat: app.godsHeat ?? {},
   };
   if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
     marks.selected = app.selectedSquare;
@@ -802,7 +1196,7 @@ async function playPlayerMove(from, to, matches) {
   app.busy = true;
   app.selectedSquare = null;
   app.boardUI.setInteractive(false);
-  await cancelCheatSearch(); // the engine must be quiet before its reply search
+  await cancelIdleProbes(); // the engine must be quiet before its reply search
   try {
     const r = await app.duel.playerMove(uci);
     if (!r.ended) await driveTurn();
@@ -831,6 +1225,7 @@ async function onMove({ uci, san, mover, ply }) {
   }
   // The player has answered the gods; their residue has served its purpose.
   if (mover === 'player') app.quakeMarks = null;
+  godsHeatOff(); // the census described the pre-move position
   app.boardUI.setPosition(app.duel.fen());
   renderPlayMarks();
   const n = Math.ceil(ply / 2);
@@ -854,10 +1249,19 @@ function checkMark() {
  * board said which way it went. Now: rumble, then motion, then a settle
  * before the enemy's reply is allowed to land on top of it.
  */
-async function onQuake({ displacements, crumble, endedGame, postFen }) {
+async function onQuake(ev) {
+  const { displacements, crumble, endedGame, postFen } = ev;
   const duel = app.duel;
   const ui = app.boardUI;
   const board = $('board');
+  // Eval delta (Phase 1.2): queue the pre/post probe for the player's idle
+  // window — `ev` IS the record.quakes entry, so the result lands on the
+  // ledger. Ended duels are not probed (the probe only runs while playing).
+  if (godsDebug() && !endedGame) {
+    evalProbe.queue.push({ duel, ev, preFen: ev.preFen, postFen: ev.postFen });
+    if (evalProbe.queue.length > 8) evalProbe.queue.shift(); // bound the backlog
+  }
+  godsHeatOff(); // the census described the pre-quake position
   setStatus(crumble ? 'the arena shudders — the floor gives!' : 'the arena shudders…');
 
   // Beat 1 — the rumble, alone, so the eye is on the board before anything moves.
@@ -953,6 +1357,7 @@ async function onEnd({ result, winner, termination }) {
   $('btnOverlayUndo').hidden = !cheatUndo();
   $('overlay').hidden = false;
   refreshCheatUI();
+  refreshGodsUI(); // the panel survives the end screen — post-mortems welcome
   setStatus(result ? `${result} · ${termination}` : 'error');
 }
 
@@ -967,16 +1372,18 @@ $('btnResetPlacement').addEventListener('click', () => {
   refreshPlacement();
 });
 $('btnBack').addEventListener('click', () => {
-  const hintQuiet = cancelCheatSearch(); // a cheat probe is also an in-flight search
+  const probesQuiet = cancelIdleProbes(); // cheat + eval probes are in-flight searches too
+  evalProbe.queue.length = 0;
   const d = app.duel;
   app.duel = null;
   if (d) d.destroy(); // sends 'stop' to any in-flight search
   // Fence: the next duel waits for every flushed bestmove before reusing the engine.
-  app.enginePending = Promise.all([hintQuiet, d ? d.whenQuiet() : null]).then(() => {});
+  app.enginePending = Promise.all([probesQuiet, d ? d.whenQuiet() : null]).then(() => {});
   app.busy = false;
   app.phase = 'menu';
   showScreen('menu');
   refreshCheatUI();
+  refreshGodsUI();
   $('title').textContent = 'Dungeon Crawler King';
   setStatus('choose an arena');
 });
@@ -989,7 +1396,7 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optEnemyEdit', 'enemyEdit']]) {
+for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optEnemyEdit', 'enemyEdit'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
@@ -999,10 +1406,24 @@ $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
 });
+/** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
+ *  running, Gods settings changes apply to the LIVE Director too (recorded
+ *  on the duel ledger). Without the overlay they keep their shipped meaning:
+ *  from the next duel. */
+function liveTune(partial) {
+  if (!godsDebug() || !app.duel || app.duel.state !== 'playing') return;
+  const applied = app.duel.tuneDirector(partial);
+  if (Object.keys(applied).length) {
+    log($('gods-trace'), `dial @p${app.duel.ply}: ${Object.entries(applied).map(([k, v]) => `${k}=${v}`).join(' ')} (live)`, 'ok');
+    renderGodsSummary();
+  }
+}
+
 $('optGodPreset').addEventListener('change', (e) => {
   options.godPreset = e.target.value;
   if (options.godPreset === 'custom' && !options.godCustom) options.godCustom = { ...GOD_PRESETS.restless };
   applyOptions();
+  liveTune(godConfig());
 });
 for (const k of GOD_KNOBS) {
   $(`god_${k}`).addEventListener('change', (e) => {
@@ -1011,8 +1432,49 @@ for (const k of GOD_KNOBS) {
     options.godCustom = { ...(options.godCustom ?? GOD_PRESETS.restless), [k]: v };
     options.godPreset = 'custom';
     applyOptions();
+    liveTune({ [k]: v });
   });
 }
+// Favor of the Gods (§4.5, hook live / theme TBD): the slider drives the
+// CURRENT duel only, and resets to 1 with each new Director.
+$('godsFavor').addEventListener('input', (e) => {
+  $('godsFavorVal').textContent = parseFloat(e.target.value).toFixed(1);
+});
+$('godsFavor').addEventListener('change', (e) => {
+  const v = parseFloat(e.target.value);
+  if (!Number.isFinite(v) || !app.duel || app.duel.state !== 'playing') return;
+  app.duel.setFavor(v); // recorded on the ledger
+  log($('gods-trace'), `favor @p${app.duel.ply}: ${v.toFixed(1)}`, 'ok');
+  renderGodsSummary();
+});
+$('btnGodsCensus').addEventListener('click', godsCensusNow);
+$('btnGodsHeat').addEventListener('click', () => {
+  app.godsHeatOn = !app.godsHeatOn;
+  syncHeatButton();
+  if (!app.godsHeatOn) {
+    app.godsHeat = null;
+    if (app.duel && app.phase !== 'placement') renderPlayMarks();
+    return;
+  }
+  if (app.godsCensus && app.duel && app.godsCensus.ply === app.duel.ply) {
+    app.godsHeat = buildHeat(app.godsCensus);
+    renderPlayMarks();
+  } else {
+    godsCensusNow(); // applies heat when the census lands (godsHeatOn is set)
+  }
+});
+$('btnGodsExport').addEventListener('click', async () => {
+  const data = godsExportData();
+  if (!data) return;
+  const json = JSON.stringify(data);
+  try {
+    await navigator.clipboard.writeText(json);
+    log($('gods-trace'), `trace copied (${(json.length / 1024).toFixed(1)} KB)`, 'ok');
+  } catch {
+    console.log('[DCK gods trace]', json); // clipboard blocked — console fallback
+    log($('gods-trace'), 'clipboard unavailable — trace dumped to console', 'bad');
+  }
+});
 $('btnAgain').addEventListener('click', () => {
   $('overlay').hidden = true;
   openArena(app.arena);
@@ -1033,8 +1495,48 @@ window.__DCK = {
   // Favor of the Gods — runtime tuning hook (theme TBD). Scales quake
   // probability mid-duel: 0 silences the gods, 1 baseline, >1 angers them.
   // In-game effects (items, shrines, taunts) will call this; exposed here
-  // so it can be exercised from the console / E2E today.
-  setFavor: (mult) => app.duel?.director.setFavor(mult),
+  // so it can be exercised from the console / E2E today. Recorded on the
+  // duel ledger since Phase 1.2.
+  setFavor: (mult) => app.duel?.setFavor(mult),
+  // The Gods debug overlay (Phase 1.2) — the instrument's console surface.
+  // Everything here is RNG-free or reads the ledger; census() is the one
+  // expensive call (a quake-scale enumeration, rule 14).
+  gods: {
+    get traces() {
+      return app.duel?.record.quakeTraces ?? null;
+    },
+    get quakes() {
+      return app.duel?.record.quakes ?? null;
+    },
+    get tunes() {
+      return app.duel?.record.tunes ?? null;
+    },
+    probs: () => {
+      const duel = app.duel;
+      if (!duel) return null;
+      const dir = duel.director;
+      const ply = duel.ply + 1;
+      return {
+        ply,
+        pQuake: dir.pQuake(ply),
+        pCrumble: dir.pCrumble(ply),
+        crumbleForced: dir.debt >= dir.debtCap,
+        pOneSided: dir.pOneSided(ply),
+        debt: dir.debt,
+        debtCap: dir.debtCap,
+        favor: dir.favor,
+      };
+    },
+    forecast: (opts = {}) => {
+      const duel = app.duel;
+      if (!duel || !duel.board) return null;
+      const free = countFreeSquares(duel.fen(), duel.files, duel.ranks);
+      return duel.director.forecast(duel.ply, { freeSquares: free, ...opts });
+    },
+    census: () => computeGodsCensus(),
+    tune: (partial) => app.duel?.tuneDirector(partial) ?? null,
+    export: () => godsExportData(),
+  },
   ready: null,
   openArenaById: (id) => {
     const a = app.arenas.find((x) => x.id === id);
@@ -1052,7 +1554,7 @@ window.__DCK = {
     return legal[Math.floor(Math.random() * legal.length)];
   },
   playerMove: async (uci) => {
-    await cancelCheatSearch();
+    await cancelIdleProbes();
     const r = await app.duel.playerMove(uci);
     if (!r.ended) await driveTurn();
     return app.duel.state;
@@ -1067,5 +1569,6 @@ window.__DCK = {
 };
 
 loadOptions();
+if (params.get('godsdebug')) options.godsDebug = true; // E2E/dev override (not persisted until the user touches options)
 syncOptionsUI();
 window.__DCK.ready = boot();
