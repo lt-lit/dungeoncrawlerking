@@ -56,9 +56,10 @@ for (const g of games) {
   }
 
   const director =
-    g.arm === 'meter'
+    g.arm !== 'baseline'
       ? new MeterDirector({ ...g.directorConfig, meter: g.meterConfig })
       : new Director(g.directorConfig);
+  const evOpts = { netMode: g.meterConfig?.netMode ?? null, files: filesN, ranks };
   const posLog = new PositionLog();
   posLog.record(g.startFen);
   let board = new ffish.Board(vName, g.startFen);
@@ -67,9 +68,9 @@ for (const g of games) {
   for (let i = 0; i < g.moves.length; i++) {
     board.push(g.moves[i]);
     const ply = i + 1;
-    const ev = moveEvents(prevFen, g.moves[i], board);
+    const ev = moveEvents(prevFen, g.moves[i], board, evOpts);
     ev.repetition = posLog.record(board.fen()) >= 2;
-    if (g.arm === 'meter') director.observePly(ev);
+    if (g.arm !== 'baseline') director.observePly(ev);
     prevFen = board.fen();
     if (board.numberLegalMoves() === 0) break; // game over — no quake phase
     const bf = board.fen().split(' ')[0];

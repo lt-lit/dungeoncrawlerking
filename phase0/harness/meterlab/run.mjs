@@ -45,12 +45,31 @@ import { makeDuelVariantIni } from '../../../play/js/variant.mjs';
 import { loadArena, buildStartFen, playerSlotSquares, defaultPawnSquares } from '../../../play/js/arena.mjs';
 import { parseSquare } from '../../../play/js/fen.mjs';
 import { MeterDirector, RestlessnessMeter, PositionLog, moveEvents, METER_DEFAULTS } from './meter.mjs';
+import { mulberry32, childSeed } from '../../../play/js/prng.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARENA_DIR = path.resolve(HERE, '../../../play/arenas');
 
 // The sweep-validated live baseline (play/js/main.mjs GOD_PRESETS.restless).
 const RESTLESS = { onsetPly: 8, quakeRamp: 60, crumbleRamp: 100, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 };
+
+// Arm name → meter config override (see meter.mjs VARIANT KNOBS). null =
+// stock Director ('baseline'); everything else runs MeterDirector with v0
+// defaults plus exactly ONE knob turned, so cross-arm deltas attribute
+// cleanly. 'meter' is v0 itself (the first corpus's arm, kept as control).
+const ARM_METER = {
+  baseline: null,
+  meter: {},
+  hold: { holdInCheck: true },
+  drain: { sateMode: 'reset' },
+  decay: { sateMode: 'decay' },
+  'net-presence': { netMode: 'presence' },
+  'net-approach': { netMode: 'approach' },
+  'crumble-integral': { crumbleIntegral: 100 },
+  fast: { rampPlies: 10 },
+  slow: { rampPlies: 24 },
+  threshold: { thresholdM: 8, rampPlies: 4 },
+};
 const EVAL_PROBE_GO = 'depth 12 movetime 300'; // mirror of the 1.2 instrument
 const EVAL_PROBE_TIMEOUT = 4300;
 const GAME_WALL_CLOCK_MS = 15 * 60 * 1000; // lab backstop, not a game rule
@@ -62,9 +81,17 @@ function arg(name, dflt) {
 }
 
 const ARMS = arg('arms', 'baseline,meter').split(',').map((s) => s.trim()).filter(Boolean);
+for (const a of ARMS) {
+  if (!(a in ARM_METER)) {
+    console.error(`unknown arm "${a}" — valid: ${Object.keys(ARM_METER).join(', ')}`);
+    process.exit(1);
+  }
+}
 const SEEDS = parseInt(arg('seeds', '6'), 10);
 const SEED_BASE = parseInt(arg('seed-base', '9000'), 10);
-const ARENA_FILTER = arg('arenas', '');
+// Comma-separated id substrings (match ANY); empty = all.
+const ARENA_FILTERS = arg('arenas', '').split(',').map((s) => s.trim()).filter(Boolean);
+const matchesFilter = (id) => !ARENA_FILTERS.length || ARENA_FILTERS.some((f) => id.includes(f));
 const GO = arg('go', 'depth 22 movetime 500'); // the shipped duel search (rule 11 cap)
 // The favored side (the "player" seat) searches SHALLOW by default: two
 // full-strength engines convert the §7 material edge in ~20 plies and the
@@ -74,8 +101,17 @@ const GO = arg('go', 'depth 22 movetime 500'); // the shipped duel search (rule 
 // keep the §7 "two blunders from losing" frame honest). Pass
 // --player-go "" to run both seats at full strength.
 const PLAYER_GO = arg('player-go', 'depth 5 movetime 120');
+// Seat model for the favored side:
+//   depth   — engineMove() at PLAYER_GO (uniformly mediocre; the v1 proxy)
+//   multipv — our own MultiPV-3 search at PLAYER_GO, then a SEEDED weighted
+//             pick among near-best moves with an occasional blunder window —
+//             mostly-good moves + rare lapses, i.e. a human-shaped error
+//             model instead of a uniformly shallow one. Moves are recorded,
+//             so replay is unaffected by the seat's RNG.
+const PLAYER_MODEL = arg('player-model', 'depth');
 const OUT_DIR = path.resolve(HERE, '../..', arg('out', 'results/meterlab'));
 const TAG = arg('tag', '');
+const STAGE_FILE = arg('stage-file', ''); // JSON stage set (gen-stages.mjs) instead of play/arenas
 
 const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, k: 0, p: 1 };
 
@@ -102,9 +138,24 @@ function defaultPlacement(arena) {
 }
 
 function loadArenas() {
+  if (STAGE_FILE) {
+    const { stages } = JSON.parse(fs.readFileSync(path.resolve(STAGE_FILE), 'utf8'));
+    return stages
+      .filter((s) => matchesFilter(s.id))
+      .map((s) => ({
+        id: s.id,
+        variantName: `duel_${s.files}x${s.ranks}`,
+        files: s.files,
+        ranks: s.ranks,
+        startFen: s.startFen,
+        playerColor: s.playerColor,
+        meta: s.meta ?? null,
+        ini: makeDuelVariantIni({ name: `duel_${s.files}x${s.ranks}`, files: s.files, ranks: s.ranks }),
+      }));
+  }
   const files = fs
     .readdirSync(ARENA_DIR)
-    .filter((f) => f.endsWith('.json') && f.includes(ARENA_FILTER))
+    .filter((f) => f.endsWith('.json') && matchesFilter(f))
     .sort();
   return files.map((f) => {
     const arena = loadArena(JSON.parse(fs.readFileSync(path.join(ARENA_DIR, f), 'utf8')));
@@ -131,6 +182,41 @@ async function freshEngine(catalogIni) {
   return engine;
 }
 
+/** Last (deepest) info line per multipv rank → [{rank, move, score}]. */
+function parseMultiPvMoves(infoLines) {
+  const byRank = new Map();
+  for (const l of infoLines) {
+    const m = l.match(/multipv (\d+).*?score (cp|mate) (-?\d+).*? pv (\S+)/);
+    if (m) byRank.set(parseInt(m[1], 10), { rank: parseInt(m[1], 10), move: m[4], score: { type: m[2], value: parseInt(m[3], 10) } });
+  }
+  return [...byRank.values()].sort((a, b) => a.rank - b.rank);
+}
+
+const scoreNum = (s) => (s.type === 'mate' ? (s.value > 0 ? 1e6 - s.value : -1e6 - s.value) : s.value);
+
+/** Human-shaped seat pick (mover POV): mostly the best move, sometimes a
+ *  near-best alternative, rarely (8%) anything within a 500cp blunder
+ *  window. Seeded — but the pick lands in record.moves, so replay never
+ *  re-rolls it. */
+function pickHumanMove(cands, rng) {
+  const best = Math.max(...cands.map((c) => scoreNum(c.score)));
+  const loss = (c) => best - scoreNum(c.score);
+  if (rng() < 0.08) {
+    const pool = cands.filter((c) => loss(c) <= 500);
+    return pool[Math.floor(rng() * pool.length)].move;
+  }
+  const pool = cands.filter((c) => loss(c) <= 150);
+  const weights = [0.7, 0.2, 0.1];
+  const w = pool.map((c, i) => weights[Math.min(i, weights.length - 1)]);
+  const total = w.reduce((a, b) => a + b, 0);
+  let roll = rng() * total;
+  for (let i = 0; i < pool.length; i++) {
+    roll -= w[i];
+    if (roll <= 0) return pool[i].move;
+  }
+  return pool[pool.length - 1].move;
+}
+
 /** One WHITE-POV eval of a bare FEN — mirror of play/js/main.mjs probeEval. */
 async function probeEval(engine, fen) {
   engine.position({ fen });
@@ -143,13 +229,16 @@ async function probeEval(engine, fen) {
 /** Play one duel; returns { line, engine } (engine may have been recycled). */
 async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
   const directorConfig = { ...RESTLESS, seed };
-  const meter = new RestlessnessMeter(); // active (meter arm) or passive observer (baseline)
+  const meterCfg = ARM_METER[arm]; // null = stock Director (baseline arm)
+  const meter = new RestlessnessMeter(meterCfg ?? {}); // active (meter arms) or passive observer (baseline)
+  const evOpts = { netMode: meter.netMode, files: arena.files, ranks: arena.ranks };
   const posLog = new PositionLog();
   const plyEvents = []; // compact per-ply event string: c/k/a/o/r
   const meterTrail = []; // meter VALUE after each completed ply
   let prevFen = arena.startFen;
   const t0 = Date.now();
 
+  const seatRng = mulberry32(childSeed(seed, 'seat')); // multipv seat picks only
   const duel = new DuelController({
     ffish,
     engine,
@@ -161,12 +250,12 @@ async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
     go: GO,
     hooks: {
       onMove({ uci }) {
-        const ev = moveEvents(prevFen, uci, duel.board);
+        const ev = moveEvents(prevFen, uci, duel.board, evOpts);
         ev.repetition = posLog.record(duel.board.fen()) >= 2;
-        const v = arm === 'meter' ? duel.director.observePly(ev) : meter.observe(ev);
+        const v = arm !== 'baseline' ? duel.director.observePly(ev) : meter.observe(ev);
         meterTrail.push(v);
         plyEvents.push(
-          (ev.capture ? 'c' : '') + (ev.check ? 'k' : '') + (ev.pawnAdvance ? 'a' : '') + (ev.promotion ? 'o' : '') + (ev.repetition ? 'r' : '')
+          (ev.capture ? 'c' : '') + (ev.check ? 'k' : '') + (ev.pawnAdvance ? 'a' : '') + (ev.promotion ? 'o' : '') + (ev.repetition ? 'r' : '') + (ev.netProgress ? 'n' : '')
         );
         prevFen = duel.board.fen();
       },
@@ -182,7 +271,7 @@ async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
       },
     },
   });
-  if (arm === 'meter') duel.director = new MeterDirector({ ...directorConfig, meter: {} });
+  if (arm !== 'baseline') duel.director = new MeterDirector({ ...directorConfig, meter: meterCfg });
   posLog.record(arena.startFen);
 
   await duel.start();
@@ -197,11 +286,32 @@ async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
     // enemy's depth-22 lines and the handicap evaporates.
     const playerSeat = PLAYER_GO && duel.turnColor() === arena.playerColor;
     if (playerSeat) duel.engine.send('setoption name Clear Hash');
+    if (playerSeat && PLAYER_MODEL === 'multipv') {
+      // Human-shaped seat: our own MultiPV search on the idle engine, then a
+      // seeded near-best pick played through the duel's own playerMove path.
+      duel.engine.setoption('MultiPV', '3');
+      duel.engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
+      const mt = PLAYER_GO.match(/movetime (\d+)/);
+      let res;
+      try {
+        res = await duel.engine.go(PLAYER_GO, { timeout: mt ? parseInt(mt[1], 10) + 4000 : 30000 });
+      } finally {
+        duel.engine.setoption('MultiPV', '1');
+      }
+      const legal = duel.legalMoves();
+      const cands = parseMultiPvMoves(res.infoLines).filter((c) => legal.includes(c.move));
+      if (cands.length) {
+        const r = await duel.playerMove(pickHumanMove(cands, seatRng));
+        if (r.ended) break;
+        continue;
+      }
+      // no usable pv (rare) — fall through to the plain engine seat
+    }
     duel.go = playerSeat ? PLAYER_GO : GO;
     const r = await duel.engineMove();
     if (r.ended) break;
   }
-  const activeMeter = arm === 'meter' ? duel.director.meter : meter;
+  const activeMeter = arm !== 'baseline' ? duel.director.meter : meter;
 
   // Per-ply quake-phase outcome tally from the full trace stream (traces are
   // re-derivable from seed+moves, so the corpus keeps only the digest).
@@ -231,7 +341,7 @@ async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
       evalAfter: null,
     };
     if (digest.meterV !== null) {
-      digest.meterP = Math.min(1, Math.max(Math.min(1, digest.meterV / activeMeter.rampPlies), activeMeter.floor(q.ply)));
+      digest.meterP = Math.min(1, Math.max(activeMeter.pOf(digest.meterV), activeMeter.floor(q.ply)));
     }
     try {
       const b = new ffish.Board(arena.variantName, q.preFen);
@@ -269,6 +379,8 @@ async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
     seed,
     go: GO,
     playerGo: PLAYER_GO || null,
+    playerModel: PLAYER_MODEL,
+    stageMeta: arena.meta ?? null,
     directorConfig,
     meterConfig: activeMeter.config0,
     result: duel.record.result,
@@ -293,7 +405,7 @@ async function playOne({ ffish, engine, catalogIni, arena, arm, seed }) {
 
 const arenas = loadArenas();
 if (!arenas.length) {
-  console.error(`no arenas match filter "${ARENA_FILTER}"`);
+  console.error(`no arenas match filter "${ARENA_FILTERS.join(',')}"`);
   process.exit(1);
 }
 const catalogIni = [...new Map(arenas.map((a) => [a.variantName, a.ini])).values()].join('\n');

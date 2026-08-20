@@ -119,7 +119,8 @@ for (const [arm, gs] of Object.entries(byArm)) {
   if (arm !== 'baseline') {
     const floorBound = quakes.filter(({ g, q }) => {
       const mc = g.meterConfig;
-      const meterOnly = Math.min(1, (q.meterV ?? 0) / mc.rampPlies);
+      const t = mc.thresholdM ?? 0;
+      const meterOnly = (q.meterV ?? 0) < t ? 0 : Math.min(1, ((q.meterV ?? 0) - t) / mc.rampPlies);
       const floor = Math.min(1, Math.max(0, (q.ply - mc.floorOnsetPly) / mc.floorRampPlies));
       return floor > meterOnly;
     });
@@ -141,10 +142,44 @@ for (const [arm, gs] of Object.entries(byArm)) {
   const harmfulHot = harmful.filter(({ g, q }) => q.preCheck === true || hotRecent(g, q.ply));
   const harmfulInCheck = harmful.filter(({ q }) => q.preCheck === true);
   const harmfulMeterQuiet = harmful.filter(({ q }) => q.meterP !== null && q.meterP < 0.25);
-  console.log(`HARMFUL (mate-lost/mate-delayed/sign-flip): ${harmful.length}/${probed.length} (${pct(harmful.length, probed.length)})`);
+  console.log(`HARMFUL (mate-lost/mate-delayed/sign-flip): ${harmful.length}/${probed.length} (${pct(harmful.length, probed.length)}) — ${(harmful.length / gs.length).toFixed(2)}/game`);
   console.log(`  … of which on HOT boards: ${harmfulHot.length}/${harmful.length} (${pct(harmfulHot.length, harmful.length)})`);
   console.log(`  … of which side-to-move in check: ${harmfulInCheck.length}/${harmful.length} (${pct(harmfulInCheck.length, harmful.length)})`);
   console.log(`  … of which on METER-QUIET plies (a meter trigger would rarely roll): ${harmfulMeterQuiet.length}/${harmful.length} (${pct(harmfulMeterQuiet.length, harmful.length)})`);
+
+  // --- stage-geometry breakdown (varied stage set only) ---
+  const staged = gs.filter((g) => g.stageMeta);
+  if (staged.length) {
+    const wallBucket = (m) => (m.walls === 0 ? 'walls 0' : m.walls <= 6 ? 'walls 1-6' : 'walls 7+');
+    const groupings = [
+      ['by walls', (m) => wallBucket(m)],
+      ['by dims', (m) => m.dims],
+    ];
+    console.log(`\nstage-geometry breakdown (${staged.length} varied-stage games):`);
+    for (const [label, keyOf] of groupings) {
+      const rows = {};
+      for (const g of staged) {
+        const r = (rows[keyOf(g.stageMeta)] ??= { games: 0, fails: 0, quakes: 0, probed: 0, harm: 0, plies: [] });
+        r.games++;
+        if (g.error) r.fails++;
+        r.plies.push(g.plies);
+        for (const q of g.quakes) {
+          r.quakes++;
+          if (q.evalBefore && q.evalAfter) {
+            r.probed++;
+            if (HARMFUL.has(classify(q.evalBefore, q.evalAfter))) r.harm++;
+          }
+        }
+      }
+      console.log(`  ${label}:`);
+      for (const [k, r] of Object.entries(rows).sort()) {
+        console.log(
+          `    ${k}: ${r.games} games · plies med ${median(r.plies)} · quakes/game ${(r.quakes / r.games).toFixed(1)} · ` +
+            `harmful ${r.harm}/${r.probed} (${pct(r.harm, r.probed)})${r.fails ? ` · TERM FAILURES ${r.fails}` : ''}`
+        );
+      }
+    }
+  }
 
   // sample worst offenders for the findings doc
   const worst = harmful
