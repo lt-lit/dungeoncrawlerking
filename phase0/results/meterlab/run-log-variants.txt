@@ -1,0 +1,19 @@
+=== hold arena01 22:47:55 ===
+meter lab: arms=[hold] seeds=12 arenas=[arena01-first-duel] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120,"sateMode":"sub","decayFactor":0.4,"thresholdM":0,"netMode":null,"holdInCheck":false,"crumbleIntegral":0}
+[hold] arena01-first-duel seed 9000: 1-0 white checkmate in 33 plies · 4 quakes (4 probed) · fellThrough 0 · 5.3s
+[hold] arena01-first-duel seed 9001: 1-0 white checkmate in 43 plies · 1 quakes (1 probed) · fellThrough 0 · 3.3s
+[hold] arena01-first-duel seed 9002: 1-0 white checkmate in 29 plies · 1 quakes (1 probed) · fellThrough 0 · 3.0s
+[hold] arena01-first-duel seed 9003: 1-0 white checkmate in 45 plies · 4 quakes (4 probed) · fellThrough 0 · 4.5s
+[hold] arena01-first-duel seed 9004: 0-1 black army-extinct in 110 plies · 23 quakes (23 probed) · fellThrough 0 · 8.9s
+[hold] arena01-first-duel seed 9005: 1-0 white stalemate in 37 plies · 3 quakes (3 probed) · fellThrough 0 · 4.9s
+[hold] arena01-first-duel seed 9006: 1-0 white checkmate in 43 plies · 3 quakes (3 probed) · fellThrough 1 · 4.8s
+[hold] arena01-first-duel seed 9007: 1-0 white checkmate in 25 plies · 1 quakes (1 probed) · fellThrough 0 · 1.9s
+[hold] arena01-first-duel seed 9008: 0-1 black checkmate in 40 plies · 1 quakes (1 probed) · fellThrough 0 · 2.7s
+[hold] arena01-first-duel seed 9009: 1-0 white checkmate in 23 plies · 2 quakes (2 probed) · fellThrough 0 · 2.9s
+[hold] arena01-first-duel seed 9010: 1-0 white army-extinct in 83 plies · 4 quakes (4 probed) · fellThrough 0 · 7.3s
+[hold] arena01-first-duel seed 9011: 1-0 white checkmate in 33 plies · 2 quakes (2 probed) · fellThrough 0 · 3.2s
+arm hold → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-hold-a01.jsonl
+done
+=== hold arena02 22:48:50 ===
+=== hold a02 23:01:22 ===
