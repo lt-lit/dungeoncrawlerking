@@ -1,6 +1,15 @@
 # Meter lab — Phase 1.3 evidence pass (restlessness-meter trigger vs the ply ramp)
 
-**Status: DRAFT — corpus running, numbers landing below.**
+**Status: COMPLETE.** 96 games (12 seeds × 4 arenas × 2 arms), zero
+termination failures, 96/96 replay-verified engine-free (`replay.mjs`).
+
+**Verdict in one line: the meter shape works.** Same seeds, same arenas,
+same search: the meter arm cut per-game god-inflicted harm by ~55% (3.27 →
+1.48 harmful quakes/game), cut in-check quake firing from 11.1% to 2.9%,
+and games got slightly SHORTER (median 45 → 43 plies, q3 59 → 52; checkmate
+share up 17 → 23 of 48) with the backstop floor never once needed. The
+residual harm that remains is the OTHER half of Phase 1.3 — the filter
+stack's loosening bias — and it is now cleanly quantified.
 
 ## Why this exists
 
@@ -78,31 +87,105 @@ keeps every game clean).
 
 ### A — Harm: where do restless quakes land, and what do they cost?
 
-*(baseline arm; "hot" = side to move in check, or a capture/check/promotion
-within the last 3 plies; eval classes from the white-POV referee — HARMFUL =
-mate-lost / mate-delayed / sign-flip)*
+*(baseline arm, 48 games, 677 quakes, 674 probed; "hot" = side to move in
+check, or a capture/check/promotion within the last 3 plies; HARMFUL =
+mate-lost / mate-delayed / sign-flip, white-POV referee)*
 
-TBD
+- **11.1%** of fired quakes landed with the side to move **in check** — and
+  under the inverted postcondition filters every one of those is a rescue by
+  construction. **46.7%** landed on hot boards.
+- Referee classes: benign 46.4% · **mate-lost 10.5%** · **mate-delayed
+  11.6%** · sign-flip 1.2% · mate-accelerated 11.0% · mate-created 9.5% ·
+  big-swing 9.8%. Read that middle column again: **more than half of all
+  quakes perturb a mate score or swing the eval** — "cosmetic" is a minority
+  outcome under `restless` in this regime.
+- **HARMFUL: 23.3% of all quakes — 3.27 per game.** The live-play report is
+  confirmed at scale and it is not an edge case: `M10→969cp`, `M9→1584cp`,
+  `M5→953cp` (that one fired DURING a check), an `M4→M7` delay at ply 20…
+  the gods un-mate roughly every fourth stir.
+- Note `mate-created` at 9.5%: the same dice also hand mates OUT. The
+  Director is not "pro-defender" so much as **pro-entropy against whichever
+  structure exists** — which near a decided game is usually the attacker's,
+  but the flip side is just as god-decided.
 
 ### B — Counterfactual timing: would the meter have rolled at all?
 
 *(baseline arm; every quake stamped with the passive meter's P at that ply;
-"meter-quiet" = meterP < 0.25 — plies where a meter trigger would rarely
+"meter-quiet" = meterP < 0.25, plies where a meter trigger would rarely
 fire)*
 
-TBD
+- **49.3%** of all baseline quakes fired on meter-quiet plies — half of the
+  gods' activity lands where a boredom-driven trigger would mostly hold.
+- Among the HARMFUL quakes it is **58.6%** — harm concentrates in exactly
+  the (hot, forcing, conversion-in-progress) stretches the meter naturally
+  sits out. A timing fix alone plausibly removes the majority of observed
+  harm, before any filter work.
+- The remaining ~41% of harm sits on plies where the meter was genuinely
+  climbing (meterP 0.3–0.6 in the samples): slow grindy conversions where
+  the board LOOKS stale to any boredom metric but a mate is quietly being
+  assembled. Timing cannot see those — that is the effect-rules half of 1.3.
 
 ### C — Termination & pacing under the meter arm
 
-*(meter arm vs baseline: every game must terminate; plies distribution;
-termination mix; quake volume and placement; §7 alarm rate; how often the
-backstop floor, not the meter, was the binding trigger)*
+*(meter arm vs baseline, same 12 seeds × 4 arenas)*
 
-TBD
+| metric | baseline (`restless`) | meter v0 |
+|---|---|---|
+| termination failures / MAX_PLIES hits | 0 | **0** |
+| plies q1/med/q3 | 34/45/59 | **33/43/52** |
+| terminations (mate/extinct/stale) | 17/29/2 | **23**/22/3 |
+| player (favored side) wins | 40/48 | 39/48 |
+| quakes per game q1/med/q3 | 7/10.5/20 | **4/6/11** |
+| crumbles (total) | 157 | 103 |
+| fell-through rate | 49 | 29 |
+| quakes fired in check | 11.1% | **2.9%** |
+| quakes on hot boards | 46.7% | **22.5%** |
+| HARMFUL per probed quake | 23.3% | **15.7%** |
+| HARMFUL per game | 3.27 | **1.48** |
+| backstop floor was the binding trigger | n/a | **0.0%** |
+
+- **The pacing worry is refuted.** Fewer quakes did NOT lengthen games —
+  the tail shortened (q3 59 → 52) and checkmate share ROSE. This is the
+  mechanism the harm data predicted: baseline quakes were actively
+  un-mating positions, so removing the mistimed ones speeds games up. The
+  gods were the pacing problem they were built to solve.
+- **Termination held with zero help from the backstop.** The meter alone
+  triggered every quake; debt-forced crumbles kept landing (103 crumbles);
+  no game approached MAX_PLIES. (48 games is not a proof — the floor stays
+  in the design as the guarantee — but v0 dials never needed it.)
+- **God volume redistributes rather than disappearing.** Short clean wins
+  in both arms still see a couple of stirs; long grinds still see ~22
+  (baseline ~25). The meter cuts the mid-game interference during active
+  conversion, which is where the harm lived.
+- Residual in-check firing (2.9%) is **sate lag**: a check lands while the
+  meter is still draining from a quiet stretch (e.g. a harmful sample fired
+  at meterP=0.31 with preCheck=true). An explicit in-check hold or a bigger
+  sate on checks composes cleanly and would zero this line.
 
 ## Reading the results
 
-TBD
+1. **The trigger really was the wrong half.** Same filters, same tiers,
+   same crumble machinery — changing only *when* the gods roll halved the
+   per-game harm and slightly shortened games. The redesign premise
+   ("state-aware timing, not more filter rules") survives its first
+   adversarial contact with data.
+2. **Timing is necessary but not sufficient.** The meter arm still shows
+   15.7% harmful quakes, concentrated in slow conversions the meter
+   correctly reads as stale — several of the worst are CRUMBLES cutting
+   mate nets (`crumble b3: M12→961cp`), which no timing rule can see. That
+   is the quantified case for the effect-rules half of 1.3:
+   check-status/checker-set preservation, and a mate-aware guard on the
+   crumble leg.
+3. **Division of labor for Phase 1.3, in numbers:** meter-style timing
+   removes ~55% of per-game harm; effect rules must own the rest. Neither
+   substitutes for the other.
+4. **De-pairing gets its opening.** One-sided stirs were near-absent in
+   both arms here (4 vs 0) — the asym ramp barely engaged at these game
+   lengths — so this corpus says nothing about removing pairing yet. But
+   with quakes now concentrated on genuinely stale boards, the original
+   one-sided catastrophe measurements (median flip = mate transition, taken
+   across ALL positions) deserve a re-run under meter timing before pairing
+   is kept as canon.
 
 ## Threats to validity
 
