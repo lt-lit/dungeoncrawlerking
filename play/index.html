@@ -37,6 +37,26 @@
       <button id="btnResetPlacement">Reset</button>
     </div>
     <div id="duel-log" class="log"></div>
+    <!-- Phase 1.2: the Gods debug overlay — the Director's tuning instrument.
+         Options → The Gods → Debug overlay (or ?godsdebug=1). -->
+    <div id="gods-debug" hidden>
+      <div class="gods-head">
+        <span class="gods-title">THE GODS &#183; debug</span>
+        <label class="gods-favor">favor
+          <input type="range" id="godsFavor" min="0" max="3" step="0.1" value="1">
+          <span id="godsFavorVal">1.0</span>
+        </label>
+      </div>
+      <div id="gods-summary" class="gods-row"></div>
+      <div id="gods-forecast" class="gods-row"></div>
+      <div class="gods-actions">
+        <button id="btnGodsCensus">census now</button>
+        <button id="btnGodsHeat">heat: off</button>
+        <button id="btnGodsExport">copy trace</button>
+      </div>
+      <div id="gods-census" class="gods-row"></div>
+      <div id="gods-trace" class="log"></div>
+    </div>
   </section>
 </main>
 
@@ -64,7 +84,8 @@
     </div>
     <h2>The Gods</h2>
     <p class="opt-hint">Earthquakes stir the arena as duels run long: pieces scoot,
-      squares collapse. Applies from the next duel.</p>
+      squares collapse. Applies from the next duel &#8212; or live mid-duel while
+      the debug overlay is on.</p>
     <label class="opt">Temperament
       <select id="optGodPreset">
         <option value="calm">Calm</option>
@@ -82,6 +103,7 @@
       <label class="opt sub">One-sided stirs allowed after (ply) <input type="number" id="god_asymOnsetPly" min="1" step="1"></label>
       <label class="opt sub">One-sided patience ramp <input type="number" id="god_asymRamp" min="1" step="1"></label>
     </div>
+    <label class="opt"><input type="checkbox" id="optGodsDebug"> Debug overlay (roll trace, census, forecast)</label>
     <button id="btnOptionsClose" class="primary">Done</button>
   </div>
 </div>

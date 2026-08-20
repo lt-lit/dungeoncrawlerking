@@ -13,7 +13,7 @@ import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { fenGrid } from './director.mjs';
+import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns } from './director.mjs';
 import { captureLoss } from './threat.mjs';
 
 const out = document.getElementById('out');
@@ -212,6 +212,132 @@ async function main() {
       if (got !== want) throw new Error(`${label}: expected ${want}, got ${got}`);
     }
     return `${cases.length} SEE cases (walls block sliders, leapers jump them)`;
+  });
+
+  // --- Phase 1.2: the Gods debug instrument must not perturb what it measures ---
+  // The three rolls share one seeded stream with a STATE-DEPENDENT draw
+  // pattern (no draw before onset, the debt cap skips the crumble roll, the
+  // displacement leg consumes a variable number of picks), so the overlay's
+  // probability getters must be RNG-free and rolls recorded inside quake()
+  // — never by re-rolling (brief §10). These checks are the acceptance
+  // criterion: a seeded duel replays identically with the overlay exercised.
+
+  await check('director probability getters consume zero RNG', () => {
+    const a = new Director({ seed: 42 });
+    for (let ply = 0; ply < 120; ply++) {
+      a.pQuake(ply);
+      a.pCrumble(ply);
+      a.pOneSided(ply);
+    }
+    a.forecast(10, { freeSquares: 20 });
+    const b = new Director({ seed: 42 });
+    for (let i = 0; i < 5; i++) {
+      if (a.rng() !== b.rng()) throw new Error('a getter consumed a draw from the seeded stream');
+    }
+    return 'pQuake/pCrumble/pOneSided/forecast leave the stream untouched';
+  });
+
+  await check('director probability math matches the rolls', () => {
+    const d = new Director({ seed: 1, onsetPly: 8, quakeRamp: 60, crumbleRamp: 100, debtCap: 10 });
+    if (d.pQuake(7) !== 0) throw new Error('pQuake before onset must be 0');
+    if (d.pQuake(68) !== 1) throw new Error('pQuake at onset+ramp must be 1');
+    d.setFavor(0);
+    if (d.pQuake(68) !== 0) throw new Error('favor 0 must silence pQuake');
+    d.setFavor(1);
+    d.debt = 10;
+    if (d.pCrumble(20) !== 1) throw new Error('debt cap must force pCrumble to 1');
+    d.debt = 0;
+    const applied = d.tune({ quakeRamp: 30, bogus: 5 });
+    if (applied.quakeRamp !== 30 || 'bogus' in applied) throw new Error(`tune misapplied: ${JSON.stringify(applied)}`);
+    if (d.pQuake(38) !== 1) throw new Error('tuned quakeRamp not reflected in pQuake');
+    const f = d.forecast(10, { freeSquares: 15 });
+    if (!(f.nextQuake > 10) || !(f.firstCrumble >= f.nextQuake)) throw new Error(`implausible forecast ${JSON.stringify(f)}`);
+    return `tune + getters consistent; forecast ${JSON.stringify(f)}`;
+  });
+
+  // Seeded replay with the instrument hammered between rolls. Uses a small
+  // 5x6 fixture so the whole check stays in the low seconds on a phone.
+  const dirVariant = catalogVariantName(5, 6);
+  const dirFen = '1rk1n/ppp2/2*2/5/1PP2/1KR1N w - - 0 1';
+  const dirCfg = { onsetPly: 2, quakeRamp: 8, crumbleRamp: 30, debtCap: 3, asymOnsetPly: 6, asymRamp: 10 };
+  const quakeSummary = (q) =>
+    q === null
+      ? null
+      : {
+          d: q.displacements.map((x) => `${x.piece}${x.from}${x.to}`),
+          c: q.crumble ? `${q.crumble.square}:${q.crumble.pieceLost ?? '-'}` : null,
+          post: q.postFen,
+          ends: q.endsGame,
+        };
+  const runDirector = (seed, exercise) => {
+    const d = new Director({ ...dirCfg, seed });
+    let fen = dirFen;
+    const out = [];
+    const traces = [];
+    for (let ply = 1; ply <= 14; ply++) {
+      if (exercise) {
+        d.pQuake(ply);
+        d.pCrumble(ply);
+        d.pOneSided(ply);
+        d.forecast(ply, { freeSquares: 10 });
+        if (ply === 6) {
+          displacementCandidates(ffish, dirVariant, fen, 5, 6);
+          crumbleCandidates(ffish, dirVariant, fen, 5, 6);
+          lockedPawns(fen, 5, 6);
+        }
+      }
+      const q = d.quake(ffish, dirVariant, fen, 5, 6, ply);
+      traces.push(d.lastTrace);
+      out.push(quakeSummary(q));
+      if (q && !q.endsGame) fen = q.postFen;
+      if (q && q.endsGame) break;
+    }
+    return { out, traces };
+  };
+
+  let dirTraces = [];
+  let dirEvents = [];
+  await check('seeded quake sequence identical with the overlay exercised', () => {
+    if (ffish.validateFen(dirFen, dirVariant) !== 1) throw new Error('director fixture FEN rejected');
+    for (const seed of [3, 7]) {
+      const plain = runDirector(seed, false);
+      const hammered = runDirector(seed, true);
+      if (JSON.stringify(plain.out) !== JSON.stringify(hammered.out)) {
+        throw new Error(`seed ${seed}: getters/census/forecast perturbed the quake sequence`);
+      }
+      dirTraces = dirTraces.concat(plain.traces);
+      dirEvents = dirEvents.concat(plain.out);
+    }
+    return `2 seeds × 14 plies replay exactly (${dirTraces.length} traces)`;
+  });
+
+  await check('roll trace records every ply with consistent reason codes', () => {
+    if (!dirTraces.length) throw new Error('no traces from the replay check');
+    let quakes = 0;
+    dirTraces.forEach((t, i) => {
+      if (!t) throw new Error(`no trace at index ${i}`);
+      if (!Array.isArray(t.rolls) || !Array.isArray(t.path) || !t.path.length) throw new Error(`ply ${t?.ply}: empty trace`);
+      const ev = dirEvents[i];
+      const want =
+        ev === null
+          ? ['quiet', 'starved']
+          : ev.ends
+            ? ['terminal']
+            : ev.c
+              ? ['crumble']
+              : [ev.d.length === 2 ? 'paired' : 'one-sided'];
+      if (!want.includes(t.outcome)) throw new Error(`ply ${t.ply}: outcome ${t.outcome} disagrees with the event`);
+      const reachedCrumbleLeg = t.path.includes('crumble-neutral') || t.path.includes('crumble-terminal') || t.path.includes('starved');
+      const crumbleWanted = t.path.includes('crumble-forced') || t.path.includes('crumble-roll-passed');
+      if (t.fellThrough !== (reachedCrumbleLeg && !crumbleWanted)) throw new Error(`ply ${t.ply}: fellThrough bookkeeping wrong (${t.path.join(',')})`);
+      if (t.outcome === 'quiet' && t.census !== null) throw new Error(`ply ${t.ply}: quiet ply computed a census`);
+      if (t.outcome !== 'quiet') {
+        if (!t.census || typeof t.census.lockedPawns !== 'number') throw new Error(`ply ${t.ply}: quake trace lacks census`);
+        quakes++;
+      }
+    });
+    if (!quakes) throw new Error('fixture produced no quakes — check the config');
+    return `${dirTraces.length} traces, ${quakes} quakes, outcomes+paths consistent`;
   });
 
   // --- Game-end protocol (rule 4): numberLegalMoves()===0, mover loses ---

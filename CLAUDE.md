@@ -13,15 +13,21 @@ rules) replaced the old crumble system in both the build and brief §4.5.
 Next per brief §10, a three-step Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
-`play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay** (roll trace
-with reason codes, candidate census, RNG-free probability getters, engine
-eval delta per quake — build the instrument BEFORE changing what it
-measures); **Phase 1.3 — redefine "symmetric"** (promote the stopgap to
-"no new winning capture for either side", retune). Then **Phase 1.5 —
-Director calibration** (port `harness/game.mjs` off the retired crumble
-system, add the §6 promotion lint, settle ramp numbers) — gated behind 1.3
-so the sweeps are not burned twice — and finally **Phase 2 — exploration
-slice**.
+`play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay ✅ done**
+(the tuning instrument, built BEFORE 1.3 changes what it measures: roll
+trace with reason codes recorded INSIDE `quake()` incl. the fall-through
+path, candidate census + board heat, RNG-free probability getters +
+nominal forecast, live ramp dials, eval delta per quake — see
+`play/README.md` § "The Gods debug overlay"; `play/selftest.html` asserts
+a seeded quake sequence replays identically with the overlay exercised);
+**Phase 1.3 — redefine "symmetric"** (promote the stopgap to
+"no new winning capture for either side", retune — the 1.2 instrument
+supplies the evidence: eval-delta flips decide whether SEE suffices,
+`rejected.unsafe_landing` counts starvation risk, fall-through rates show
+the crumble-rate shift). Then **Phase 1.5 — Director calibration** (port
+`harness/game.mjs` off the retired crumble system, add the §6 promotion
+lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
+twice — and finally **Phase 2 — exploration slice**.
 
 ## Layout
 
