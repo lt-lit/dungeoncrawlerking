@@ -27,7 +27,7 @@ const pass = (name) => console.log(`PASS: ${name}`);
 const openStage = (files, ranks, id = `open-${files}x${ranks}`) =>
   loadStageV2({ schema: 2, id, map: Array.from({ length: ranks }, () => '.'.repeat(files)) });
 
-/** Invariants on one side's layout. */
+/** Invariants on one side's layout (molding v2: dense, per-file screen). */
 function checkSide(name, army, layout, side, ranks) {
   const rows = (c) => (side === 'white' ? c.r : ranks - 1 - c.r); // depth from home edge
   const backs = layout.cells.filter((c) => c.piece !== 'P');
@@ -40,11 +40,24 @@ function checkSide(name, army, layout, side, ranks) {
     const rearmost = Math.min(...layout.cells.map(rows));
     check(`${name}: royal in rearmost occupied row`, rows(royal[0]) === rearmost,
       `royal depth ${rows(royal[0])}, rearmost ${rearmost}`);
+    check(`${name}: no pawn in the royal's row`, pawns.every((c) => rows(c) !== rows(royal[0])));
   }
-  const maxBack = Math.max(...backs.map(rows));
-  const minPawn = Math.min(...pawns.map(rows));
-  check(`${name}: pawns strictly forward of all non-pawns`, minPawn > maxBack,
-    `deepest-forward back at ${maxBack}, rearmost pawn at ${minPawn}`);
+  // per-file screen: within each file, every non-pawn sits behind every pawn
+  const byFile = new Map();
+  for (const c of layout.cells) {
+    if (!byFile.has(c.f)) byFile.set(c.f, []);
+    byFile.get(c.f).push(c);
+  }
+  for (const [f, cs] of byFile) {
+    const b = cs.filter((c) => c.piece !== 'P').map(rows);
+    const p = cs.filter((c) => c.piece === 'P').map(rows);
+    if (b.length && p.length) {
+      check(`${name}: file ${String.fromCharCode(97 + f)} screen order`, Math.max(...b) < Math.min(...p),
+        `back depths ${b}, pawn depths ${p}`);
+    }
+  }
+  // dense: no empty usable cell strictly behind an occupied cell in the same file
+  // (holes inside the formation were the v1 bug — cheap proxy: cell count fits depth)
 }
 
 // ---- 1. composition ----
@@ -88,6 +101,26 @@ function checkSide(name, army, layout, side, ranks) {
     if (l) checkSide(`squeezed 8x2 ${side}`, army, l, side, 10);
   }
   pass('squeeze');
+}
+
+// ---- 3b. mixed rows: 8x2 army on a 6-wide window (the v1 hollow-row case) ----
+{
+  const stage = openStage(6, 10, 'hall-6');
+  const army = makeArmy({ width: 8, pieces: ['Q', 'Q', 'R', 'B', 'B', 'N', 'N'] });
+  const l = layoutArmy({ grid: stage.grid, files: 6, ranks: 10, side: 'white', army, maxDepth: 7 });
+  check('8x2 on 6-wide is depth 3 (dense, was 4 with holes)', l && l.depthRows === 3, l && String(l.depthRows));
+  if (l) {
+    checkSide('mixed-row 8x2', army, l, 'white', 10);
+    const row1 = l.cells.filter((c) => c.r === 1);
+    check('overflow row mixes pieces and pawns (no holes)', row1.length === 6 && row1.some((c) => c.piece === 'P') && row1.some((c) => c.piece !== 'P'),
+      `row1 has ${row1.length} cells`);
+    const row2 = l.cells.filter((c) => c.r === 2);
+    const row2Files = row2.map((c) => c.f).sort((a, b) => a - b).join(',');
+    check('front partial row: spare pawns on coverage files (c,d) + outer flanks (a,f)',
+      row2.length === 4 && row2.every((c) => c.piece === 'P') && row2Files === '0,2,3,5',
+      `files [${row2Files}]`);
+  }
+  pass('mixed rows');
 }
 
 // ---- 4. wall pocket in the deployment zone (molding showcase) ----

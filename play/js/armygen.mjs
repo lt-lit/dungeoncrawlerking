@@ -114,6 +114,14 @@ function centerOut(start, w) {
   );
 }
 
+/** Outer-first ordering (edges of the window inward) — stable, left-first ties. */
+function outerFirst(start, w) {
+  const mid = start + (w - 1) / 2;
+  return Array.from({ length: w }, (_, i) => start + i).sort(
+    (a, b) => Math.abs(b - mid) - Math.abs(a - mid) || a - b
+  );
+}
+
 /**
  * Mold one army onto terrain. Pure and seeded.
  *
@@ -128,9 +136,25 @@ function centerOut(start, w) {
  * }
  * Returns { cells: [{f, r, piece}], depthRows, extent, violations } or null
  * ("doesn't fit"). `extent` = the last occupied row index measured from the
- * side's home edge (gap math). Fill order IS the invariant proof: royal
- * first (lands in the rearmost row that has any usable cell), non-pawns
- * fill from the back, pawns start strictly after the last non-pawn row.
+ * side's home edge (gap math).
+ *
+ * MOLDING v2 — dense packing (designer-corrected: rows MIX; the v1 strict
+ * row separation hollowed formations whenever the back row overflowed).
+ * One back-to-front cell cursor; non-pawns favor BACK rows + CENTER
+ * columns, pawns take the very next cell onward — same row allowed —
+ * favoring OUTER columns, with pawn-coverage priority above the outer
+ * preference (files holding a still-unscreened piece get pawns first;
+ * designer: "generally at least one pawn in front of each non-pawn").
+ * The partial last row therefore lands at the FRONT and its spares sit on
+ * the flanks.
+ *
+ * The fill order IS the invariant proof: every piece cell precedes every
+ * pawn cell in a back-to-front walk, so within any single file pieces sit
+ * strictly behind pawns (walls skip cells but never reorder); the royal is
+ * placed first, taking the rearmost usable row, center-most cell; and the
+ * royal's row can never hold a pawn (the window is at most `width` files,
+ * the army has exactly `width` non-pawns, so pieces always consume the
+ * entire rearmost row before pawns begin).
  */
 export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', archetype = 'heavies-deep', rng = mulberry32(1), maxDepth }) {
   const w = Math.min(army.width, files);
@@ -140,7 +164,7 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     : anchor === 'right' ? files - w
     : Math.max(0, Math.min(files - w, anchor | 0));
   const rowRank = (i) => (side === 'white' ? i : ranks - 1 - i);
-  const usable = (i) => centerOut(start, w).filter((f) => grid[rowRank(i)][f] !== '*');
+  const open = (i, f) => grid[rowRank(i)][f] !== '*';
   const depthCap = Math.min(maxDepth ?? ranks, ranks);
 
   // Back units, royal first; the archetype orders the rest (first-placed
@@ -154,37 +178,36 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
   const backUnits = [army.royal, ...rest];
 
   const cells = [];
-  let row = 0;
-  let unit = 0;
-  while (unit < backUnits.length) {
-    if (row >= depthCap) return null; // doesn't fit
-    for (const f of usable(row)) {
-      if (unit >= backUnits.length) break;
-      cells.push({ f, r: rowRank(row), piece: backUnits[unit++] });
-    }
-    row++;
-  }
-  const lastBackRow = row - 1;
-
-  // Pawns: strictly forward of every non-pawn row. Coverage preference:
-  // within each row, files holding a still-uncovered piece come first.
-  const pieceFiles = new Set(cells.map((c) => c.f));
+  const pieceFiles = new Set();
   const covered = new Set();
+  let unit = 0;
   let pawns = 0;
-  row = lastBackRow + 1;
+  let row = 0;
   while (pawns < army.width) {
     if (row >= depthCap) return null; // doesn't fit
-    const cand = usable(row);
-    cand.sort((a, b) => {
-      const na = pieceFiles.has(a) && !covered.has(a) ? 0 : 1;
-      const nb = pieceFiles.has(b) && !covered.has(b) ? 0 : 1;
-      return na - nb;
-    });
-    for (const f of cand) {
-      if (pawns >= army.width) break;
-      cells.push({ f, r: rowRank(row), piece: 'P' });
-      covered.add(f);
-      pawns++;
+    // Non-pawns first, center-out, until the bag runs dry — then pawns
+    // CONTINUE in the same row: unscreened piece-files first, then outer.
+    const taken = new Set();
+    for (const f of centerOut(start, w)) {
+      if (unit >= backUnits.length) break;
+      if (!open(row, f)) continue;
+      cells.push({ f, r: rowRank(row), piece: backUnits[unit++] });
+      pieceFiles.add(f);
+      taken.add(f);
+    }
+    if (unit >= backUnits.length) {
+      const cand = outerFirst(start, w).filter((f) => open(row, f) && !taken.has(f));
+      cand.sort((a, b) => {
+        const na = pieceFiles.has(a) && !covered.has(a) ? 0 : 1;
+        const nb = pieceFiles.has(b) && !covered.has(b) ? 0 : 1;
+        return na - nb; // coverage outranks the outer preference (stable sort keeps outer order inside each bucket)
+      });
+      for (const f of cand) {
+        if (pawns >= army.width) break;
+        cells.push({ f, r: rowRank(row), piece: 'P' });
+        covered.add(f);
+        pawns++;
+      }
     }
     row++;
   }

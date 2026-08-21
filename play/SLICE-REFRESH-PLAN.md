@@ -129,13 +129,20 @@ All 12 stages in `play/stages/` are stamped as viable test arenas
 (s01-the-closet … s12-rat-warren; gallery `play/stages-gallery.html`).
 Two follow-ups from the same review, in order:
 
-1. **Molding v2 first**: the strict "pawn rows strictly after all piece
-   rows" rule was an over-derivation, NOT the designer's intent — it
-   hollows out the formation whenever the back row overflows mid-row
-   (giant empty cells inside the army). Redefinition: pack DENSELY;
-   pawns and pieces may share rows; "pawns in front" is a PER-FILE screen
-   (within each file, every pawn of an army sits forward of every non-pawn
-   of that army). Royal-rearmost unchanged.
+1. **Molding v2 — SHIPPED**: the strict "pawn rows strictly after all
+   piece rows" rule was an over-derivation, NOT the designer's intent — it
+   hollowed the formation whenever the back row overflowed mid-row.
+   Now: dense packing, rows mix; "pawns in front" is a PER-FILE screen
+   (within each file, every pawn forward of every non-pawn — held by fill
+   order, asserted per-file in the test bench). Fill preferences
+   (designer-specified): non-pawns favor back rows + center columns;
+   pawns favor front rows + outer columns, with pawn-coverage priority
+   ABOVE the outer preference (unscreened piece-files get pawns first —
+   flip that one line if the designer prefers pure-outer after seeing it).
+   Royal-rearmost unchanged; the royal's row provably never holds a pawn.
+   Set-level wall balance: s03/s05/s12 flipped vertically (the v1 set's
+   clusters skewed toward the top edge — not a reasonable distribution
+   when either side can be the player's).
 2. **Stage wave 2 after molding sign-off**: the v1 set mostly keeps the
    deployment rows clear (only s08 bites into one), which dodges the
    molding-around-terrain question. Wave 2 adds stages with walls
