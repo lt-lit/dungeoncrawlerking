@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "wave": 3,
+  "id": "s27-posterngate",
+  "title": "Posterngate",
+  "notes": "Wave 3. Each back rank is walled except a 2-cell gate at OPPOSITE corners: both royals start cornered, armies mold diagonally. The cornered-royal case.",
+  "map": [
+    "####..",
+    "......",
+    "...#..",
+    "......",
+    "......",
+    "..#...",
+    "......",
+    "..####"
+  ]
+}

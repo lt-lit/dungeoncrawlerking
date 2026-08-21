@@ -1,7 +1,7 @@
 // App spine: boot, arena menu, placement flow (§4.3), duel driving, win/loss.
 //
 // Boot order (CLAUDE.md rules 1/7): ffish + engine init in parallel; the fixed
-// 50-variant catalog is loaded ONCE into both (variant names are single-use);
+// 60-variant catalog is loaded ONCE into both (variant names are single-use);
 // every duel thereafter varies only via FEN. One engine instance serves the
 // whole page session (fresh ffish Board + `ucinewgame` per duel; a page
 // reload is the recycle path — a session never approaches the ~40-game WASM
@@ -828,7 +828,7 @@ async function boot() {
     app.catalog = catalog;
     ffish.loadVariantConfig(catalog);
     await engine.loadVariantsIni(catalog);
-    log(bootLog, 'engine + rules ready (50-variant catalog loaded)', 'ok');
+    log(bootLog, 'engine + rules ready (60-variant catalog loaded)', 'ok');
   } catch (e) {
     setStatus('boot failed');
     log(bootLog, 'BOOT FAILED: ' + (e && e.message ? e.message : e), 'bad');

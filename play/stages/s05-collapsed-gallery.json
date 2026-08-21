@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "id": "s05-collapsed-gallery",
+  "title": "Collapsed Gallery",
+  "notes": "Rubble clump on the left flank mid-board; right flank fully open. Flank-choice terrain.",
+  "map": [
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "..#....",
+    ".###...",
+    ".##....",
+    ".......",
+    "......."
+  ]
+}

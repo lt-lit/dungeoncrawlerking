@@ -1,0 +1,18 @@
+{
+  "schema": 2,
+  "id": "s10-broken-crossing",
+  "title": "Broken Crossing",
+  "notes": "Two broken wall arms leave three routes of different widths. Route-choice terrain at mid scale.",
+  "map": [
+    "........",
+    "........",
+    "...#....",
+    ".###....",
+    "........",
+    "....###.",
+    "....#...",
+    "........",
+    "........",
+    "........"
+  ]
+}

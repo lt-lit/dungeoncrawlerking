@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "id": "s07-twin-chambers",
+  "title": "Twin Chambers",
+  "notes": "Partial spine splits the board into two rooms connected top and bottom. Two-theater duels; rook files die at the spine.",
+  "map": [
+    "........",
+    "........",
+    "...##...",
+    "...#....",
+    "...#....",
+    "...##...",
+    "........",
+    "........"
+  ]
+}

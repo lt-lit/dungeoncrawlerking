@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "id": "s06-the-doorway",
+  "title": "The Doorway",
+  "notes": "A wall line with one 2-wide door, off-center. The purest chokepoint: all traffic funnels through files d-e.",
+  "map": [
+    "......",
+    "......",
+    "......",
+    "###..#",
+    "......",
+    "......",
+    "......",
+    "......",
+    "......"
+  ]
+}

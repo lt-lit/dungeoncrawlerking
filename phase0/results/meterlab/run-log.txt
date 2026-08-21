@@ -1,0 +1,144 @@
+=== baseline arena01 18:59:35 ===
+meter lab: arms=[baseline] seeds=12 arenas=[arena01-first-duel] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[baseline] arena01-first-duel seed 9000: 1-0 white checkmate in 43 plies · 10 quakes (10 probed) · fellThrough 1 · 8.9s
+[baseline] arena01-first-duel seed 9001: 1-0 white army-extinct in 27 plies · 3 quakes (3 probed) · fellThrough 1 · 3.1s
+[baseline] arena01-first-duel seed 9002: 1-0 white stalemate in 51 plies · 12 quakes (12 probed) · fellThrough 4 · 25.3s
+[baseline] arena01-first-duel seed 9003: 1-0 white checkmate in 37 plies · 7 quakes (7 probed) · fellThrough 0 · 6.2s
+[baseline] arena01-first-duel seed 9004: 1-0 white checkmate in 49 plies · 11 quakes (11 probed) · fellThrough 1 · 9.8s
+[baseline] arena01-first-duel seed 9005: 1-0 white army-extinct in 49 plies · 14 quakes (14 probed) · fellThrough 1 · 9.4s
+[baseline] arena01-first-duel seed 9006: 1-0 white army-extinct in 35 plies · 9 quakes (9 probed) · fellThrough 1 · 8.3s
+[baseline] arena01-first-duel seed 9007: 1-0 white army-extinct in 35 plies · 9 quakes (9 probed) · fellThrough 1 · 6.3s
+[baseline] arena01-first-duel seed 9008: 1-0 white army-extinct in 33 plies · 2 quakes (2 probed) · fellThrough 0 · 2.5s
+[baseline] arena01-first-duel seed 9009: 0-1 black army-extinct in 72 plies · 34 quakes (34 probed) · fellThrough 2 · 29.9s
+[baseline] arena01-first-duel seed 9010: 1-0 white army-extinct in 61 plies · 19 quakes (19 probed) · fellThrough 1 · 12.0s
+[baseline] arena01-first-duel seed 9011: 1-0 white army-extinct in 31 plies · 4 quakes (4 probed) · fellThrough 0 · 4.8s
+arm baseline → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-baseline-a01.jsonl
+done
+=== baseline arena02 19:01:44 ===
+meter lab: arms=[baseline] seeds=12 arenas=[arena02-ambush] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[baseline] arena02-ambush seed 9000: 0-1 black checkmate in 56 plies · 20 quakes (20 probed) · fellThrough 0 · 25.7s
+[baseline] arena02-ambush seed 9001: 0-1 black checkmate in 72 plies · 31 quakes (31 probed) · fellThrough 2 · 31.8s
+[baseline] arena02-ambush seed 9002: 0-1 black checkmate in 62 plies · 24 quakes (24 probed) · fellThrough 3 · 31.8s
+[baseline] arena02-ambush seed 9003: 0-1 black stalemate in 42 plies · 8 quakes (5 probed) · fellThrough 0 · 35.4s
+[baseline] arena02-ambush seed 9004: 0-1 black checkmate in 66 plies · 25 quakes (25 probed) · fellThrough 1 · 25.1s
+[baseline] arena02-ambush seed 9005: 0-1 black army-extinct in 44 plies · 11 quakes (11 probed) · fellThrough 0 · 22.0s
+(node:8115) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 uncaughtException listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:8115) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unhandledRejection listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+[baseline] arena02-ambush seed 9006: 0-1 black checkmate in 34 plies · 9 quakes (9 probed) · fellThrough 0 · 17.0s
+[baseline] arena02-ambush seed 9007: 0-1 black army-extinct in 46 plies · 18 quakes (18 probed) · fellThrough 0 · 26.1s
+[baseline] arena02-ambush seed 9008: 0-1 black checkmate in 52 plies · 9 quakes (9 probed) · fellThrough 1 · 20.5s
+[baseline] arena02-ambush seed 9009: 1-0 white army-extinct in 59 plies · 23 quakes (23 probed) · fellThrough 2 · 29.1s
+[baseline] arena02-ambush seed 9010: 1-0 white army-extinct in 79 plies · 34 quakes (34 probed) · fellThrough 3 · 32.1s
+[baseline] arena02-ambush seed 9011: 1-0 white army-extinct in 77 plies · 36 quakes (36 probed) · fellThrough 2 · 34.9s
+arm baseline → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-baseline-a02.jsonl
+done
+=== baseline arena03 19:07:18 ===
+meter lab: arms=[baseline] seeds=12 arenas=[arena03-clipped-vault] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[baseline] arena03-clipped-vault seed 9000: 1-0 white checkmate in 55 plies · 20 quakes (20 probed) · fellThrough 3 · 16.3s
+[baseline] arena03-clipped-vault seed 9001: 1-0 white checkmate in 67 plies · 27 quakes (27 probed) · fellThrough 1 · 23.0s
+[baseline] arena03-clipped-vault seed 9002: 1-0 white checkmate in 45 plies · 10 quakes (10 probed) · fellThrough 1 · 18.4s
+  retrying on a fresh engine after: ply 5: engine returned no move but ffish says game not over
+[baseline] arena03-clipped-vault seed 9003: 1-0 white army-extinct in 35 plies · 7 quakes (7 probed) · fellThrough 1 · 15.1s
+[baseline] arena03-clipped-vault seed 9004: 1-0 white army-extinct in 49 plies · 11 quakes (11 probed) · fellThrough 0 · 16.9s
+[baseline] arena03-clipped-vault seed 9005: 1-0 white army-extinct in 45 plies · 12 quakes (12 probed) · fellThrough 0 · 23.8s
+[baseline] arena03-clipped-vault seed 9006: 0-1 black checkmate in 34 plies · 8 quakes (8 probed) · fellThrough 1 · 10.7s
+[baseline] arena03-clipped-vault seed 9007: 0-1 black army-extinct in 36 plies · 9 quakes (9 probed) · fellThrough 2 · 10.3s
+[baseline] arena03-clipped-vault seed 9008: 0-1 black army-extinct in 58 plies · 14 quakes (14 probed) · fellThrough 1 · 16.3s
+[baseline] arena03-clipped-vault seed 9009: 1-0 white checkmate in 67 plies · 28 quakes (28 probed) · fellThrough 3 · 23.2s
+[baseline] arena03-clipped-vault seed 9010: 1-0 white army-extinct in 77 plies · 33 quakes (33 probed) · fellThrough 3 · 27.9s
+[baseline] arena03-clipped-vault seed 9011: 1-0 white army-extinct in 45 plies · 12 quakes (12 probed) · fellThrough 0 · 17.3s
+arm baseline → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-baseline-a03.jsonl
+done
+=== baseline arena04 19:11:01 ===
+meter lab: arms=[baseline] seeds=12 arenas=[arena04-long-stair] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[baseline] arena04-long-stair seed 9000: 1-0 white army-extinct in 31 plies · 3 quakes (3 probed) · fellThrough 1 · 6.6s
+[baseline] arena04-long-stair seed 9001: 1-0 white army-extinct in 29 plies · 3 quakes (3 probed) · fellThrough 0 · 6.4s
+[baseline] arena04-long-stair seed 9002: 1-0 white army-extinct in 27 plies · 3 quakes (3 probed) · fellThrough 0 · 5.2s
+[baseline] arena04-long-stair seed 9003: 1-0 white army-extinct in 19 plies · 1 quakes (1 probed) · fellThrough 0 · 3.4s
+[baseline] arena04-long-stair seed 9004: 1-0 white army-extinct in 43 plies · 7 quakes (7 probed) · fellThrough 3 · 8.1s
+[baseline] arena04-long-stair seed 9005: 1-0 white army-extinct in 35 plies · 6 quakes (6 probed) · fellThrough 0 · 10.9s
+[baseline] arena04-long-stair seed 9006: 1-0 white checkmate in 27 plies · 6 quakes (6 probed) · fellThrough 0 · 6.9s
+[baseline] arena04-long-stair seed 9007: 1-0 white checkmate in 71 plies · 36 quakes (36 probed) · fellThrough 0 · 20.8s
+[baseline] arena04-long-stair seed 9008: 1-0 white checkmate in 19 plies · 1 quakes (1 probed) · fellThrough 0 · 4.0s
+[baseline] arena04-long-stair seed 9009: 1-0 white army-extinct in 19 plies · 1 quakes (1 probed) · fellThrough 0 · 3.4s
+[baseline] arena04-long-stair seed 9010: 1-0 white army-extinct in 47 plies · 10 quakes (10 probed) · fellThrough 2 · 11.9s
+[baseline] arena04-long-stair seed 9011: 0-1 black army-extinct in 68 plies · 27 quakes (27 probed) · fellThrough 0 · 18.3s
+arm baseline → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-baseline-a04.jsonl
+done
+=== meter arena01 19:12:49 ===
+meter lab: arms=[meter] seeds=12 arenas=[arena01-first-duel] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[meter] arena01-first-duel seed 9000: 1-0 white checkmate in 33 plies · 4 quakes (4 probed) · fellThrough 0 · 5.4s
+[meter] arena01-first-duel seed 9001: 1-0 white checkmate in 43 plies · 1 quakes (1 probed) · fellThrough 0 · 3.4s
+[meter] arena01-first-duel seed 9002: 1-0 white checkmate in 29 plies · 1 quakes (1 probed) · fellThrough 0 · 3.0s
+[meter] arena01-first-duel seed 9003: 1-0 white checkmate in 45 plies · 4 quakes (4 probed) · fellThrough 0 · 4.5s
+[meter] arena01-first-duel seed 9004: 0-1 black stalemate in 84 plies · 16 quakes (16 probed) · fellThrough 0 · 7.9s
+[meter] arena01-first-duel seed 9005: 1-0 white stalemate in 37 plies · 3 quakes (3 probed) · fellThrough 0 · 5.0s
+[meter] arena01-first-duel seed 9006: 1-0 white checkmate in 43 plies · 3 quakes (3 probed) · fellThrough 1 · 4.8s
+[meter] arena01-first-duel seed 9007: 1-0 white checkmate in 25 plies · 1 quakes (1 probed) · fellThrough 0 · 1.9s
+[meter] arena01-first-duel seed 9008: 0-1 black checkmate in 40 plies · 1 quakes (1 probed) · fellThrough 0 · 2.7s
+[meter] arena01-first-duel seed 9009: 1-0 white checkmate in 23 plies · 2 quakes (2 probed) · fellThrough 0 · 2.9s
+[meter] arena01-first-duel seed 9010: 1-0 white army-extinct in 83 plies · 4 quakes (4 probed) · fellThrough 0 · 30.5s
+[meter] arena01-first-duel seed 9011: 1-0 white checkmate in 33 plies · 2 quakes (2 probed) · fellThrough 0 · 3.2s
+arm meter → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-meter-a01.jsonl
+done
+=== meter arena02 19:14:07 ===
+meter lab: arms=[meter] seeds=12 arenas=[arena02-ambush] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[meter] arena02-ambush seed 9000: 0-1 black checkmate in 48 plies · 11 quakes (11 probed) · fellThrough 0 · 20.8s
+[meter] arena02-ambush seed 9001: 0-1 black army-extinct in 108 plies · 51 quakes (51 probed) · fellThrough 2 · 31.2s
+[meter] arena02-ambush seed 9002: 0-1 black army-extinct in 62 plies · 10 quakes (10 probed) · fellThrough 0 · 20.7s
+[meter] arena02-ambush seed 9003: 0-1 black checkmate in 44 plies · 6 quakes (6 probed) · fellThrough 0 · 18.2s
+[meter] arena02-ambush seed 9004: 0-1 black checkmate in 40 plies · 4 quakes (4 probed) · fellThrough 0 · 16.3s
+[meter] arena02-ambush seed 9005: 0-1 black checkmate in 42 plies · 11 quakes (11 probed) · fellThrough 0 · 20.6s
+[meter] arena02-ambush seed 9006: 0-1 black army-extinct in 44 plies · 6 quakes (3 probed) · fellThrough 0 · 33.0s
+(node:8612) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 uncaughtException listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:8612) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unhandledRejection listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+[meter] arena02-ambush seed 9007: 1-0 white army-extinct in 65 plies · 22 quakes (22 probed) · fellThrough 1 · 27.7s
+[meter] arena02-ambush seed 9008: 0-1 black checkmate in 84 plies · 13 quakes (13 probed) · fellThrough 2 · 19.4s
+[meter] arena02-ambush seed 9009: 0-1 black checkmate in 34 plies · 6 quakes (6 probed) · fellThrough 0 · 16.1s
+[meter] arena02-ambush seed 9010: 0-1 black army-extinct in 44 plies · 8 quakes (8 probed) · fellThrough 0 · 19.6s
+[meter] arena02-ambush seed 9011: 0-1 black army-extinct in 48 plies · 6 quakes (6 probed) · fellThrough 0 · 19.5s
+arm meter → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-meter-a02.jsonl
+done
+=== meter arena03 19:18:32 ===
+meter lab: arms=[meter] seeds=12 arenas=[arena03-clipped-vault] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[meter] arena03-clipped-vault seed 9000: 1-0 white checkmate in 31 plies · 7 quakes (7 probed) · fellThrough 0 · 9.6s
+[meter] arena03-clipped-vault seed 9001: 1-0 white checkmate in 79 plies · 23 quakes (23 probed) · fellThrough 0 · 39.4s
+[meter] arena03-clipped-vault seed 9002: 1-0 white checkmate in 43 plies · 4 quakes (4 probed) · fellThrough 0 · 13.0s
+[meter] arena03-clipped-vault seed 9003: 1-0 white army-extinct in 33 plies · 5 quakes (5 probed) · fellThrough 0 · 10.8s
+[meter] arena03-clipped-vault seed 9004: 1-0 white army-extinct in 39 plies · 5 quakes (5 probed) · fellThrough 3 · 19.8s
+[meter] arena03-clipped-vault seed 9005: 1-0 white checkmate in 43 plies · 9 quakes (9 probed) · fellThrough 0 · 21.3s
+[meter] arena03-clipped-vault seed 9006: 1-0 white army-extinct in 79 plies · 40 quakes (40 probed) · fellThrough 3 · 21.9s
+[meter] arena03-clipped-vault seed 9007: 0-1 black army-extinct in 32 plies · 3 quakes (3 probed) · fellThrough 0 · 8.5s
+[meter] arena03-clipped-vault seed 9008: 1-0 white checkmate in 49 plies · 7 quakes (7 probed) · fellThrough 1 · 12.3s
+[meter] arena03-clipped-vault seed 9009: 1-0 white army-extinct in 37 plies · 4 quakes (4 probed) · fellThrough 0 · 21.4s
+[meter] arena03-clipped-vault seed 9010: 0-1 black army-extinct in 44 plies · 7 quakes (7 probed) · fellThrough 1 · 12.7s
+[meter] arena03-clipped-vault seed 9011: 1-0 white checkmate in 45 plies · 4 quakes (4 probed) · fellThrough 0 · 10.2s
+arm meter → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-meter-a03.jsonl
+done
+=== meter arena04 19:21:55 ===
+meter lab: arms=[meter] seeds=12 arenas=[arena04-long-stair] go="depth 22 movetime 500" playerGo="depth 2 movetime 80"
+meter defaults: {"sate":4,"repBonus":2,"rampPlies":16,"floorOnsetPly":120,"floorRampPlies":120}
+[meter] arena04-long-stair seed 9000: 1-0 white checkmate in 37 plies · 7 quakes (7 probed) · fellThrough 1 · 9.2s
+[meter] arena04-long-stair seed 9001: 1-0 white army-extinct in 17 plies · 3 quakes (3 probed) · fellThrough 0 · 4.9s
+[meter] arena04-long-stair seed 9002: 1-0 white army-extinct in 63 plies · 13 quakes (13 probed) · fellThrough 4 · 13.4s
+[meter] arena04-long-stair seed 9003: 0-1 black army-extinct in 42 plies · 8 quakes (8 probed) · fellThrough 0 · 7.9s
+[meter] arena04-long-stair seed 9004: 1-0 white checkmate in 31 plies · 3 quakes (3 probed) · fellThrough 1 · 5.6s
+[meter] arena04-long-stair seed 9005: 1-0 white army-extinct in 25 plies · 4 quakes (4 probed) · fellThrough 0 · 5.2s
+[meter] arena04-long-stair seed 9006: 1-0 white army-extinct in 29 plies · 5 quakes (5 probed) · fellThrough 0 · 6.8s
+[meter] arena04-long-stair seed 9007: 0-1 black army-extinct in 82 plies · 20 quakes (20 probed) · fellThrough 0 · 14.7s
+[meter] arena04-long-stair seed 9008: 0-1 black army-extinct in 62 plies · 25 quakes (25 probed) · fellThrough 1 · 14.5s
+[meter] arena04-long-stair seed 9009: 1-0 white army-extinct in 77 plies · 32 quakes (32 probed) · fellThrough 5 · 11.9s
+[meter] arena04-long-stair seed 9010: 0-1 black stalemate in 52 plies · 16 quakes (16 probed) · fellThrough 3 · 10.9s
+[meter] arena04-long-stair seed 9011: 1-0 white army-extinct in 45 plies · 4 quakes (4 probed) · fellThrough 0 · 10.0s
+arm meter → /home/user/dungeoncrawlerking/phase0/results/meterlab/corpus-meter-a04.jsonl
+done
+=== CORPUS DONE 19:23:52 ===

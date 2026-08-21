@@ -1,0 +1,18 @@
+{
+  "schema": 2,
+  "wave": 2,
+  "id": "s20-the-anvil",
+  "title": "The Anvil",
+  "notes": "Wave 2. Narrow board; white SECOND rank has a center wall pair (the pawn screen must split around it), black back corners clipped. Pawn-rank molding under compression.",
+  "map": [
+    "#..#",
+    "....",
+    "....",
+    "..#.",
+    "....",
+    "....",
+    "....",
+    ".##.",
+    "...."
+  ]
+}

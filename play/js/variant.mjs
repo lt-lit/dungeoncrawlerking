@@ -2,7 +2,7 @@
 // Browser port of phase0/lib/variant.mjs with two additions: a known-key
 // allowlist (unknown variants.ini keys are silently ignored by BOTH libraries
 // — spike 6 — so a typo produces legal-looking wrong rules) and the fixed
-// 50-variant catalog (variant names are single-use — spike 1 — so the game
+// 60-variant catalog (variant names are single-use — spike 1 — so the game
 // loads every duel_<files>x<ranks> once at boot and never redefines).
 import { emptyBoard, serializeBoard } from './fen.mjs';
 
@@ -65,11 +65,14 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     // Promotion region = enemy back rank (§4.4, spike 5)
     promotionRegionWhite: `*${ranks}`,
     promotionRegionBlack: '*1',
-    // Symmetric pawn double-step from each side's pawn row (spike 7: the
-    // default doubleStepRegionBlack is literal *7, which misses black's pawn
-    // row on every board that isn't 8 ranks — silent formation asymmetry).
-    doubleStepRegionWhite: '*2',
-    doubleStepRegionBlack: `*${ranks - 1}`,
+    // UNIVERSAL pawn double-step (slice refresh; spike 13): armies mold to
+    // terrain, so pawns start on arbitrary ranks — the region covers every
+    // pawn-legal rank so the push is never an accident of deployment depth.
+    // FSF region semantics are every-visit (no first-move tracking): any
+    // pawn in the region always has the double-step. Walls block both the
+    // jumped and landing squares; en passant works against any of them.
+    doubleStepRegionWhite: Array.from({ length: Math.max(0, ranks - 2) }, (_, i) => `*${i + 2}`).join(' '),
+    doubleStepRegionBlack: Array.from({ length: Math.max(0, ranks - 2) }, (_, i) => `*${ranks - 1 - i}`).join(' '),
     ...extra,
   };
   for (const k of Object.keys(opts)) {
@@ -91,14 +94,15 @@ export function catalogVariantName(files, ranks) {
 }
 
 /**
- * The fixed 50-variant catalog: duel_<files>x<ranks> for files 3–12 × ranks
- * 6–10 (spikes 1/3/8). Loaded ONCE at boot into both ffish and the engine;
+ * The fixed 60-variant catalog: duel_<files>x<ranks> for files 3–12 × ranks
+ * 5–10 (spikes 1/3/8; ranks-5 added by the slice refresh for the 3×5
+ * minimum stage). Loaded ONCE at boot into both ffish and the engine;
  * every duel thereafter varies only via FEN.
  */
 export function makeCatalogIni() {
   const blocks = [];
   for (let files = 3; files <= 12; files++) {
-    for (let ranks = 6; ranks <= 10; ranks++) {
+    for (let ranks = 5; ranks <= 10; ranks++) {
       blocks.push(makeDuelVariantIni({ name: catalogVariantName(files, ranks), files, ranks }));
     }
   }

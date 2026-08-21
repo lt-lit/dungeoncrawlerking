@@ -1,0 +1,19 @@
+{
+  "schema": 2,
+  "wave": 2,
+  "id": "s21-collapsed-keep",
+  "title": "Collapsed Keep",
+  "notes": "Wave 2. The big broken-ground case at 10x10: rubble in both first AND second ranks plus midfield rooms. Everything molds, everywhere, at the size ceiling.",
+  "map": [
+    "..##......",
+    "....#.....",
+    "..........",
+    "......##..",
+    ".##.......",
+    ".......#..",
+    "..........",
+    "...##.....",
+    ".........#",
+    "###......."
+  ]
+}

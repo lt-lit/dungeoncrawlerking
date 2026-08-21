@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "wave": 3,
+  "id": "s32-knifework",
+  "title": "Knifework",
+  "notes": "Wave 3. Minimum width WITH terrain: staggered walls turn a 3-wide corridor into alternating 2-wide passes. Single-file knife fight — 3-wide has only ever been tested open.",
+  "map": [
+    "...",
+    "...",
+    ".#.",
+    "...",
+    "#..",
+    "...",
+    "..."
+  ]
+}

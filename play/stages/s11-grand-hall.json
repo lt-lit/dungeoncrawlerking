@@ -1,0 +1,18 @@
+{
+  "schema": 2,
+  "id": "s11-grand-hall",
+  "title": "Grand Hall",
+  "notes": "The 10x10 upper bound: mostly open, three scattered pillars, a two-cell alcove on the east wall. Tests wide-board play, search cost, and phone rendering.",
+  "map": [
+    "..........",
+    "..........",
+    "..#.......",
+    "......#...",
+    "..........",
+    ".........#",
+    ".........#",
+    "...#......",
+    "..........",
+    ".........."
+  ]
+}
