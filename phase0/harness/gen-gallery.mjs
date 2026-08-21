@@ -31,7 +31,12 @@ const stages = fs
   .readdirSync(STAGE_DIR)
   .filter((f) => f.endsWith('.json'))
   .sort()
-  .map((f) => loadStageV2(JSON.parse(fs.readFileSync(path.join(STAGE_DIR, f), 'utf8'))));
+  .map((f) => {
+    const raw = JSON.parse(fs.readFileSync(path.join(STAGE_DIR, f), 'utf8'));
+    const s = loadStageV2(raw);
+    s.wave = raw.wave ?? 1;
+    return s;
+  });
 
 const W_GLYPH = { K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙' };
 const B_GLYPH = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟' };
@@ -104,7 +109,7 @@ function sampleCard(label, note, stage, s) {
     `W ${describeArmy(m.white.army)} vs B ${describeArmy(m.black.army)} · gap ${m.gap} · seed ${s.seed}${viol}</figcaption></figure>`;
 }
 
-let cards = '';
+const cardsByWave = { 1: '', 2: '' };
 let issues = 0;
 for (const stage of stages) {
   const wide = stage.files >= 6;
@@ -138,7 +143,7 @@ for (const stage of stages) {
   });
   if (small.fail || big.fail || scrambled.fail) issues++;
   const mirror = maxMirrorWidth(stage);
-  cards += `<section class="card" id="${stage.id}">
+  cardsByWave[stage.wave] += `<section class="card" id="${stage.id}">
 <h2>${stage.title} <code>${stage.id}</code></h2>
 <p class="meta">${stage.files}×${stage.ranks} · ${stage.walls.length} walls · largest mirror army that fits: ${mirror ? `${mirror}×2` : 'none'}</p>
 <p class="notes">${stage.notes}</p>
@@ -181,8 +186,16 @@ output molded onto each stage (royal rearmost row, pawns in front; soft
 pawn-coverage violations flagged). For each stage: <b>keep / tweak / kill</b> —
 call tweaks by coordinates (walls are drawn in the JSON as ASCII, one char per
 square). Samples are seeded and reproducible; "not shown" means the generator
-rejected every attempt (that is data too).</p>
-${cards}`;
+rejected every attempt (that is data too). Balance testing runs every stage
+in BOTH vertical orientations (designer rule — mirrors are not separate
+scenarios), so judge terrain on its own merits, not by which side it faces.</p>
+<h1 class="wavehead">Wave 2 — proposed (broken deployment ground)</h1>
+<p class="sub">Entirely new designs; every stage has walls inside the first/last
+two ranks, most in the very first or last rank — the molding stress set.</p>
+${cardsByWave[2]}
+<h1 class="wavehead">Wave 1 — locked</h1>
+<p class="sub">The clean-ground set, re-molded under v2.1 for reference.</p>
+${cardsByWave[1]}`;
 
 fs.writeFileSync(OUT, html);
 console.log(`\n${stages.length} stages, ${issues} with sample issues → ${OUT}`);

@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "wave": 2,
+  "id": "s22-sinkhole",
+  "title": "Sinkhole",
+  "notes": "Wave 2. A 2x2 central sink plus one wall in each back rank. The minimal broken-deployment stage — one obstruction per army, one hazard mid-board.",
+  "map": [
+    "...#..",
+    "......",
+    "..##..",
+    "..##..",
+    "......",
+    "......",
+    ".#...."
+  ]
+}

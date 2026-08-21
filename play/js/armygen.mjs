@@ -114,13 +114,6 @@ function centerOut(start, w) {
   );
 }
 
-/** Outer-first ordering (edges of the window inward) — stable, left-first ties. */
-function outerFirst(start, w) {
-  const mid = start + (w - 1) / 2;
-  return Array.from({ length: w }, (_, i) => start + i).sort(
-    (a, b) => Math.abs(b - mid) - Math.abs(a - mid) || a - b
-  );
-}
 
 /**
  * Mold one army onto terrain. Pure and seeded.
@@ -138,15 +131,20 @@ function outerFirst(start, w) {
  * ("doesn't fit"). `extent` = the last occupied row index measured from the
  * side's home edge (gap math).
  *
- * MOLDING v2 — dense packing (designer-corrected: rows MIX; the v1 strict
- * row separation hollowed formations whenever the back row overflowed).
- * One back-to-front cell cursor; non-pawns favor BACK rows + CENTER
- * columns, pawns take the very next cell onward — same row allowed —
- * favoring OUTER columns, with pawn-coverage priority above the outer
- * preference (files holding a still-unscreened piece get pawns first;
- * designer: "generally at least one pawn in front of each non-pawn").
- * The partial last row therefore lands at the FRONT and its spares sit on
- * the flanks.
+ * MOLDING v2.1 — dense packing, one back-to-front cursor, CENTER-OUT
+ * everywhere (designer-corrected twice: v1's strict row separation
+ * hollowed formations; v2's outer-first/coverage-driven pawns scattered
+ * the sparse front row). Center-out for both unit classes produces every
+ * shape the designer specified with zero special cases: in a MIXED row
+ * the pieces took the center first, so pawns land on the outer cells; in
+ * a sparse FRONT row the spare pawns center themselves.
+ *
+ * Pawn cover is a REPORT, not a placement force: a piece counts as
+ * screened if its file holds an own pawn forward of it OR a wall forward
+ * of it (walls block sliders — cover is cover). With pawn count always
+ * equal to non-pawn count, open-file pieces only arise from overflow
+ * rows on wall-less ground; `violations` names those files and the
+ * designer judges them in the gallery.
  *
  * The fill order IS the invariant proof: every piece cell precedes every
  * pawn cell in a back-to-front walk, so within any single file pieces sit
@@ -178,43 +176,45 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
   const backUnits = [army.royal, ...rest];
 
   const cells = [];
-  const pieceFiles = new Set();
-  const covered = new Set();
   let unit = 0;
   let pawns = 0;
   let row = 0;
   while (pawns < army.width) {
     if (row >= depthCap) return null; // doesn't fit
-    // Non-pawns first, center-out, until the bag runs dry — then pawns
-    // CONTINUE in the same row: unscreened piece-files first, then outer.
-    const taken = new Set();
+    // One center-out pass per row: non-pawns until the bag runs dry, then
+    // pawns continue in the same row (mixed rows put pawns on the outer
+    // cells because the pieces already hold the center; a sparse front
+    // row centers its spares).
     for (const f of centerOut(start, w)) {
-      if (unit >= backUnits.length) break;
       if (!open(row, f)) continue;
-      cells.push({ f, r: rowRank(row), piece: backUnits[unit++] });
-      pieceFiles.add(f);
-      taken.add(f);
-    }
-    if (unit >= backUnits.length) {
-      const cand = outerFirst(start, w).filter((f) => open(row, f) && !taken.has(f));
-      cand.sort((a, b) => {
-        const na = pieceFiles.has(a) && !covered.has(a) ? 0 : 1;
-        const nb = pieceFiles.has(b) && !covered.has(b) ? 0 : 1;
-        return na - nb; // coverage outranks the outer preference (stable sort keeps outer order inside each bucket)
-      });
-      for (const f of cand) {
-        if (pawns >= army.width) break;
+      if (unit < backUnits.length) {
+        cells.push({ f, r: rowRank(row), piece: backUnits[unit++] });
+      } else if (pawns < army.width) {
         cells.push({ f, r: rowRank(row), piece: 'P' });
-        covered.add(f);
         pawns++;
-      }
+      } else break;
     }
     row++;
   }
 
-  const violations = [...pieceFiles]
-    .filter((f) => !covered.has(f))
-    .map((f) => `uncovered-piece-file:${String.fromCharCode(97 + f)}`);
+  // Cover report (informational): a piece is screened by an own pawn OR a
+  // wall forward of it in its file. Per the per-file invariant any own
+  // pawn in the file is forward of every piece in it.
+  const dir = side === 'white' ? 1 : -1;
+  const pawnFiles = new Set(cells.filter((c) => c.piece === 'P').map((c) => c.f));
+  const openFiles = new Set();
+  for (const c of cells) {
+    if (c.piece === 'P' || pawnFiles.has(c.f) || openFiles.has(c.f)) continue;
+    let walled = false;
+    for (let r = c.r + dir; r >= 0 && r < ranks; r += dir) {
+      if (grid[r][c.f] === '*') {
+        walled = true;
+        break;
+      }
+    }
+    if (!walled) openFiles.add(c.f);
+  }
+  const violations = [...openFiles].sort((a, b) => a - b).map((f) => `open-file:${String.fromCharCode(97 + f)}`);
   return { cells, depthRows: row, extent: row - 1, violations };
 }
 

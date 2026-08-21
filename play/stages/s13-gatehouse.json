@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "wave": 2,
+  "id": "s13-gatehouse",
+  "title": "Gatehouse",
+  "notes": "Wave 2. Wall stubs inside BOTH back ranks: black loses its corners, white loses its left pair. Each army molds around its own gate before the fight starts.",
+  "map": [
+    "#....#",
+    "......",
+    "..#...",
+    "......",
+    "......",
+    "...#..",
+    "......",
+    "##...."
+  ]
+}

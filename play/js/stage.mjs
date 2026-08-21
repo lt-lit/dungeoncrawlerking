@@ -53,3 +53,21 @@ export function loadStageV2(json) {
     variantName: catalogVariantName(files, ranks),
   };
 }
+
+/**
+ * Vertical mirror of a stage — the terrain that faced white now faces
+ * black. TESTING CONVENTION (designer rule): a mirrored stage is NOT a
+ * separate scenario; every balance corpus runs each stage in BOTH
+ * orientations, and the pre-game test setup exposes a flip toggle.
+ */
+export function flipStageVertical(stage) {
+  const { files, ranks } = stage;
+  const grid = Array.from({ length: ranks }, (_, r) => [...stage.grid[ranks - 1 - r]]);
+  const walls = [];
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) {
+      if (grid[r][f] === '*') walls.push(`${String.fromCharCode(97 + f)}${r + 1}`);
+    }
+  }
+  return { ...stage, id: `${stage.id}~flipped`, grid, walls };
+}

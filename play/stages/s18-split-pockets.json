@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "wave": 2,
+  "id": "s18-split-pockets",
+  "title": "Split Pockets",
+  "notes": "Wave 2. Wall spurs divide both back ranks into two pockets. A wide army must mold into two clumps around its spur — the split-deployment case.",
+  "map": [
+    "...##.....",
+    "..........",
+    "......#...",
+    "..........",
+    "..........",
+    "..#.......",
+    "....#.....",
+    "....##...."
+  ]
+}

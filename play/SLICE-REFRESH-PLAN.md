@@ -129,25 +129,30 @@ All 12 stages in `play/stages/` are stamped as viable test arenas
 (s01-the-closet … s12-rat-warren; gallery `play/stages-gallery.html`).
 Two follow-ups from the same review, in order:
 
-1. **Molding v2 — SHIPPED**: the strict "pawn rows strictly after all
-   piece rows" rule was an over-derivation, NOT the designer's intent — it
-   hollowed the formation whenever the back row overflowed mid-row.
-   Now: dense packing, rows mix; "pawns in front" is a PER-FILE screen
-   (within each file, every pawn forward of every non-pawn — held by fill
-   order, asserted per-file in the test bench). Fill preferences
-   (designer-specified): non-pawns favor back rows + center columns;
-   pawns favor front rows + outer columns, with pawn-coverage priority
-   ABOVE the outer preference (unscreened piece-files get pawns first —
-   flip that one line if the designer prefers pure-outer after seeing it).
-   Royal-rearmost unchanged; the royal's row provably never holds a pawn.
-   Set-level wall balance: s03/s05/s12 flipped vertically (the v1 set's
-   clusters skewed toward the top edge — not a reasonable distribution
-   when either side can be the player's).
-2. **Stage wave 2 after molding sign-off**: the v1 set mostly keeps the
-   deployment rows clear (only s08 bites into one), which dodges the
-   molding-around-terrain question. Wave 2 adds stages with walls
-   intruding into the first/last two ranks — bitten corners, pillars on
-   the start rows, rubble at the deployment line, split pockets.
+1. **Molding v2.1 — SHIPPED** (two designer corrections deep): v1's
+   strict row separation hollowed formations; v2's outer-first +
+   coverage-driven pawn placement scattered the sparse front row. Final
+   rule is ONE mechanism: dense back-to-front cursor, CENTER-OUT for both
+   unit classes — mixed rows put pawns on the outer cells automatically
+   (pieces already hold the center) and sparse front rows center their
+   spares. "Pawns in front" is a PER-FILE screen held by fill order and
+   asserted per-file in the test bench; royal rearmost; the royal's row
+   provably never holds a pawn. Pawn cover is a REPORT, never a placement
+   force, and WALLS COUNT as cover (they block sliders; designer: "cover
+   is cover") — `violations` lists open files only.
+2. **Flip-testing convention (designer rule)**: every stage is also
+   tested VERTICALLY FLIPPED in every balance corpus — mirrors are not
+   separate scenarios (`flipStageVertical` in stage.mjs). The pre-game
+   test setup must expose a board-flip toggle (queued in the setup-UI
+   work item).
+3. **Stage wave 2 — PROPOSED, awaiting review**: 10 entirely new designs
+   (s13–s22), every one with walls inside the first/last two ranks and
+   most in the very first/last rank: gatehouse stubs, buried flanks,
+   colonnade pillars in the pawn ranks, a cave-mouth back rank, rubble
+   concentrated at the deployment lines (the inverse of wave 1), split
+   deployment pockets, a diagonal scar, a squeezed pawn-rank anvil, a
+   collapsed keep at 10×10, and a minimal sinkhole. This is the molding
+   stress set the v1 wave dodged.
 
 ## Work plan
 

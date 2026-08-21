@@ -116,11 +116,23 @@ function checkSide(name, army, layout, side, ranks) {
       `row1 has ${row1.length} cells`);
     const row2 = l.cells.filter((c) => c.r === 2);
     const row2Files = row2.map((c) => c.f).sort((a, b) => a - b).join(',');
-    check('front partial row: spare pawns on coverage files (c,d) + outer flanks (a,f)',
-      row2.length === 4 && row2.every((c) => c.piece === 'P') && row2Files === '0,2,3,5',
+    check('sparse front row is CENTERED (v2.1)',
+      row2.length === 4 && row2.every((c) => c.piece === 'P') && row2Files === '1,2,3,4',
       `files [${row2Files}]`);
+    const row1Pawns = l.cells.filter((c) => c.r === 1 && c.piece === 'P').map((c) => c.f).sort((a, b) => a - b).join(',');
+    check('mixed-row pawns sit on the outer cells (pieces hold center)', row1Pawns === '0,1,4,5', `files [${row1Pawns}]`);
   }
   pass('mixed rows');
+}
+
+// ---- 3c. walls count as cover (report-only, v2.1) ----
+{
+  // Wall at a2: file a's piece has no pawn but IS screened by the wall.
+  const stage = loadStageV2({ schema: 2, id: 'wall-cover', map: ['...', '...', '...', '...', '...', '...', '#..', '...'] });
+  const army = makeArmy({ width: 3, pieces: ['R', 'N'] });
+  const l = layoutArmy({ grid: stage.grid, files: 3, ranks: 8, side: 'white', army, maxDepth: 6 });
+  check('wall-screened file is NOT flagged', l && l.violations.length === 0, l && l.violations.join(','));
+  pass('wall cover');
 }
 
 // ---- 4. wall pocket in the deployment zone (molding showcase) ----
