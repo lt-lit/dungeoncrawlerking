@@ -12,7 +12,7 @@
 </head>
 <body>
 <header id="topbar">
-  <button id="btnBack" hidden aria-label="Back to arenas">&#8592;</button>
+  <button id="btnBack" hidden aria-label="Back to setup">&#8592;</button>
   <h1 id="title">Dungeon Crawler King</h1>
   <button id="btnUndo" hidden aria-label="Undo">&#8630;</button>
   <button id="btnOptions" aria-label="Options">&#9881;</button>
@@ -20,9 +20,9 @@
 </header>
 
 <main id="app">
-  <section id="screen-menu" class="screen">
-    <p id="menu-intro">Duel vertical slice &#8212; choose an arena.</p>
-    <div id="arena-list"></div>
+  <section id="screen-setup" class="screen">
+    <p id="menu-intro">Proving grounds &#8212; pick a stage. The armies are shaped on the next screen, live.</p>
+    <div id="stage-list"></div>
     <div id="boot-log" class="log"></div>
   </section>
 
@@ -31,10 +31,31 @@
     <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
     <div id="board"></div>
     <div id="player-bar" class="side-bar"></div>
-    <div id="tray"></div>
-    <div id="placement-controls" hidden>
-      <button id="btnBegin" class="primary" disabled>Begin duel</button>
-      <button id="btnResetPlacement">Reset</button>
+    <div id="preview-controls" hidden>
+      <button id="btnBegin" class="primary">Begin duel</button>
+      <button id="btnRedeal">Re-deal</button>
+    </div>
+    <!-- The generator panel lives UNDER the live board preview: every knob
+         change re-deals and the armies update in place (visible only while
+         previewing). -->
+    <div id="setup-panel" hidden>
+      <div class="setup-row">
+        <span id="setup-readout"></span>
+      </div>
+      <div class="setup-row" id="setup-terrain">
+        <label class="opt">Flip stage <input type="checkbox" id="supFlip"></label>
+        <label class="opt">Crop far <input type="number" id="supCropTop" min="0" max="5" step="1" value="0"></label>
+        <label class="opt">Crop near <input type="number" id="supCropBottom" min="0" max="5" step="1" value="0"></label>
+        <label class="opt">First move
+          <select id="supTurn"><option value="w" selected>You</option><option value="b">Enemy</option></select>
+        </label>
+      </div>
+      <div class="setup-side" id="setup-white"></div>
+      <div class="setup-side" id="setup-black"></div>
+      <div class="setup-row">
+        <label class="opt">Seed <input type="number" id="supSeed" min="1" step="1" value="1"></label>
+        <button id="btnReseed" aria-label="New seed">&#127922;</button>
+      </div>
     </div>
     <div id="duel-log" class="log"></div>
     <!-- Phase 1.2: the Gods debug overlay — the Director's tuning instrument.
@@ -65,8 +86,9 @@
     <h2 id="overlay-title"></h2>
     <p id="overlay-detail"></p>
     <button id="btnOverlayUndo" hidden>&#8630; Undo last move</button>
-    <button id="btnAgain" class="primary">Play again</button>
-    <button id="btnMenu">Back to arenas</button>
+    <button id="btnAgain" class="primary">Rematch</button>
+    <button id="btnOverlayRedeal">Re-deal</button>
+    <button id="btnMenu">Back to setup</button>
   </div>
 </div>
 
@@ -80,7 +102,6 @@
         moves</label>
       <label class="opt sub"><input type="checkbox" id="optUndo"> Allow undo</label>
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
-      <label class="opt sub"><input type="checkbox" id="optEnemyEdit"> Edit enemy pieces</label>
     </div>
     <h2>The Gods</h2>
     <p class="opt-hint">Earthquakes stir the arena as duels run long: pieces scoot,

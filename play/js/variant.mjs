@@ -94,6 +94,50 @@ export function catalogVariantName(files, ranks) {
 }
 
 /**
+ * Per-deal duel variant: the catalog baseline with the pawn double-step
+ * region set to each side's CAMP — every rank from its home edge up to
+ * its camp line: the rank holding the MOST of that side's dealt pawns,
+ * ties toward the enemy (spike 14; designer rule 2026-08-21, final
+ * form). The line sits where the position LOOKS like the starting line
+ * — the pawn wall — so it reads at a glance, chess's own row-based rule
+ * generalized (row = first-move-only in chess only because nothing
+ * there moves pawns backward; quakes CAN, and where the readings
+ * diverge the row wins). At or behind the line, a pawn can leap; past
+ * it, never again. Designer-signed consequences: a pawn dealt AHEAD of
+ * the line (molding bumped it past the wall) is already advanced and
+ * never leaps; a moved pawn knocked back behind the line regains the
+ * jump; rear pawns behind the line can single-step then double once
+ * lanes open (a tied stack puts the line at its front wall, so the
+ * whole mass has access); all-scattered terrain ties resolve toward
+ * the enemy, keeping nearly every pawn leap-capable.
+ *
+ * The name ENCODES the config, so re-registering a colliding name is
+ * always an identical no-op, never a silent rules change (rule 7 bans
+ * redefinition; spike 14 verified incremental ADDITION in both
+ * libraries). Registration is the caller's job: ffish via
+ * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
+ * cumulative variants-ini reload (main.mjs appends to app.catalog).
+ */
+export function dealVariant(files, ranks, whiteLineRank, blackLineRank) {
+  const w = whiteLineRank | 0;
+  const b = blackLineRank | 0;
+  if (w < 1 || w > ranks || b < 1 || b > ranks) {
+    throw new Error(`camp lines w${w}/b${b} outside 1-${ranks}`);
+  }
+  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}`;
+  const ini = makeDuelVariantIni({
+    name,
+    files,
+    ranks,
+    extra: {
+      doubleStepRegionWhite: Array.from({ length: w }, (_, i) => `*${i + 1}`).join(' '),
+      doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
+    },
+  });
+  return { name, ini };
+}
+
+/**
  * The fixed 60-variant catalog: duel_<files>x<ranks> for files 3–12 × ranks
  * 5–10 (spikes 1/3/8; ranks-5 added by the slice refresh for the 3×5
  * minimum stage). Loaded ONCE at boot into both ffish and the engine;

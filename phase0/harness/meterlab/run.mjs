@@ -33,22 +33,21 @@
 // in-process recycling cannot be the primary hygiene. A batch of ~10 games
 // per process, memory reclaimed at exit, plus the one-shot fresh-engine
 // retry below for sporadic corruption, keeps every game clean:
-//   for arm in baseline meter; do for a in 01 02 03 04; do
-//     node harness/meterlab/run.mjs --arms $arm --arenas arena$a --tag a$a --seeds 10
+//   for arm in baseline meter; do for s in s01 s02; do
+//     node harness/meterlab/run.mjs --stage-file <set.json> --arms $arm --arenas $s --tag $s --seeds 10
 //   done; done
+// (--stage-file is REQUIRED since the legacy play/arenas were retired;
+// --arenas remains the id substring filter within the set.)
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadFfish, loadEngine } from '../../lib/load.mjs';
 import { DuelController } from '../../../play/js/duel.mjs';
 import { makeDuelVariantIni } from '../../../play/js/variant.mjs';
-import { loadArena, buildStartFen, playerSlotSquares, defaultPawnSquares } from '../../../play/js/arena.mjs';
-import { parseSquare } from '../../../play/js/fen.mjs';
 import { MeterDirector, RestlessnessMeter, PositionLog, moveEvents, METER_DEFAULTS } from './meter.mjs';
 import { mulberry32, childSeed } from '../../../play/js/prng.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ARENA_DIR = path.resolve(HERE, '../../../play/arenas');
 
 // The sweep-validated live baseline (play/js/main.mjs GOD_PRESETS.restless).
 const RESTLESS = { onsetPly: 8, quakeRamp: 60, crumbleRamp: 100, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 };
@@ -111,65 +110,47 @@ const PLAYER_GO = arg('player-go', 'depth 5 movetime 120');
 const PLAYER_MODEL = arg('player-model', 'depth');
 const OUT_DIR = path.resolve(HERE, '../..', arg('out', 'results/meterlab'));
 const TAG = arg('tag', '');
-const STAGE_FILE = arg('stage-file', ''); // JSON stage set (gen-stages.mjs) instead of play/arenas
-
-const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, k: 0, p: 1 };
-
-/** Default placement — mirror of play/js/main.mjs defaultPlacement(). */
-function defaultPlacement(arena) {
-  const slots = playerSlotSquares(arena);
-  const placement = {};
-  const mid = (arena.player.backRankStart * 2 + arena.player.patchWidth - 1) / 2;
-  const byMid = slots
-    .slice()
-    .sort((a, b) => Math.abs(parseSquare(a).file - mid) - Math.abs(parseSquare(b).file - mid));
-  placement[byMid[0]] = 'K';
-  const rest = byMid.slice(1);
-  const pieces = arena.player.pieceSet
-    .slice()
-    .sort((a, b) => PIECE_VALUES[b.toLowerCase()] - PIECE_VALUES[a.toLowerCase()]);
-  pieces.slice(0, rest.length).forEach((p, i) => {
-    placement[rest[i]] = p;
-  });
-  for (const sq of defaultPawnSquares(arena)) {
-    if (!placement[sq]) placement[sq] = 'P';
-  }
-  return placement;
-}
+// JSON stage set: {stages:[{id, files, ranks, startFen, playerColor, meta}]}.
+// The legacy play/arenas mode is RETIRED with the arenas themselves (the
+// setup-UI rework); the Phase 1.3 rerun's corpus builder emits this same
+// shape from play/stages × flipStageVertical × armygen.dealMatchup.
+const STAGE_FILE = arg('stage-file', '');
 
 function loadArenas() {
-  if (STAGE_FILE) {
-    const { stages } = JSON.parse(fs.readFileSync(path.resolve(STAGE_FILE), 'utf8'));
-    return stages
-      .filter((s) => matchesFilter(s.id))
-      .map((s) => ({
+  if (!STAGE_FILE) {
+    throw new Error(
+      'the legacy play/arenas corpus is retired — pass --stage-file <set.json> ' +
+        '(the meter-lab rerun builds sets from play/stages × armygen.dealMatchup; ' +
+        'startFen/playerColor per entry, both orientations pre-materialized)'
+    );
+  }
+  const { stages } = JSON.parse(fs.readFileSync(path.resolve(STAGE_FILE), 'utf8'));
+  return stages
+    .filter((s) => matchesFilter(s.id))
+    .map((s) => {
+      // Entries from the dealMatchup materializer carry their own deal
+      // variant (the camp-line double-step, spike 14). variantName and
+      // ini travel TOGETHER and the ini must define exactly that name —
+      // otherwise every game on the entry targets an unregistered
+      // variant (or silently runs under the wrong double-step rules).
+      if (!!s.variantName !== !!s.ini) {
+        throw new Error(`stage ${s.id}: variantName and ini must be provided together`);
+      }
+      if (s.ini && !s.ini.includes(`[${s.variantName}:`)) {
+        throw new Error(`stage ${s.id}: ini does not define variant "${s.variantName}"`);
+      }
+      const variantName = s.variantName ?? `duel_${s.files}x${s.ranks}`;
+      return {
         id: s.id,
-        variantName: `duel_${s.files}x${s.ranks}`,
+        variantName,
         files: s.files,
         ranks: s.ranks,
         startFen: s.startFen,
         playerColor: s.playerColor,
         meta: s.meta ?? null,
-        ini: makeDuelVariantIni({ name: `duel_${s.files}x${s.ranks}`, files: s.files, ranks: s.ranks }),
-      }));
-  }
-  const files = fs
-    .readdirSync(ARENA_DIR)
-    .filter((f) => f.endsWith('.json') && matchesFilter(f))
-    .sort();
-  return files.map((f) => {
-    const arena = loadArena(JSON.parse(fs.readFileSync(path.join(ARENA_DIR, f), 'utf8')));
-    const { startFen } = buildStartFen(arena, defaultPlacement(arena));
-    return {
-      id: arena.id,
-      variantName: arena.variantName,
-      files: arena.files,
-      ranks: arena.ranks,
-      startFen,
-      playerColor: arena.playerColor,
-      ini: makeDuelVariantIni({ name: arena.variantName, files: arena.files, ranks: arena.ranks }),
-    };
-  });
+        ini: s.ini ?? makeDuelVariantIni({ name: variantName, files: s.files, ranks: s.ranks }),
+      };
+    });
 }
 
 async function freshEngine(catalogIni) {

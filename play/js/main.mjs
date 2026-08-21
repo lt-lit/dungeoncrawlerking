@@ -1,4 +1,5 @@
-// App spine: boot, arena menu, placement flow (§4.3), duel driving, win/loss.
+// App spine: boot, stage picker + army generator (the proving-grounds setup
+// screen), duel driving, win/loss.
 //
 // Boot order (CLAUDE.md rules 1/7): ffish + engine init in parallel; the fixed
 // 60-variant catalog is loaded ONCE into both (variant names are single-use);
@@ -7,36 +8,41 @@
 // reload is the recycle path — a session never approaches the ~40-game WASM
 // fatigue limit).
 //
-// Test/debug query params (used by the Playwright E2E suite):
-//   ?arena=<id>      auto-open that arena
-//   &autoplace=1     accept the default placement immediately
-//   &autobegin=1     also begin the duel
-//   &go=<uci go args>  override engine search (e.g. "depth 60 movetime 80")
-//   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=
+// Setup flow (slice refresh — replaces the retired arena menu + placement
+// screen): pick a stage (33 designer-locked terrains, fetched as one
+// manifest bundle) → knobs (per-side army width/composition/archetype/
+// anchor, flip, crop, initiative, ONE master seed — army, molding and
+// Director streams all derive from it via childSeed) → armygen.dealMatchup
+// composes and sanity-checks the duel → preview on the board → Begin.
+// The player always holds White and sits at the bottom; "Enemy moves
+// first" is the turn field, not a seat swap; the flip toggle mirrors the
+// TERRAIN (the both-orientations testing convention), not the view.
+//
+// Test/debug query params (the E2E driver contract):
+//   ?stage=<id>      auto-select that stage (e.g. s07-twin-chambers)
+//   &flip=1&ct=&cb=  stage orientation + crop far/near
+//   &turn=w|b        initiative (b = enemy moves first)
+//   &seed=<n>        the master setup seed
+//   &w=&b=           army specs, "width:spec:archetype:anchor" where spec is
+//                    b<points> (budget draw) or piece letters (e.g. QRNBN);
+//                    trailing parts optional — "6:b30", "5:QRNN:scrambled"
+//   &autobegin=1     deal and begin immediately
+//   &go=<uci go args>  override engine search (e.g. "depth 22 movetime 80")
+//   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&dirseed=
 //     override the Director config (see director.mjs DIRECTOR_DEFAULTS)
 //   &godsdebug=1     force the Gods debug overlay on (Phase 1.2 instrument)
 //   &fx=<scale>      animation speed multiplier; 0 disables motion entirely
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
-import { parseSquare, findSquares } from './fen.mjs';
-import {
-  ARENA_MANIFEST,
-  fetchArena,
-  playerSlotSquares,
-  playerPawnSquares,
-  playerPool,
-  defaultPawnSquares,
-  defaultEnemySetup,
-  buildStartFen,
-  buildPreviewFen,
-} from './arena.mjs';
-import { BoardUI, Tray, pickPromotion } from './board-ui.mjs';
+import { findSquares, emptyBoard, serializeBoard } from './fen.mjs';
+import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
+import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
+import { BoardUI, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid } from './director.mjs';
 
 const $ = (id) => document.getElementById(id);
-const PIECE_VALUES = { q: 9, r: 5, b: 3, n: 3, p: 1, k: 0 };
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
 const params = new URLSearchParams(location.search);
 
@@ -55,21 +61,17 @@ const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.r
 const app = {
   ffish: null,
   engine: null,
-  catalog: null,
+  catalog: null, // CUMULATIVE variants ini: the 60-variant catalog + every deal variant this session (spike 14)
+  dealVariants: new Set(), // deal-variant names already appended to app.catalog
   cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength}
   quakeMarks: null, // {from:[], to:[], pit} — the last quake's residue, held
   // on the board through the enemy's reply and cleared when the player moves
-  enemySetup: {}, // square -> piece letter for the enemy formation (editable in cheat mode)
-  enemySelected: null, // enemy editor: selected enemy square
-  arenas: [], // loaded arena objects, menu order
-  arena: null,
+  stages: [], // loadStageV2 outputs from the manifest bundle, picker order
+  session: null, // the previewed/live duel: {id, title, files, ranks, variantName, playerColor, enemyColor, deal}
   boardUI: null,
-  tray: null,
   duel: null,
-  placement: {}, // square -> piece letter (uppercase)
-  selectedTrayId: null,
   selectedSquare: null, // during play: player's selected from-square
-  phase: 'boot', // boot | menu | placement | playing | ended | error
+  phase: 'boot', // boot | setup | preview | playing | ended | error
   busy: false, // gates input while the engine thinks / animations run
   enginePending: null, // whenQuiet() of an abandoned duel's in-flight search
   duelsOnEngine: 0, // rule 6: recycle the instance well before ~40 games
@@ -92,59 +94,110 @@ function log(el, msg, cls) {
   el.scrollTop = el.scrollHeight;
 }
 
-function storageKey(arena) {
-  return `dck.place.${arena.id}`;
-}
+// -------------------------------------------------- setup model (generator)
 
-function loadSavedPlacement(arena) {
+const SETUP_KEY = 'dck.setup.v1';
+const ARCHETYPES = ['heavies-deep', 'minors-deep', 'scrambled'];
+const ANCHORS = ['center', 'left', 'right'];
+
+/** The generator's knobs. ONE master seed drives everything downstream
+ *  (armies, molding, Director) via childSeed, so re-entering a seed with
+ *  the same knobs reproduces the whole duel, quakes included. Default
+ *  budgets hand the player the §13 material edge (~+6). */
+const setup = {
+  stageId: null,
+  flip: false,
+  cropTop: 0,
+  cropBottom: 0,
+  turn: 'w', // initiative: 'b' = the enemy moves first (the player is always White)
+  seed: 1,
+  white: { width: 6, mode: 'budget', budget: 30, pieces: 'QRRNB', archetype: 'heavies-deep', anchor: 'center' },
+  black: { width: 6, mode: 'budget', budget: 24, pieces: 'QRNBN', archetype: 'heavies-deep', anchor: 'center' },
+};
+
+function loadSetup() {
   try {
-    const raw = localStorage.getItem(storageKey(arena));
-    if (!raw) return null;
-    const saved = JSON.parse(raw);
-    buildStartFen(arena, saved); // the one true validity check — throws on stale saves
-    return saved;
+    const saved = JSON.parse(localStorage.getItem(SETUP_KEY) ?? '{}');
+    for (const k of ['stageId', 'flip', 'cropTop', 'cropBottom', 'turn', 'seed']) {
+      if (k in saved) setup[k] = saved[k];
+    }
+    for (const side of ['white', 'black']) {
+      if (saved[side]) for (const k of Object.keys(setup[side])) if (k in saved[side]) setup[side][k] = saved[side][k];
+    }
   } catch {
-    return null;
+    /* defaults */
   }
 }
 
-function savePlacement(arena, placement) {
+function saveSetup() {
   try {
-    localStorage.setItem(storageKey(arena), JSON.stringify(placement));
+    localStorage.setItem(SETUP_KEY, JSON.stringify(setup));
   } catch {
-    /* storage unavailable — QoL only */
+    /* QoL only */
   }
 }
 
-/** Default placement — the authored formation: king nearest the patch
- *  middle, pieces by value outward (the harness's "balanced" archetype, §7),
- *  pawns at their authored squares. */
-function defaultPlacement(arena) {
-  const slots = playerSlotSquares(arena); // file-ascending
-  if (!slots.length) return {};
-  const placement = {};
-  const mid = (arena.player.backRankStart * 2 + arena.player.patchWidth - 1) / 2;
-  const byMid = slots
-    .slice()
-    .sort((a, b) => Math.abs(parseSquare(a).file - mid) - Math.abs(parseSquare(b).file - mid));
-  placement[byMid[0]] = 'K';
-  const rest = byMid.slice(1);
-  const pieces = arena.player.pieceSet
-    .slice()
-    .sort((a, b) => PIECE_VALUES[b.toLowerCase()] - PIECE_VALUES[a.toLowerCase()]);
-  pieces.slice(0, rest.length).forEach((p, i) => {
-    placement[rest[i]] = p;
-  });
-  for (const sq of defaultPawnSquares(arena)) {
-    if (!placement[sq]) placement[sq] = 'P';
+function currentStage() {
+  return app.stages.find((s) => s.id === setup.stageId) ?? null;
+}
+
+/** Side knobs → a makeArmy spec, or throw with a human-readable reason. */
+function sideSpec(side) {
+  const s = setup[side];
+  const width = s.width | 0;
+  if (width < ARMY_MIN_WIDTH || width > ARMY_MAX_WIDTH) throw new Error(`${side}: width ${width} outside ${ARMY_MIN_WIDTH}–${ARMY_MAX_WIDTH}`);
+  if (s.mode === 'pieces') {
+    const pieces = [...s.pieces.toUpperCase().replace(/[^NBRQ]/g, '')];
+    if (pieces.length !== width - 1) throw new Error(`${side}: ${pieces.length} pieces given, needs ${width - 1} (N/B/R/Q)`);
+    return { spec: { width, pieces }, archetype: s.archetype, anchor: s.anchor };
   }
-  return placement;
+  return { spec: { width, budget: s.budget | 0 }, archetype: s.archetype, anchor: s.anchor };
+}
+
+/** Compose + sanity-check the duel the current knobs describe (armygen's
+ *  dealMatchup: fit, gap, connectivity, no side in check, not decided at
+ *  ply 0). Cheap — grid math + a couple of one-position ffish probes. */
+function computeDeal() {
+  const stage = currentStage();
+  if (!stage) return { ok: false, error: 'pick a stage' };
+  try {
+    return dealMatchup({
+      stage,
+      flip: setup.flip,
+      cropTop: setup.cropTop | 0,
+      cropBottom: setup.cropBottom | 0,
+      white: sideSpec('white'),
+      black: sideSpec('black'),
+      seed: setup.seed | 0 || 1,
+      turn: setup.turn === 'b' ? 'b' : 'w',
+      ffish: app.ffish,
+    });
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function makeSession(deal) {
+  const stage = currentStage();
+  return {
+    id: deal.stage.id, // transform suffixes included (~flipped, ~crop…)
+    title: stage?.title ?? deal.stageId,
+    files: deal.files,
+    ranks: deal.ranks,
+    variantName: deal.variantName,
+    playerColor: 'white', // the player ALWAYS holds White (designer rule);
+    enemyColor: 'black', // initiative is the deal's turn field, not a seat swap
+    deal,
+    // Knob snapshot at deal time — the export stays truthful even if the
+    // setup panel is edited while this duel runs.
+    specs: { white: { ...setup.white }, black: { ...setup.black } },
+  };
 }
 
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, enemyEdit: false, godPreset: 'restless', godCustom: null, godsDebug: false };
+const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false };
 
 // The Gods (Board State Director) — tuning presets. Numbers are plies.
 // 'restless' is the sweep-validated baseline; custom exposes every knob.
@@ -183,7 +236,6 @@ function saveOptions() {
 const cheatHints = () => options.cheat && options.hints;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
-const cheatEnemyEdit = () => options.cheat && options.enemyEdit;
 // The Gods debug overlay (Phase 1.2) is a tuning instrument, not a cheat —
 // it gates on its own option so it can run without Cheater Mode.
 const godsDebug = () => options.godsDebug;
@@ -194,7 +246,6 @@ function syncOptionsUI() {
   $('optHintN').value = String(options.hintN);
   $('optUndo').checked = options.undo;
   $('optEval').checked = options.evalBar;
-  $('optEnemyEdit').checked = options.enemyEdit;
   $('cheat-opts').classList.toggle('disabled', !options.cheat);
   $('optGodPreset').value = options.godPreset;
   const cfg = godConfig();
@@ -211,7 +262,7 @@ function refreshCheatUI() {
   const inDuel = !!app.duel && (app.phase === 'playing' || app.phase === 'ended');
   $('btnUndo').hidden = !(cheatUndo() && inDuel);
   $('btnUndo').disabled =
-    app.busy || !app.duel || (app.duel.state === 'playing' && app.duel.turnColor() !== app.arena.playerColor);
+    app.busy || !app.duel || !app.session || (app.duel.state === 'playing' && app.duel.turnColor() !== app.session.playerColor);
   $('eval-bar').hidden = !(cheatEval() && inDuel);
 }
 
@@ -222,13 +273,9 @@ function applyOptions() {
   refreshGodsUI();
   if (!cheatHints()) {
     app.cheatArrows = [];
-    if (app.duel && app.phase !== 'placement') renderPlayMarks();
+    if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
   }
-  if (app.phase === 'placement') {
-    if (!cheatEnemyEdit()) app.enemySelected = null;
-    refreshPlacement();
-  }
-  if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.arena.playerColor) {
+  if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.session.playerColor) {
     void runIdleProbes(); // options may have just enabled hints/eval/overlay mid-turn
   }
 }
@@ -263,13 +310,13 @@ async function cancelCheatSearch() {
 async function runCheatSearch() {
   if (!app.duel || app.duel.state !== 'playing' || app.busy) return;
   if (!(cheatHints() || cheatEval())) return;
-  if (app.duel.turnColor() !== app.arena.playerColor) return;
+  if (app.duel.turnColor() !== app.session.playerColor) return;
   await cancelCheatSearch();
   // Re-check after the await: the player's move can land in that gap (it
   // sets app.busy BEFORE cancelling probes), and a probe launched past that
   // fence would overlap the duel's reply search — two `go`s on one engine.
   if (!app.duel || app.duel.state !== 'playing' || app.busy) return;
-  if (app.duel.turnColor() !== app.arena.playerColor) return;
+  if (app.duel.turnColor() !== app.session.playerColor) return;
   const duel = app.duel;
   const engine = app.engine;
   const mySeq = ++cheat.seq;
@@ -308,7 +355,7 @@ async function runCheatSearch() {
   if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing') return; // stale
   const pvs = parseMultiPv(res.infoLines, n);
   if (!pvs.length) return;
-  if (cheatEval()) updateEvalBar(pvs[0].score, app.arena.playerColor);
+  if (cheatEval()) updateEvalBar(pvs[0].score, app.session.playerColor);
   if (cheatHints()) {
     // Arrow strength scales with how close each move is to the best one
     // (lichess-style): equal → full size, 300cp worse → minimum size.
@@ -348,7 +395,7 @@ async function recycleIdleEngine(deadEngine) {
     if (app.duel && app.duel.state === 'playing') {
       app.duel.engine = fresh;
       fresh.send('ucinewgame');
-      fresh.setoption('UCI_Variant', app.arena.variantName);
+      fresh.setoption('UCI_Variant', app.session.variantName);
       await fresh.isready();
     }
     return true;
@@ -375,7 +422,7 @@ async function cheatProbeFailed(deadEngine, err) {
     setStatus('your move · hints unavailable');
     return;
   }
-  if (app.duel && app.duel.state === 'playing' && app.duel.turnColor() === app.arena.playerColor && !app.busy) {
+  if (app.duel && app.duel.state === 'playing' && app.duel.turnColor() === app.session.playerColor && !app.busy) {
     void runCheatSearch();
   }
 }
@@ -454,7 +501,7 @@ async function runEvalProbes() {
       evalProbe.queue.length = 0;
       return;
     }
-    if (duel.turnColor() !== app.arena.playerColor || app.busy) return; // window closed — resume next turn
+    if (duel.turnColor() !== app.session.playerColor || app.busy) return; // window closed — resume next turn
     const job = evalProbe.queue[0];
     if (job.duel !== duel) {
       evalProbe.queue.shift(); // stale job from an abandoned duel
@@ -532,8 +579,8 @@ function parseMultiPv(infoLines, n) {
 
 /** score is from povColor's point of view; the bar renders player-POV. */
 function updateEvalBar(score, povColor) {
-  if (!score || !app.arena) return;
-  const pov = povColor === app.arena.playerColor ? score : { type: score.type, value: -score.value };
+  if (!score || !app.session) return;
+  const pov = povColor === app.session.playerColor ? score : { type: score.type, value: -score.value };
   let cp;
   let text;
   if (pov.type === 'mate') {
@@ -552,11 +599,11 @@ function updateEvalBar(score, povColor) {
 async function doUndo() {
   if (!cheatUndo() || !app.duel || app.busy) return;
   const duel = app.duel;
-  if (duel.state === 'playing' && duel.turnColor() !== app.arena.playerColor) return;
+  if (duel.state === 'playing' && duel.turnColor() !== app.session.playerColor) return;
   app.busy = true;
   await cancelIdleProbes();
   evalProbe.queue.length = 0; // queued jobs belong to the abandoned timeline
-  const did = duel.undoToTurn(app.arena.playerColor === 'white' ? 'w' : 'b');
+  const did = duel.undoToTurn(app.session.playerColor === 'white' ? 'w' : 'b');
   app.busy = false;
   if (!did) {
     setStatus('nothing to undo');
@@ -751,7 +798,7 @@ let censusPending = false;
 function godsCensusNow() {
   const duel = app.duel;
   if (!duel || duel.state !== 'playing' || censusPending) return;
-  if (app.busy || duel.turnColor() !== app.arena.playerColor) {
+  if (app.busy || duel.turnColor() !== app.session.playerColor) {
     setStatus('census: wait for your turn');
     return;
   }
@@ -760,7 +807,7 @@ function godsCensusNow() {
   setTimeout(() => {
     censusPending = false;
     if (app.duel !== duel || duel.state !== 'playing' || app.busy) return;
-    if (duel.turnColor() !== app.arena.playerColor) return; // turn moved on in the gap
+    if (duel.turnColor() !== app.session.playerColor) return; // turn moved on in the gap
     app.godsCensus = computeGodsCensus();
     renderGodsCensus();
     if (app.godsHeatOn && app.godsCensus) {
@@ -776,8 +823,23 @@ function godsExportData() {
   const d = app.duel;
   if (!d) return null;
   const dir = d.director;
+  const deal = app.session?.deal;
   return {
-    arena: app.arena?.id ?? null,
+    // Full deal provenance: (stage, flip, crop, specs, setupSeed) + the
+    // Director seed below reconstruct the entire session, quakes included.
+    stage: deal?.stageId ?? null,
+    stageTransformed: app.session?.id ?? null,
+    flip: deal?.flip ?? false,
+    crop: deal ? { top: deal.cropTop, bottom: deal.cropBottom } : null,
+    turn: deal?.turn ?? 'w',
+    setupSeed: deal?.seed ?? null,
+    dealAttempt: deal?.attempt ?? null,
+    armies: deal
+      ? {
+          white: { ...deal.white.army, archetype: app.session.specs.white.archetype, anchor: app.session.specs.white.anchor },
+          black: { ...deal.black.army, archetype: app.session.specs.black.archetype, anchor: app.session.specs.black.anchor },
+        }
+      : null,
     variant: d.variantName,
     startFen: d.startFen,
     seed: dir.seed,
@@ -837,192 +899,286 @@ async function boot() {
     return;
   }
 
-  setStatus('loading arenas…');
-  const fetched = await Promise.allSettled(ARENA_MANIFEST.map((url) => fetchArena(url)));
-  fetched.forEach((r, i) => {
-    if (r.status === 'fulfilled') app.arenas.push(r.value);
-    else log(bootLog, `arena ${ARENA_MANIFEST[i]} failed to load: ${r.reason.message}`, 'bad');
-  });
-  renderMenu();
-  app.phase = 'menu';
-  setStatus('choose an arena');
+  setStatus('loading stages…');
+  try {
+    const res = await fetch('stages/manifest.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const manifest = await res.json();
+    app.stages = manifest.stages.map((json) => loadStageV2(json));
+    log(bootLog, `${app.stages.length} stages loaded`, 'ok');
+  } catch (e) {
+    setStatus('boot failed');
+    log(bootLog, `stage manifest failed to load: ${e.message} — regenerate with phase0/harness/gen-stage-manifest.mjs`, 'bad');
+    app.phase = 'error';
+    return;
+  }
+  applySetupParams();
+  renderStageList();
+  renderSidePanels();
+  syncStagePicker();
+  app.phase = 'setup';
+  setStatus('pick a stage');
 
-  const wanted = params.get('arena');
-  if (wanted) {
-    const arena = app.arenas.find((a) => a.id === wanted);
-    if (arena) await openArena(arena);
+  const wantedStage = params.get('stage');
+  if (wantedStage) {
+    // A typo'd ?stage= must FAIL, not silently open the saved stage — a
+    // driver would measure the wrong terrain without noticing.
+    if (!app.stages.some((s) => s.id === wantedStage)) {
+      setStatus(`unknown stage ${wantedStage}`);
+      return;
+    }
+    openStagePreview(); // straight into the live preview
+    if (params.get('autobegin')) {
+      if (app.session) await beginDuel();
+      else setStatus(`auto-deal failed: ${$('setup-readout').textContent}`);
+    }
   }
 }
 
-function renderMenu() {
-  const list = $('arena-list');
+// ------------------------------------------------- the setup screen (§4.2/§4.3)
+
+/** URL params → setup knobs (the E2E driver contract; see the header). */
+function applySetupParams() {
+  const stage = params.get('stage');
+  if (stage && app.stages.some((s) => s.id === stage)) setup.stageId = stage;
+  if (!currentStage()) setup.stageId = null; // saved id no longer in the set
+  if (params.get('flip') !== null) setup.flip = params.get('flip') === '1';
+  if (params.get('ct') !== null) setup.cropTop = intParam('ct', setup.cropTop, 0);
+  if (params.get('cb') !== null) setup.cropBottom = intParam('cb', setup.cropBottom, 0);
+  const turn = params.get('turn');
+  if (turn === 'w' || turn === 'b') setup.turn = turn;
+  setup.seed = intParam('seed', setup.seed, 1);
+  for (const [p, side] of [['w', 'white'], ['b', 'black']]) {
+    const raw = params.get(p);
+    if (!raw) continue;
+    // "width:spec:archetype:anchor" — spec is b<points> or piece letters.
+    const [w, spec, archetype, anchor] = raw.split(':');
+    const s = setup[side];
+    const width = parseInt(w, 10);
+    if (width >= ARMY_MIN_WIDTH && width <= ARMY_MAX_WIDTH) s.width = width;
+    if (spec) {
+      const budget = spec.match(/^b(\d+)$/i);
+      if (budget) {
+        s.mode = 'budget';
+        s.budget = parseInt(budget[1], 10);
+      } else if (/^[NBRQnbrq]+$/.test(spec)) {
+        s.mode = 'pieces';
+        s.pieces = spec.toUpperCase();
+      }
+    }
+    if (ARCHETYPES.includes(archetype)) s.archetype = archetype;
+    if (ANCHORS.includes(anchor)) s.anchor = anchor;
+  }
+}
+
+/** Tiny terrain thumbnail: the ASCII map as it is authored (far rank on top). */
+function stageMiniMap(stage) {
+  const rows = [];
+  for (let r = stage.ranks - 1; r >= 0; r--) {
+    rows.push(stage.grid[r].map((c) => (c === '*' ? '█' : '·')).join(''));
+  }
+  return rows.join('\n');
+}
+
+function renderStageList() {
+  const list = $('stage-list');
   list.textContent = '';
-  for (const arena of app.arenas) {
+  for (const stage of app.stages) {
     const card = document.createElement('button');
-    card.className = 'arena-card';
-    card.innerHTML =
-      `<span class="arena-title"></span><span class="arena-dims"></span><span class="arena-intro"></span>`;
-    card.querySelector('.arena-title').textContent = arena.title;
-    card.querySelector('.arena-dims').textContent =
-      `${arena.files}×${arena.ranks} · ${arena.initiative === 'player' ? 'you hold the initiative' : 'AMBUSH — the enemy moves first'}`;
-    card.querySelector('.arena-intro').textContent = arena.intro;
-    card.addEventListener('click', () => openArena(arena));
+    card.className = 'stage-card';
+    card.dataset.stageId = stage.id;
+    card.innerHTML = `<pre class="stage-map"></pre><span class="stage-title"></span><span class="stage-dims"></span>`;
+    card.querySelector('.stage-map').textContent = stageMiniMap(stage);
+    card.querySelector('.stage-title').textContent = stage.title;
+    card.querySelector('.stage-dims').textContent = `${stage.files}×${stage.ranks}`;
+    card.title = stage.notes;
+    card.addEventListener('click', () => {
+      setup.stageId = stage.id;
+      clampCrops();
+      saveSetup();
+      syncStagePicker();
+      openStagePreview();
+    });
     list.appendChild(card);
   }
 }
 
-// ----------------------------------------------------------------- placement
+/** Crops are bounded by the catalog floor (5 ranks must survive). */
+function clampCrops() {
+  const stage = currentStage();
+  const budget = stage ? Math.max(0, stage.ranks - 5) : 0;
+  setup.cropTop = Math.max(0, Math.min(setup.cropTop | 0, budget));
+  setup.cropBottom = Math.max(0, Math.min(setup.cropBottom | 0, budget - setup.cropTop));
+}
+
+/** Build one side's knob block (identical structure per side, distinct ids). */
+function renderSidePanels() {
+  for (const side of ['white', 'black']) {
+    const el = $(`setup-${side}`);
+    const label = side === 'white' ? 'You (White)' : 'Enemy (Black)';
+    el.innerHTML =
+      `<span class="side-label">${label}</span>` +
+      `<label class="opt">Width <select data-k="width">${Array.from(
+        { length: ARMY_MAX_WIDTH - ARMY_MIN_WIDTH + 1 },
+        (_, i) => `<option>${ARMY_MIN_WIDTH + i}</option>`
+      ).join('')}</select></label>` +
+      `<label class="opt">Army <select data-k="mode"><option value="budget">points</option><option value="pieces">exact</option></select></label>` +
+      `<label class="opt mode-budget">Points <input type="number" data-k="budget" min="4" max="75" step="1"></label>` +
+      `<label class="opt mode-pieces">Pieces <input type="text" data-k="pieces" size="8" placeholder="QRNBN"></label>` +
+      `<label class="opt">Depth <select data-k="archetype">${ARCHETYPES.map((a) => `<option>${a}</option>`).join('')}</select></label>` +
+      `<label class="opt">Anchor <select data-k="anchor">${ANCHORS.map((a) => `<option>${a}</option>`).join('')}</select></label>`;
+    for (const input of el.querySelectorAll('[data-k]')) {
+      input.addEventListener('change', () => {
+        const k = input.dataset.k;
+        const v = input.type === 'number' || k === 'width' ? parseInt(input.value, 10) : input.value;
+        setup[side][k] = v;
+        saveSetup();
+        syncPanel();
+        refreshLiveDeal(); // the armies update on the board as you tweak
+      });
+    }
+  }
+}
+
+function syncStagePicker() {
+  for (const card of $('stage-list').children) {
+    card.classList.toggle('selected', card.dataset.stageId === setup.stageId);
+  }
+}
+
+/** Reflect the setup model into the panel controls (never deals). */
+function syncPanel() {
+  const stage = currentStage();
+  if (!stage) return;
+  $('supFlip').checked = setup.flip;
+  const budget = Math.max(0, stage.ranks - 5);
+  $('supCropTop').max = String(budget);
+  $('supCropBottom').max = String(budget);
+  $('supCropTop').value = String(setup.cropTop);
+  $('supCropBottom').value = String(setup.cropBottom);
+  $('supTurn').value = setup.turn;
+  $('supSeed').value = String(setup.seed);
+  for (const side of ['white', 'black']) {
+    const el = $(`setup-${side}`);
+    for (const input of el.querySelectorAll('[data-k]')) {
+      const k = input.dataset.k;
+      if (input.value !== String(setup[side][k])) input.value = String(setup[side][k]);
+    }
+    el.querySelector('.mode-budget').hidden = setup[side].mode !== 'budget';
+    el.querySelector('.mode-pieces').hidden = setup[side].mode !== 'pieces';
+  }
+}
+
+const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
+
+/** (Re)mount the board for the given dims and show a position on it. */
+function mountPreviewBoard(files, ranks, fen) {
+  if (!app.boardUI || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
+    if (app.boardUI) app.boardUI.destroy();
+    app.boardUI = new BoardUI($('board'), {
+      files,
+      ranks,
+      flipped: false, // the player is always White at the bottom
+      onSquareTap: onSquareTap,
+    });
+  }
+  app.boardUI.setPosition(fen);
+  app.boardUI.setMarks({});
+  app.boardUI.setInteractive(false);
+}
+
+/** Walls-only FEN of the transformed terrain — what the preview shows when
+ *  the current knobs cannot deal (the stage stays visible, the reason
+ *  says why the armies are missing). */
+function terrainOnly() {
+  const stage = currentStage();
+  let t;
+  try {
+    t = cropStage(setup.flip ? flipStageVertical(stage) : stage, setup.cropTop | 0, setup.cropBottom | 0);
+  } catch {
+    t = setup.flip ? flipStageVertical(stage) : stage; // the crop is the invalid part
+  }
+  const board = emptyBoard(t.files, t.ranks);
+  for (let r = 0; r < t.ranks; r++) {
+    for (let f = 0; f < t.files; f++) if (t.grid[r][f] === '*') board[t.ranks - 1 - r][f] = '*';
+  }
+  return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1` };
+}
+
+/** THE live loop: recompute the deal from the current knobs and paint the
+ *  result on the board immediately. Every knob change lands here. */
+function refreshLiveDeal() {
+  if (app.phase !== 'preview') return;
+  const out = $('setup-readout');
+  if (!currentStage()) {
+    // configureSetup can inject an unknown stageId while previewing —
+    // report instead of dereferencing a null stage in terrainOnly().
+    app.session = null;
+    out.textContent = '✗ pick a stage';
+    out.className = 'bad';
+    $('btnBegin').disabled = true;
+    setStatus('pick a stage');
+    return;
+  }
+  const deal = computeDeal();
+  if (!deal.ok) {
+    app.session = null;
+    const t = terrainOnly();
+    mountPreviewBoard(t.files, t.ranks, t.fen);
+    $('enemy-bar').textContent = 'enemy · black';
+    $('player-bar').textContent = 'you · white';
+    out.textContent = `✗ ${deal.error}`;
+    out.className = 'bad';
+    $('btnBegin').disabled = true;
+    setStatus("doesn't fit — adjust the armies");
+    return;
+  }
+  app.session = makeSession(deal);
+  mountPreviewBoard(deal.files, deal.ranks, deal.fen);
+  $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
+  $('player-bar').textContent = `you · white · ${deal.white.army.value} pts`;
+  const edge = deal.edge > 0 ? `your edge +${deal.edge}` : deal.edge < 0 ? `enemy edge +${-deal.edge}` : 'even armies';
+  const extras = [];
+  if (deal.attempt > 0) extras.push(`re-dealt ×${deal.attempt}`);
+  if (deal.violations.length) extras.push(`${deal.violations.length} open file${deal.violations.length > 1 ? 's' : ''}`);
+  out.textContent = `✓ ${deal.files}×${deal.ranks} · gap ${deal.gap} · ${edge}${extras.length ? ' · ' + extras.join(' · ') : ''}`;
+  out.className = 'ok';
+  $('btnBegin').disabled = false;
+  setStatus(`${edge} · gap ${deal.gap}${deal.turn === 'b' ? ' · the enemy moves first' : ''}`);
+}
+
+/** Open the live preview for the currently selected stage: the board up
+ *  top, the generator knobs under it, armies re-dealt on every change. */
+function openStagePreview() {
+  const stage = currentStage();
+  if (!stage) return;
+  app.phase = 'preview';
+  app.busy = false;
+  refreshGodsUI(); // an ended duel's panel may still be up — hide it
+  refreshCheatUI();
+  showScreen('duel');
+  $('title').textContent = stage.title;
+  $('duel-log').textContent = '';
+  $('preview-controls').hidden = false;
+  $('setup-panel').hidden = false;
+  syncPanel();
+  refreshLiveDeal();
+}
+
+/** New seed, same knobs — the Re-deal buttons land here. */
+function redeal() {
+  setup.seed = randomSeed();
+  saveSetup();
+  syncPanel();
+  refreshLiveDeal();
+}
+
+// ------------------------------------------------------------------- screens
 
 function showScreen(name) {
-  $('screen-menu').hidden = name !== 'menu';
+  $('screen-setup').hidden = name !== 'setup';
   $('screen-duel').hidden = name !== 'duel';
-  $('btnBack').hidden = name === 'menu';
-}
-
-async function openArena(arena) {
-  app.arena = arena;
-  app.phase = 'placement';
-  app.busy = false;
-  refreshGodsUI(); // 'Play again' lands here with the ended duel still around — hide its panel
-  showScreen('duel');
-  $('title').textContent = arena.title;
-  $('duel-log').textContent = '';
-  $('placement-controls').hidden = false;
-
-  if (app.boardUI) app.boardUI.destroy();
-  app.boardUI = new BoardUI($('board'), {
-    files: arena.files,
-    ranks: arena.ranks,
-    flipped: arena.playerColor === 'black',
-    onSquareTap: onSquareTap,
-  });
-  app.tray = new Tray($('tray'), { onTap: onTrayTap });
-  $('enemy-bar').textContent = `enemy · ${arena.enemyColor}`;
-  $('player-bar').textContent = `you · ${arena.playerColor}`;
-
-  app.placement = loadSavedPlacement(arena) ?? defaultPlacement(arena);
-  app.enemySetup = defaultEnemySetup(arena);
-  app.selectedTrayId = null;
-  app.enemySelected = null;
-
-  refreshPlacement();
-  if (params.get('autoplace') && params.get('autobegin')) await beginDuel();
-}
-
-/** Tray model: one entry per pool piece (king, pieces, then pawns). */
-function trayItems() {
-  const pool = playerPool(app.arena).map((p, i) => ({ id: `${p}${i}`, piece: p }));
-  const used = new Map(); // piece -> count placed
-  for (const p of Object.values(app.placement)) used.set(p, (used.get(p) ?? 0) + 1);
-  return pool.map((item) => {
-    let state = 'available';
-    const left = used.get(item.piece) ?? 0;
-    if (left > 0) {
-      used.set(item.piece, left - 1);
-      state = 'placed';
-    }
-    if (item.id === app.selectedTrayId) state = 'selected';
-    return { ...item, color: app.arena.playerColor, state };
-  });
-}
-
-function selectedTrayPiece() {
-  return app.selectedTrayId ? app.selectedTrayId.replace(/\d+$/, '') : null;
-}
-
-/** Squares where the currently selected tray piece may go (empty, right rows). */
-function legalDropSquares(piece) {
-  const arena = app.arena;
-  const occupied = (sq) => app.placement[sq] || app.enemySetup[sq];
-  const base = piece === 'P' ? playerPawnSquares(arena) : piece ? playerSlotSquares(arena) : playerPawnSquares(arena);
-  return base.filter((sq) => !occupied(sq));
-}
-
-function refreshPlacement() {
-  const arena = app.arena;
-  app.boardUI.setPosition(buildPreviewFen(arena, app.placement, app.enemySetup));
-  app.boardUI.setMarks({
-    slots: legalDropSquares(selectedTrayPiece()),
-    selected: app.enemySelected ?? undefined,
-  });
-  app.tray.setPieces(trayItems());
-  app.boardUI.setInteractive(true);
-  const hasKing = Object.values(app.placement).includes('K');
-  $('btnBegin').disabled = !hasKing;
-  if (app.enemySelected) {
-    setStatus('tap a square to move the enemy piece — tap it again to remove it');
-  } else {
-    setStatus(hasKing ? 'place your pieces — then begin' : 'place your king');
-  }
-}
-
-function onTrayTap(id) {
-  if (app.phase !== 'placement') return;
-  const items = trayItems();
-  const item = items.find((x) => x.id === id);
-  if (!item || item.state === 'placed') return;
-  app.selectedTrayId = app.selectedTrayId === id ? null : id;
-  app.enemySelected = null;
-  refreshPlacement();
-}
-
-/** Enemy formation editor (cheat mode, testing tool): tap an enemy piece to
- *  pick it up, tap a square to move it, tap it again to remove it. The king
- *  can be moved but never removed (the duel config needs both kings). */
-function enemyEditTap(sq) {
-  const wallSet = new Set(app.arena.walls);
-  if (app.enemySelected) {
-    if (sq === app.enemySelected) {
-      if (app.enemySetup[sq] === 'K') {
-        app.enemySelected = null;
-        refreshPlacement();
-        setStatus('the enemy king must stay on the board');
-        return true;
-      }
-      delete app.enemySetup[sq]; // second tap removes
-      app.enemySelected = null;
-      refreshPlacement();
-      return true;
-    }
-    if (app.enemySetup[sq]) {
-      app.enemySelected = sq; // re-select another enemy piece
-      refreshPlacement();
-      return true;
-    }
-    if (!wallSet.has(sq) && !app.placement[sq]) {
-      app.enemySetup[sq] = app.enemySetup[app.enemySelected];
-      delete app.enemySetup[app.enemySelected];
-      app.enemySelected = null;
-      refreshPlacement();
-      return true;
-    }
-    return true; // wall / player-occupied — ignore the tap, keep selection
-  }
-  if (app.enemySetup[sq]) {
-    app.enemySelected = sq;
-    app.selectedTrayId = null;
-    refreshPlacement();
-    return true;
-  }
-  return false;
-}
-
-function placementTap(sq) {
-  if (cheatEnemyEdit() && enemyEditTap(sq)) return;
-  const existing = app.placement[sq];
-  const piece = selectedTrayPiece();
-  if (piece) {
-    if (!legalDropSquares(piece).includes(sq)) return;
-    // A king may only exist once: placing it elsewhere moves it.
-    if (piece === 'K') {
-      for (const [s, p] of Object.entries(app.placement)) if (p === 'K') delete app.placement[s];
-    }
-    app.placement[sq] = piece;
-    app.selectedTrayId = null;
-  } else if (existing) {
-    delete app.placement[sq]; // pick the piece back up
-  }
-  refreshPlacement();
+  $('btnBack').hidden = name === 'setup';
 }
 
 /** Fence + recycle before binding a duel to the shared engine: never reuse an
@@ -1047,36 +1203,37 @@ async function ensureEngineReady() {
   app.duelsOnEngine++;
 }
 
-/** Crumble override params are test-only; a typo must not silently change
- *  the game — fall back to the arena's numbers unless the value is sane. */
+/** Override params are test-only; a typo must not silently change the
+ *  game — fall back to the configured numbers unless the value is sane. */
 function intParam(name, fallback, min) {
   const v = parseInt(params.get(name) ?? '', 10);
   return Number.isInteger(v) && v >= min ? v : fallback;
 }
 
 async function beginDuel() {
-  const arena = app.arena;
-  let startFen;
-  try {
-    ({ startFen } = buildStartFen(arena, app.placement, app.enemySetup));
-  } catch (e) {
-    setStatus(e.message);
-    return;
-  }
-  // The enemy editor can craft positions FSF rejects — check before starting.
-  if (app.ffish.validateFen(startFen, arena.variantName) !== 1) {
-    setStatus('illegal position — adjust the setup');
-    return;
-  }
-  savePlacement(arena, app.placement);
-  $('placement-controls').hidden = true;
-  app.tray.clear();
+  const session = app.session;
+  if (!session) return;
+  const deal = session.deal;
+  $('preview-controls').hidden = true;
+  $('setup-panel').hidden = true;
+  $('duel-log').textContent = '';
   app.phase = 'playing';
   app.selectedSquare = null;
   await ensureEngineReady();
+  // Camp-line double-step (spike 14): every deal rides its own variant
+  // (double-step region = each side's camp, home edge up to its mode
+  // pawn rank). Append it to the cumulative ini — recycle paths reload
+  // app.catalog, so a mid-duel engine swap keeps the live variant — and
+  // reload this instance now.
+  if (!app.dealVariants.has(deal.variantName)) {
+    app.catalog += '\n' + deal.variantIni;
+    app.dealVariants.add(deal.variantName);
+  }
+  await app.engine.loadVariantsIni(app.catalog);
 
-  // Director config: settings preset (or custom knobs) + the arena's seed
-  // for determinism; every knob overridable via query param (test-only).
+  // Director config: settings preset (or custom knobs) + the seed the deal
+  // derived from the master setup seed (one number reproduces the whole
+  // session); every knob overridable via query param (test-only).
   const god = godConfig();
   const director = {
     onsetPly: intParam('onset', god.onsetPly, 1),
@@ -1085,7 +1242,7 @@ async function beginDuel() {
     debtCap: intParam('debt', god.debtCap, 1),
     asymOnsetPly: intParam('asymonset', god.asymOnsetPly, 1),
     asymRamp: intParam('asymramp', god.asymRamp, 1),
-    seed: intParam('seed', arena.crumble?.seed ?? 1, 1),
+    seed: intParam('dirseed', deal.directorSeed, 1),
   };
   app.cheatArrows = [];
   app.quakeMarks = null;
@@ -1105,20 +1262,19 @@ async function beginDuel() {
   app.duel = new DuelController({
     ffish: app.ffish,
     engine: app.engine,
-    variantName: arena.variantName,
-    startFen,
-    files: arena.files,
-    ranks: arena.ranks,
+    variantName: session.variantName,
+    startFen: deal.fen,
+    files: session.files,
+    ranks: session.ranks,
     director,
-    // depth 22, NOT 60: on 4–6-file arenas movetime 500 rips past depth 55,
-    // and ultra-deep searches are what probabilistically crash this WASM
-    // build's pthread ("index out of bounds" — the stall the recovery ladder
-    // catches). Measured: d60 crashed 1/30 searches at d55+; d22 crashed
-    // 0/50 and still returns in <200 ms. On big boards movetime binds first
-    // either way, so this costs nothing (the engine was reaching d22-23 in
-    // live play). Full strength per §13 is untouched — this is a stability
-    // cap, not a handicap.
-    go: params.get('go') ?? 'depth 22 movetime 500',
+    // depth 22, NOT 60: ultra-deep searches are what probabilistically crash
+    // this WASM build's pthread ("index out of bounds" — the stall the
+    // recovery ladder catches; measured d60 1/30, d22 0/50). Within that
+    // cap the engine may think as long as it needs, up to 10 s (designer
+    // decision 2026-08: human-play pacing is not a tuning concern yet) —
+    // small boards still reply in <200 ms because d22 arrives first; big
+    // boards get the full think. Lab corpora set their own faster limits.
+    go: params.get('go') ?? 'depth 22 movetime 10000',
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
   await app.duel.start();
@@ -1133,7 +1289,7 @@ async function beginDuel() {
 async function driveTurn() {
   const duel = app.duel;
   if (!duel || duel.state !== 'playing') return;
-  if (duel.turnColor() === app.arena.playerColor) {
+  if (duel.turnColor() === app.session.playerColor) {
     app.busy = false;
     app.boardUI.setInteractive(true);
     setStatus('your move');
@@ -1179,9 +1335,8 @@ function targetsFor(from) {
 
 function onSquareTap(sq) {
   if (app.busy) return;
-  if (app.phase === 'placement') return placementTap(sq);
   if (app.phase !== 'playing' || !app.duel || app.duel.state !== 'playing') return;
-  if (app.duel.turnColor() !== app.arena.playerColor) return;
+  if (app.duel.turnColor() !== app.session.playerColor) return;
 
   const legal = app.duel.legalMoves();
   const from = app.selectedSquare;
@@ -1315,13 +1470,13 @@ async function onQuake(ev) {
   if (app.duel !== duel) return;
   const bits = [];
   for (const d of displacements) {
-    const yours = (d.piece === d.piece.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;
+    const yours = (d.piece === d.piece.toUpperCase() ? 'white' : 'black') === app.session.playerColor;
     bits.push(`${yours ? 'your' : 'enemy'} ${pieceName(d.piece)} ${d.from}→${d.to}`);
   }
   if (crumble) {
     let c = `${crumble.square} collapses`;
     if (crumble.pieceLost && crumble.pieceLost !== '*') {
-      const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.arena.playerColor;
+      const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.session.playerColor;
       c += ` · ${yours ? 'your' : 'enemy'} ${pieceName(crumble.pieceLost)} is swallowed`;
     }
     bits.push(c);
@@ -1351,14 +1506,14 @@ function onEngineInfo({ score, depth }) {
   // Score is from the ENGINE's point of view (it is the mover).
   const s = score.type === 'mate' ? (score.value > 0 ? `M${score.value}` : `−M${-score.value}`) : (score.value / 100).toFixed(1);
   lastEngineInfo = `d${depth ?? '?'} ${s}`;
-  if (cheatEval()) updateEvalBar(score, app.arena.enemyColor);
+  if (cheatEval()) updateEvalBar(score, app.session.enemyColor);
 }
 
 async function onEnd({ result, winner, termination }) {
   app.phase = 'ended';
   app.busy = false;
   app.boardUI.setInteractive(false);
-  const playerWon = winner === app.arena.playerColor;
+  const playerWon = winner === app.session.playerColor;
   const title = termination === 'error' ? 'The arena falters' : playerWon ? 'Victory' : 'Defeat';
   const detail =
     termination === 'error'
@@ -1388,12 +1543,35 @@ async function onEnd({ result, winner, termination }) {
 // ------------------------------------------------------------------- wiring
 
 $('btnBegin').addEventListener('click', beginDuel);
-$('btnResetPlacement').addEventListener('click', () => {
-  app.placement = defaultPlacement(app.arena);
-  app.enemySetup = defaultEnemySetup(app.arena);
-  app.selectedTrayId = null;
-  app.enemySelected = null;
-  refreshPlacement();
+$('btnRedeal').addEventListener('click', redeal);
+$('btnReseed').addEventListener('click', redeal);
+$('supFlip').addEventListener('change', (e) => {
+  setup.flip = e.target.checked;
+  saveSetup();
+  syncPanel();
+  refreshLiveDeal();
+});
+for (const [el, key] of [['supCropTop', 'cropTop'], ['supCropBottom', 'cropBottom']]) {
+  $(el).addEventListener('change', (e) => {
+    setup[key] = Math.max(0, parseInt(e.target.value, 10) || 0);
+    clampCrops();
+    saveSetup();
+    syncPanel();
+    refreshLiveDeal();
+  });
+}
+$('supTurn').addEventListener('change', (e) => {
+  setup.turn = e.target.value === 'b' ? 'b' : 'w';
+  saveSetup();
+  syncPanel();
+  refreshLiveDeal();
+});
+$('supSeed').addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10);
+  setup.seed = Number.isInteger(v) && v >= 1 ? v : 1;
+  saveSetup();
+  syncPanel();
+  refreshLiveDeal();
 });
 $('btnBack').addEventListener('click', () => {
   const probesQuiet = cancelIdleProbes(); // cheat + eval probes are in-flight searches too
@@ -1406,12 +1584,13 @@ $('btnBack').addEventListener('click', () => {
   // 4 s wait and force-recycles when the fence never goes quiet.
   app.enginePending = Promise.all([probesQuiet, d ? d.whenQuiet() : null]).then(() => {});
   app.busy = false;
-  app.phase = 'menu';
-  showScreen('menu');
+  app.phase = 'setup';
+  showScreen('setup');
   refreshCheatUI();
   refreshGodsUI();
   $('title').textContent = 'Dungeon Crawler King';
-  setStatus('choose an arena');
+  syncStagePicker();
+  setStatus('pick a stage');
 });
 $('btnUndo').addEventListener('click', doUndo);
 $('btnOverlayUndo').addEventListener('click', doUndo);
@@ -1422,7 +1601,7 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optEnemyEdit', 'enemyEdit'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
@@ -1479,7 +1658,7 @@ $('btnGodsHeat').addEventListener('click', () => {
   syncHeatButton();
   if (!app.godsHeatOn) {
     app.godsHeat = null;
-    if (app.duel && app.phase !== 'placement') renderPlayMarks();
+    if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
     return;
   }
   if (app.godsCensus && app.duel && app.godsCensus.ply === app.duel.ply) {
@@ -1501,9 +1680,21 @@ $('btnGodsExport').addEventListener('click', async () => {
     log($('gods-trace'), 'clipboard unavailable — trace dumped to console', 'bad');
   }
 });
+// Rematch: the SAME deal and the SAME Director seed — the identical duel,
+// for "let me try that again". Re-deal: back to the live preview on a
+// fresh seed.
 $('btnAgain').addEventListener('click', () => {
   $('overlay').hidden = true;
-  openArena(app.arena);
+  void beginDuel(); // session (deal + Director seed) is untouched
+});
+$('btnOverlayRedeal').addEventListener('click', () => {
+  $('overlay').hidden = true;
+  // Fresh seed FIRST, then one preview — openStagePreview deals once;
+  // dealing with the stale seed and immediately re-dealing flashed the
+  // discarded position and ran the pipeline twice.
+  setup.seed = randomSeed();
+  saveSetup();
+  openStagePreview();
 });
 $('btnMenu').addEventListener('click', () => {
   $('overlay').hidden = true;
@@ -1564,15 +1755,21 @@ window.__DCK = {
     export: () => godsExportData(),
   },
   ready: null,
-  openArenaById: (id) => {
-    const a = app.arenas.find((x) => x.id === id);
-    if (!a) throw new Error(`no arena ${id}`);
-    return openArena(a);
+  // Setup-screen surface: patch the knobs, deal, preview, begin.
+  setup,
+  configureSetup: (partial) => {
+    for (const k of ['stageId', 'flip', 'cropTop', 'cropBottom', 'turn', 'seed']) if (k in partial) setup[k] = partial[k];
+    for (const side of ['white', 'black']) if (partial[side]) Object.assign(setup[side], partial[side]);
+    clampCrops();
+    saveSetup();
+    syncStagePicker();
+    if (app.phase === 'preview') {
+      syncPanel();
+      refreshLiveDeal();
+    }
   },
-  autoplace: () => {
-    app.placement = defaultPlacement(app.arena);
-    refreshPlacement();
-  },
+  deal: () => computeDeal(),
+  preview: () => openStagePreview(),
   begin: () => beginDuel(),
   legalMoves: () => app.duel.legalMoves(),
   randomMove: () => {
@@ -1595,6 +1792,7 @@ window.__DCK = {
 };
 
 loadOptions();
+loadSetup();
 if (params.get('godsdebug')) options.godsDebug = true; // E2E/dev override (not persisted until the user touches options)
 syncOptionsUI();
 window.__DCK.ready = boot();

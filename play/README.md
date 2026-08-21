@@ -1,9 +1,22 @@
-# Phase 1 — duel vertical slice
+# Phase 1 — duel vertical slice (the proving grounds)
 
-Hand-authored arena JSON → variant config + FEN → playable duel vs the engine
-on a phone (brief §10). Placement UI, win/loss, promotion, live Earthquakes
-(the Board State Director). No overworld. Vanilla JS ES modules, no build
-step, GitHub Pages.
+Designer-locked stage terrain × generated armies → variant config + FEN →
+playable duel vs the engine on a phone (brief §10). Setup screen (stage
+picker + army generator), win/loss, promotion, live Earthquakes (the Board
+State Director). No overworld. Vanilla JS ES modules, no build step,
+GitHub Pages.
+
+**The slice-refresh setup flow replaced the original arena menu + placement
+screen** (retired with `arenas/*.json`, `js/arena.mjs`, and the enemy-edit
+cheat): pick one of the 33 locked stages, then shape both armies LIVE — the
+generator knobs (width 3–8, points budget or exact pieces, depth archetype,
+anchor, initiative, flip, crop, one master seed + 🎲) sit under the board
+preview, and every change re-deals the armies on the board in place (an
+impossible combo shows the bare terrain and the reason, with Begin
+blocked). One master seed derives the armies, their molding AND the
+Director's quake stream — re-entering a seed reproduces the whole duel.
+The player always holds White at the bottom; "Enemy moves first" is the
+turn field, not a seat swap.
 
 **This build replaces the §4.5 crumble system with the Board State Director
 ("THE GODS")** — the experimental arena-regeneration design from the 2026-08
@@ -24,11 +37,14 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 `index.html` — service-worker scope) injects them after one self-reload.
 
 - `index.html` — the game. Debug/E2E query params (see `js/main.mjs` header):
-  `?arena=<id>&autoplace=1&autobegin=1&go=…` plus Director overrides
-  `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&seed=` and `&fx=<scale>`
-  (animation speed; **`fx=0` disables motion entirely — drivers want this**,
-  since animations run inside `app.busy` and `waitIdle()` waits them out).
-  `prefers-reduced-motion` does the same by default.
+  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…`
+  (army spec strings are `width:spec:archetype:anchor`, spec = `b<points>`
+  or piece letters — e.g. `w=6:b30`, `b=5:QRNN:scrambled`), plus Director
+  overrides `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&dirseed=`
+  and `&fx=<scale>` (animation speed; **`fx=0` disables motion entirely —
+  drivers want this**, since animations run inside `app.busy` and
+  `waitIdle()` waits them out). `prefers-reduced-motion` does the same by
+  default.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
   60-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
   must read PASS.
@@ -70,16 +86,40 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Known gaps, deliberately left to Phase 1.3: discovered attacks from the
   vacated square, rescues of already-hanging pieces, pins, and crumbles
   (which pick uniformly and so may swallow a queen as readily as air).
-- `js/variant.mjs` — Phase 0 port + the fixed 60-variant catalog (3-12 files x 5-10 ranks)
-  (`duel_3x6`…`duel_12x10`, loaded ONCE at boot — variant names are
-  single-use) and a variants.ini key allowlist (unknown keys are silently
-  ignored by both libraries).
+- `js/variant.mjs` — Phase 0 port + the fixed 60-variant catalog (3–12 files ×
+  5–10 ranks: `duel_3x5`…`duel_12x10`, loaded ONCE at boot — variant names
+  are single-use) and a variants.ini key allowlist (unknown keys are
+  silently ignored by both libraries). Promotion region = the ENTIRE far
+  rank, per color, in every variant (designer rule — see the stage section).
+  `dealVariant()` builds the PER-DEAL variant that carries the CAMP-LINE
+  double-step (spike 14): its `doubleStepRegion` spans every rank from
+  each home edge to that side's camp line (armygen `campLineRank` — the
+  mode pawn rank, ties toward the enemy), its name encodes that config
+  (`duel_<f>x<r>__w<line>__b<line>` — so re-registration is always an
+  identical no-op, never a silent rules change), and deal variants
+  register INCREMENTALLY alongside the catalog — ffish via
+  `loadVariantConfig`, the engine via the cumulative `app.catalog`
+  reload that every recycle path already performs.
+- `js/stage.mjs` — stage schema v2: terrain-only ASCII maps →
+  `loadStageV2`, plus the two transforms every corpus and the setup screen
+  use: `flipStageVertical` (the both-orientations testing convention) and
+  `cropStage` (gap control by redrawing the boundary — see below).
+- `js/armygen.mjs` — the army generator + molding layout (unit bags W×2,
+  W 3–8; molding v2.1 with the two designer invariants: royal rearmost,
+  pawns in front PER FILE) and **`dealMatchup`, the single composed entry
+  point** (terrain transforms + armies + molding + connectivity + ffish
+  sanity checks + seeded retries) shared by the setup screen,
+  `phase0/harness/verify-stages.mjs`, and the meter-lab corpus builder —
+  never re-assemble the pipeline by hand (the crumbleFilter split is the
+  cautionary tale).
+- `stages/*.json` — the 33 designer-locked stages; `stages/manifest.json`
+  is the generated browser bundle (regenerate with
+  `phase0/harness/gen-stage-manifest.mjs` after any stage edit —
+  `verify-stages.mjs` fails on a stale bundle). Designer review gallery:
+  `stages-gallery.html` (generated by `phase0/harness/gen-gallery.mjs`).
 - `js/engine.mjs` — browser engine/ffish access; `UciEngine` is the Phase 0
   class verbatim, incl. the search watchdog. Boot always sets
   `Use NNUE false` (defaults TRUE in this build) and `Threads 1`.
-- `js/arena.mjs` — arena JSON validation/loading, §6 connectivity lint,
-  placement → startFen. The initiative side plays White and sits at the
-  bottom in FEN terms; the UI flips the view when the player is Black.
 - `js/duel.mjs` — the live game loop, a structural port of
   `phase0/harness/game.mjs`: ffish is the source of truth, game end is
   `numberLegalMoves() === 0` → side to move loses. The bare-army rule (a
@@ -90,8 +130,8 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   only kingless states (surgery-only). Engine history resets via bare
   `position fen` after every quake, plus an engine-stall recovery
   ladder (recycle instance, retry at reduced depth).
-- `js/board-ui.mjs`, `style.css` — board/tray/promotion rendering, absolute
-  `data-square` addressing, fits 3×6–12×10 boards on a 390×844 viewport.
+- `js/board-ui.mjs`, `style.css` — board/promotion rendering, absolute
+  `data-square` addressing, fits 3×5–12×10 boards on a 390×844 viewport.
   **Phase 1.1 motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -102,73 +142,91 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   flashed both squares with one class, so it showed *that* something moved
   but never *which way* — and its 700 ms flash outlived the 450 ms wait, so
   the piece teleported mid-flash.
-- `js/main.mjs` — boot, menu, placement flow (§4.3), duel driving, win/loss.
-- `arenas/*.json` — the authored arenas (schema documented below).
+- `js/main.mjs` — boot, the setup screen (stage picker + generator panel),
+  duel driving, win/loss.
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
-## Arena JSON (schema 1)
+## Stages (schema 2) + the army generator
+
+A stage is GROUND — walls and dimensions drawn as ASCII, nothing else
+(armies are never part of a stage):
 
 ```json
-{
-  "schema": 1, "id": "arena01-first-duel", "title": "First Duel",
-  "intro": "1–2 lines of flavor",
-  "files": 4, "ranks": 6,
-  "walls": [],
-  "enemy":  { "backRank": ["N", "K"], "backRankStart": 1, "pawns": ["b", "c"] },
-  "player": { "pieceSet": ["R", "N"], "backRankStart": 0, "patchWidth": 3, "pawns": ["a", "b", "c"] },
-  "initiative": "player",
-  "crumble": { "onsetPly": 40, "cadence": 10, "seed": 101 }
-}
+{ "schema": 2, "id": "s03-the-squeeze", "title": "The Squeeze",
+  "notes": "why this terrain exists / what it tests",
+  "map": ["#....", ".....", "..."] }
 ```
 
-The `crumble` block is legacy-shaped: **only `seed` is read by this build**
-(the Director's pacing comes from the settings preset / query params);
-`onsetPly`/`cadence` are validated but ignored.
+`.` floor · `#` wall (`*` accepted — the FEN glyph); rectangular, top rank
+first; 3–12 files × 5–10 ranks (the engine's largeboard caps). The 33
+locked stages are a curated sample of plausible dungeon slices — Phase 2's
+dungeon generator replaces authoring wholesale, so there is no editor; the
+diff and the gallery are the review surface.
 
-Absolute board coordinates; `backRank` arrays are file-ascending; player
-patch width 3–5 (§4.2), enemy patch width 2–5 (the width-3 floor is
-player-side only — a 2-wide "scrub" army just leaves open lanes); gap
-(`ranks − 4`) capped at 4 — gaps 5–6 grind past 100 plies in every sweep,
-and the Phase 2 duel trigger will enforce the same ceiling; walls eat slots
-(a walled back-row slot suppresses that file's pawn too — under the default
-automatic pawn row); never wall a 3-file arena (one wall costs a third of a
-rank's cross-section — the linter caught a walled 3×8 turning into an enemy
-fortress); `pieceSet` excludes the king (always in the placement pool). The optional per-side `"pawns"` array (file letters) authors a SPARSE
-pawn row instead of §4.2's automatic full-patch row (`[]` = pawnless).
-`loadArena` rejects out-of-catalog dims, patch violations, a walled
-enemy-king slot, and arenas whose walls sever the two formations.
+**The deal pipeline** (armygen `dealMatchup`, one call): stage →
+`flipStageVertical`? → `cropStage`? → per-side armies (`makeArmy`: width
+3–8, explicit pieces or a seeded points-budget draw) → molding
+(`layoutArmy` — dense center-out fill; royal rearmost, pawns in front per
+file; walls reshape everything) → gap check → connectivity check → the
+deal's own variant (the camp-line double-step, spike 14) → ffish sanity
+probes (no side starts in check, not decided at ply 0) → seeded retries
+on rejection → start FEN + `variantName`/`variantIni`. Everything
+derives from ONE master seed via `childSeed` (armies, molding, and the
+Director's quake stream), so a seed + knobs reproduces the entire duel.
 
-Placement (deliberately looser than §4.2's patch): the arena's
-`backRankStart`/`patchWidth`/`pawns` define only the DEFAULT arrangement.
-During setup the player may place pieces anywhere on their back row and
-pawns anywhere on their first two rows (FSF accepts back-rank pawns; they
-keep a single-step push). The pool is king + `pieceSet` + the authored pawn
-count.
+**Double-step = the CAMP LINE (designer rule, 2026-08-21).** Every pawn
+has the two-square push **at or behind its side's camp line** — the rank
+holding the most of that side's dealt pawns, ties toward the enemy — and
+never past it. Spike 13's every-visit caveat (repeated doubles from
+anywhere) is repealed. The line sits where the position LOOKS like the
+starting line: chess's row-based rule generalized — it equals
+first-move-only until a quake moves a pawn backward or sideways, and
+there the row wins, because a player can see a line, not a pawn's
+history. Accepted consequences: a pawn molded AHEAD of the wall
+(~10% of dealt pawns on this bed) reads and plays as already advanced —
+no leap, ever; a moved pawn knocked back behind the line regains the
+jump; rear pawns behind the line can single-step then double once lanes
+open (tied stacks put the line at the front wall).
 
-Balance philosophy (§13, §2.2): the engine is always full strength, so
-arenas hand the PLAYER a decisive material edge — difficulty tuning happens
-entirely in these JSON files. The shipped arenas follow the puzzle vision:
-the player fields the 3×2 starter army (K+R+N + 3 pawns) against small
-armies (K + one or two pieces, 0–2 pawns), targeting mates in roughly 10–20
-plies under good play while staying ~2 blunders from a loss. Engine-vs-engine
-plies per arena are measured by `phase0/harness/verify-play-arenas.mjs`
-(encounter linter v0 — run it after editing any arena).
+**Crop = redrawing the boundary (designer rule, 2026-08).** To every piece
+a rank of solid wall and the board simply ending are identical, so
+`cropStage` REMOVES far/near ranks instead of walling them; the cropped
+board uses the smaller catalog variant. Consequence, load-bearing: **the
+promotion zone is ALWAYS the entire actual far rank of the playable area,
+for both sides, at every crop** — never a square outside it. (Corollary:
+no stage may have a fully-walled extreme rank, and no crop may create one —
+`loadStageV2`/`cropStage`/`verify-stages` all enforce it.) Cropping exists
+so every stage can test smaller gaps than its full height supports — it
+rehearses how a dungeon encounter will draw arena boundaries.
+
+Balance philosophy (§13, §2.2): the engine is always full strength, so the
+tuning knob is the material edge the generator hands the player (the setup
+screen shows the live edge; §7's puzzle band is ~+4..+7, "two blunders
+from losing"). Mirror matches are a lab-only bias canary, never a play
+mode. The static verifier is `phase0/harness/verify-stages.mjs` (every
+stage × both orientations × crops × sampled armies through `dealMatchup`,
+exit-code semantics — run it after editing any stage); engine-vs-engine
+verification is the meter-lab rerun on this same bed.
 
 ## Options / Cheater Mode
 
-The gear menu has a Cheater Mode toggle with four sub-options, persisted in
+The gear menu has a Cheater Mode toggle with three sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
 on the player's turn — lichess-style arrows whose width/opacity scale with
 how close each move is to the best one, + SANs in the status line; MultiPV
 is always reset to 1 before the engine's own replies, which stay
 full-strength), **Allow undo** (snapshot-based rewind to the player's
 previous turn, usable from the loss screen; the Director RNG stream is not
-rewound), **Show eval bar** (player-POV score from the engine's replies and
-the cheat probes), and **Edit enemy pieces** (testing tool: during
-placement, tap an enemy piece to pick it up, tap a square to move it, tap it
-again to remove it — the enemy king can be moved but never removed, and the
-final position is FSF-validated at Begin).
+rewound), and **Show eval bar** (player-POV score from the engine's replies
+and the cheat probes). The old "edit enemy pieces" testing tool retired
+with the placement screen — the generator knobs + seeds cover its job.
+
+Engine pacing (designer decision, 2026-08): the enemy thinks up to **10
+seconds** per move (`depth 22 movetime 10000` — the depth cap is the WASM
+stability rule, not a strength limit). Small boards still reply in
+<200 ms because depth 22 arrives first; big boards get the full think.
+Lab corpora set their own faster limits.
 
 ## The Gods debug overlay (Phase 1.2)
 
@@ -243,7 +301,9 @@ What the panel shows:
   itself. Without the overlay they keep their shipped meaning (next duel).
   Config changes never touch the RNG stream, debt, or favor.
 - **Export** (`copy trace`) — the full ledger as JSON to the clipboard:
-  arena, seed, `config0` (the starting config a replay constructs with),
+  the deal provenance (stage id, flip, crop, army specs, master setup
+  seed — everything a replay re-deals from), the Director seed,
+  `config0` (the starting config a replay constructs with),
   the live config, tunes (undo drops a `{ply, undo: true}` marker on the
   ledger, since an undo forks the RNG stream and ends replayability),
   moves, quakes + deltas, every roll trace. `__DCK.gods.export()` returns

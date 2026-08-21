@@ -11,10 +11,12 @@
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
-import { splitFen, parseBoard, serializeBoard, setSquare, getSquare } from './fen.mjs';
+import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns } from './director.mjs';
 import { captureLoss } from './threat.mjs';
+import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
+import { dealMatchup, campLineRank } from './armygen.mjs';
 
 const out = document.getElementById('out');
 const summaryEl = document.getElementById('summary');
@@ -95,12 +97,13 @@ async function main() {
     return '60 variants written to /variants.ini, readyok';
   });
 
-  // --- Catalog extremes: smallest and largest boards construct and move ---
+  // --- Catalog extremes: smallest and largest boards construct and move.
+  // 3x5 IS the real minimum the setup screen serves (s01-the-closet). ---
   const extremeSpecs = [
     {
-      files: 3, ranks: 6, walls: [],
+      files: 3, ranks: 5, walls: [],
       white: { backRank: ['R', 'K', 'N'], backRankStart: 0, row: 0 },
-      black: { backRank: ['r', 'k', 'n'], backRankStart: 0, row: 5 },
+      black: { backRank: ['r', 'k', 'n'], backRankStart: 0, row: 4 },
     },
     {
       files: 12, ranks: 10, walls: [],
@@ -120,6 +123,161 @@ async function main() {
       return `${n} legal moves`;
     });
   }
+
+  // --- The proving grounds (slice refresh): stages + the army generator.
+  // The setup screen fetches the manifest bundle and runs dealMatchup in the
+  // browser for the first time — these checks make a regression in that
+  // path visible here, not on a phone. ---
+  let stages = [];
+  await check('stage manifest loads and validates', async () => {
+    const res = await fetch('stages/manifest.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status} — regenerate with phase0/harness/gen-stage-manifest.mjs`);
+    const manifest = await res.json();
+    stages = manifest.stages.map((json) => loadStageV2(json));
+    if (stages.length !== manifest.count || stages.length < 33) {
+      throw new Error(`expected ≥33 stages (count ${manifest.count}), loaded ${stages.length}`);
+    }
+    for (const s of stages) {
+      if (!s.grid[0].some((c) => c === null) || !s.grid[s.ranks - 1].some((c) => c === null)) {
+        throw new Error(`${s.id}: an extreme rank is all wall — the promotion row must be playable`);
+      }
+    }
+    return `${stages.length} stages, all promotion rows playable`;
+  });
+
+  await check('flipStageVertical is an involution on every stage', () => {
+    if (!stages.length) throw new Error('no stages loaded');
+    for (const s of stages) {
+      const back = flipStageVertical(flipStageVertical(s));
+      if (JSON.stringify(back.grid) !== JSON.stringify(s.grid)) throw new Error(`${s.id}: double flip changed the grid`);
+      if (JSON.stringify([...back.walls].sort()) !== JSON.stringify([...s.walls].sort())) {
+        throw new Error(`${s.id}: double flip changed the wall set`);
+      }
+    }
+    return `${stages.length} stages round-trip`;
+  });
+
+  const dealKnobs = {
+    white: { spec: { width: 6, budget: 30 } },
+    black: { spec: { width: 5, budget: 20 } },
+    seed: 7,
+  };
+  await check('dealMatchup is deterministic and self-checking', () => {
+    const s21 = stages.find((s) => s.id === 's21-collapsed-keep');
+    if (!s21) throw new Error('s21-collapsed-keep missing from the manifest');
+    const a = dealMatchup({ stage: s21, flip: true, cropTop: 1, cropBottom: 1, ...dealKnobs, turn: 'b', ffish });
+    if (!a.ok) throw new Error(`deal failed: ${a.error}`);
+    const b = dealMatchup({ stage: s21, flip: true, cropTop: 1, cropBottom: 1, ...dealKnobs, turn: 'b', ffish });
+    if (a.fen !== b.fen || a.directorSeed !== b.directorSeed) throw new Error('same inputs dealt different duels');
+    if (!a.variantName.startsWith(`${catalogVariantName(10, 8)}__w`) || !a.variantIni) {
+      throw new Error(`crop 1t1b of 10x10 should ride a duel_10x8 DEAL variant, got ${a.variantName}`);
+    }
+    if (a.fen.split(' ')[1] !== 'b') throw new Error('turn field lost — enemy-first deals must start black to move');
+    return `10x10→${a.files}x${a.ranks} flipped deal replays exactly (gap ${a.gap}, edge ${a.edge >= 0 ? '+' : ''}${a.edge})`;
+  });
+
+  // The designer's double-step rule (spike 14, camp line): each side's
+  // deal variant grants the leap at or behind its front-most dealt pawn
+  // rank — past the line, never again. Quake-scooted pawns behind the
+  // line keep it, which is the whole point of rows over dealt squares.
+  await check('double-step follows the camp line on a dealt board', () => {
+    const s26 = stages.find((s) => s.id === 's26-flats');
+    if (!s26) throw new Error('s26-flats missing from the manifest');
+    const deal = dealMatchup({ stage: s26, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 18 } }, seed: 4, ffish });
+    if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
+    const whitePawns = deal.white.layout.cells.filter((c) => c.piece === 'P');
+    const wLine = campLineRank(deal.white.layout.cells, 1); // mode pawn rank, ties toward the enemy
+    if (!deal.variantName.includes(`__w${wLine}__`)) throw new Error(`variant ${deal.variantName} does not encode line w${wLine}`);
+    const sq = (c) => `${String.fromCharCode(97 + c.f)}${c.r + 1}`;
+    const b = new ffish.Board(deal.variantName, deal.fen);
+    const legal = () => b.legalMoves().trim().split(/\s+/).filter(Boolean);
+    // dealt pawns on the line offer the double at ply 0
+    const doubles = legal().filter((m) => {
+      const p = whitePawns.find((c) => m.startsWith(sq(c)));
+      return p && parseInt(m.slice(sq(p).length).replace(/^[a-l]/, ''), 10) === p.r + 3;
+    });
+    if (!doubles.length) {
+      b.delete();
+      throw new Error('no dealt pawn offers a double-step at ply 0');
+    }
+    // a pawn that crosses the line loses the leap forever
+    const pawn = whitePawns.find((c) => legal().includes(`${sq(c)}${String.fromCharCode(97 + c.f)}${c.r + 2}`));
+    if (!pawn) {
+      b.delete();
+      throw new Error('no pawn with a legal single step to test');
+    }
+    const from = sq(pawn);
+    const stepped = `${String.fromCharCode(97 + pawn.f)}${pawn.r + 2}`;
+    b.push(`${from}${stepped}`);
+    b.push(legal()[0]); // any black reply
+    const saved = legal().find((m) => m.startsWith(stepped) && m.endsWith(String(pawn.r + 4)));
+    b.delete();
+    if (saved) throw new Error(`pawn ${from}→${stepped} kept its leap past the line (${saved})`);
+    // the quake-scoot case: a pawn relocated to an empty square BEHIND the
+    // line (never a dealt square) must still leap — simulate the surgery.
+    const scootTo = findSquares(deal.fen, (cell, f, r) => cell === null && r + 1 < wLine)
+      .find((s) => getSquare(deal.fen, { file: s.file, rankFromBottom: s.rankFromBottom + 1 }) === null
+        && getSquare(deal.fen, { file: s.file, rankFromBottom: s.rankFromBottom + 2 }) === null);
+    if (!scootTo) {
+      return `${doubles.length} camp-line doubles at ply 0; crossing the line kills the leap (no open scoot square to test the quake case)`;
+    }
+    const scootFen = setSquare(setSquare(deal.fen, from, null), scootTo.name, 'P');
+    const b2 = new ffish.Board(deal.variantName, scootFen);
+    const leap = b2.legalMoves().trim().split(/\s+/).includes(`${scootTo.name}${String.fromCharCode(97 + scootTo.file)}${scootTo.rankFromBottom + 3}`);
+    b2.delete();
+    if (!leap) throw new Error(`scooted pawn on ${scootTo.name} (behind line ${wLine}) cannot leap`);
+    return `${doubles.length} camp-line doubles at ply 0; crossing the line kills the leap; a scooted pawn on ${scootTo.name} still leaps`;
+  });
+
+  await check('molding invariants hold on a dealt board', () => {
+    const s11 = stages.find((s) => s.id === 's11-grand-hall');
+    if (!s11) throw new Error('s11-grand-hall missing from the manifest');
+    const deal = dealMatchup({ stage: s11, white: { spec: { width: 8, budget: 40 } }, black: { spec: { width: 8, budget: 40 } }, seed: 3, ffish });
+    if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
+    for (const [layout, isWhite] of [[deal.white.layout, true], [deal.black.layout, false]]) {
+      const rearward = (r) => (isWhite ? r : deal.ranks - 1 - r); // rows from the side's home edge
+      const royalRow = Math.min(...layout.cells.filter((c) => c.piece === 'K').map((c) => rearward(c.r)));
+      const minRow = Math.min(...layout.cells.map((c) => rearward(c.r)));
+      if (royalRow !== minRow) throw new Error(`${isWhite ? 'white' : 'black'}: royal not in the rearmost occupied row`);
+      const byFile = new Map();
+      for (const c of layout.cells) {
+        if (!byFile.has(c.f)) byFile.set(c.f, []);
+        byFile.get(c.f).push(c);
+      }
+      for (const [f, cells] of byFile) {
+        const pawns = cells.filter((c) => c.piece === 'P').map((c) => rearward(c.r));
+        const pieces = cells.filter((c) => c.piece !== 'P').map((c) => rearward(c.r));
+        if (pawns.length && pieces.length && Math.min(...pawns) <= Math.max(...pieces)) {
+          throw new Error(`${isWhite ? 'white' : 'black'} file ${f}: a pawn sits behind a piece`);
+        }
+      }
+    }
+    return `royal-rearmost + per-file pawn screen hold for both 8x2 armies (gap ${deal.gap})`;
+  });
+
+  // The designer's promotion rule: the promotion zone is ALWAYS the entire
+  // actual far rank of the playable area, both sides — cropping redraws the
+  // boundary (the rank is REMOVED, never walled off), so the smaller
+  // catalog variant's promotion region is the real far rank by construction.
+  await check('cropping keeps promotion on the actual far rank', () => {
+    const s21 = stages.find((s) => s.id === 's21-collapsed-keep');
+    const cropped = cropStage(s21, 2, 1); // 10x10 → 10x7
+    if (cropped.ranks !== 7 || cropped.variantName !== catalogVariantName(10, 7)) {
+      throw new Error(`crop 2t1b: expected 10x7 duel_10x7, got ${cropped.files}x${cropped.ranks} ${cropped.variantName}`);
+    }
+    // A white pawn one step under the cropped far rank must have promotion
+    // moves there (both sides keep escorts — a bare king is decided at load).
+    const fen = '2k7/P1p7/10/10/10/2P7/2K7 w - - 0 1'; // 10 files x 7 ranks
+    if (ffish.validateFen(fen, cropped.variantName) !== 1) throw new Error('promotion fixture FEN rejected');
+    const b = new ffish.Board(cropped.variantName, fen);
+    const moves = b.legalMoves().trim().split(/\s+/).filter(Boolean);
+    b.delete();
+    const promos = moves.filter((m) => m.startsWith('a6a7'));
+    if (!promos.length || !promos.some((m) => m.length > 4)) {
+      throw new Error(`no promotion moves on the cropped far rank (a6a7*): ${moves.join(' ')}`);
+    }
+    return `a6a7 promotes on duel_10x7 (${promos.join(' ')})`;
+  });
 
   // --- Duel generation + legality cross-check (phase0 selftest, 9x8 arena) ---
   const spec = {
