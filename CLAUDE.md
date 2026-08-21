@@ -24,7 +24,14 @@ a seeded quake sequence replays identically with the overlay exercised);
 "no new winning capture for either side", retune — the 1.2 instrument
 supplies the evidence: eval-delta flips decide whether SEE suffices,
 `rejected.unsafe_landing` counts starvation risk, fall-through rates show
-the crumble-rate shift). Then **Phase 1.5 — Director calibration** (port
+the crumble-rate shift). **1.3 evidence work is PAUSED on the
+proving-grounds refresh** (`play/SLICE-REFRESH-PLAN.md`): the meter-lab
+data (`phase0/harness/meterlab/`, results + findings in
+`phase0/results/`) showed the ply-ramp trigger is the wrong half of the
+Director, but final numbers wait on a representative test bed — stages
+3×5–10×10 (authored, gallery-verified) × a knobbed army generator (W×2
+armies, molding layout; army size is INDEPENDENT of stage geometry).
+Then **Phase 1.5 — Director calibration** (port
 `harness/game.mjs` off the retired crumble system, add the §6 promotion
 lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
 twice — and finally **Phase 2 — exploration slice**.
