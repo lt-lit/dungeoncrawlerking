@@ -38,7 +38,7 @@
 //
 // Exit 0 = all PASS.
 import { loadFfish, loadEngine } from '../lib/load.mjs';
-import { makeCatalogIni, makeDuelVariantIni } from '../../play/js/variant.mjs';
+import { makeCatalogIni, makeDuelVariantIni, dealVariant } from '../../play/js/variant.mjs';
 
 let failures = 0;
 const check = (name, cond, detail = '') => {
@@ -110,6 +110,35 @@ check('KNOWN residual: pawn arriving on a comrade dealt square regains once', m.
   const fen = '4k5/pppppppp2/10/10/10/10/10/10/PPPPPPPP2/4K5 w - - 0 1';
   check('long deal-variant name registers and validates', ffish.validateFen(fen, long) === 1);
   check('long-name variant serves doubles', moves(long, fen).includes('a2a4'));
+}
+
+// ---- 2b: THE SHIPPED RULE — the camp line (designer-final, 2026-08-21) ----
+// Exact dealt squares proved too literal to read: quakes scoot untouched
+// pawns sideways/backwards off their squares, and a player can't see
+// where a pawn was born. The designer chose rows: each side's double-step
+// zone is every rank from its home edge up to its FRONT-MOST dealt pawn
+// rank — "at or behind your starting line, you can leap; past it, never
+// again" (chess's own row rule generalized; the two readings only differ
+// because quakes can move pawns backward). Three signed consequences:
+// knocked-back moved pawns regain; stacked rear pawns can 1-then-2 while
+// behind the line; wall-scattered molding sets the line at the deepest
+// front pawn. dealVariant() is the production builder under test here.
+{
+  const v = dealVariant(5, 8, 4, 6); // white camp = ranks 1-4, black camp = ranks 6-8
+  check('dealVariant name encodes the lines', v.name === 'duel_5x8__w4__b6', v.name);
+  ffish.loadVariantConfig(v.ini);
+  // quake-scoot fiction: a NEVER-MOVED white pawn now sits on a2 — not a
+  // square any pawn was dealt onto, but behind the line. It must leap.
+  let mm = moves(v.name, ['4k', '5', '2p2', '5', '5', '5', 'P4', 'K1R2'].join('/') + ' w - - 0 1');
+  check('camp line: scooted pawn behind the line leaps (a2a4)', mm.includes('a2a4'));
+  mm = moves(v.name, ['4k', '5', '2p2', '5', '1P3', '5', '5', 'KR3'].join('/') + ' w - - 0 1');
+  check('camp line: pawn ON the line leaps (b4b6)', mm.includes('b4b6'));
+  mm = moves(v.name, ['4k', '5', '2p2', 'P4', '5', '5', '5', 'KR3'].join('/') + ' w - - 0 1');
+  check('camp line: pawn past the line never leaps (a5a7 absent)', !mm.includes('a5a7'));
+  mm = moves(v.name, ['4k', '2p2', '5', '5', '5', '5', 'P4', 'K1R2'].join('/') + ' b - - 0 1');
+  check('camp line: black pawn behind ITS line leaps (c7c5)', mm.includes('c7c5'));
+  mm = moves(v.name, ['4k', '5', '5', '2p2', '5', '5', 'P4', 'K1R2'].join('/') + ' b - - 0 1');
+  check('camp line: black pawn past its line never leaps (c5c3 absent)', !mm.includes('c5c3'));
 }
 
 // ---- 3: betza `i` is region-gated (no hidden move tracking) ----

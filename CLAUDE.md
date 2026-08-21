@@ -33,11 +33,12 @@ bed's data half is DONE**: 33 designer-locked stages (`play/stages/`,
 gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
 (`play/js/armygen.mjs` — W×2 unit bags, W 3–8, molding layout with two
 invariants: royal rearmost, pawns in front PER FILE; army size is
-INDEPENDENT of stage geometry), plus the universal FIRST-MOVE-ONLY pawn
-double-step (spikes 13+14 — every deal registers its own variant whose
-`doubleStepRegion` is the dealt pawn squares; the every-visit caveat is
-REPEALED, designer correction 2026-08-21) and a 60-variant catalog
-(ranks 5–10). Balance corpora run every stage in BOTH vertical
+INDEPENDENT of stage geometry), plus the CAMP-LINE pawn double-step
+(spikes 13+14 — every deal registers its own variant whose
+`doubleStepRegion` runs from each home edge to that side's front-most
+dealt pawn rank: at or behind your starting line you can leap, past it
+never again; the every-visit caveat is REPEALED, designer correction
+2026-08-21) and a 60-variant catalog (ranks 5–10). Balance corpora run every stage in BOTH vertical
 orientations (mirrors are not separate scenarios — `flipStageVertical`).
 **The setup-UI rework is DONE**: the game boots into a stage picker →
 LIVE preview (the generator panel sits under the board and every knob
@@ -136,8 +137,8 @@ run one sweep at a time.
 7. **Variant names are single-use** (redefinition silently no-ops). Use the
    dims-keyed catalog pattern: `duel_<files>x<ranks>`, all 60 loaded once at
    boot. Incremental ADDITION of new names is safe in both libraries
-   (spike 14): per-deal variants (`duel_<f>x<r>__w<sqs>__b<sqs>`, the
-   first-move-only double-step) register alongside the catalog, and their
+   (spike 14): per-deal variants (`duel_<f>x<r>__w<line>__b<line>`, the
+   camp-line double-step) register alongside the catalog, and their
    names ENCODE their config so a re-registration is always an
    identical-config no-op — never mint a deal-variant name that doesn't
    fully determine its rules. The engine learns them via the CUMULATIVE

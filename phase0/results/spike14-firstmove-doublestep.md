@@ -1,6 +1,22 @@
-# Spike 14 — first-move-only pawn double-step
+# Spike 14 — first-move-only pawn double-step → the CAMP LINE
 
-**Status: PASS (14/14).** Runnable: `node spikes/spike14-firstmove-doublestep.mjs`.
+**Status: PASS (20/20).** Runnable: `node spikes/spike14-firstmove-doublestep.mjs`.
+
+**Final rule (designer, 2026-08-21, second pass):** the shipped semantics
+are ROW-based, not square-based — each side's double-step zone is every
+rank from its home edge up to its front-most dealt pawn rank (the **camp
+line**): at or behind your starting line you can leap; past it, never
+again. Chess's own double-step is row-based too, and equals
+first-move-only there only because nothing can move a pawn backward —
+quakes CAN, and where the readings diverge the designer chose the row: a
+player can see a line, and cannot see a pawn's move history (a
+quake-scooted, never-touched pawn stripped of its leap by exact-square
+regions "doesn't read"). Three consequences, designer-accepted: a moved
+pawn knocked back behind the line regains the jump; in stacked pawn rows
+a rear pawn still behind the line can single-step then double;
+wall-scattered molding puts the line at the front-most pawn, widening
+shallower files' zones. The exact-dealt-squares variant below remains
+verified as the tighter-but-illegible alternative.
 
 ## The problem
 
@@ -49,11 +65,12 @@ it stands on the square it was dealt onto.**
 
 ## Production shape
 
-`variant.mjs → dealVariant(files, ranks, whitePawnSquares,
-blackPawnSquares)` builds the per-deal block; `armygen.dealMatchup`
-derives the pawn squares from the molded layouts, registers the variant
-in ffish before its own FEN lint, and returns `variantName` +
-`variantIni`; the game appends the block to its cumulative ini and
-reloads the engine per duel (recycle paths reload the same cumulative
-text, so a mid-duel engine swap keeps the live variant). The 60-variant
-catalog is untouched — deal variants ride alongside it.
+`variant.mjs → dealVariant(files, ranks, whiteLineRank, blackLineRank)`
+builds the per-deal block (`duel_<f>x<r>__w<line>__b<line>`, regions =
+rank spans from each home edge to the line); `armygen.dealMatchup`
+derives the camp lines from the molded layouts (front-most pawn rank per
+side), registers the variant in ffish before its own FEN lint, and
+returns `variantName` + `variantIni`; the game appends the block to its
+cumulative ini and reloads the engine per duel (recycle paths reload the
+same cumulative text, so a mid-duel engine swap keeps the live variant).
+The 60-variant catalog is untouched — deal variants ride alongside it.

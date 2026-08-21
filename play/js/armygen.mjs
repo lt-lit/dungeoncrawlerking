@@ -362,14 +362,15 @@ export function dealMatchup({
       reasons.push(`attempt ${attempt}: disconnected`);
       continue;
     }
-    // First-move-only double-step (spike 14): the deal's own variant,
-    // double-step region = the exact squares the pawns are dealt onto.
-    const sqName = (c) => `${String.fromCharCode(97 + c.f)}${c.r + 1}`;
+    // The camp-line double-step (spike 14, designer rule): each side's
+    // deal variant grants the two-square push at or behind its
+    // front-most dealt pawn rank — past the line, never again.
+    const pawnRanks = (side) => m[side].layout.cells.filter((c) => c.piece === 'P').map((c) => c.r + 1);
     const variant = dealVariant(
       terrain.files,
       terrain.ranks,
-      m.white.layout.cells.filter((c) => c.piece === 'P').map(sqName),
-      m.black.layout.cells.filter((c) => c.piece === 'P').map(sqName)
+      Math.max(...pawnRanks('white')),
+      Math.min(...pawnRanks('black'))
     );
     if (ffish) {
       registerDealVariant(ffish, variant);

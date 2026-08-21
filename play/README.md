@@ -91,10 +91,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   are single-use) and a variants.ini key allowlist (unknown keys are
   silently ignored by both libraries). Promotion region = the ENTIRE far
   rank, per color, in every variant (designer rule — see the stage section).
-  `dealVariant()` builds the PER-DEAL variant that makes the pawn
-  double-step FIRST-MOVE-ONLY (spike 14): its `doubleStepRegion` is the
-  exact squares the pawns are dealt onto, its name encodes that config
-  (so re-registration is always an identical no-op, never a silent rules
+  `dealVariant()` builds the PER-DEAL variant that carries the CAMP-LINE
+  double-step (spike 14): its `doubleStepRegion` spans every rank from
+  each home edge to that side's front-most dealt pawn rank, its name
+  encodes that config (`duel_<f>x<r>__w<line>__b<line>` — so
+  re-registration is always an identical no-op, never a silent rules
   change), and deal variants register INCREMENTALLY alongside the catalog
   — ffish via `loadVariantConfig`, the engine via the cumulative
   `app.catalog` reload that every recycle path already performs.
@@ -167,21 +168,22 @@ diff and the gallery are the review surface.
 3–8, explicit pieces or a seeded points-budget draw) → molding
 (`layoutArmy` — dense center-out fill; royal rearmost, pawns in front per
 file; walls reshape everything) → gap check → connectivity check → the
-deal's own variant (double-step region = the dealt pawn squares — the
-first-move-only rule, spike 14) → ffish sanity probes (no side starts in
-check, not decided at ply 0) → seeded retries on rejection → start FEN +
-`variantName`/`variantIni`. Everything derives from ONE master seed via
-`childSeed` (armies, molding, and the Director's quake stream), so a
-seed + knobs reproduces the entire duel.
+deal's own variant (the camp-line double-step, spike 14) → ffish sanity
+probes (no side starts in check, not decided at ply 0) → seeded retries
+on rejection → start FEN + `variantName`/`variantIni`. Everything
+derives from ONE master seed via `childSeed` (armies, molding, and the
+Director's quake stream), so a seed + knobs reproduces the entire duel.
 
-**Double-step = first-move-only (designer rule, 2026-08-21).** Every pawn
-has the two-square push regardless of starting position, but ONLY on its
-first move — spike 13's every-visit caveat is repealed. Since pawns never
-move backward, "standing on your dealt square" IS "hasn't moved", which
-is the only encoding that survives quake FEN surgery (no move history
-exists to consult). Residuals accepted as engine grammar: a pawn arriving
-on a comrade's dealt square (stacked-file molding only) regains the
-option once; a quake displacing a pawn onto/off a dealt square shifts it.
+**Double-step = the CAMP LINE (designer rule, 2026-08-21).** Every pawn
+has the two-square push **at or behind its side's starting line** — the
+front-most rank that side's pawns are dealt onto — and never past it.
+Spike 13's every-visit caveat (repeated doubles from anywhere) is
+repealed. This is chess's row-based rule generalized: it equals
+first-move-only until a quake moves a pawn backward or sideways, and
+there the row wins — a player can see a line, not a pawn's history.
+Accepted consequences: a moved pawn knocked back behind the line regains
+the jump; a stacked rear pawn still behind the line can single-step then
+double; wall-scattered molding sets the line at the front-most pawn.
 
 **Crop = redrawing the boundary (designer rule, 2026-08).** To every piece
 a rank of solid wall and the board simply ending are identical, so

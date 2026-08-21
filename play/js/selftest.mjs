@@ -11,7 +11,7 @@
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
-import { splitFen, parseBoard, serializeBoard, setSquare, getSquare } from './fen.mjs';
+import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns } from './director.mjs';
 import { captureLoss } from './threat.mjs';
@@ -176,19 +176,22 @@ async function main() {
     return `10x10→${a.files}x${a.ranks} flipped deal replays exactly (gap ${a.gap}, edge ${a.edge >= 0 ? '+' : ''}${a.edge})`;
   });
 
-  // The designer's double-step rule (spike 14): the two-square push belongs
-  // to a pawn's FIRST move only — expressed as the deal variant's region
-  // being the exact dealt pawn squares, so a pawn that moves loses it.
-  await check('double-step is first-move-only on a dealt board', () => {
+  // The designer's double-step rule (spike 14, camp line): each side's
+  // deal variant grants the leap at or behind its front-most dealt pawn
+  // rank — past the line, never again. Quake-scooted pawns behind the
+  // line keep it, which is the whole point of rows over dealt squares.
+  await check('double-step follows the camp line on a dealt board', () => {
     const s26 = stages.find((s) => s.id === 's26-flats');
     if (!s26) throw new Error('s26-flats missing from the manifest');
     const deal = dealMatchup({ stage: s26, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 18 } }, seed: 4, ffish });
     if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
     const whitePawns = deal.white.layout.cells.filter((c) => c.piece === 'P');
+    const wLine = Math.max(...whitePawns.map((c) => c.r + 1));
+    if (!deal.variantName.includes(`__w${wLine}__`)) throw new Error(`variant ${deal.variantName} does not encode line w${wLine}`);
     const sq = (c) => `${String.fromCharCode(97 + c.f)}${c.r + 1}`;
     const b = new ffish.Board(deal.variantName, deal.fen);
     const legal = () => b.legalMoves().trim().split(/\s+/).filter(Boolean);
-    // every dealt pawn with two open squares ahead offers the double
+    // dealt pawns on the line offer the double at ply 0
     const doubles = legal().filter((m) => {
       const p = whitePawns.find((c) => m.startsWith(sq(c)));
       return p && parseInt(m.slice(sq(p).length).replace(/^[a-l]/, ''), 10) === p.r + 3;
@@ -197,7 +200,7 @@ async function main() {
       b.delete();
       throw new Error('no dealt pawn offers a double-step at ply 0');
     }
-    // single-step a pawn, hand the move back, and its double must be gone
+    // a pawn that crosses the line loses the leap forever
     const pawn = whitePawns.find((c) => legal().includes(`${sq(c)}${String.fromCharCode(97 + c.f)}${c.r + 2}`));
     if (!pawn) {
       b.delete();
@@ -206,12 +209,24 @@ async function main() {
     const from = sq(pawn);
     const stepped = `${String.fromCharCode(97 + pawn.f)}${pawn.r + 2}`;
     b.push(`${from}${stepped}`);
-    const reply = legal()[0]; // any black reply
-    b.push(reply);
+    b.push(legal()[0]); // any black reply
     const saved = legal().find((m) => m.startsWith(stepped) && m.endsWith(String(pawn.r + 4)));
     b.delete();
-    if (saved) throw new Error(`pawn ${from}→${stepped} kept a saved double (${saved})`);
-    return `${doubles.length} first-move doubles at ply 0; a moved pawn loses its jump (${from}→${stepped})`;
+    if (saved) throw new Error(`pawn ${from}→${stepped} kept its leap past the line (${saved})`);
+    // the quake-scoot case: a pawn relocated to an empty square BEHIND the
+    // line (never a dealt square) must still leap — simulate the surgery.
+    const scootTo = findSquares(deal.fen, (cell, f, r) => cell === null && r + 1 < wLine)
+      .find((s) => getSquare(deal.fen, { file: s.file, rankFromBottom: s.rankFromBottom + 1 }) === null
+        && getSquare(deal.fen, { file: s.file, rankFromBottom: s.rankFromBottom + 2 }) === null);
+    if (!scootTo) {
+      return `${doubles.length} camp-line doubles at ply 0; crossing the line kills the leap (no open scoot square to test the quake case)`;
+    }
+    const scootFen = setSquare(setSquare(deal.fen, from, null), scootTo.name, 'P');
+    const b2 = new ffish.Board(deal.variantName, scootFen);
+    const leap = b2.legalMoves().trim().split(/\s+/).includes(`${scootTo.name}${String.fromCharCode(97 + scootTo.file)}${scootTo.rankFromBottom + 3}`);
+    b2.delete();
+    if (!leap) throw new Error(`scooted pawn on ${scootTo.name} (behind line ${wLine}) cannot leap`);
+    return `${doubles.length} camp-line doubles at ply 0; crossing the line kills the leap; a scooted pawn on ${scootTo.name} still leaps`;
   });
 
   await check('molding invariants hold on a dealt board', () => {

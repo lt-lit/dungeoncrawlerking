@@ -95,11 +95,19 @@ export function catalogVariantName(files, ranks) {
 
 /**
  * Per-deal duel variant: the catalog baseline with the pawn double-step
- * region narrowed to the exact squares each color's pawns are DEALT onto
- * (spike 14 — the designer's first-move-only rule). A pawn never moves
- * backward, so "standing on your dealt square" IS "hasn't moved"; the
- * one residual (arriving on a comrade's dealt square regains the option
- * once — stacked-file molding only) is an accepted engine-grammar limit.
+ * region set to each side's CAMP — every rank from its home edge up to
+ * its front-most dealt pawn rank, the "camp line" (spike 14; designer
+ * rule 2026-08-21). This is chess's own rule generalized: chess's
+ * double-step is row-based ("on your start row"), which equals
+ * first-move-only there only because nothing can move a pawn backward —
+ * quakes CAN, and when the readings diverge the designer chose the row:
+ * at or behind your starting line, a pawn can leap; past it, never
+ * again. Reads at a glance, and a quake-scooted pawn behaves the way a
+ * player expects. Three accepted consequences (designer-signed): a
+ * moved pawn knocked back behind the line regains the jump; in stacked
+ * pawn rows a rear pawn still behind the line can single-step then
+ * double; wall-scattered molding puts the line at the FRONT-most pawn,
+ * widening shallower files' zones.
  *
  * The name ENCODES the config, so re-registering a colliding name is
  * always an identical no-op, never a silent rules change (rule 7 bans
@@ -108,17 +116,20 @@ export function catalogVariantName(files, ranks) {
  * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
  * cumulative variants-ini reload (main.mjs appends to app.catalog).
  */
-export function dealVariant(files, ranks, whitePawnSquares, blackPawnSquares) {
-  const w = [...whitePawnSquares].sort();
-  const b = [...blackPawnSquares].sort();
-  const name = `${catalogVariantName(files, ranks)}__w${w.join('')}__b${b.join('')}`;
+export function dealVariant(files, ranks, whiteLineRank, blackLineRank) {
+  const w = whiteLineRank | 0;
+  const b = blackLineRank | 0;
+  if (w < 1 || w > ranks || b < 1 || b > ranks) {
+    throw new Error(`camp lines w${w}/b${b} outside 1-${ranks}`);
+  }
+  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}`;
   const ini = makeDuelVariantIni({
     name,
     files,
     ranks,
     extra: {
-      doubleStepRegionWhite: w.join(' '),
-      doubleStepRegionBlack: b.join(' '),
+      doubleStepRegionWhite: Array.from({ length: w }, (_, i) => `*${i + 1}`).join(' '),
+      doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
     },
   });
   return { name, ini };
