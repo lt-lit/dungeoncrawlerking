@@ -5,8 +5,10 @@
 // from MOLDING: armies squish and rearrange to fit the terrain they deploy
 // on. Only two invariants constrain the rearrangement (designer-specified):
 //   1. the royal sits in the army's REARMOST OCCUPIED row;
-//   2. pawns stay IN FRONT: every pawn row is strictly forward of every
-//      non-pawn row.
+//   2. pawns stay IN FRONT — PER FILE (molding v2.1): within any single
+//      file every piece sits strictly behind every pawn. Mixed piece/pawn
+//      ROWS are legal and normal; the fill order proves the per-file
+//      screen (see layoutArmy).
 // Everything else — width, depth, raggedness around walls — is terrain.
 //
 // Army size has NOTHING to do with stage geometry (the old width coupling
@@ -28,6 +30,7 @@
 import { mulberry32, childSeed } from './prng.mjs';
 import { emptyBoard, serializeBoard } from './fen.mjs';
 import { catalogVariantName } from './variant.mjs';
+import { flipStageVertical, cropStage } from './stage.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
 export const ARMY_MIN_WIDTH = 3;
@@ -304,6 +307,92 @@ export function armiesConnected(stage, matchup) {
     }
   }
   return false;
+}
+
+/**
+ * Deal a complete duel: terrain transforms + armies + molding + every
+ * sanity check, in ONE call. This is the single shared entry point for
+ * the setup UI, the stage verifier, and the meter-lab corpus builder —
+ * no caller re-assembles the buildMatchup/armiesConnected/lintMatchupFen
+ * trio by hand (the crumbleFilter split is the cautionary tale).
+ *
+ * opts = {
+ *   stage,                    — loadStageV2() output (untransformed)
+ *   flip = false,             — flipStageVertical first (testing convention)
+ *   cropTop = 0, cropBottom = 0, — then cropStage, in the FINAL orientation
+ *   white, black,             — per-side { army | spec, anchor, archetype }
+ *   seed = 1,                 — ONE master seed; army/mold/director streams
+ *                               derive from it via childSeed
+ *   turn = 'w',               — initiative ('b' = enemy moves first; the
+ *                               player always holds White)
+ *   gapMin = 1,
+ *   attempts = 8,             — seeded retries on a failed deal; attempt 0
+ *                               uses the master seed itself, attempt k>0
+ *                               uses childSeed(seed, 'attempt<k>') — fully
+ *                               deterministic given (inputs, seed)
+ *   ffish = null,             — optional; enables the FEN-level checks
+ *                               (start-position legality, checks, decided)
+ * }
+ *
+ * Success: { ok: true, stageId, flip, cropTop, cropBottom, stage (the
+ *   transformed terrain), files, ranks, variantName, fen, turn, white,
+ *   black, gap, edge (white value − black value), violations, seed,
+ *   attempt, attemptSeed, directorSeed }.
+ * Failure: { ok: false, error, reasons: [per-attempt reason strings] }.
+ */
+export function dealMatchup({
+  stage, flip = false, cropTop = 0, cropBottom = 0,
+  white, black, seed = 1, turn = 'w', gapMin = 1, attempts = 8, ffish = null,
+}) {
+  let terrain;
+  try {
+    terrain = cropStage(flip ? flipStageVertical(stage) : stage, cropTop, cropBottom);
+  } catch (e) {
+    return { ok: false, error: e.message, reasons: [e.message] };
+  }
+  const reasons = [];
+  for (let attempt = 0; attempt < Math.max(1, attempts); attempt++) {
+    const attemptSeed = attempt === 0 ? seed : childSeed(seed, `attempt${attempt}`);
+    const m = buildMatchup({ stage: terrain, white, black, seed: attemptSeed, gapMin, turn });
+    if (m.error) {
+      reasons.push(`attempt ${attempt}: ${m.error}`);
+      continue;
+    }
+    if (!armiesConnected(terrain, m)) {
+      reasons.push(`attempt ${attempt}: disconnected`);
+      continue;
+    }
+    if (ffish) {
+      const lint = lintMatchupFen(ffish, m.variantName, m.fen);
+      if (!lint.ok) {
+        reasons.push(`attempt ${attempt}: ${lint.reasons.join(',')}`);
+        continue;
+      }
+    }
+    return {
+      ok: true,
+      stageId: stage.id,
+      flip,
+      cropTop,
+      cropBottom,
+      stage: terrain,
+      files: terrain.files,
+      ranks: terrain.ranks,
+      variantName: m.variantName,
+      fen: m.fen,
+      turn,
+      white: m.white,
+      black: m.black,
+      gap: m.gap,
+      edge: m.white.army.value - m.black.army.value,
+      violations: m.violations,
+      seed,
+      attempt,
+      attemptSeed,
+      directorSeed: childSeed(attemptSeed, 'director'),
+    };
+  }
+  return { ok: false, error: reasons[reasons.length - 1] ?? 'no attempt ran', reasons };
 }
 
 /**

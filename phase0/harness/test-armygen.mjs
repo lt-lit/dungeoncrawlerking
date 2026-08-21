@@ -10,8 +10,8 @@
 //
 // Usage: cd phase0 && node harness/test-armygen.mjs
 import { loadFfish } from '../lib/load.mjs';
-import { loadStageV2 } from '../../play/js/stage.mjs';
-import { makeArmy, armyValue, layoutArmy, buildMatchup, armiesConnected, lintMatchupFen, PIECE_VALUES } from '../../play/js/armygen.mjs';
+import { loadStageV2, flipStageVertical, cropStage } from '../../play/js/stage.mjs';
+import { makeArmy, armyValue, layoutArmy, buildMatchup, armiesConnected, lintMatchupFen, dealMatchup, PIECE_VALUES } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { mulberry32 } from '../../play/js/prng.mjs';
 
@@ -226,6 +226,81 @@ ffish.loadVariantConfig(makeCatalogIni());
   check('fuzz built a healthy majority', built > 150, String(built));
   check('no disconnected matchups on these terrains', disconnected === 0, String(disconnected));
   pass('fuzz');
+}
+
+// ---- 10. flip + crop (stage transforms the corpus convention and the
+// setup screen build on) ----
+{
+  const jag = loadStageV2({
+    schema: 2,
+    id: 'jagged',
+    map: ['#.......', '........', '..##....', '........', '.....#..', '........', '#......#', '........'],
+  });
+  const flipped = flipStageVertical(jag);
+  const back = flipStageVertical(flipped);
+  check('flip is an involution (grid)', JSON.stringify(back.grid) === JSON.stringify(jag.grid));
+  check('flip is an involution (walls)', JSON.stringify([...back.walls].sort()) === JSON.stringify([...jag.walls].sort()));
+  check('flip mirrors ranks', flipped.grid[0].join() === jag.grid[jag.ranks - 1].join());
+  // molding on flipped terrain obeys the same invariants
+  const m = buildMatchup({ stage: flipped, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 22 } }, seed: 11 });
+  check('flipped stage deals', !m.error, m.error);
+  if (!m.error) {
+    checkSide('flipped white', m.white.army, m.white.layout, 'white', flipped.ranks);
+    checkSide('flipped black', m.black.army, m.black.layout, 'black', flipped.ranks);
+  }
+
+  const cropped = cropStage(jag, 2, 1);
+  check('crop dims', cropped.files === 8 && cropped.ranks === 5, `${cropped.files}x${cropped.ranks}`);
+  check('crop variant follows the smaller board', cropped.variantName === 'duel_8x5', cropped.variantName);
+  check('crop keeps interior rows', cropped.grid[0].join() === jag.grid[1].join() && cropped.grid[4].join() === jag.grid[5].join());
+  check('crop 0/0 is identity', cropStage(jag, 0, 0) === jag);
+  let threw = false;
+  try {
+    cropStage(jag, 3, 1); // 8 ranks - 4 = 4 < 5
+  } catch {
+    threw = true;
+  }
+  check('crop below 5 ranks throws', threw);
+  threw = false;
+  try {
+    // walling the would-be far rank must be rejected (promotion row rule)
+    cropStage(loadStageV2({ schema: 2, id: 'walltop', map: ['......', '######', '......', '......', '......', '......', '......'] }), 1, 0);
+  } catch {
+    threw = true;
+  }
+  check('crop onto an all-wall far rank throws', threw);
+  pass('flip + crop');
+}
+
+// ---- 11. dealMatchup (the shared setup/verify/corpus entry point) ----
+{
+  const stage = loadStageV2({
+    schema: 2,
+    id: 'deal-bench',
+    map: ['........', '..#.....', '........', '....##..', '........', '........', '.#......', '........', '........', '........'],
+  });
+  const knobs = { white: { spec: { width: 6, budget: 30 } }, black: { spec: { width: 5, budget: 20 } }, seed: 9 };
+  const a = dealMatchup({ stage, flip: true, cropTop: 1, cropBottom: 1, turn: 'b', ...knobs, ffish });
+  check('deal succeeds', a.ok, a.error);
+  if (a.ok) {
+    const b = dealMatchup({ stage, flip: true, cropTop: 1, cropBottom: 1, turn: 'b', ...knobs, ffish });
+    check('deal deterministic', a.fen === b.fen && a.directorSeed === b.directorSeed && a.attempt === b.attempt);
+    check('deal dims follow the crop', a.files === 8 && a.ranks === 8, `${a.files}x${a.ranks}`);
+    check('deal carries the turn', a.fen.split(' ')[1] === 'b');
+    check('deal edge is white minus black', a.edge === a.white.army.value - a.black.army.value);
+    check('deal director seed differs from setup seed', a.directorSeed !== a.seed);
+  }
+  const tooBig = dealMatchup({ stage, cropTop: 3, cropBottom: 3, ...knobs, ffish });
+  check('impossible crop reports, never throws', tooBig.ok === false && /ranks/.test(tooBig.error), tooBig.error);
+  const noFit = dealMatchup({
+    stage: loadStageV2({ schema: 2, id: 'tiny', map: ['...', '...', '...', '...', '...'] }),
+    white: { spec: { width: 8, budget: 40 } },
+    black: { spec: { width: 8, budget: 40 } },
+    seed: 1,
+    ffish,
+  });
+  check("doesn't-fit reports with per-attempt reasons", noFit.ok === false && noFit.reasons.length >= 1, JSON.stringify(noFit.reasons));
+  pass('dealMatchup');
 }
 
 console.log(failures === 0 ? '\nARMYGEN TESTS PASS' : `\nARMYGEN TESTS FAIL (${failures})`);
