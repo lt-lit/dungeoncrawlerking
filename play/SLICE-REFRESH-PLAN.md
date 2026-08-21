@@ -100,14 +100,19 @@ triple is rejected "doesn't fit".
   the designer as its concrete consequence (unlimited repeated
   double-steps from anywhere) and was rejected on contact. The rule is
   the CAMP LINE: spike 14 — per-deal variants whose doubleStepRegion
-  runs from each home edge to that side's front-most dealt pawn rank
-  (chess's row rule generalized; position-derivable, so it survives
-  quake FEN surgery, which no move-history scheme could — and a
-  quake-scooted pawn reads correctly, which the first-cut exact-squares
-  version did not). Designer-accepted consequences: knocked-back moved
-  pawns regain the jump; stacked rear pawns can 1-then-2 while behind
-  the line; wall-scattered molding sets the line at the front-most
-  pawn. No camp shading needed — the line is clean.]`
+  runs from each home edge to that side's line, THE MODE PAWN RANK with
+  ties toward the enemy (three passes: exact dealt squares failed the
+  quake-scoot reading; front-most rank failed the straggler reading —
+  molding bumps ~10% of pawns past the wall and a lone one dragged the
+  zone forward; the wall itself is where the eye puts the line).
+  Position-derivable, so it survives quake FEN surgery, which no
+  move-history scheme could. Designer-accepted consequences: pawns
+  dealt ahead of the line are "advanced" and never leap; knocked-back
+  moved pawns regain the jump; stacked rear pawns can 1-then-2 behind
+  the line (tied stacks put the line at the front wall); all-scattered
+  ties resolve generous. Census on the 33-stage bed: 10.5% of dealt
+  pawns advanced, 49% of deals have ≥1, worst 40%. No camp shading —
+  the line is clean.]`
 - **Gap between armies**: lint rejects gap < 1. In practice duels are
   expected to begin at gap 2–5, but extremes get tested; **whether ideal
   gap scales with army size is a lab investigation item** (game-quality
@@ -177,12 +182,13 @@ triple is rejected "doesn't fit".
   combo shows the bare terrain and the reason with Begin blocked. The
   first build's picker-side panel with a text-only readout was rejected.
 - **Double-step follows the CAMP LINE (designer corrections, same
-  day, two passes)**: first-move-only was the intent; the shipped
-  semantics are row-based — at or behind the side's front-most dealt
-  pawn rank — because quakes move pawns backwards/sideways and a
-  scooted untouched pawn must still read as able to leap. See the
-  repeal note under Decisions above; spike 14 + per-deal variants
-  implement it.
+  day, three passes)**: first-move-only was the intent; the shipped
+  semantics are row-based — at or behind the side's MODE pawn rank,
+  ties toward the enemy — because quakes move pawns backwards/sideways
+  (a scooted untouched pawn must still read as able to leap) and
+  molding bumps stragglers past the wall (a lone forward pawn must
+  read as advanced, not drag the zone up). See the repeal note under
+  Decisions above; spike 14 + per-deal variants implement it.
 
 ## Stage set v1 — LOCKED (designer-reviewed 2026-08)
 

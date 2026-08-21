@@ -11,7 +11,7 @@
 // Usage: cd phase0 && node harness/test-armygen.mjs
 import { loadFfish } from '../lib/load.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from '../../play/js/stage.mjs';
-import { makeArmy, armyValue, layoutArmy, buildMatchup, armiesConnected, lintMatchupFen, dealMatchup, PIECE_VALUES } from '../../play/js/armygen.mjs';
+import { makeArmy, armyValue, layoutArmy, buildMatchup, armiesConnected, lintMatchupFen, dealMatchup, campLineRank, PIECE_VALUES } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { mulberry32 } from '../../play/js/prng.mjs';
 
@@ -288,12 +288,15 @@ ffish.loadVariantConfig(makeCatalogIni());
     check('deal dims follow the crop', a.files === 8 && a.ranks === 8, `${a.files}x${a.ranks}`);
     check('deal carries the turn', a.fen.split(' ')[1] === 'b');
     // camp-line double-step (spike 14): the deal rides its own variant
-    // whose regions run from each home edge to that side's front-most
-    // dealt pawn rank; move-semantics proof lives in spike 14 + selftest.
+    // whose regions run from each home edge to that side's camp line —
+    // the mode pawn rank, ties toward the enemy; move-semantics proof
+    // lives in spike 14 + selftest.
     const lines = a.variantName.match(/__w(\d+)__b(\d+)$/);
-    const wLine = Math.max(...a.white.layout.cells.filter((c) => c.piece === 'P').map((c) => c.r + 1));
-    const bLine = Math.min(...a.black.layout.cells.filter((c) => c.piece === 'P').map((c) => c.r + 1));
-    check('deal variant encodes the camp lines', !!lines && +lines[1] === wLine && +lines[2] === bLine && !!a.variantIni, a.variantName);
+    check(
+      'deal variant encodes the camp lines',
+      !!lines && +lines[1] === campLineRank(a.white.layout.cells, 1) && +lines[2] === campLineRank(a.black.layout.cells, -1) && !!a.variantIni,
+      a.variantName
+    );
     check('deal variant is registered and serves the FEN', ffish.validateFen(a.fen, a.variantName) === 1);
     check('deal edge is white minus black', a.edge === a.white.army.value - a.black.army.value);
     check('deal director seed differs from setup seed', a.directorSeed !== a.seed);
@@ -309,6 +312,41 @@ ffish.loadVariantConfig(makeCatalogIni());
   });
   check("doesn't-fit reports with per-attempt reasons", noFit.ok === false && noFit.reasons.length >= 1, JSON.stringify(noFit.reasons));
   pass('dealMatchup');
+}
+
+// ---- 12. the camp line: mode row, ties toward the enemy ----
+{
+  // Sparse front row: W6 on 5-wide ground — the sixth back unit spills
+  // into row 1, so pawns land 4 on rank 2 + 2 bumped to rank 3. The line
+  // must sit at the WALL (rank 2), not the bumped stragglers' rank.
+  const narrow = openStage(5, 8);
+  const a = dealMatchup({ stage: narrow, white: { spec: { width: 6, budget: 28 } }, black: { spec: { width: 6, budget: 28 } }, seed: 2, ffish });
+  check('sparse-front deal succeeds', a.ok, a.error);
+  if (a.ok) {
+    const wRanks = a.white.layout.cells.filter((c) => c.piece === 'P').map((c) => c.r + 1);
+    check('case really has bumped-forward pawns', wRanks.some((r) => r === 3) && wRanks.filter((r) => r === 2).length === 4, wRanks.join(','));
+    check('line sits at the pawn wall, not the stragglers', /__w2__b7$/.test(a.variantName), a.variantName);
+    // a bumped-forward pawn (rank 3, ahead of line 2) must NOT leap
+    const b = new ffish.Board(a.variantName, a.fen);
+    const legal = b.legalMoves().trim().split(/\s+/);
+    b.delete();
+    const straggler = a.white.layout.cells.find((c) => c.piece === 'P' && c.r + 1 === 3);
+    const sq = `${String.fromCharCode(97 + straggler.f)}${straggler.r + 1}`;
+    check('straggler ahead of the line never leaps', !legal.includes(`${sq}${String.fromCharCode(97 + straggler.f)}${straggler.r + 3}`), sq);
+  }
+
+  // Tied stacks: W8 in a 4-wide hall — two full pawn walls (4+4) tie,
+  // and the tie resolves TOWARD THE ENEMY: the line is the front wall.
+  const hall = openStage(4, 10);
+  const t = dealMatchup({ stage: hall, white: { spec: { width: 8, budget: 40 } }, black: { spec: { width: 8, budget: 40 } }, seed: 3, ffish });
+  check('tied-stack deal succeeds', t.ok, t.error);
+  if (t.ok) {
+    const wCounts = {};
+    for (const c of t.white.layout.cells) if (c.piece === 'P') wCounts[c.r + 1] = (wCounts[c.r + 1] ?? 0) + 1;
+    check('case really is a 4+4 tie', wCounts[3] === 4 && wCounts[4] === 4, JSON.stringify(wCounts));
+    check('tie resolves toward the enemy (front wall)', /__w4__b7$/.test(t.variantName), t.variantName);
+  }
+  pass('camp line (mode + enemy-tie)');
 }
 
 console.log(failures === 0 ? '\nARMYGEN TESTS PASS' : `\nARMYGEN TESTS FAIL (${failures})`);

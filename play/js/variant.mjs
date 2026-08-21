@@ -96,18 +96,20 @@ export function catalogVariantName(files, ranks) {
 /**
  * Per-deal duel variant: the catalog baseline with the pawn double-step
  * region set to each side's CAMP — every rank from its home edge up to
- * its front-most dealt pawn rank, the "camp line" (spike 14; designer
- * rule 2026-08-21). This is chess's own rule generalized: chess's
- * double-step is row-based ("on your start row"), which equals
- * first-move-only there only because nothing can move a pawn backward —
- * quakes CAN, and when the readings diverge the designer chose the row:
- * at or behind your starting line, a pawn can leap; past it, never
- * again. Reads at a glance, and a quake-scooted pawn behaves the way a
- * player expects. Three accepted consequences (designer-signed): a
- * moved pawn knocked back behind the line regains the jump; in stacked
- * pawn rows a rear pawn still behind the line can single-step then
- * double; wall-scattered molding puts the line at the FRONT-most pawn,
- * widening shallower files' zones.
+ * its camp line: the rank holding the MOST of that side's dealt pawns,
+ * ties toward the enemy (spike 14; designer rule 2026-08-21, final
+ * form). The line sits where the position LOOKS like the starting line
+ * — the pawn wall — so it reads at a glance, chess's own row-based rule
+ * generalized (row = first-move-only in chess only because nothing
+ * there moves pawns backward; quakes CAN, and where the readings
+ * diverge the row wins). At or behind the line, a pawn can leap; past
+ * it, never again. Designer-signed consequences: a pawn dealt AHEAD of
+ * the line (molding bumped it past the wall) is already advanced and
+ * never leaps; a moved pawn knocked back behind the line regains the
+ * jump; rear pawns behind the line can single-step then double once
+ * lanes open (a tied stack puts the line at its front wall, so the
+ * whole mass has access); all-scattered terrain ties resolve toward
+ * the enemy, keeping nearly every pawn leap-capable.
  *
  * The name ENCODES the config, so re-registering a colliding name is
  * always an identical no-op, never a silent rules change (rule 7 bans

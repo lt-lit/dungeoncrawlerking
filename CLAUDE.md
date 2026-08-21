@@ -35,10 +35,12 @@ gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
 invariants: royal rearmost, pawns in front PER FILE; army size is
 INDEPENDENT of stage geometry), plus the CAMP-LINE pawn double-step
 (spikes 13+14 — every deal registers its own variant whose
-`doubleStepRegion` runs from each home edge to that side's front-most
-dealt pawn rank: at or behind your starting line you can leap, past it
-never again; the every-visit caveat is REPEALED, designer correction
-2026-08-21) and a 60-variant catalog (ranks 5–10). Balance corpora run every stage in BOTH vertical
+`doubleStepRegion` runs from each home edge to that side's camp line,
+the rank holding the MOST of its dealt pawns with ties toward the
+enemy: at or behind your line you can leap, past it never again; pawns
+molded ahead of the wall are "advanced" and never leap; the every-visit
+caveat is REPEALED, designer correction 2026-08-21) and a 60-variant
+catalog (ranks 5–10). Balance corpora run every stage in BOTH vertical
 orientations (mirrors are not separate scenarios — `flipStageVertical`).
 **The setup-UI rework is DONE**: the game boots into a stage picker →
 LIVE preview (the generator panel sits under the board and every knob

@@ -93,12 +93,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   rank, per color, in every variant (designer rule — see the stage section).
   `dealVariant()` builds the PER-DEAL variant that carries the CAMP-LINE
   double-step (spike 14): its `doubleStepRegion` spans every rank from
-  each home edge to that side's front-most dealt pawn rank, its name
-  encodes that config (`duel_<f>x<r>__w<line>__b<line>` — so
-  re-registration is always an identical no-op, never a silent rules
-  change), and deal variants register INCREMENTALLY alongside the catalog
-  — ffish via `loadVariantConfig`, the engine via the cumulative
-  `app.catalog` reload that every recycle path already performs.
+  each home edge to that side's camp line (armygen `campLineRank` — the
+  mode pawn rank, ties toward the enemy), its name encodes that config
+  (`duel_<f>x<r>__w<line>__b<line>` — so re-registration is always an
+  identical no-op, never a silent rules change), and deal variants
+  register INCREMENTALLY alongside the catalog — ffish via
+  `loadVariantConfig`, the engine via the cumulative `app.catalog`
+  reload that every recycle path already performs.
 - `js/stage.mjs` — stage schema v2: terrain-only ASCII maps →
   `loadStageV2`, plus the two transforms every corpus and the setup screen
   use: `flipStageVertical` (the both-orientations testing convention) and
@@ -175,15 +176,18 @@ derives from ONE master seed via `childSeed` (armies, molding, and the
 Director's quake stream), so a seed + knobs reproduces the entire duel.
 
 **Double-step = the CAMP LINE (designer rule, 2026-08-21).** Every pawn
-has the two-square push **at or behind its side's starting line** — the
-front-most rank that side's pawns are dealt onto — and never past it.
-Spike 13's every-visit caveat (repeated doubles from anywhere) is
-repealed. This is chess's row-based rule generalized: it equals
+has the two-square push **at or behind its side's camp line** — the rank
+holding the most of that side's dealt pawns, ties toward the enemy — and
+never past it. Spike 13's every-visit caveat (repeated doubles from
+anywhere) is repealed. The line sits where the position LOOKS like the
+starting line: chess's row-based rule generalized — it equals
 first-move-only until a quake moves a pawn backward or sideways, and
-there the row wins — a player can see a line, not a pawn's history.
-Accepted consequences: a moved pawn knocked back behind the line regains
-the jump; a stacked rear pawn still behind the line can single-step then
-double; wall-scattered molding sets the line at the front-most pawn.
+there the row wins, because a player can see a line, not a pawn's
+history. Accepted consequences: a pawn molded AHEAD of the wall
+(~10% of dealt pawns on this bed) reads and plays as already advanced —
+no leap, ever; a moved pawn knocked back behind the line regains the
+jump; rear pawns behind the line can single-step then double once lanes
+open (tied stacks put the line at the front wall).
 
 **Crop = redrawing the boundary (designer rule, 2026-08).** To every piece
 a rank of solid wall and the board simply ending are identical, so

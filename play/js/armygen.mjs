@@ -362,15 +362,18 @@ export function dealMatchup({
       reasons.push(`attempt ${attempt}: disconnected`);
       continue;
     }
-    // The camp-line double-step (spike 14, designer rule): each side's
-    // deal variant grants the two-square push at or behind its
-    // front-most dealt pawn rank — past the line, never again.
-    const pawnRanks = (side) => m[side].layout.cells.filter((c) => c.piece === 'P').map((c) => c.r + 1);
+    // The camp-line double-step (spike 14, designer rule 2026-08-21,
+    // final form): each side's line is the rank holding the MOST of its
+    // dealt pawns — where the position LOOKS like the starting line —
+    // with ties resolved toward the enemy (a tied stack puts the line at
+    // its front wall; all-scattered terrain resolves generous). The leap
+    // zone is that rank plus everything behind it; a pawn dealt AHEAD of
+    // the line is already advanced and never leaps.
     const variant = dealVariant(
       terrain.files,
       terrain.ranks,
-      Math.max(...pawnRanks('white')),
-      Math.min(...pawnRanks('black'))
+      campLineRank(m.white.layout.cells, 1),
+      campLineRank(m.black.layout.cells, -1)
     );
     if (ffish) {
       registerDealVariant(ffish, variant);
@@ -405,6 +408,22 @@ export function dealMatchup({
     };
   }
   return { ok: false, error: reasons[reasons.length - 1] ?? 'no attempt ran', reasons };
+}
+
+/** The camp line: the rank holding the most of this side's dealt pawns,
+ *  ties resolved toward the enemy (`enemyward` = +1 for white, −1 for
+ *  black). A lone straggler can never drag the line forward — only an
+ *  equally large pawn wall moves it. */
+export function campLineRank(layoutCells, enemyward) {
+  const counts = new Map();
+  for (const c of layoutCells) {
+    if (c.piece === 'P') counts.set(c.r + 1, (counts.get(c.r + 1) ?? 0) + 1);
+  }
+  let best = null;
+  for (const [r, n] of counts) {
+    if (!best || n > best.n || (n === best.n && (r - best.r) * enemyward > 0)) best = { r, n };
+  }
+  return best.r;
 }
 
 /** Register a deal variant into ffish exactly once per page/process.

@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadFfish } from '../lib/load.mjs';
 import { loadStageV2, flipStageVertical } from '../../play/js/stage.mjs';
-import { dealMatchup } from '../../play/js/armygen.mjs';
+import { dealMatchup, campLineRank } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { buildManifest } from './gen-stage-manifest.mjs';
 
@@ -100,6 +100,31 @@ const SEEDS = [1, 2, 3];
 let deals = 0;
 let rejects = 0;
 const reasonTally = new Map();
+// Camp-line census (informational, designer-requested 2026-08-21): where
+// the mode-row line lands and how many dealt pawns sit AHEAD of it
+// ("advanced" — no leap). Not a gate; the numbers go in the run output.
+const census = { pawns: 0, forward: 0, dealsWithForward: 0, worst: 0, tieDeals: 0 };
+function censusDeal(d) {
+  let fwd = 0;
+  let pawns = 0;
+  for (const [side, enemyward] of [['white', 1], ['black', -1]]) {
+    const cells = d[side].layout.cells;
+    const line = campLineRank(cells, enemyward);
+    const counts = new Map();
+    for (const c of cells) {
+      if (c.piece !== 'P') continue;
+      pawns++;
+      counts.set(c.r + 1, (counts.get(c.r + 1) ?? 0) + 1);
+      if ((c.r + 1 - line) * enemyward > 0) fwd++;
+    }
+    const top = Math.max(...counts.values());
+    if ([...counts.values()].filter((n) => n === top).length > 1) census.tieDeals++;
+  }
+  census.pawns += pawns;
+  census.forward += fwd;
+  if (fwd > 0) census.dealsWithForward++;
+  census.worst = Math.max(census.worst, fwd / pawns);
+}
 for (const base of stages) {
   for (const flip of [false, true]) {
     const orientation = `${base.id}${flip ? '~flipped' : ''}`;
@@ -120,6 +145,7 @@ for (const base of stages) {
           deals++;
           if (ct === 0 && cb === 0) cleanUncropped++;
           checkInvariants(`${orientation} c${ct}/${cb} ${spec.white.spec.width}v${spec.black.spec.width} s${seed}`, d);
+          censusDeal(d);
           if (d.gap < 1) fail(`${orientation}: gap ${d.gap} < 1 accepted`);
         }
       }
@@ -129,6 +155,13 @@ for (const base of stages) {
 }
 
 console.log(`${deals} deals accepted, ${rejects} rejected (legal re-roll class)`);
+console.log(
+  `camp-line census: ${census.forward}/${census.pawns} dealt pawns ahead of a line ` +
+    `(${((100 * census.forward) / census.pawns).toFixed(1)}%) · ` +
+    `${census.dealsWithForward}/${deals} deals have ≥1 advanced pawn · ` +
+    `worst single deal ${(100 * census.worst).toFixed(0)}% · ` +
+    `${census.tieDeals} side-ties (resolved toward the enemy)`
+);
 for (const [reason, n] of [...reasonTally.entries()].sort((a, b) => b[1] - a[1])) {
   console.log(`  reject: ${n}× ${reason}`);
 }

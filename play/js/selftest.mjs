@@ -16,7 +16,7 @@ import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns } from './director.mjs';
 import { captureLoss } from './threat.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
-import { dealMatchup } from './armygen.mjs';
+import { dealMatchup, campLineRank } from './armygen.mjs';
 
 const out = document.getElementById('out');
 const summaryEl = document.getElementById('summary');
@@ -186,7 +186,7 @@ async function main() {
     const deal = dealMatchup({ stage: s26, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 18 } }, seed: 4, ffish });
     if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
     const whitePawns = deal.white.layout.cells.filter((c) => c.piece === 'P');
-    const wLine = Math.max(...whitePawns.map((c) => c.r + 1));
+    const wLine = campLineRank(deal.white.layout.cells, 1); // mode pawn rank, ties toward the enemy
     if (!deal.variantName.includes(`__w${wLine}__`)) throw new Error(`variant ${deal.variantName} does not encode line w${wLine}`);
     const sq = (c) => `${String.fromCharCode(97 + c.f)}${c.r + 1}`;
     const b = new ffish.Board(deal.variantName, deal.fen);
