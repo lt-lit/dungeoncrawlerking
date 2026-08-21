@@ -21,9 +21,27 @@
 
 <main id="app">
   <section id="screen-setup" class="screen">
-    <p id="menu-intro">Proving grounds &#8212; pick a stage, shape the armies.</p>
+    <p id="menu-intro">Proving grounds &#8212; pick a stage. The armies are shaped on the next screen, live.</p>
     <div id="stage-list"></div>
+    <div id="boot-log" class="log"></div>
+  </section>
+
+  <section id="screen-duel" class="screen" hidden>
+    <div id="enemy-bar" class="side-bar"></div>
+    <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
+    <div id="board"></div>
+    <div id="player-bar" class="side-bar"></div>
+    <div id="preview-controls" hidden>
+      <button id="btnBegin" class="primary">Begin duel</button>
+      <button id="btnRedeal">Re-deal</button>
+    </div>
+    <!-- The generator panel lives UNDER the live board preview: every knob
+         change re-deals and the armies update in place (visible only while
+         previewing). -->
     <div id="setup-panel" hidden>
+      <div class="setup-row">
+        <span id="setup-readout"></span>
+      </div>
       <div class="setup-row" id="setup-terrain">
         <label class="opt">Flip stage <input type="checkbox" id="supFlip"></label>
         <label class="opt">Crop far <input type="number" id="supCropTop" min="0" max="5" step="1" value="0"></label>
@@ -37,23 +55,7 @@
       <div class="setup-row">
         <label class="opt">Seed <input type="number" id="supSeed" min="1" step="1" value="1"></label>
         <button id="btnReseed" aria-label="New seed">&#127922;</button>
-        <span id="setup-readout"></span>
       </div>
-      <div class="setup-row">
-        <button id="btnPreview" class="primary">Preview duel</button>
-      </div>
-    </div>
-    <div id="boot-log" class="log"></div>
-  </section>
-
-  <section id="screen-duel" class="screen" hidden>
-    <div id="enemy-bar" class="side-bar"></div>
-    <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
-    <div id="board"></div>
-    <div id="player-bar" class="side-bar"></div>
-    <div id="preview-controls" hidden>
-      <button id="btnBegin" class="primary">Begin duel</button>
-      <button id="btnRedeal">Re-deal</button>
     </div>
     <div id="duel-log" class="log"></div>
     <!-- Phase 1.2: the Gods debug overlay — the Director's tuning instrument.

@@ -8,12 +8,15 @@ GitHub Pages.
 
 **The slice-refresh setup flow replaced the original arena menu + placement
 screen** (retired with `arenas/*.json`, `js/arena.mjs`, and the enemy-edit
-cheat): pick one of the 33 locked stages, shape both armies with the
+cheat): pick one of the 33 locked stages, then shape both armies LIVE — the
 generator knobs (width 3–8, points budget or exact pieces, depth archetype,
-anchor), set initiative / flip / crop, and one master seed derives the
-armies, their molding AND the Director's quake stream — re-entering a seed
-reproduces the whole duel. The player always holds White at the bottom;
-"Enemy moves first" is the turn field, not a seat swap.
+anchor, initiative, flip, crop, one master seed + 🎲) sit under the board
+preview, and every change re-deals the armies on the board in place (an
+impossible combo shows the bare terrain and the reason, with Begin
+blocked). One master seed derives the armies, their molding AND the
+Director's quake stream — re-entering a seed reproduces the whole duel.
+The player always holds White at the bottom; "Enemy moves first" is the
+turn field, not a seat swap.
 
 **This build replaces the §4.5 crumble system with the Board State Director
 ("THE GODS")** — the experimental arena-regeneration design from the 2026-08
@@ -88,6 +91,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   are single-use) and a variants.ini key allowlist (unknown keys are
   silently ignored by both libraries). Promotion region = the ENTIRE far
   rank, per color, in every variant (designer rule — see the stage section).
+  `dealVariant()` builds the PER-DEAL variant that makes the pawn
+  double-step FIRST-MOVE-ONLY (spike 14): its `doubleStepRegion` is the
+  exact squares the pawns are dealt onto, its name encodes that config
+  (so re-registration is always an identical no-op, never a silent rules
+  change), and deal variants register INCREMENTALLY alongside the catalog
+  — ffish via `loadVariantConfig`, the engine via the cumulative
+  `app.catalog` reload that every recycle path already performs.
 - `js/stage.mjs` — stage schema v2: terrain-only ASCII maps →
   `loadStageV2`, plus the two transforms every corpus and the setup screen
   use: `flipStageVertical` (the both-orientations testing convention) and
@@ -156,11 +166,22 @@ diff and the gallery are the review surface.
 `flipStageVertical`? → `cropStage`? → per-side armies (`makeArmy`: width
 3–8, explicit pieces or a seeded points-budget draw) → molding
 (`layoutArmy` — dense center-out fill; royal rearmost, pawns in front per
-file; walls reshape everything) → gap check → connectivity check → ffish
-sanity probes (no side starts in check, not decided at ply 0) → seeded
-retries on rejection → start FEN + the catalog variant. Everything derives
-from ONE master seed via `childSeed` (armies, molding, and the Director's
-quake stream), so a seed + knobs reproduces the entire duel.
+file; walls reshape everything) → gap check → connectivity check → the
+deal's own variant (double-step region = the dealt pawn squares — the
+first-move-only rule, spike 14) → ffish sanity probes (no side starts in
+check, not decided at ply 0) → seeded retries on rejection → start FEN +
+`variantName`/`variantIni`. Everything derives from ONE master seed via
+`childSeed` (armies, molding, and the Director's quake stream), so a
+seed + knobs reproduces the entire duel.
+
+**Double-step = first-move-only (designer rule, 2026-08-21).** Every pawn
+has the two-square push regardless of starting position, but ONLY on its
+first move — spike 13's every-visit caveat is repealed. Since pawns never
+move backward, "standing on your dealt square" IS "hasn't moved", which
+is the only encoding that survives quake FEN surgery (no move history
+exists to consult). Residuals accepted as engine grammar: a pawn arriving
+on a comrade's dealt square (stacked-file molding only) regains the
+option once; a quake displacing a pawn onto/off a dealt square shifts it.
 
 **Crop = redrawing the boundary (designer rule, 2026-08).** To every piece
 a rank of solid wall and the board simply ending are identical, so

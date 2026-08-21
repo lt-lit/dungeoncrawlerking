@@ -35,8 +35,8 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
-import { findSquares } from './fen.mjs';
-import { loadStageV2 } from './stage.mjs';
+import { findSquares, emptyBoard, serializeBoard } from './fen.mjs';
+import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
@@ -61,7 +61,8 @@ const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.r
 const app = {
   ffish: null,
   engine: null,
-  catalog: null,
+  catalog: null, // CUMULATIVE variants ini: the 60-variant catalog + every deal variant this session (spike 14)
+  dealVariants: new Set(), // deal-variant names already appended to app.catalog
   cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength}
   quakeMarks: null, // {from:[], to:[], pit} — the last quake's residue, held
   // on the board through the enemy's reply and cleared when the player moves
@@ -914,17 +915,15 @@ async function boot() {
   applySetupParams();
   renderStageList();
   renderSidePanels();
-  syncSetupUI();
+  syncStagePicker();
   app.phase = 'setup';
   setStatus('pick a stage');
 
-  if (params.get('autobegin')) {
-    const deal = computeDeal();
-    if (deal.ok) {
-      openPreview(deal);
-      await beginDuel();
-    } else {
-      setStatus(`auto-deal failed: ${deal.error}`);
+  if (params.get('stage') && currentStage()) {
+    openStagePreview(); // straight into the live preview
+    if (params.get('autobegin')) {
+      if (app.session) await beginDuel();
+      else setStatus(`auto-deal failed: ${$('setup-readout').textContent}`);
     }
   }
 }
@@ -990,7 +989,8 @@ function renderStageList() {
       setup.stageId = stage.id;
       clampCrops();
       saveSetup();
-      syncSetupUI();
+      syncStagePicker();
+      openStagePreview();
     });
     list.appendChild(card);
   }
@@ -1026,23 +1026,23 @@ function renderSidePanels() {
         const v = input.type === 'number' || k === 'width' ? parseInt(input.value, 10) : input.value;
         setup[side][k] = v;
         saveSetup();
-        syncSetupUI();
+        syncPanel();
+        refreshLiveDeal(); // the armies update on the board as you tweak
       });
     }
   }
 }
 
-/** Reflect the setup model into the panel + recompute the deal readout. */
-function syncSetupUI() {
+function syncStagePicker() {
   for (const card of $('stage-list').children) {
     card.classList.toggle('selected', card.dataset.stageId === setup.stageId);
   }
+}
+
+/** Reflect the setup model into the panel controls (never deals). */
+function syncPanel() {
   const stage = currentStage();
-  $('setup-panel').hidden = !stage;
-  if (!stage) {
-    setStatus('pick a stage');
-    return;
-  }
+  if (!stage) return;
   $('supFlip').checked = setup.flip;
   const budget = Math.max(0, stage.ranks - 5);
   $('supCropTop').max = String(budget);
@@ -1060,96 +1060,108 @@ function syncSetupUI() {
     el.querySelector('.mode-budget').hidden = setup[side].mode !== 'budget';
     el.querySelector('.mode-pieces').hidden = setup[side].mode !== 'pieces';
   }
-  updateDealReadout();
 }
 
-/** The live feasibility/edge readout under the knobs — every knob change
- *  re-deals (cheap) and reports fit, gap and the material edge. */
-function updateDealReadout() {
-  const out = $('setup-readout');
-  if (!app.ffish) {
-    out.textContent = '';
-    return;
+const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
+
+/** (Re)mount the board for the given dims and show a position on it. */
+function mountPreviewBoard(files, ranks, fen) {
+  if (!app.boardUI || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
+    if (app.boardUI) app.boardUI.destroy();
+    app.boardUI = new BoardUI($('board'), {
+      files,
+      ranks,
+      flipped: false, // the player is always White at the bottom
+      onSquareTap: onSquareTap,
+    });
   }
+  app.boardUI.setPosition(fen);
+  app.boardUI.setMarks({});
+  app.boardUI.setInteractive(false);
+}
+
+/** Walls-only FEN of the transformed terrain — what the preview shows when
+ *  the current knobs cannot deal (the stage stays visible, the reason
+ *  says why the armies are missing). */
+function terrainOnly() {
+  const stage = currentStage();
+  let t;
+  try {
+    t = cropStage(setup.flip ? flipStageVertical(stage) : stage, setup.cropTop | 0, setup.cropBottom | 0);
+  } catch {
+    t = setup.flip ? flipStageVertical(stage) : stage; // the crop is the invalid part
+  }
+  const board = emptyBoard(t.files, t.ranks);
+  for (let r = 0; r < t.ranks; r++) {
+    for (let f = 0; f < t.files; f++) if (t.grid[r][f] === '*') board[t.ranks - 1 - r][f] = '*';
+  }
+  return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1` };
+}
+
+/** THE live loop: recompute the deal from the current knobs and paint the
+ *  result on the board immediately. Every knob change lands here. */
+function refreshLiveDeal() {
+  if (app.phase !== 'preview') return;
+  const out = $('setup-readout');
   const deal = computeDeal();
   if (!deal.ok) {
+    app.session = null;
+    const t = terrainOnly();
+    mountPreviewBoard(t.files, t.ranks, t.fen);
+    $('enemy-bar').textContent = 'enemy · black';
+    $('player-bar').textContent = 'you · white';
     out.textContent = `✗ ${deal.error}`;
     out.className = 'bad';
-    $('btnPreview').disabled = true;
+    $('btnBegin').disabled = true;
+    setStatus("doesn't fit — adjust the armies");
     return;
   }
+  app.session = makeSession(deal);
+  mountPreviewBoard(deal.files, deal.ranks, deal.fen);
+  $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
+  $('player-bar').textContent = `you · white · ${deal.white.army.value} pts`;
   const edge = deal.edge > 0 ? `your edge +${deal.edge}` : deal.edge < 0 ? `enemy edge +${-deal.edge}` : 'even armies';
   const extras = [];
   if (deal.attempt > 0) extras.push(`re-dealt ×${deal.attempt}`);
   if (deal.violations.length) extras.push(`${deal.violations.length} open file${deal.violations.length > 1 ? 's' : ''}`);
   out.textContent = `✓ ${deal.files}×${deal.ranks} · gap ${deal.gap} · ${edge}${extras.length ? ' · ' + extras.join(' · ') : ''}`;
   out.className = 'ok';
-  $('btnPreview').disabled = false;
-  setStatus('shape the armies — then preview');
+  $('btnBegin').disabled = false;
+  setStatus(`${edge} · gap ${deal.gap}${deal.turn === 'b' ? ' · the enemy moves first' : ''}`);
 }
 
-const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
-
-/** Deal with the current knobs and show the result on the board. */
-function dealAndPreview() {
-  const deal = computeDeal();
-  if (!deal.ok) {
-    setStatus(`doesn't fit: ${deal.error}`);
-    return;
-  }
-  openPreview(deal);
-}
-
-/** New seed, same knobs — from the preview controls or the end overlay. */
-function redeal() {
-  setup.seed = randomSeed();
-  saveSetup();
-  const deal = computeDeal();
-  if (!deal.ok) {
-    setStatus(`doesn't fit: ${deal.error}`);
-    syncSetupUI();
-    return;
-  }
-  openPreview(deal);
-}
-
-// ------------------------------------------------------------------- preview
-
-function showScreen(name) {
-  $('screen-setup').hidden = name !== 'setup';
-  $('screen-duel').hidden = name !== 'duel';
-  $('btnBack').hidden = name === 'setup';
-}
-
-/** Show a successful deal on the board — the pre-duel look at what the
- *  generator produced. Begin starts THIS exact deal (the session pins it);
- *  Re-deal rolls a fresh seed with the same knobs. */
-function openPreview(deal) {
-  app.session = makeSession(deal);
+/** Open the live preview for the currently selected stage: the board up
+ *  top, the generator knobs under it, armies re-dealt on every change. */
+function openStagePreview() {
+  const stage = currentStage();
+  if (!stage) return;
   app.phase = 'preview';
   app.busy = false;
   refreshGodsUI(); // an ended duel's panel may still be up — hide it
   refreshCheatUI();
   showScreen('duel');
-  const bits = [deal.flip ? 'flipped' : '', deal.cropTop || deal.cropBottom ? `crop ${deal.cropTop}/${deal.cropBottom}` : ''].filter(Boolean);
-  $('title').textContent = app.session.title + (bits.length ? ` (${bits.join(', ')})` : '');
+  $('title').textContent = stage.title;
   $('duel-log').textContent = '';
   $('preview-controls').hidden = false;
+  $('setup-panel').hidden = false;
+  syncPanel();
+  refreshLiveDeal();
+}
 
-  if (app.boardUI) app.boardUI.destroy();
-  app.boardUI = new BoardUI($('board'), {
-    files: deal.files,
-    ranks: deal.ranks,
-    flipped: false, // the player is always White at the bottom
-    onSquareTap: onSquareTap,
-  });
-  app.boardUI.setPosition(deal.fen);
-  app.boardUI.setMarks({});
-  app.boardUI.setInteractive(false);
-  $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
-  $('player-bar').textContent = `you · white · ${deal.white.army.value} pts`;
-  const edge = deal.edge > 0 ? `your edge +${deal.edge}` : deal.edge < 0 ? `enemy edge +${-deal.edge}` : 'even armies';
-  setStatus(`${edge} · gap ${deal.gap} · seed ${deal.seed}${deal.turn === 'b' ? ' · the enemy moves first' : ''}`);
+/** New seed, same knobs — the Re-deal buttons land here. */
+function redeal() {
+  setup.seed = randomSeed();
+  saveSetup();
+  syncPanel();
+  refreshLiveDeal();
+}
+
+// ------------------------------------------------------------------- screens
+
+function showScreen(name) {
+  $('screen-setup').hidden = name !== 'setup';
+  $('screen-duel').hidden = name !== 'duel';
+  $('btnBack').hidden = name === 'setup';
 }
 
 /** Fence + recycle before binding a duel to the shared engine: never reuse an
@@ -1186,9 +1198,20 @@ async function beginDuel() {
   if (!session) return;
   const deal = session.deal;
   $('preview-controls').hidden = true;
+  $('setup-panel').hidden = true;
+  $('duel-log').textContent = '';
   app.phase = 'playing';
   app.selectedSquare = null;
   await ensureEngineReady();
+  // First-move-only double-step (spike 14): every deal rides its own
+  // variant (double-step region = the dealt pawn squares). Append it to
+  // the cumulative ini — recycle paths reload app.catalog, so a mid-duel
+  // engine swap keeps the live variant — and reload this instance now.
+  if (!app.dealVariants.has(deal.variantName)) {
+    app.catalog += '\n' + deal.variantIni;
+    app.dealVariants.add(deal.variantName);
+  }
+  await app.engine.loadVariantsIni(app.catalog);
 
   // Director config: settings preset (or custom knobs) + the seed the deal
   // derived from the master setup seed (one number reproduces the whole
@@ -1502,36 +1525,35 @@ async function onEnd({ result, winner, termination }) {
 // ------------------------------------------------------------------- wiring
 
 $('btnBegin').addEventListener('click', beginDuel);
-$('btnPreview').addEventListener('click', dealAndPreview);
 $('btnRedeal').addEventListener('click', redeal);
-$('btnReseed').addEventListener('click', () => {
-  setup.seed = randomSeed();
-  saveSetup();
-  syncSetupUI();
-});
+$('btnReseed').addEventListener('click', redeal);
 $('supFlip').addEventListener('change', (e) => {
   setup.flip = e.target.checked;
   saveSetup();
-  syncSetupUI();
+  syncPanel();
+  refreshLiveDeal();
 });
 for (const [el, key] of [['supCropTop', 'cropTop'], ['supCropBottom', 'cropBottom']]) {
   $(el).addEventListener('change', (e) => {
     setup[key] = Math.max(0, parseInt(e.target.value, 10) || 0);
     clampCrops();
     saveSetup();
-    syncSetupUI();
+    syncPanel();
+    refreshLiveDeal();
   });
 }
 $('supTurn').addEventListener('change', (e) => {
   setup.turn = e.target.value === 'b' ? 'b' : 'w';
   saveSetup();
-  syncSetupUI();
+  syncPanel();
+  refreshLiveDeal();
 });
 $('supSeed').addEventListener('change', (e) => {
   const v = parseInt(e.target.value, 10);
   setup.seed = Number.isInteger(v) && v >= 1 ? v : 1;
   saveSetup();
-  syncSetupUI();
+  syncPanel();
+  refreshLiveDeal();
 });
 $('btnBack').addEventListener('click', () => {
   const probesQuiet = cancelIdleProbes(); // cheat + eval probes are in-flight searches too
@@ -1549,7 +1571,8 @@ $('btnBack').addEventListener('click', () => {
   refreshCheatUI();
   refreshGodsUI();
   $('title').textContent = 'Dungeon Crawler King';
-  syncSetupUI();
+  syncStagePicker();
+  setStatus('pick a stage');
 });
 $('btnUndo').addEventListener('click', doUndo);
 $('btnOverlayUndo').addEventListener('click', doUndo);
@@ -1640,14 +1663,15 @@ $('btnGodsExport').addEventListener('click', async () => {
   }
 });
 // Rematch: the SAME deal and the SAME Director seed — the identical duel,
-// for "let me try that again". Re-deal: same knobs, fresh seed.
+// for "let me try that again". Re-deal: back to the live preview on a
+// fresh seed.
 $('btnAgain').addEventListener('click', () => {
   $('overlay').hidden = true;
-  openPreview(app.session.deal);
-  void beginDuel();
+  void beginDuel(); // session (deal + Director seed) is untouched
 });
 $('btnOverlayRedeal').addEventListener('click', () => {
   $('overlay').hidden = true;
+  openStagePreview();
   redeal();
 });
 $('btnMenu').addEventListener('click', () => {
@@ -1716,10 +1740,14 @@ window.__DCK = {
     for (const side of ['white', 'black']) if (partial[side]) Object.assign(setup[side], partial[side]);
     clampCrops();
     saveSetup();
-    syncSetupUI();
+    syncStagePicker();
+    if (app.phase === 'preview') {
+      syncPanel();
+      refreshLiveDeal();
+    }
   },
   deal: () => computeDeal(),
-  preview: () => dealAndPreview(),
+  preview: () => openStagePreview(),
   begin: () => beginDuel(),
   legalMoves: () => app.duel.legalMoves(),
   randomMove: () => {

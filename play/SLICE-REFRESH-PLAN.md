@@ -96,6 +96,14 @@ triple is rejected "doesn't fit".
   parses). Caveat accepted: region semantics are every-visit, not
   first-move-only — pawns always have the double-step available. Canon
   edit queued for §4.4 alongside the §4.2 rewrite.
+  `[REPEALED 2026-08-21 — the "accepted" caveat had never been put to
+  the designer as its concrete consequence (a pawn banking its jump for
+  mid-board) and was rejected on contact. The rule is FIRST-MOVE-ONLY:
+  spike 14 — per-deal variants whose doubleStepRegion is the exact dealt
+  pawn squares (unmoved ⇔ on your dealt square; survives quake FEN
+  surgery, which no move-history scheme could). Residuals accepted as
+  engine grammar: comrade-square re-entry under stacked-file molding;
+  quake displacement onto/off a dealt square.]`
 - **Gap between armies**: lint rejects gap < 1. In practice duels are
   expected to begin at gap 2–5, but extremes get tested; **whether ideal
   gap scales with army size is a lab investigation item** (game-quality
@@ -159,6 +167,14 @@ triple is rejected "doesn't fit".
 - **Verifier scope**: `verify-stages.mjs` is STATIC (deal sampling +
   invariants over 33 stages × both orientations × crops, exit-code
   gated); engine-vs-engine verification belongs to the meter-lab rerun.
+- **Live preview (designer correction, same day)**: army generation
+  happens AFTER the stage is picked, on the board — the knob panel sits
+  under the preview and every change re-deals in place; an impossible
+  combo shows the bare terrain and the reason with Begin blocked. The
+  first build's picker-side panel with a text-only readout was rejected.
+- **Double-step is FIRST-MOVE-ONLY (designer correction, same day)**:
+  see the repeal note under Decisions above; spike 14 + per-deal
+  variants implement it.
 
 ## Stage set v1 — LOCKED (designer-reviewed 2026-08)
 
