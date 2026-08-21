@@ -42,6 +42,16 @@ export function loadStageV2(json) {
       }
     }
   });
+  // Designer rule (2026-08): the promotion zone is ALWAYS the entire
+  // actual far rank of the playable area — a stage whose extreme rank is
+  // all wall would make promotion unreachable, so it is rejected at load
+  // (the manifest build fails, not the phone; cropStage guards crops the
+  // same way).
+  for (const edge of [0, ranks - 1]) {
+    if (!grid[edge].some((c) => c === null)) {
+      throw new Error(`stage ${json.id}: rank ${edge + 1} is all wall — the promotion row must be playable`);
+    }
+  }
   return {
     id: json.id,
     title: json.title ?? json.id,

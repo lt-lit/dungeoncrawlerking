@@ -127,19 +127,30 @@ function loadArenas() {
   const { stages } = JSON.parse(fs.readFileSync(path.resolve(STAGE_FILE), 'utf8'));
   return stages
     .filter((s) => matchesFilter(s.id))
-    .map((s) => ({
-      id: s.id,
+    .map((s) => {
       // Entries from the dealMatchup materializer carry their own deal
-      // variant (first-move-only double-step, spike 14); bare entries
-      // fall back to the catalog baseline.
-      variantName: s.variantName ?? `duel_${s.files}x${s.ranks}`,
-      files: s.files,
-      ranks: s.ranks,
-      startFen: s.startFen,
-      playerColor: s.playerColor,
-      meta: s.meta ?? null,
-      ini: s.ini ?? makeDuelVariantIni({ name: `duel_${s.files}x${s.ranks}`, files: s.files, ranks: s.ranks }),
-    }));
+      // variant (the camp-line double-step, spike 14). variantName and
+      // ini travel TOGETHER and the ini must define exactly that name —
+      // otherwise every game on the entry targets an unregistered
+      // variant (or silently runs under the wrong double-step rules).
+      if (!!s.variantName !== !!s.ini) {
+        throw new Error(`stage ${s.id}: variantName and ini must be provided together`);
+      }
+      if (s.ini && !s.ini.includes(`[${s.variantName}:`)) {
+        throw new Error(`stage ${s.id}: ini does not define variant "${s.variantName}"`);
+      }
+      const variantName = s.variantName ?? `duel_${s.files}x${s.ranks}`;
+      return {
+        id: s.id,
+        variantName,
+        files: s.files,
+        ranks: s.ranks,
+        startFen: s.startFen,
+        playerColor: s.playerColor,
+        meta: s.meta ?? null,
+        ini: s.ini ?? makeDuelVariantIni({ name: variantName, files: s.files, ranks: s.ranks }),
+      };
+    });
 }
 
 async function freshEngine(catalogIni) {

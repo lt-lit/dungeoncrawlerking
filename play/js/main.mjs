@@ -919,7 +919,14 @@ async function boot() {
   app.phase = 'setup';
   setStatus('pick a stage');
 
-  if (params.get('stage') && currentStage()) {
+  const wantedStage = params.get('stage');
+  if (wantedStage) {
+    // A typo'd ?stage= must FAIL, not silently open the saved stage — a
+    // driver would measure the wrong terrain without noticing.
+    if (!app.stages.some((s) => s.id === wantedStage)) {
+      setStatus(`unknown stage ${wantedStage}`);
+      return;
+    }
     openStagePreview(); // straight into the live preview
     if (params.get('autobegin')) {
       if (app.session) await beginDuel();
@@ -934,7 +941,7 @@ async function boot() {
 function applySetupParams() {
   const stage = params.get('stage');
   if (stage && app.stages.some((s) => s.id === stage)) setup.stageId = stage;
-  if (!currentStage()) setup.stageId = setup.stageId && app.stages.some((s) => s.id === setup.stageId) ? setup.stageId : null;
+  if (!currentStage()) setup.stageId = null; // saved id no longer in the set
   if (params.get('flip') !== null) setup.flip = params.get('flip') === '1';
   if (params.get('ct') !== null) setup.cropTop = intParam('ct', setup.cropTop, 0);
   if (params.get('cb') !== null) setup.cropBottom = intParam('cb', setup.cropBottom, 0);
@@ -1103,6 +1110,16 @@ function terrainOnly() {
 function refreshLiveDeal() {
   if (app.phase !== 'preview') return;
   const out = $('setup-readout');
+  if (!currentStage()) {
+    // configureSetup can inject an unknown stageId while previewing —
+    // report instead of dereferencing a null stage in terrainOnly().
+    app.session = null;
+    out.textContent = '✗ pick a stage';
+    out.className = 'bad';
+    $('btnBegin').disabled = true;
+    setStatus('pick a stage');
+    return;
+  }
   const deal = computeDeal();
   if (!deal.ok) {
     app.session = null;
@@ -1203,10 +1220,11 @@ async function beginDuel() {
   app.phase = 'playing';
   app.selectedSquare = null;
   await ensureEngineReady();
-  // First-move-only double-step (spike 14): every deal rides its own
-  // variant (double-step region = the dealt pawn squares). Append it to
-  // the cumulative ini — recycle paths reload app.catalog, so a mid-duel
-  // engine swap keeps the live variant — and reload this instance now.
+  // Camp-line double-step (spike 14): every deal rides its own variant
+  // (double-step region = each side's camp, home edge up to its mode
+  // pawn rank). Append it to the cumulative ini — recycle paths reload
+  // app.catalog, so a mid-duel engine swap keeps the live variant — and
+  // reload this instance now.
   if (!app.dealVariants.has(deal.variantName)) {
     app.catalog += '\n' + deal.variantIni;
     app.dealVariants.add(deal.variantName);
@@ -1671,8 +1689,12 @@ $('btnAgain').addEventListener('click', () => {
 });
 $('btnOverlayRedeal').addEventListener('click', () => {
   $('overlay').hidden = true;
+  // Fresh seed FIRST, then one preview — openStagePreview deals once;
+  // dealing with the stale seed and immediately re-dealing flashed the
+  // discarded position and ran the pipeline twice.
+  setup.seed = randomSeed();
+  saveSetup();
   openStagePreview();
-  redeal();
 });
 $('btnMenu').addEventListener('click', () => {
   $('overlay').hidden = true;
