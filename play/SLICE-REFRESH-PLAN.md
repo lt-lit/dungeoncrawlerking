@@ -88,13 +88,22 @@ side starts in check; not decided at ply 0; strict invariant violations
 (wall pocket forcing a piece past a pawn) re-roll the offset, else the
 triple is rejected "doesn't fit".
 
-### Open decisions (defaults chosen, flagged for the designer)
+### Decisions (designer-resolved 2026-08)
 
-- **Double-step under molding**: squished pawn rows start off the native
-  double-step rank and lose the two-square push (in a 4-wide hall, an
-  8-pawn army has NO double-step pawns). Default: accept (chess-strict;
-  "a squeezed army is less springy"). Alternative if it feels bad: widen
-  `doubleStepRegion*` in the variant config.
+- **Double-step: UNIVERSAL.** Every pawn gets the two-square push
+  regardless of rank — spike 13 verified FSF supports multi-rank
+  `doubleStepRegion` lists (walls block correctly, ep works, engine
+  parses). Caveat accepted: region semantics are every-visit, not
+  first-move-only — pawns always have the double-step available. Canon
+  edit queued for §4.4 alongside the §4.2 rewrite.
+- **Gap between armies**: lint rejects gap < 1; the generator exposes a
+  min/max gap knob. In practice duels are expected to begin at gap 2–5,
+  but extremes get tested; **whether ideal gap scales with army size is a
+  lab investigation item** (game-quality metrics vs gap × army width).
+- **Pawn coverage**: "generally at least one pawn in front of each
+  non-pawn piece" — implemented as a soft preference in the molding fill
+  (violations only where walls force them), surfaced visually in the
+  gallery for the designer to judge in action.
 - **Back-piece ordering when pieces overflow into multiple rows**: default
   "heavies deep, minors forward", exposed as the archetype knob; judged in
   the gallery.
@@ -102,6 +111,11 @@ triple is rejected "doesn't fit".
   corridor): rejected by lint. What the DUNGEON does about it (refuse the
   duel? partial deploy? attrition?) is an open design question for Phase 2,
   deliberately not answered here.
+- **Mirror-match bias canary**: kept, lab-only, FULL-strength engines on
+  both seats (no shallow-seat handicap in that arm).
+- **Wall patterns**: a deliberate mix — corridors, chambers, pillars,
+  rubble, everything; variety is the point, and arenas are NOT assumed
+  symmetrical.
 
 ### Canon edits queued (need designer sign-off before committing)
 
