@@ -123,6 +123,25 @@ triple is rejected "doesn't fit".
   unit bag + molding invariants. `[REVISED]` stamp per the Phase-1.1
   precedent. CLAUDE.md and module headers follow.
 
+## Stage set v1 — LOCKED (designer-reviewed 2026-08)
+
+All 12 stages in `play/stages/` are stamped as viable test arenas
+(s01-the-closet … s12-rat-warren; gallery `play/stages-gallery.html`).
+Two follow-ups from the same review, in order:
+
+1. **Molding v2 first**: the strict "pawn rows strictly after all piece
+   rows" rule was an over-derivation, NOT the designer's intent — it
+   hollows out the formation whenever the back row overflows mid-row
+   (giant empty cells inside the army). Redefinition: pack DENSELY;
+   pawns and pieces may share rows; "pawns in front" is a PER-FILE screen
+   (within each file, every pawn of an army sits forward of every non-pawn
+   of that army). Royal-rearmost unchanged.
+2. **Stage wave 2 after molding sign-off**: the v1 set mostly keeps the
+   deployment rows clear (only s08 bites into one), which dodges the
+   molding-around-terrain question. Wave 2 adds stages with walls
+   intruding into the first/last two ranks — bitten corners, pillars on
+   the start rows, rubble at the deployment line, split pockets.
+
 ## Work plan
 
 1. **Schema v2 + core modules**: arena JSON with ASCII maps; army
