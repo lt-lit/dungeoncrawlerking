@@ -29,7 +29,7 @@
 // eye in the stage gallery rather than enforced.
 import { mulberry32, childSeed } from './prng.mjs';
 import { emptyBoard, serializeBoard } from './fen.mjs';
-import { catalogVariantName } from './variant.mjs';
+import { catalogVariantName, dealVariant } from './variant.mjs';
 import { flipStageVertical, cropStage } from './stage.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
@@ -362,8 +362,18 @@ export function dealMatchup({
       reasons.push(`attempt ${attempt}: disconnected`);
       continue;
     }
+    // First-move-only double-step (spike 14): the deal's own variant,
+    // double-step region = the exact squares the pawns are dealt onto.
+    const sqName = (c) => `${String.fromCharCode(97 + c.f)}${c.r + 1}`;
+    const variant = dealVariant(
+      terrain.files,
+      terrain.ranks,
+      m.white.layout.cells.filter((c) => c.piece === 'P').map(sqName),
+      m.black.layout.cells.filter((c) => c.piece === 'P').map(sqName)
+    );
     if (ffish) {
-      const lint = lintMatchupFen(ffish, m.variantName, m.fen);
+      registerDealVariant(ffish, variant);
+      const lint = lintMatchupFen(ffish, variant.name, m.fen);
       if (!lint.ok) {
         reasons.push(`attempt ${attempt}: ${lint.reasons.join(',')}`);
         continue;
@@ -378,7 +388,8 @@ export function dealMatchup({
       stage: terrain,
       files: terrain.files,
       ranks: terrain.ranks,
-      variantName: m.variantName,
+      variantName: variant.name,
+      variantIni: variant.ini,
       fen: m.fen,
       turn,
       white: m.white,
@@ -393,6 +404,16 @@ export function dealMatchup({
     };
   }
   return { ok: false, error: reasons[reasons.length - 1] ?? 'no attempt ran', reasons };
+}
+
+/** Register a deal variant into ffish exactly once per page/process.
+ *  Names encode their config (dealVariant), so a repeat is always the
+ *  identical block — the guard only saves the redundant parse. */
+const registeredDealVariants = new Set();
+function registerDealVariant(ffish, variant) {
+  if (registeredDealVariants.has(variant.name)) return;
+  ffish.loadVariantConfig(variant.ini);
+  registeredDealVariants.add(variant.name);
 }
 
 /**

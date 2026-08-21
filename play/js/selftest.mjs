@@ -169,9 +169,49 @@ async function main() {
     if (!a.ok) throw new Error(`deal failed: ${a.error}`);
     const b = dealMatchup({ stage: s21, flip: true, cropTop: 1, cropBottom: 1, ...dealKnobs, turn: 'b', ffish });
     if (a.fen !== b.fen || a.directorSeed !== b.directorSeed) throw new Error('same inputs dealt different duels');
-    if (a.variantName !== catalogVariantName(10, 8)) throw new Error(`crop 1t1b of 10x10 should use duel_10x8, got ${a.variantName}`);
+    if (!a.variantName.startsWith(`${catalogVariantName(10, 8)}__w`) || !a.variantIni) {
+      throw new Error(`crop 1t1b of 10x10 should ride a duel_10x8 DEAL variant, got ${a.variantName}`);
+    }
     if (a.fen.split(' ')[1] !== 'b') throw new Error('turn field lost — enemy-first deals must start black to move');
     return `10x10→${a.files}x${a.ranks} flipped deal replays exactly (gap ${a.gap}, edge ${a.edge >= 0 ? '+' : ''}${a.edge})`;
+  });
+
+  // The designer's double-step rule (spike 14): the two-square push belongs
+  // to a pawn's FIRST move only — expressed as the deal variant's region
+  // being the exact dealt pawn squares, so a pawn that moves loses it.
+  await check('double-step is first-move-only on a dealt board', () => {
+    const s26 = stages.find((s) => s.id === 's26-flats');
+    if (!s26) throw new Error('s26-flats missing from the manifest');
+    const deal = dealMatchup({ stage: s26, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 18 } }, seed: 4, ffish });
+    if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
+    const whitePawns = deal.white.layout.cells.filter((c) => c.piece === 'P');
+    const sq = (c) => `${String.fromCharCode(97 + c.f)}${c.r + 1}`;
+    const b = new ffish.Board(deal.variantName, deal.fen);
+    const legal = () => b.legalMoves().trim().split(/\s+/).filter(Boolean);
+    // every dealt pawn with two open squares ahead offers the double
+    const doubles = legal().filter((m) => {
+      const p = whitePawns.find((c) => m.startsWith(sq(c)));
+      return p && parseInt(m.slice(sq(p).length).replace(/^[a-l]/, ''), 10) === p.r + 3;
+    });
+    if (!doubles.length) {
+      b.delete();
+      throw new Error('no dealt pawn offers a double-step at ply 0');
+    }
+    // single-step a pawn, hand the move back, and its double must be gone
+    const pawn = whitePawns.find((c) => legal().includes(`${sq(c)}${String.fromCharCode(97 + c.f)}${c.r + 2}`));
+    if (!pawn) {
+      b.delete();
+      throw new Error('no pawn with a legal single step to test');
+    }
+    const from = sq(pawn);
+    const stepped = `${String.fromCharCode(97 + pawn.f)}${pawn.r + 2}`;
+    b.push(`${from}${stepped}`);
+    const reply = legal()[0]; // any black reply
+    b.push(reply);
+    const saved = legal().find((m) => m.startsWith(stepped) && m.endsWith(String(pawn.r + 4)));
+    b.delete();
+    if (saved) throw new Error(`pawn ${from}→${stepped} kept a saved double (${saved})`);
+    return `${doubles.length} first-move doubles at ply 0; a moved pawn loses its jump (${from}→${stepped})`;
   });
 
   await check('molding invariants hold on a dealt board', () => {

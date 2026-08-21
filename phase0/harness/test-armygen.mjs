@@ -287,6 +287,11 @@ ffish.loadVariantConfig(makeCatalogIni());
     check('deal deterministic', a.fen === b.fen && a.directorSeed === b.directorSeed && a.attempt === b.attempt);
     check('deal dims follow the crop', a.files === 8 && a.ranks === 8, `${a.files}x${a.ranks}`);
     check('deal carries the turn', a.fen.split(' ')[1] === 'b');
+    // first-move-only double-step (spike 14): the deal rides its own
+    // variant whose double-step region is the dealt pawn squares; the
+    // move-semantics proof lives in spike 14 and the browser selftest.
+    check('deal variant encodes the dealt pawn squares', a.variantName.startsWith('duel_8x8__w') && a.variantName.includes('__b') && !!a.variantIni, a.variantName);
+    check('deal variant is registered and serves the FEN', ffish.validateFen(a.fen, a.variantName) === 1);
     check('deal edge is white minus black', a.edge === a.white.army.value - a.black.army.value);
     check('deal director seed differs from setup seed', a.directorSeed !== a.seed);
   }

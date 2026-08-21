@@ -129,13 +129,16 @@ function loadArenas() {
     .filter((s) => matchesFilter(s.id))
     .map((s) => ({
       id: s.id,
-      variantName: `duel_${s.files}x${s.ranks}`,
+      // Entries from the dealMatchup materializer carry their own deal
+      // variant (first-move-only double-step, spike 14); bare entries
+      // fall back to the catalog baseline.
+      variantName: s.variantName ?? `duel_${s.files}x${s.ranks}`,
       files: s.files,
       ranks: s.ranks,
       startFen: s.startFen,
       playerColor: s.playerColor,
       meta: s.meta ?? null,
-      ini: makeDuelVariantIni({ name: `duel_${s.files}x${s.ranks}`, files: s.files, ranks: s.ranks }),
+      ini: s.ini ?? makeDuelVariantIni({ name: `duel_${s.files}x${s.ranks}`, files: s.files, ranks: s.ranks }),
     }));
 }
 

@@ -94,6 +94,37 @@ export function catalogVariantName(files, ranks) {
 }
 
 /**
+ * Per-deal duel variant: the catalog baseline with the pawn double-step
+ * region narrowed to the exact squares each color's pawns are DEALT onto
+ * (spike 14 — the designer's first-move-only rule). A pawn never moves
+ * backward, so "standing on your dealt square" IS "hasn't moved"; the
+ * one residual (arriving on a comrade's dealt square regains the option
+ * once — stacked-file molding only) is an accepted engine-grammar limit.
+ *
+ * The name ENCODES the config, so re-registering a colliding name is
+ * always an identical no-op, never a silent rules change (rule 7 bans
+ * redefinition; spike 14 verified incremental ADDITION in both
+ * libraries). Registration is the caller's job: ffish via
+ * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
+ * cumulative variants-ini reload (main.mjs appends to app.catalog).
+ */
+export function dealVariant(files, ranks, whitePawnSquares, blackPawnSquares) {
+  const w = [...whitePawnSquares].sort();
+  const b = [...blackPawnSquares].sort();
+  const name = `${catalogVariantName(files, ranks)}__w${w.join('')}__b${b.join('')}`;
+  const ini = makeDuelVariantIni({
+    name,
+    files,
+    ranks,
+    extra: {
+      doubleStepRegionWhite: w.join(' '),
+      doubleStepRegionBlack: b.join(' '),
+    },
+  });
+  return { name, ini };
+}
+
+/**
  * The fixed 60-variant catalog: duel_<files>x<ranks> for files 3–12 × ranks
  * 5–10 (spikes 1/3/8; ranks-5 added by the slice refresh for the 3×5
  * minimum stage). Loaded ONCE at boot into both ffish and the engine;
