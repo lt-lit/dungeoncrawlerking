@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "id": "s12-rat-warren",
+  "title": "Rat Warren",
+  "notes": "Dense pockets (13 walls): parallel 1-2 wide runs and dead ends. The wall-density stress case — quake starvation, locked pawns, fall-through.",
+  "map": [
+    "..........",
+    ".#..#.....",
+    ".#..#..##.",
+    "....#.....",
+    ".##...#...",
+    "......#.##",
+    "..........",
+    ".........."
+  ]
+}

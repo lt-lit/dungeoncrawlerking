@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "id": "s04-pillared-court",
+  "title": "Pillared Court",
+  "notes": "Two lone pillars, diagonal offset. Classic cover: cuts long files/diagonals without shaping rooms.",
+  "map": [
+    "......",
+    "......",
+    "..#...",
+    "......",
+    "....#.",
+    "......",
+    "......",
+    "......"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema": 2,
+  "id": "s02-cracked-hall",
+  "title": "Cracked Hall",
+  "notes": "Narrow hall, sparse rubble offset left-then-right. Lightest possible terrain interference.",
+  "map": [
+    "....",
+    "....",
+    ".#..",
+    "....",
+    "..#.",
+    "....",
+    "...."
+  ]
+}
