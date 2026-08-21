@@ -10,7 +10,7 @@ Earthquakes; no overworld). See `play/README.md` for its layout and the arena
 JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON**
 — Earthquakes (symmetric displacement + rare rising crumbles, NO repetition
 rules) replaced the old crumble system in both the build and brief §4.5.
-Next per brief §10, a three-step Gods track before calibration resumes:
+Next per brief §10, a four-step Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
 `play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay ✅ done**
@@ -24,8 +24,9 @@ a seeded quake sequence replays identically with the overlay exercised);
 "no new winning capture for either side", retune — the 1.2 instrument
 supplies the evidence: eval-delta flips decide whether SEE suffices,
 `rejected.unsafe_landing` counts starvation risk, fall-through rates show
-the crumble-rate shift). **1.3 evidence work is PAUSED on the
-proving-grounds refresh** (`play/SLICE-REFRESH-PLAN.md`): the meter-lab
+the crumble-rate shift). **1.3 is BLOCKED on Phase 1.2.5 — The
+Proving Grounds** (brief §10), the calibration test bed +
+automated-playtest rig; its evidence work is paused there (`play/SLICE-REFRESH-PLAN.md`): the meter-lab
 data (`phase0/harness/meterlab/`, results + findings in
 `phase0/results/`) showed the ply-ramp trigger is the wrong half of the
 Director; final numbers wait on the representative test bed. **The test
@@ -57,11 +58,20 @@ rank of the playable area, both sides, at every crop** (no stage or crop
 may produce a fully-walled extreme rank); and **human play caps the
 engine at 10 s/move** (`depth 22 movetime 10000` — d22 stays as the WASM
 stability cap; perf/optimization work is deliberately parked, labs keep
-faster limits). Still to come before 1.3 resumes: the meter-lab corpus
-materializer (stages × orientations × dealMatchup → `run.mjs
---stage-file` sets, + the mirror-canary drift metric in analyze.mjs) and
-the meter-lab rerun on the new bed.
-Then **Phase 1.5 — Director calibration** (port
+faster limits). **PHASE 1.2.5 IS THE ACTIVE PHASE** and its
+remaining half is the LAB RIG — all automated-playtest plumbing, no duel
+rules change: (a) the **corpus materializer** (33 stages × both
+orientations × `dealMatchup` → the stage-file sets `harness/meterlab/
+run.mjs` consumes, §7 player-favored edge + a full-strength mirror arm);
+(b) the **mirror-canary drift metric** in `harness/meterlab/analyze.mjs`;
+(c) the **meter-lab rerun** on the new bed. Ask the designer FIRST which
+arms run, seeds/matchups per stage-orientation, and the favored-seat
+model (depth-2 proxy vs human-shaped MultiPV) — switching mid-corpus
+forks the evidence. The phase ends when the evidence is on the table.
+Only then **Phase 1.3** (the rule decision — and note the
+meter-lab first pass may widen it from "redefine symmetric" to replacing
+the whole decision layer; §4.5 is LOCKED in shape, so that needs a design
+conversation first). Then **Phase 1.5 — Director calibration** (port
 `harness/game.mjs` off the retired crumble system, add the §6 promotion
 lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
 twice — and finally **Phase 2 — exploration slice**.
