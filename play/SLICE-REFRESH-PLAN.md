@@ -1,8 +1,15 @@
 # Vertical-slice refresh — the proving grounds (plan)
 
-Status: **agreed in design review, build not started.** This document is the
-work plan and the record of the decisions behind it. It gates the rest of
-Phase 1.3: the meter-lab variant sweep was deliberately stopped (partial
+> **This document is the work plan for PHASE 1.2.5 — The Proving Grounds**
+> (brief §10): the calibration test bed and the automated-playtest rig that
+> Phase 1.3 (the Gods rule change) is blocked on. The data bed and the setup
+> screen shipped (PRs #10, #11); what REMAINS is the lab rig — corpus
+> materializer, mirror-canary metric, and the meter-lab rerun. See the
+> STATUS block near the end of this file for the live picture.
+
+Status: **data bed + setup screen SHIPPED; the lab rig remains** (see the
+header and the STATUS block below). This document is the work plan and the
+record of the decisions behind it. It gates the rest of Phase 1.3: the meter-lab variant sweep was deliberately stopped (partial
 data committed, labeled) because its stage/army distribution was not
 representative — tuning numbers collected on it would have baked bad
 assumptions into canon.
