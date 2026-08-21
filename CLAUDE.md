@@ -28,9 +28,17 @@ the crumble-rate shift). **1.3 evidence work is PAUSED on the
 proving-grounds refresh** (`play/SLICE-REFRESH-PLAN.md`): the meter-lab
 data (`phase0/harness/meterlab/`, results + findings in
 `phase0/results/`) showed the ply-ramp trigger is the wrong half of the
-Director, but final numbers wait on a representative test bed — stages
-3×5–10×10 (authored, gallery-verified) × a knobbed army generator (W×2
-armies, molding layout; army size is INDEPENDENT of stage geometry).
+Director; final numbers wait on the representative test bed. **The test
+bed's data half is DONE**: 33 designer-locked stages (`play/stages/`,
+gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
+(`play/js/armygen.mjs` — W×2 unit bags, W 3–8, molding layout with two
+invariants: royal rearmost, pawns in front PER FILE; army size is
+INDEPENDENT of stage geometry), plus the UNIVERSAL pawn double-step
+baseline (spike 13) and a 60-variant catalog (ranks 5–10). Balance
+corpora run every stage in BOTH vertical orientations (mirrors are not
+separate scenarios — `flipStageVertical`). Still to come before 1.3
+resumes: the setup-UI rework (generator panel + flip toggle, retire the
+legacy arenas/placement screen) and the meter-lab rerun on the new bed.
 Then **Phase 1.5 — Director calibration** (port
 `harness/game.mjs` off the retired crumble system, add the §6 promotion
 lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
@@ -107,7 +115,7 @@ run one sweep at a time.
    instance corrupts under sustained multi-game use. Never call `quit()` in
    Node (Emscripten kills the whole process); drop the reference.
 7. **Variant names are single-use** (redefinition silently no-ops). Use the
-   dims-keyed catalog pattern: `duel_<files>x<ranks>`, all 50 loaded once at
+   dims-keyed catalog pattern: `duel_<files>x<ranks>`, all 60 loaded once at
    boot; everything else varies via FEN.
 8. **Parse UCI squares with a regex** — rank-10 squares are 3 chars (`f10`).
 9. **Quake surgery**: rewrite FEN (`setSquare` → `*` for a crumble, or

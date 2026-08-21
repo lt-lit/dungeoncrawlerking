@@ -56,15 +56,18 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 - **Width = local room width**, up to FSF's max files. Side barriers are only added when needed to fit FSF limits. Board caps: 12 files × 10 ranks (largeboard build).
 - **Overworld terrain inside the barrier carries into the duel as static wall squares (`*` in FEN).** This is the entire point of the dynamic-arena design: pillars, wall stubs, and room edges shape every fight. Walls and Earthquake holes (§4.5, §5.1) project identically.
 
-### 4.2 Formations `[LOCKED]`
+### 4.2 Formations `[REVISED 2026-08 — the proving-grounds refresh; was: fixed N×2 patches, width 3–5, walls-eat-slots]`
 
-- Each side's formation is **2 ranks deep**: a back row (king + pieces) and a pawn row in front of it. Like chess.
-- **Patch = N×2. Player: N ∈ [3, 5]; enemy floor is 2.** Width cap of 5 (5 pawns, king + up to 4 pieces). The width-3 minimum is PLAYER-side only — 2-wide "scrub" armies (king + one piece) are the standard early encounter, and the arena itself never drops below 3 files, so a narrow enemy just leaves open lanes. `[REVISED with the small-army/puzzle vision.]`
-- **The pawn row is authorable and sparse** (0–N pawns; pawnless piece-scraps are legal). The §4.2 automatic full-width row is only the default. `[REVISED — Phase 1 arenas ship 0–3 pawns per side.]`
-- **The player's opening kit is a 3×2 army — K+R+N + 3 pawns** `[PROVISIONAL in composition]` — and the army's bounding box GROWS through the run (3×2 → 4×2 → 5×2, 6 → 8 → 10 units), terminating at the patch cap (§8). Keep a major piece in the kit: rook mates work at any arena width; minors-only armies grind on wide boards.
-- **Clip rule:** the patch is anchored to the king's projected overworld position (king can be anywhere in his back row — no centering requirement), shifted inward only if he'd clip a wall. Walls eat slots. What survives is what you fight with.
-- Pawn row is **automatic, pawns only**, spanning the patch width. Pawn direction: toward the enemy along the duel axis (canonical orientation comes from the alignment axis).
-- Formations spawn whole. **No hands/pockets by default** — all material starts on the board. Early-game deployment turns were judged a drag; materializing the whole army *is* the summoning.
+- An army is a **unit bag with a native W×2 shape**: a back row (one royal + W−1 non-pawns) and a pawn row of **exactly W pawns** — pawn count always equals non-pawn count. **W ∈ [3, 8]**, both sides (the old 2-wide enemy "scrub" floor and the width-5 cap are superseded).
+- **Army size is INDEPENDENT of stage geometry** — the old board-width/patch-width coupling was a bug of assumption. The W×2 shape is only what the bag looks like on open ground; on real terrain the army **MOLDS**: a dense back-to-front, center-out fill that squishes through narrow ground and flows around walls (an 8×2 army in a 4-wide hall deploys 4 ranks deep). Exactly TWO invariants constrain the rearrangement:
+  1. the royal sits in the army's **rearmost occupied row**;
+  2. **pawns stay in front, per file** — within each file, every pawn is forward of every non-pawn. Mixed piece/pawn rows are legal and normal.
+  Non-pawns favor back rows + center columns; pawns take the outer cells of mixed rows and center themselves on a sparse front row. Reference implementation: `play/js/armygen.mjs` (`layoutArmy`) — one pure seeded function shared by the setup tool, the calibration lab, and (later) the dungeon layer.
+- **Pawn cover is a diagnostic, not a rule**: a piece counts as screened by an own pawn OR a wall forward of it in its file (walls block sliders — cover is cover). Unscreened files are reported, never forced.
+- The old **clip rule ("walls eat slots") is superseded by molding**: the army reshapes around terrain instead of losing units. A deployment that cannot fit (gap floor violated, ground too broken) is REJECTED by the lint — what the dungeon does with an un-deployable duel is `[OPEN]` (§5).
+- Compositions come from the **army generator**: explicit piece list or point-budget draw (±2 accuracy — the {3,5,9} value lattice has edge gaps), arrangement archetypes, one royal per side. Royal TYPE is a parameter (king variants are schema-ready; engine-side variant work deferred).
+- **The player's opening kit is a 3×2 army — K+R+N + 3 pawns** `[PROVISIONAL in composition]` — and the army GROWS through the run (3×2 → … → 8×2), terminating at the width cap (§8). Keep a major piece in the kit: rook mates work at any arena width.
+- Pawn direction: toward the enemy along the duel axis (canonical orientation from the alignment axis). Formations spawn whole. **No hands/pockets by default** — materializing the whole army *is* the summoning.
 
 ### 4.3 Player placement at duel start `[SUPERSEDED by the army-avatar pivot — see §5.1]`
 
@@ -92,11 +95,12 @@ original clauses below stand only for that interim and as design record.]`
   - Insufficient-material and fortress states resolve via §4.5: the Board State Director reopens what it can and closes the board when it cannot — arenas that can't produce a result stop existing.
   - **Cost of no repetition bound:** nothing caps how long a shuffle can persist, so iterative deepening can race to MAX_PLY in a fortress and hard-crash the WASM pthread. The duel layer needs a stall-recovery ladder (recycle instance, retry at reduced depth) and a depth cap; both ship in `play/`. Track the stall rate as a first-class metric (§7).
 - **Promotion region = enemy back rank** (per-color `promotionRegion`). March a pawn onto their home row and it transforms. Promotion piece targets `[OPEN]`.
+- **Pawn double-step is UNIVERSAL** `[REVISED 2026-08 — slice refresh; spike 13]`: molding (§4.2) puts pawn rows at arbitrary depths, so `doubleStepRegion` covers every pawn-legal rank per color — the push is never an accident of deployment depth. FSF region semantics are every-visit (no first-move tracking exists), so any pawn ALWAYS has the two-square option; accepted as the rule. Walls block both the jumped and landing squares; en passant works against any double-step. Verified in both libraries: `phase0/results/spike13-universal-doublestep.md`.
 - **Initiative:** whichever side's move *completes* the legal duel condition plays White. Ambusher moves first; a player who deliberately steps into alignment holds White.
 - If a **player** move creates legal alignment with multiple roamers simultaneously, the player chooses their opponent.
 - **capturesToHand:** believed variant-wide only (not per-color) — if so, it is **not** a general rule. At most a symmetric boss modifier ("the Necromancer"). `[PROVISIONAL, pending spike]`
 - **Reserve slot** (single piece in hand, droppable on own back ranks) is a possible high-tier upgrade, not a core mechanic. `[OPEN]`
-- **Gap math:** formations are 2 deep each → 4 ranks of formation; the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]`
+- **Gap math:** the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]` `[UNDER RE-INVESTIGATION 2026-08: molded armies are no longer fixed 2-deep, so gap and formation depth decouple; the proving-grounds lab tests gaps 1–6 and whether the ideal gap scales with army size — designer expects a practical trigger band of 2–5. The lint floor for a legal deal is gap ≥ 1.]`
 
 ### 4.5 The Board State Director — Earthquakes `[LOCKED in shape, PROVISIONAL in numbers — REPLACES the crumble system]`
 

@@ -30,7 +30,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   since animations run inside `app.busy` and `waitIdle()` waits them out).
   `prefers-reduced-motion` does the same by default.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
-  50-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
+  60-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
   must read PASS.
 
 ## Layout
@@ -70,7 +70,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Known gaps, deliberately left to Phase 1.3: discovered attacks from the
   vacated square, rescues of already-hanging pieces, pins, and crumbles
   (which pick uniformly and so may swallow a queen as readily as air).
-- `js/variant.mjs` — Phase 0 port + the fixed 50-variant catalog
+- `js/variant.mjs` — Phase 0 port + the fixed 60-variant catalog (3-12 files x 5-10 ranks)
   (`duel_3x6`…`duel_12x10`, loaded ONCE at boot — variant names are
   single-use) and a variants.ini key allowlist (unknown keys are silently
   ignored by both libraries).

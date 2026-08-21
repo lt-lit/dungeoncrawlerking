@@ -1,7 +1,7 @@
 // Browser infra selftest for the duel slice. Ports every check from
 // phase0/lib/selftest.mjs (FEN round-trip, wall setSquare, validateFen,
 // ffish-vs-engine perft-1 legality cross-check, engine bestmove legality) and
-// adds the Phase 1 boot-path checks: the full 50-variant catalog loaded ONCE
+// adds the Phase 1 boot-path checks: the full 60-variant catalog loaded ONCE
 // into BOTH libraries (variant names are single-use — rule 7), the §4.5
 // crumble filter, and the game-end protocol (rule 4: numberLegalMoves()===0
 // and the mover loses — never ffish isGameOver()/result()).
@@ -81,17 +81,18 @@ async function main() {
     return wallFen.split(' ')[0];
   });
 
-  // --- Full 50-variant catalog into BOTH libraries (rule 7: load once at boot) ---
+  // --- Full 60-variant catalog into BOTH libraries (rule 7: load once at
+  // boot; ranks 5-10 since the slice refresh added the 3x5 minimum stage) ---
   const catalogIni = makeCatalogIni();
   await check('catalog load (ffish)', async () => {
     const blocks = (catalogIni.match(/^\[duel_/gm) || []).length;
-    if (blocks !== 50) throw new Error(`expected 50 catalog variants in ini, got ${blocks}`);
+    if (blocks !== 60) throw new Error(`expected 60 catalog variants in ini, got ${blocks}`);
     ffish.loadVariantConfig(catalogIni);
-    return '50 variants registered';
+    return '60 variants registered';
   });
   await check('catalog load (engine)', async () => {
     await engine.loadVariantsIni(catalogIni); // the FULL catalog text, same as boot
-    return '50 variants written to /variants.ini, readyok';
+    return '60 variants written to /variants.ini, readyok';
   });
 
   // --- Catalog extremes: smallest and largest boards construct and move ---

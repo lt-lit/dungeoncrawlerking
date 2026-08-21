@@ -151,13 +151,35 @@ Two follow-ups from the same review, in order:
    cave-mouth back rank, rubble at the deployment lines, split pockets, a
    diagonal scar, the anvil, a collapsed keep at 10×10, a minimal
    sinkhole.
-4. **Stage wave 3 — PROPOSED**: scenarios the 22 locked stages still do
-   not cover — room-corridor-room necks, dense pillar lattices, a full
-   two-front divide, WIDE-SHALLOW boards (armies near contact at deal),
-   cornered-royal gates, a fully-walled pawn rank (deep pawn starts — the
-   universal double-step case), a one-door fortress pocket (the stall
-   scenario the Director exists to break), a serpentine weave, an
-   L-shaped playfield, 3-wide-with-walls, and the smallest square.
+4. **Stage wave 3 — LOCKED**: s23–s33, the coverage-gap set —
+   room-corridor-room neck, pillar lattice, two-front divide,
+   wide-shallow 10×6, cornered-royal posterngates, the walled pawn rank
+   (deep pawn starts under the universal double-step), the one-door
+   fortress redoubt, serpentine weave, L-shaped playfield,
+   3-wide-with-walls, and the 5×5 minimum square.
+
+**ALL 33 STAGES LOCKED (s01–s33)** — the proving-grounds stage set is
+complete and designer-stamped. Canon updated: brief §4.2 rewritten
+(unit-bag armies, W 3–8, molding invariants, clip rule superseded),
+§4.4 gains the universal double-step rule and the gap re-investigation
+note, both `[REVISED 2026-08]`.
+
+## What ships in the first PR vs what comes next
+
+This branch delivers: the meter-lab evidence pass (Phase 1.3 trigger
+finding + 9 vetted variants + replay-verified corpora), the proving
+grounds (armygen + molding v2.1, stage schema v2, 33 locked stages,
+gallery pipeline), spike 13 + the universal double-step baseline, the
+60-variant catalog, and the canon edits. The shipped game (play/index.html)
+is UNCHANGED in behavior except the variant baseline: it still plays the
+four legacy arenas through the old placement screen.
+
+Next branch (in work-plan order): the setup-UI rework — generator panel
+(per-side knobs, seeds, live edge readout, board-flip toggle), retiring
+the legacy arenas + placement screen + enemyEdit cheat — then the phone
+perf benchmark at 10×10, then the meter-lab rerun over the locked 33 ×
+both orientations × generated matchups, which reopens Phase 1.3's rule
+decision on representative data.
 
 ## Work plan
 

@@ -2,7 +2,7 @@
 // Browser port of phase0/lib/variant.mjs with two additions: a known-key
 // allowlist (unknown variants.ini keys are silently ignored by BOTH libraries
 // — spike 6 — so a typo produces legal-looking wrong rules) and the fixed
-// 50-variant catalog (variant names are single-use — spike 1 — so the game
+// 60-variant catalog (variant names are single-use — spike 1 — so the game
 // loads every duel_<files>x<ranks> once at boot and never redefines).
 import { emptyBoard, serializeBoard } from './fen.mjs';
 
