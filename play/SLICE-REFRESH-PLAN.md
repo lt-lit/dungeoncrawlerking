@@ -96,10 +96,13 @@ triple is rejected "doesn't fit".
   parses). Caveat accepted: region semantics are every-visit, not
   first-move-only — pawns always have the double-step available. Canon
   edit queued for §4.4 alongside the §4.2 rewrite.
-- **Gap between armies**: lint rejects gap < 1; the generator exposes a
-  min/max gap knob. In practice duels are expected to begin at gap 2–5,
-  but extremes get tested; **whether ideal gap scales with army size is a
-  lab investigation item** (game-quality metrics vs gap × army width).
+- **Gap between armies**: lint rejects gap < 1. In practice duels are
+  expected to begin at gap 2–5, but extremes get tested; **whether ideal
+  gap scales with army size is a lab investigation item** (game-quality
+  metrics vs gap × army width). `[REVISED 2026-08-21: the planned min/max
+  gap knob became the CROP knob — see the setup-UI decisions below —
+  since molded armies pack to their home edges and gap is otherwise
+  emergent from stage height.]`
 - **Pawn coverage**: "generally at least one pawn in front of each
   non-pawn piece" — implemented as a soft preference in the molding fill
   (violations only where walls force them), surfaced visually in the
@@ -122,6 +125,40 @@ triple is rejected "doesn't fit".
 - Brief **§4.2 rewrite**: patch width 3–5 → army W 3–8; formation model →
   unit bag + molding invariants. `[REVISED]` stamp per the Phase-1.1
   precedent. CLAUDE.md and module headers follow.
+- **LANDED** (commit `cfd3419`, with the 33-stage lock): §4.2 and §4.4
+  both carry `[REVISED 2026-08]` stamps. This section is history, not a
+  work item.
+
+### Setup-UI decisions (designer-resolved 2026-08-21)
+
+- **Seat & initiative**: the player ALWAYS holds White at the bottom;
+  "enemy moves first" is the deal's turn field (`turn: 'b'`), never a
+  seat swap. The flip toggle mirrors the TERRAIN.
+- **One master seed**: a visible, re-enterable seed field (+ 🎲 reroll)
+  drives armies, molding AND the Director via `childSeed` — one number
+  reproduces the whole duel, quakes included.
+- **Gap control = CROP**: two steppers REMOVE far/near ranks
+  (`cropStage`), redrawing the boundary the way a dungeon encounter will;
+  every stage can then test smaller gaps than its height supports. To
+  every piece a boundary is a boundary, so this changes no rules — and it
+  keeps the designer's promotion rule by construction: **the promotion
+  zone is ALWAYS the entire actual far rank of the playable area, both
+  sides, at every crop.** No stage/crop may produce a fully-walled
+  extreme rank (enforced in loader, crop, and verifier).
+- **Archetypes**: ship the implemented three (heavies-deep / minors-deep /
+  scrambled). Full custom back-row arrangement is deferred to its own
+  session.
+- **Rejection policy**: `dealMatchup` auto-retries a few derived seeds,
+  then surfaces "doesn't fit" with the reason. One shared entry point for
+  UI / verifier / corpus builder — no re-assembled pipelines.
+- **Pacing**: perf/optimization work is DEFERRED (designer call — not a
+  concern at this stage). Human play caps the engine at 10 s/move
+  (`depth 22 movetime 10000`; d22 stays as the WASM stability cap). The
+  10×10 phone benchmark is parked with it; lab corpora keep their own
+  faster limits.
+- **Verifier scope**: `verify-stages.mjs` is STATIC (deal sampling +
+  invariants over 33 stages × both orientations × crops, exit-code
+  gated); engine-vs-engine verification belongs to the meter-lab rerun.
 
 ## Stage set v1 — LOCKED (designer-reviewed 2026-08)
 
@@ -180,6 +217,22 @@ the legacy arenas + placement screen + enemyEdit cheat — then the phone
 perf benchmark at 10×10, then the meter-lab rerun over the locked 33 ×
 both orientations × generated matchups, which reopens Phase 1.3's rule
 decision on representative data.
+
+**STATUS 2026-08-21 — the setup-UI rework is BUILT** (this branch):
+stage picker + generator panel (per-side width/points-or-pieces/
+archetype/anchor, initiative, flip, crop steppers, master seed + 🎲,
+live fit/gap/edge readout), deal preview on the board, Rematch/Re-deal,
+new driver params, 10 s think cap; legacy arenas + placement screen +
+enemyEdit + `js/arena.mjs` retired; `dealMatchup`/`cropStage` shipped
+with bench + verifier coverage (`test-armygen.mjs` §10–11,
+`verify-stages.mjs` replacing `verify-play-arenas.mjs`); browser
+selftest extended (manifest, flip involution, deterministic deal,
+crop-promotion rule, 3×5 extreme); meter-lab runner decoupled from the
+retired arena loader (`--stage-file` only). The phone perf gate is
+PARKED by designer decision (see setup-UI decisions). Remaining before
+1.3 reopens: the corpus materializer (stages × orientations ×
+`dealMatchup` → run.mjs stage-file, + mirror-canary arm and its
+analyze.mjs drift metric) and the meter-lab rerun itself.
 
 ## Work plan
 

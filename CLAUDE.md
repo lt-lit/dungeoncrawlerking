@@ -36,9 +36,24 @@ invariants: royal rearmost, pawns in front PER FILE; army size is
 INDEPENDENT of stage geometry), plus the UNIVERSAL pawn double-step
 baseline (spike 13) and a 60-variant catalog (ranks 5–10). Balance
 corpora run every stage in BOTH vertical orientations (mirrors are not
-separate scenarios — `flipStageVertical`). Still to come before 1.3
-resumes: the setup-UI rework (generator panel + flip toggle, retire the
-legacy arenas/placement screen) and the meter-lab rerun on the new bed.
+separate scenarios — `flipStageVertical`). **The setup-UI rework is
+DONE**: the game boots into a stage picker + generator panel (per-side
+knobs, initiative toggle, flip, CROP steppers, ONE master seed driving
+armies+molding+Director via childSeed), deal preview, Rematch/Re-deal;
+the legacy arenas, placement screen, enemyEdit cheat and
+`play/js/arena.mjs` are RETIRED (`armygen.dealMatchup` is the single
+composed deal entry point — UI, `phase0/harness/verify-stages.mjs`, and
+the future corpus builder all share it). Two designer rules from that
+build are canon: **crop redraws the boundary by REMOVING ranks (never
+walling them), and the promotion zone is ALWAYS the entire actual far
+rank of the playable area, both sides, at every crop** (no stage or crop
+may produce a fully-walled extreme rank); and **human play caps the
+engine at 10 s/move** (`depth 22 movetime 10000` — d22 stays as the WASM
+stability cap; perf/optimization work is deliberately parked, labs keep
+faster limits). Still to come before 1.3 resumes: the meter-lab corpus
+materializer (stages × orientations × dealMatchup → `run.mjs
+--stage-file` sets, + the mirror-canary drift metric in analyze.mjs) and
+the meter-lab rerun on the new bed.
 Then **Phase 1.5 — Director calibration** (port
 `harness/game.mjs` off the retired crumble system, add the §6 promotion
 lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
