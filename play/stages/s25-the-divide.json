@@ -1,0 +1,18 @@
+{
+  "schema": 2,
+  "wave": 3,
+  "id": "s25-the-divide",
+  "title": "The Divide",
+  "notes": "Wave 3. A full spine (ranks 2-8) splits the board into two corridors joined only at the deployment ranks: fight both fronts or race the ends. The two-front case.",
+  "map": [
+    "........",
+    "....#...",
+    "....#...",
+    "....#...",
+    "....#...",
+    "....#...",
+    "....#...",
+    "....#...",
+    "........"
+  ]
+}

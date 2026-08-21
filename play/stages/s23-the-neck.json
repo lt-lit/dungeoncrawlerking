@@ -1,0 +1,18 @@
+{
+  "schema": 2,
+  "wave": 3,
+  "id": "s23-the-neck",
+  "title": "The Neck",
+  "notes": "Wave 3. Room-corridor-room: two open chambers joined by a weaving 2-wide neck (ranks 4-6). The duel starts in separate rooms — covers the topology no locked stage has.",
+  "map": [
+    ".......",
+    ".......",
+    ".......",
+    "###..##",
+    "##..###",
+    "###..##",
+    ".......",
+    ".......",
+    "......."
+  ]
+}

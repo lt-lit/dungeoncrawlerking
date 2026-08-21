@@ -118,14 +118,19 @@ for (const stage of stages) {
     black: { spec: { width: 3, budget: 8 } },
   }));
   const big = trySample(stage, () => {
+    const anchorPairs = wide
+      ? [['left', 'right'], ['right', 'left'], ['center', 'center']]
+      : [['center', 'center']];
     for (let w = 8; w >= 3; w--) {
       const bw = Math.max(3, w - 2);
-      const specs = {
-        white: { spec: { width: w, budget: w + 5 * (w - 1) }, anchor: wide ? 'left' : 'center' },
-        black: { spec: { width: bw, budget: bw + 4 * (bw - 1) }, anchor: wide ? 'right' : 'center' },
-      };
-      const probe = buildMatchup({ stage, seed: 1, gapMin: 1, ...specs });
-      if (!probe.error) return specs;
+      for (const [aw, ab] of anchorPairs) {
+        const specs = {
+          white: { spec: { width: w, budget: w + 5 * (w - 1) }, anchor: aw },
+          black: { spec: { width: bw, budget: bw + 4 * (bw - 1) }, anchor: ab },
+        };
+        const probe = buildMatchup({ stage, seed: 1, gapMin: 1, ...specs });
+        if (!probe.error) return specs;
+      }
     }
     return null;
   });

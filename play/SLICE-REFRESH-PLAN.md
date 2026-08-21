@@ -145,14 +145,19 @@ Two follow-ups from the same review, in order:
    separate scenarios (`flipStageVertical` in stage.mjs). The pre-game
    test setup must expose a board-flip toggle (queued in the setup-UI
    work item).
-3. **Stage wave 2 — PROPOSED, awaiting review**: 10 entirely new designs
-   (s13–s22), every one with walls inside the first/last two ranks and
-   most in the very first/last rank: gatehouse stubs, buried flanks,
-   colonnade pillars in the pawn ranks, a cave-mouth back rank, rubble
-   concentrated at the deployment lines (the inverse of wave 1), split
-   deployment pockets, a diagonal scar, a squeezed pawn-rank anvil, a
-   collapsed keep at 10×10, and a minimal sinkhole. This is the molding
-   stress set the v1 wave dodged.
+3. **Stage wave 2 — LOCKED** (designer-reviewed, molding v2.1 confirmed
+   working as intended): s13–s22, the broken-deployment-ground set —
+   gatehouse stubs, buried flanks, colonnade pillars in the pawn ranks, a
+   cave-mouth back rank, rubble at the deployment lines, split pockets, a
+   diagonal scar, the anvil, a collapsed keep at 10×10, a minimal
+   sinkhole.
+4. **Stage wave 3 — PROPOSED**: scenarios the 22 locked stages still do
+   not cover — room-corridor-room necks, dense pillar lattices, a full
+   two-front divide, WIDE-SHALLOW boards (armies near contact at deal),
+   cornered-royal gates, a fully-walled pawn rank (deep pawn starts — the
+   universal double-step case), a one-door fortress pocket (the stall
+   scenario the Director exists to break), a serpentine weave, an
+   L-shaped playfield, 3-wide-with-walls, and the smallest square.
 
 ## Work plan
 

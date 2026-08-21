@@ -1,0 +1,19 @@
+{
+  "schema": 2,
+  "wave": 3,
+  "id": "s30-the-serpent",
+  "title": "The Serpent",
+  "notes": "Wave 3. Overlapping wall arms force an S-weave up the long board: no straight path exists. Approach marches under permanent cover, the serpentine case.",
+  "map": [
+    ".....",
+    ".....",
+    "###..",
+    ".....",
+    "..###",
+    ".....",
+    "###..",
+    ".....",
+    ".....",
+    "....."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "wave": 3,
+  "id": "s28-parapet",
+  "title": "The Parapet",
+  "notes": "Wave 3. White second rank walled except two slots: the pawn screen is forced DEEP (rank 3+) — the universal double-step earning its keep. Black side lightly bitten for contrast.",
+  "map": [
+    "...#...",
+    "......#",
+    ".......",
+    "...#...",
+    ".......",
+    ".......",
+    "##.#.##",
+    "......."
+  ]
+}
