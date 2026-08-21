@@ -1,6 +1,6 @@
 /* Dungeon Crawler King — duel slice. Dark dungeon theme, mobile-first.
-   Sizing invariant: every board from 3×6 to 12×10 fits a 390×844 viewport
-   with topbar + tray + controls visible (board width is capped by both the
+   Sizing invariant: every board from 3×5 to 12×10 fits a 390×844 viewport
+   with topbar + controls visible (board width is capped by both the
    viewport width and the height budget via --files/--ranks aspect math). */
 
 :root {
@@ -102,26 +102,82 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .log .bad { color: var(--bad); }
 .log .crumble { color: var(--gold); }
 
-/* ---------- menu ---------- */
+/* ---------- setup screen (stage picker + army generator) ---------- */
 
 #menu-intro { color: var(--muted); font-size: .9rem; }
 
-#arena-list { display: flex; flex-direction: column; gap: .6rem; }
+#stage-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: .5rem;
+  max-height: 34dvh;
+  overflow-y: auto;
+  padding: .2rem;
+}
 
-.arena-card {
+.stage-card {
   display: flex;
   flex-direction: column;
-  gap: .15rem;
-  text-align: left;
-  padding: .7rem .9rem;
+  align-items: center;
+  gap: .2rem;
+  padding: .45rem .3rem;
   background: var(--panel);
   border: 1px solid #333;
 }
 
-.arena-card:active { background: var(--panel-2); }
-.arena-title { font-weight: 600; }
-.arena-dims { font-size: .75rem; color: var(--gold); }
-.arena-intro { font-size: .8rem; color: var(--muted); }
+.stage-card:active { background: var(--panel-2); }
+.stage-card.selected { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.stage-map {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: .55rem;
+  line-height: 1.05;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+.stage-card.selected .stage-map { color: var(--gold); }
+.stage-title { font-size: .72rem; font-weight: 600; text-align: center; }
+.stage-dims { font-size: .68rem; color: var(--gold); }
+
+#setup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  margin-top: .7rem;
+  background: var(--panel);
+  border: 1px solid #333;
+  border-radius: .5rem;
+  padding: .7rem .8rem;
+}
+
+#setup-panel[hidden] { display: none; }
+
+.setup-row { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+.setup-row .opt { font-size: .85rem; gap: .35rem; }
+.setup-row .opt select,
+#setup-panel .opt select { margin-left: 0; }
+
+.setup-side {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  padding: .4rem .5rem;
+  background: var(--panel-2);
+  border-radius: .4rem;
+}
+
+.setup-side .opt { font-size: .82rem; gap: .3rem; }
+.setup-side .opt[hidden] { display: none; }
+.side-label { font-size: .78rem; color: var(--gold); text-transform: uppercase; letter-spacing: .05em; flex-basis: 100%; }
+
+#setup-panel input[type="number"] { width: 4.2rem; background: var(--bg); color: inherit; border: 1px solid #444; border-radius: .3rem; padding: .15rem .3rem; }
+#setup-panel input[type="text"] { width: 6.5rem; background: var(--bg); color: inherit; border: 1px solid #444; border-radius: .3rem; padding: .15rem .3rem; font-family: ui-monospace, monospace; text-transform: uppercase; }
+#btnReseed { font-size: 1rem; padding: .3rem .55rem; }
+
+#setup-readout { font-size: .8rem; font-family: ui-monospace, monospace; }
+#setup-readout.ok { color: var(--ok); }
+#setup-readout.bad { color: var(--bad); }
 
 /* ---------- duel screen ---------- */
 
@@ -231,16 +287,6 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .arrow-layer .arrow line { stroke: #6cc3ff; stroke-linecap: round; }
 .arrow-layer .arrow polygon { fill: #6cc3ff; }
 
-.cell.slot { box-shadow: inset 0 0 0 100vmax #7fd77f1e; }
-.cell.slot::before {
-  content: '';
-  position: absolute;
-  width: 40%;
-  height: 40%;
-  border: 2px dashed #7fd77f66;
-  border-radius: .2rem;
-}
-
 .board.inactive .cell { cursor: default; }
 .board:not(.inactive) .cell { cursor: pointer; }
 
@@ -328,34 +374,9 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   .cell.crumbling::before { animation: none; }
 }
 
-/* ---------- tray + placement ---------- */
+/* ---------- preview controls ---------- */
 
-.tray {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .4rem;
-  justify-content: center;
-  margin-top: .6rem;
-  min-height: 0;
-}
-
-.tray:empty { display: none; }
-
-.tray-chip {
-  width: 3rem;
-  height: 3rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--panel);
-}
-
-.tray-chip .piece { font-size: 2rem; }
-.tray-chip.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
-.tray-chip.placed { opacity: .3; }
-
-#placement-controls {
+#preview-controls {
   display: flex;
   gap: .6rem;
   justify-content: center;
@@ -363,7 +384,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 }
 
 /* Author display rules above would beat the UA [hidden] rule — restate it. */
-#placement-controls[hidden],
+#preview-controls[hidden],
 .screen[hidden],
 .board[hidden] { display: none; }
 

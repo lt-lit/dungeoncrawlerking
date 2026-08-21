@@ -1,4 +1,4 @@
-// Board renderer + placement tray + promotion picker (mobile-first DOM/CSS).
+// Board renderer + promotion picker (mobile-first DOM/CSS).
 //
 // Squares are addressed by ABSOLUTE name ('a1'..'l10') everywhere; flipping
 // the view (player plays Black) only changes visual row/column order —
@@ -159,10 +159,9 @@ export class BoardUI {
    *  map painting the Director's candidate census — displacement landing
    *  squares by tier, 't' for terminal crumbles. Debug-only chrome: its CSS
    *  sits before the quake marks so live-game marks win ties. */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, slots = [], arrows = [], quakeFrom = [], quakeTo = [], pit = null, heat = {} } = {}) {
+  setMarks({ selected = null, targets = [], lastMove = [], check = null, arrows = [], quakeFrom = [], quakeTo = [], pit = null, heat = {} } = {}) {
     const targetSet = new Set(targets);
     const lastSet = new Set(lastMove);
-    const slotSet = new Set(slots);
     const quakeFromSet = new Set(quakeFrom);
     const quakeToSet = new Set(quakeTo);
     for (const [sq, cell] of this.cells) {
@@ -170,7 +169,6 @@ export class BoardUI {
       cell.classList.toggle('target', targetSet.has(sq));
       cell.classList.toggle('last', lastSet.has(sq));
       cell.classList.toggle('check', sq === check);
-      cell.classList.toggle('slot', slotSet.has(sq));
       cell.classList.toggle('quake-from', quakeFromSet.has(sq));
       cell.classList.toggle('quake-to', quakeToSet.has(sq));
       cell.classList.toggle('fresh-pit', sq === pit);
@@ -293,33 +291,4 @@ export function pickPromotion(letters) {
     overlay.appendChild(card);
     document.body.appendChild(overlay);
   });
-}
-
-/** Placement tray: the player's piece pool (§4.3). */
-export class Tray {
-  constructor(container, { onTap } = {}) {
-    this.container = container;
-    this.onTap = onTap;
-    container.classList.add('tray');
-  }
-
-  setPieces(items) {
-    this.container.textContent = '';
-    for (const it of items) {
-      const chip = document.createElement('button');
-      chip.className = `tray-chip ${it.state}`;
-      chip.dataset.trayId = it.id;
-      chip.disabled = it.state === 'placed';
-      const glyph = document.createElement('span');
-      glyph.className = `piece ${it.color}`;
-      glyph.textContent = GLYPHS[it.piece.toLowerCase()] ?? it.piece;
-      chip.appendChild(glyph);
-      chip.addEventListener('click', () => this.onTap && this.onTap(it.id));
-      this.container.appendChild(chip);
-    }
-  }
-
-  clear() {
-    this.container.textContent = '';
-  }
 }
