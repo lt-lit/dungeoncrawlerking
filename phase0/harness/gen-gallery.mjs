@@ -109,9 +109,12 @@ function sampleCard(label, note, stage, s) {
     `W ${describeArmy(m.white.army)} vs B ${describeArmy(m.black.army)} · gap ${m.gap} · seed ${s.seed}${viol}</figcaption></figure>`;
 }
 
-const cardsByWave = { 1: '', 2: '' };
+// Waves render newest-first; unknown waves must never vanish silently
+// (wave 3 did exactly that when this was a fixed two-key object).
+const cardsByWave = {};
 let issues = 0;
 for (const stage of stages) {
+  cardsByWave[stage.wave] ??= '';
   const wide = stage.files >= 6;
   const small = trySample(stage, () => ({
     white: { spec: { width: 3, budget: 12 } },
@@ -194,13 +197,18 @@ square). Samples are seeded and reproducible; "not shown" means the generator
 rejected every attempt (that is data too). Balance testing runs every stage
 in BOTH vertical orientations (designer rule — mirrors are not separate
 scenarios), so judge terrain on its own merits, not by which side it faces.</p>
-<h1 class="wavehead">Wave 2 — proposed (broken deployment ground)</h1>
-<p class="sub">Entirely new designs; every stage has walls inside the first/last
-two ranks, most in the very first or last rank — the molding stress set.</p>
-${cardsByWave[2]}
-<h1 class="wavehead">Wave 1 — locked</h1>
-<p class="sub">The clean-ground set, re-molded under v2.1 for reference.</p>
-${cardsByWave[1]}`;
+${Object.keys(cardsByWave)
+  .map(Number)
+  .sort((a, b) => b - a)
+  .map((w) => {
+    const label = {
+      3: 'Wave 3 — proposed (the uncovered scenarios: necks, lattices, two-front, wide-shallow, cornered royals, deep pawns, fortress pocket, serpentine, L-board, 3-wide terrain, minimum square)',
+      2: 'Wave 2 — locked (broken deployment ground)',
+      1: 'Wave 1 — locked (clean ground)',
+    }[w] ?? `Wave ${w} — proposed`;
+    return `<h1 class="wavehead">${label}</h1>\n${cardsByWave[w]}`;
+  })
+  .join('\n')}`;
 
 fs.writeFileSync(OUT, html);
 console.log(`\n${stages.length} stages, ${issues} with sample issues → ${OUT}`);
