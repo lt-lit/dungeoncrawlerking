@@ -45,7 +45,14 @@ const iniUniversal = makeDuelVariantIni({
   ranks: RANKS,
   extra: { doubleStepRegionWhite: wRegion, doubleStepRegionBlack: bRegion },
 });
-const iniBaseline = makeDuelVariantIni({ name: 'ds_baseline', files: 5, ranks: RANKS });
+// Control opts back OUT to the pre-refresh single-rank region (the duel
+// baseline is now universal — this spike is the reason it changed).
+const iniBaseline = makeDuelVariantIni({
+  name: 'ds_baseline',
+  files: 5,
+  ranks: RANKS,
+  extra: { doubleStepRegionWhite: '*2', doubleStepRegionBlack: `*${RANKS - 1}` },
+});
 ffish.loadVariantConfig(iniUniversal + '\n' + iniBaseline);
 
 // Fixtures keep both sides armed (rule 4b: bare-king positions are decided

@@ -44,11 +44,15 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     // Promotion region = enemy back rank (§4.4, spike 5)
     promotionRegionWhite: `*${ranks}`,
     promotionRegionBlack: '*1',
-    // Symmetric pawn double-step from each side's pawn row (spike 7: the
-    // default doubleStepRegionBlack is literal *7, which misses black's pawn
-    // row on every board that isn't 8 ranks — silent formation asymmetry).
-    doubleStepRegionWhite: '*2',
-    doubleStepRegionBlack: `*${ranks - 1}`,
+    // UNIVERSAL pawn double-step (slice refresh; spike 13): armies mold to
+    // terrain, so pawns start on arbitrary ranks — the region covers every
+    // pawn-legal rank so the push is never an accident of deployment depth.
+    // FSF region semantics are every-visit (no first-move tracking): any
+    // pawn in the region always has the double-step. Walls block both the
+    // jumped and landing squares; en passant works against any of them.
+    // (Keep the two copies of this file in sync — play/js/variant.mjs.)
+    doubleStepRegionWhite: Array.from({ length: Math.max(0, ranks - 2) }, (_, i) => `*${i + 2}`).join(' '),
+    doubleStepRegionBlack: Array.from({ length: Math.max(0, ranks - 2) }, (_, i) => `*${ranks - 1 - i}`).join(' '),
     ...extra,
   };
   const lines = [`[${name}:chess]`];
