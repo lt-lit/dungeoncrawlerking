@@ -10,7 +10,7 @@ Earthquakes; no overworld). See `play/README.md` for its layout and the arena
 JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON**
 — Earthquakes (symmetric displacement + rare rising crumbles, NO repetition
 rules) replaced the old crumble system in both the build and brief §4.5.
-Next per brief §10, a four-step Gods track before calibration resumes:
+Next per brief §10, a Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
 `play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay ✅ done**
@@ -58,10 +58,30 @@ rank of the playable area, both sides, at every crop** (no stage or crop
 may produce a fully-walled extreme rank); and **human play caps the
 engine at 10 s/move** (`depth 22 movetime 10000` — d22 stays as the WASM
 stability cap; perf/optimization work is deliberately parked, labs keep
-faster limits). **PHASE 1.2.5 IS THE ACTIVE PHASE** and its
+faster limits). **CAPTURABLE WALLS ARE CANON — brief §4.6** (designer decision
+2026-08-25): a second terrain glyph `^` — furniture — neutral, immobile,
+owned by neither side, capturable by EITHER side by moving onto it, and
+priced natively by the engine (the point). Furniture is TERRAIN
+everywhere except the capture itself — a wall to molding, crop, the camp
+line, and the gods — and NOTHING ever creates a `^` mid-duel. It needs a
+patched engine pair, so two phases now precede the Proving Grounds.
+**PHASE 1.2.3 — THE FORGE — IS THE ACTIVE PHASE**: rebuild BOTH vendored
+WASM artifacts from ONE dead-squares patch on current FSF master
+(baggage stripped, the two known movegen defects fixed — reference diff,
+build recipe, gotchas, and the sandbox proof live in `engine/README.md`);
+the vendoring gate is rule 16, and the walled-passer eval fix is
+upstream-only, deliberately NOT shipped. Then **Phase 1.2.4 — Set
+Dressing**: retire the hard-coded `'*'` tests for a terrain helper
+(~50–60 sites / ~24 files; known landmines: `director.mjs` counts `^` as
+a white piece via the `toUpperCase()` idiom, `pushReaches` reads it as
+open), interim Director rule "furniture is stone to the gods" (the
+rework owns the real policy), a sprite, the stage-map `^` character, and
+`^` authored into all 33 stages — exit is crates in live phone duels.
+After both land, **PHASE 1.2.5** resumes; its
 remaining half is the LAB RIG — all automated-playtest plumbing, no duel
 rules change: (a) the **corpus materializer** (33 stages × both
-orientations × `dealMatchup` → the stage-file sets `harness/meterlab/
+orientations × {stone-only, furniture} arms (§4.6: `^`→`.` derives the
+control from the same stage files) × `dealMatchup` → the stage-file sets `harness/meterlab/
 run.mjs` consumes, §7 player-favored edge + a full-strength mirror arm);
 (b) the **mirror-canary drift metric** in `harness/meterlab/analyze.mjs`;
 (c) the **meter-lab rerun** on the new bed. Ask the designer FIRST which
@@ -83,6 +103,12 @@ twice — and finally **Phase 2 — exploration slice**.
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
   `play/index.html` (rule 10). `play/selftest.html` is the in-browser infra
   cross-check — keep it PASSing.
+- `engine/` — the Phase 1.2.3 patch kit: the dead-squares reference diff
+  (full KOTH PR #29 src diff, UNSTRIPPED — the port must drop
+  selfCapture/ironPieceTypes/deathOnCaptureTypes/fatalgiveaway), the
+  sandbox spike's cross-check tests, and `engine/README.md` (recipe,
+  resolved conflicts, gotchas, gate). `play/vendor/` stays the STOCK
+  1.1.11/0.7.9 pair until 1.2.3 passes rule 16's gate.
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)
@@ -196,3 +222,30 @@ run one sweep at a time.
     is 2, and only ever distinguishes tier B from tier C). Cheap filters
     belong BEFORE the ffish probes — that is why the landing-safety check
     runs on the grid. Do not add per-candidate ffish work without measuring.
+15. **The vendored pair is a MATCHED SET built from one patch, two trees,
+    two toolchains.** ffish comes from FSF mainline (`src/Makefile_js`,
+    emsdk 1.39.16); the engine from `fairy-stockfish/fairy-stockfish.wasm`
+    branch `nnue` (emsdk 2.0.26) — but every rule-bearing source file is
+    byte-identical between them, so ONE patch feeds both. Any rules change
+    rebuilds BOTH or the game desyncs (ffish is the legality gate at
+    `duel.mjs`). Build gotchas that already bit: emsdk activation is
+    stateful (installing one version deactivates the other — build ffish
+    FIRST); `make -j emscripten_build` races the copy step and publishes a
+    STALE binary (build serially: `make build && make
+    emscripten_copy_files`); the worker is `cat stockfish.worker.js
+    emscripten/worker-postamble.js`, never a plain copy. Full recipe:
+    `engine/README.md`.
+16. **No rebuilt pair is vendored before the equivalence gate**: `^`-free
+    perft parity vs the previous pair for BOTH binaries; ffish↔engine
+    perft agreement on `^` boards; `play/selftest.html` + the 60-variant
+    catalog in a REAL browser (Node exercises neither SharedArrayBuffer
+    nor the pthread path); re-measure rule 11's depth cap on the new
+    binaries and update it here.
+17. **The patch bar.** The engine is patched only for a mechanic that (a)
+    cannot be expressed in variants.ini (enumerate the grammar first —
+    all 147 parser keys were swept before furniture cleared the bar) and
+    (b) cannot be faked at the game layer without the engine playing
+    badly. Patches are separate minimal files in `engine/patches/`;
+    upstream everything upstreamable (FSF merges outside PRs routinely —
+    furniture targets issue #609; the walled-passer eval fix goes as its
+    own PR and ships to us only via upstream).
