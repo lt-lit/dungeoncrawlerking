@@ -1,0 +1,294 @@
+diff --git a/src/apiutil.h b/src/apiutil.h
+index c898cf2..b9fa573 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -629,7 +629,7 @@ inline Validation fill_char_board(CharBoard& board, const std::string& fenBoard,
+     {
+         if (c == ' ' || c == '[')
+             break;
+-        if (c == '*')
++        if (c == '*' || c == '^')
+             ++fileIdx;
+         else if (isdigit(c))
+         {
+@@ -979,7 +979,7 @@ inline Validation check_digit_field(const std::string& field) {
+ }
+ 
+ inline std::string get_valid_special_chars(const Variant* v) {
+-    std::string validSpecialCharactersFirstField = "/*";
++    std::string validSpecialCharactersFirstField = "/*^";
+     // Whether or not '-', '+', '~', '[', ']' are valid depends on the variant being played.
+     if (v->shogiStylePromotions)
+         validSpecialCharactersFirstField += '+';
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index a7b6a9f..070be54 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -149,7 +149,7 @@ namespace {
+ 
+     const Bitboard pawns      = pos.pieces(Us, PAWN);
+     const Bitboard movable    = pos.board_bb(Us, PAWN) & ~pos.pieces();
+-    const Bitboard capturable = pos.board_bb(Us, PAWN) &  pos.pieces(Them);
++    const Bitboard capturable = pos.board_bb(Us, PAWN) & (pos.pieces(Them) | pos.dead_squares());
+ 
+     target = Type == EVASIONS ? target : AllSquares;
+ 
+@@ -317,12 +317,12 @@ namespace {
+         if (b2 | b3)
+         {
+             if (pos.mandatory_piece_promotion())
+-                b1 &= (promotion_zone & from ? Bitboard(0) : ~promotion_zone) | (pos.piece_promotion_on_capture() ? ~pos.pieces() : Bitboard(0));
+-            // Exclude quiet promotions/demotions
++                b1 &= (promotion_zone & from ? Bitboard(0) : ~promotion_zone) | (pos.piece_promotion_on_capture() ? ~pos.pieces() | pos.dead_squares() : Bitboard(0));
++            // Exclude quiet promotions/demotions (capturing a neutral dead square counts as quiet here)
+             if (pos.piece_promotion_on_capture())
+             {
+-                b2 &= pos.pieces();
+-                b3 &= pos.pieces();
++                b2 &= pos.pieces() & ~pos.dead_squares();
++                b3 &= pos.pieces() & ~pos.dead_squares();
+             }
+             // Consider promotions/demotions into promotion zone
+             if (!(promotion_zone & from))
+@@ -386,7 +386,7 @@ namespace {
+     {
+         target = Type == EVASIONS     ?  between_bb(ksq, lsb(pos.checkers()))
+                : Type == NON_EVASIONS ? ~pos.pieces( Us)
+-               : Type == CAPTURES     ?  pos.pieces(~Us)
++               : Type == CAPTURES     ?  pos.pieces(~Us) | pos.dead_squares()
+                                       : ~pos.pieces(   ); // QUIETS || QUIET_CHECKS
+ 
+         if (Type == EVASIONS)
+@@ -408,7 +408,7 @@ namespace {
+         // generate drops
+         if (pos.piece_drops() && Type != CAPTURES && (pos.can_drop(Us, ALL_PIECES) || pos.two_boards()))
+             for (PieceSet ps = pos.piece_types(); ps;)
+-                moveList = generate_drops<Us, Type>(pos, moveList, pop_lsb(ps), target & ~pos.pieces(~Us));
++                moveList = generate_drops<Us, Type>(pos, moveList, pop_lsb(ps), target & ~(pos.pieces(~Us) | pos.dead_squares()));
+ 
+         // Castling with non-king piece
+         if (!pos.count<KING>(Us) && Type != CAPTURES && pos.can_castle(Us & ANY_CASTLING))
+diff --git a/src/position.cpp b/src/position.cpp
+index 6d59ef6..e2c3646 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -45,6 +45,7 @@ namespace Zobrist {
+   Key inHand[PIECE_NB][SQUARE_NB];
+   Key checks[COLOR_NB][CHECKS_NB];
+   Key wall[SQUARE_NB];
++  Key dead[SQUARE_NB];
+   Key endgame[EG_EVAL_NB];
+ }
+ 
+@@ -61,7 +62,9 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
+   for (Rank r = pos.max_rank(); r >= RANK_1; --r)
+   {
+       for (File f = FILE_A; f <= pos.max_file(); ++f)
+-          if (pos.state()->wallSquares & make_square(f, r))
++          if (pos.state()->deadSquares & make_square(f, r))
++              os << " | ^";
++          else if (pos.state()->wallSquares & make_square(f, r))
+               os << " | *";
+           else if (pos.unpromoted_piece_on(make_square(f, r)))
+               os << " |+" << pos.piece_to_char()[pos.unpromoted_piece_on(make_square(f, r))];
+@@ -183,7 +186,10 @@ void Position::init() {
+               Zobrist::inHand[make_piece(c, pt)][n] = rng.rand<Key>();
+ 
+   for (Square s = SQ_A1; s <= SQ_MAX; ++s)
++  {
+       Zobrist::wall[s] = rng.rand<Key>();
++      Zobrist::dead[s] = rng.rand<Key>();
++  }
+ 
+   for (int i = NO_EG_EVAL; i < EG_EVAL_NB; ++i)
+       Zobrist::endgame[i] = rng.rand<Key>();
+@@ -319,6 +325,14 @@ Position& Position::set(const Variant* v, const string& fenStr, bool isChess960,
+           ++sq;
+       }
+ 
++      // Neutral dead square, capturable by either side
++      else if (token == '^')
++      {
++          st->deadSquares |= sq;
++          byTypeBB[ALL_PIECES] |= sq;
++          ++sq;
++      }
++
+       else if ((idx = piece_to_char().find(token)) != string::npos || (idx = piece_to_char_synonyms().find(token)) != string::npos)
+       {
+           if (ss.peek() == '~')
+@@ -636,7 +650,7 @@ void Position::set_state(StateInfo* si) const {
+       si->key ^= Zobrist::psq[pc][s];
+ 
+       if (!pc)
+-          si->key ^= Zobrist::wall[s];
++          si->key ^= (si->deadSquares & s) ? Zobrist::dead[s] : Zobrist::wall[s];
+ 
+       else if (type_of(pc) == PAWN)
+           si->pawnKey ^= Zobrist::psq[pc][s];
+@@ -713,8 +727,8 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+           if (f <= max_file())
+           {
+               if (empty(make_square(f, r)) || fogArea & make_square(f, r))
+-                  // Wall square
+-                  ss << "*";
++                  // Wall or neutral dead square
++                  ss << ((st->deadSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "^" : "*");
+               else if (unpromoted_piece_on(make_square(f, r)))
+                   // Promoted shogi pieces, e.g., +r for dragon
+                   ss << "+" << piece_to_char()[unpromoted_piece_on(make_square(f, r))];
+@@ -1064,7 +1078,7 @@ bool Position::legal(Move m) const {
+       return false;
+ 
+   // Illegal quiet moves
+-  if (must_capture() && !capture(m) && has_capture())
++  if (must_capture() && !piece_capture(m) && has_capture())
+       return false;
+ 
+   // Illegal non-drop moves
+@@ -1356,7 +1370,7 @@ bool Position::pseudo_legal(const Move m) const {
+   if (    mandatory_piece_promotion()
+       && (is_promoted(from) ? piece_demotion() : promoted_piece_type(type_of(pc)) != NO_PIECE_TYPE)
+       && (promotion_zone(us) & (SquareBB[from] | to))
+-      && (!piece_promotion_on_capture() || capture(m)))
++      && (!piece_promotion_on_capture() || piece_capture(m)))
+       return false;
+ 
+   // Is not a promotion, so promotion piece must be empty
+@@ -1380,7 +1394,7 @@ bool Position::pseudo_legal(const Move m) const {
+       if (mandatory_pawn_promotion() && (promotion_zone(us) & to) && !sittuyin_promotion())
+           return false;
+ 
+-      if (   !(pawn_attacks_bb(us, from) & pieces(~us) & to)     // Not a capture
++      if (   !(pawn_attacks_bb(us, from) & (pieces(~us) | st->deadSquares) & to)     // Not a capture
+           && !((from + pawn_push(us) == to) && !(pieces() & to)) // Not a single push
+           && !(   (from + 2 * pawn_push(us) == to)               // Not a double push
+                && (double_step_region(us) & from)
+@@ -1672,6 +1686,20 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       st->rule50 = 0;
+   }
+ 
++  // Capture of a neutral dead square: remove it from the board.
++  // It was in the occupancy but in no piece/color bitboard and board[to] is
++  // NO_PIECE, so clearing its occupancy bit here lets move_piece() below
++  // treat the destination as an ordinary empty square.
++  if (type_of(m) != DROP && from != to && (st->deadSquares & to))
++  {
++      st->deadSquares ^= to;
++      byTypeBB[ALL_PIECES] ^= to;
++      k ^= Zobrist::dead[to];
++
++      // Removing a dead square is irreversible
++      st->rule50 = 0;
++  }
++
+   // Update hash key
+   if (type_of(m) == DROP)
+   {
+@@ -2265,6 +2293,13 @@ void Position::undo_move(Move m) {
+       }
+   }
+ 
++  // Restore dead squares removed by this move. Done LAST, unlike the wall
++  // reset at the top: a restored dead square sits exactly on the move's 'to'
++  // square, so restoring it earlier would corrupt the occupancy XOR/OR
++  // arithmetic of the promotion and capture undo above (walls have no such
++  // hazard - they are never on a moved-to square).
++  byTypeBB[ALL_PIECES] ^= st->deadSquares ^ st->previous->deadSquares;
++
+   // Finally point our state pointer back to the previous state
+   st = st->previous;
+   --gamePly;
+@@ -2505,8 +2540,8 @@ bool Position::see_ge(Move m, Value threshold) const {
+   if (swap <= 0)
+       return true;
+ 
+-  // Petrification ends SEE
+-  if (var->petrifyOnCaptureTypes & type_of(moved_piece(m)) && capture(m))
++  // Petrification ends SEE (capturing a neutral dead square does not petrify)
++  if (var->petrifyOnCaptureTypes & type_of(moved_piece(m)) && piece_capture(m))
+       return false;
+ 
+   Bitboard occupied = (type_of(m) != DROP ? pieces() ^ from : pieces()) ^ to;
+diff --git a/src/position.h b/src/position.h
+index 685c079..d36493d 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -55,6 +55,7 @@ struct StateInfo {
+   Bitboard epSquares;
+   Square castlingKingSquare[COLOR_NB];
+   Bitboard wallSquares;
++  Bitboard deadSquares;
+   Bitboard gatesBB[COLOR_NB];
+ 
+   // Not copied when making a move (will be recomputed anyhow)
+@@ -125,6 +126,7 @@ public:
+   bool two_boards() const;
+   Bitboard board_bb() const;
+   Bitboard board_bb(Color c, PieceType pt) const;
++  Bitboard dead_squares() const;
+   PieceSet piece_types() const;
+   const std::string& piece_to_char() const;
+   const std::string& piece_to_char_synonyms() const;
+@@ -284,6 +286,7 @@ public:
+   bool pseudo_legal(const Move m) const;
+   bool virtual_drop(Move m) const;
+   bool capture(Move m) const;
++  bool piece_capture(Move m) const;
+   bool capture_or_promotion(Move m) const;
+   Square capture_square(Square to) const;
+   bool gives_check(Move m) const;
+@@ -432,6 +435,10 @@ inline Bitboard Position::board_bb(Color c, PieceType pt) const {
+   return var->mobilityRegion[c][pt] ? var->mobilityRegion[c][pt] & board_bb() : board_bb();
+ }
+ 
++inline Bitboard Position::dead_squares() const {
++  return st->deadSquares;
++}
++
+ inline PieceSet Position::piece_types() const {
+   assert(var != nullptr);
+   return var->pieceTypes;
+@@ -651,7 +658,7 @@ inline bool Position::has_capture() const {
+   if (checkers())
+   {
+       for (const auto& mevasion : MoveList<EVASIONS>(*this))
+-          if (capture(mevasion) && legal(mevasion))
++          if (piece_capture(mevasion) && legal(mevasion))
+           {
+               st->legalCapture = VALUE_TRUE;
+               return true;
+@@ -660,7 +667,7 @@ inline bool Position::has_capture() const {
+   else
+   {
+       for (const auto& mcap : MoveList<CAPTURES>(*this))
+-          if (capture(mcap) && legal(mcap))
++          if (piece_capture(mcap) && legal(mcap))
+           {
+               st->legalCapture = VALUE_TRUE;
+               return true;
+@@ -1436,13 +1443,22 @@ inline bool Position::is_chess960() const {
+ 
+ inline bool Position::capture_or_promotion(Move m) const {
+   assert(is_ok(m));
+-  return type_of(m) == PROMOTION || type_of(m) == EN_PASSANT || (type_of(m) != CASTLING && !empty(to_sq(m)));
++  return type_of(m) == PROMOTION || type_of(m) == EN_PASSANT || (type_of(m) != CASTLING && (!empty(to_sq(m)) || bool(st->deadSquares & to_sq(m))));
+ }
+ 
+ inline bool Position::capture(Move m) const {
+   assert(is_ok(m));
+   // Castling is encoded as "king captures rook"
+-  return (!empty(to_sq(m)) && type_of(m) != CASTLING && from_sq(m) != to_sq(m)) || type_of(m) == EN_PASSANT;
++  // A move onto a dead square removes it from the board and counts as a capture
++  return ((!empty(to_sq(m)) || bool(st->deadSquares & to_sq(m))) && type_of(m) != CASTLING && from_sq(m) != to_sq(m)) || type_of(m) == EN_PASSANT;
++}
++
++inline bool Position::piece_capture(Move m) const {
++  assert(is_ok(m));
++  // A capture of an actual piece, i.e., not the removal of a neutral dead square.
++  // Variant rules that reward or compel capturing (mustCapture, promotion on capture)
++  // are keyed on this, not on capture().
++  return capture(m) && !(st->deadSquares & to_sq(m));
+ }
+ 
+ inline Square Position::capture_square(Square to) const {

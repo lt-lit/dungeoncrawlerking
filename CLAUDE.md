@@ -66,11 +66,20 @@ everywhere except the capture itself — a wall to molding, crop, the camp
 line, and the gods — and NOTHING ever creates a `^` mid-duel. It needs a
 patched engine pair, so two phases now precede the Proving Grounds.
 **PHASE 1.2.3 — THE FORGE — IS THE ACTIVE PHASE**: rebuild BOTH vendored
-WASM artifacts from ONE dead-squares patch on current FSF master
-(baggage stripped, the two known movegen defects fixed — reference diff,
-build recipe, gotchas, and the sandbox proof live in `engine/README.md`);
-the vendoring gate is rule 16, and the walled-passer eval fix is
-upstream-only, deliberately NOT shipped. Then **Phase 1.2.4 — Set
+WASM artifacts from ONE dead-squares patch on current FSF master. The
+patch is AUTHORED and natively validated (2026-08-25):
+`engine/patches/dead-squares.patch`, 73+/22− across four files, applies
+to both pinned trees; `^`-free boards are node-for-node identical to
+stock at fixed depth; the internet reference diff is REFERENCE ONLY — it
+carries THREE defects (the two known movegen ones, which the authored
+design is immune to by construction, plus a promotion-capture undo
+corruption found in the audit); the §4.6 terrain-is-not-a-victim ruling
+(mustCapture / capture-gated promotion ignore crate captures) is
+implemented engine-wide. Remaining: the two emsdk WASM builds, then rule
+16's gate (now incl. `regress-ffish.cjs`, `search-identity.cjs`, the
+promo mirror fixtures, a spike10 rerun — see `engine/README.md`). The
+walled-passer eval fix stays deliberately NOT shipped, and upstreaming
+is not planned (designer 2026-08-25). Then **Phase 1.2.4 — Set
 Dressing**: retire the hard-coded `'*'` tests for a terrain helper
 (~50–60 sites / ~24 files; known landmines: `director.mjs` counts `^` as
 a white piece via the `toUpperCase()` idiom, `pushReaches` reads it as
@@ -245,7 +254,9 @@ run one sweep at a time.
     cannot be expressed in variants.ini (enumerate the grammar first —
     all 147 parser keys were swept before furniture cleared the bar) and
     (b) cannot be faked at the game layer without the engine playing
-    badly. Patches are separate minimal files in `engine/patches/`;
-    upstream everything upstreamable (FSF merges outside PRs routinely —
-    furniture targets issue #609; the walled-passer eval fix goes as its
-    own PR and ships to us only via upstream).
+    badly. Patches are separate minimal files in `engine/patches/`, kept
+    upstream-SHAPED (no new variant keys, stock-identical without the new
+    glyph) — but upstreaming itself is optional and NOT planned (designer
+    2026-08-25; the natural venue would be FSF issue #609 if that ever
+    changes). The walled-passer eval fix stays unshipped, documented in
+    `engine/README.md`.
