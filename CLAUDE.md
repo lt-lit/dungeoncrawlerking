@@ -65,9 +65,9 @@ priced natively by the engine (the point). Furniture is TERRAIN
 everywhere except the capture itself — a wall to molding, crop, the camp
 line, and the gods — and NOTHING ever creates a `^` mid-duel. It needs a
 patched engine pair, so two phases now precede the Proving Grounds.
-**PHASE 1.2.3 — THE FORGE — IS THE ACTIVE PHASE**: rebuild BOTH vendored
-WASM artifacts from ONE dead-squares patch on current FSF master. The
-patch is AUTHORED and natively validated (2026-08-25):
+**Phase 1.2.3 — The Forge ✅ done (2026-08-26)**: both vendored
+WASM artifacts rebuilt from ONE dead-squares patch on current FSF master.
+The patch is AUTHORED and natively validated (2026-08-25):
 `engine/patches/dead-squares.patch`, 73+/22− across four files, applies
 to both pinned trees; `^`-free boards are node-for-node identical to
 stock at fixed depth; the internet reference diff is REFERENCE ONLY — it
@@ -80,11 +80,11 @@ rule 16's gate ran green end to end — full Node suite (incl.
 `regress-ffish.cjs`, `search-identity.cjs` node-exact vs both baselines,
 the promo mirror fixtures), `play/selftest.html` 29/29 in headless
 Chromium with SharedArrayBuffer live, depth-cap re-measure (rule 11
-unchanged), spike10 32/32. The ONE item left before 1.2.3 closes is the
-designer's phone feel check; Phase 1.2.4 is unblocked. The walled-passer
-eval fix stays deliberately NOT shipped, and upstreaming is not planned
-(designer 2026-08-25). Then **Phase 1.2.4 — Set
-Dressing**: retire the hard-coded `'*'` tests for a terrain helper
+unchanged), spike10 32/32, and the designer's phone feel check passed
+(2026-08-26 — duel feel unchanged, selftest green on device). The
+walled-passer eval fix stays deliberately NOT shipped, and upstreaming is
+not planned (designer 2026-08-25). **PHASE 1.2.4 — SET DRESSING — IS THE
+ACTIVE PHASE**: retire the hard-coded `'*'` tests for a terrain helper
 (~50–60 sites / ~24 files; known landmines: `director.mjs` counts `^` as
 a white piece via the `toUpperCase()` idiom, `pushReaches` reads it as
 open), interim Director rule "furniture is stone to the gods" (the

@@ -2,13 +2,14 @@
 
 Canon: brief §4.6. Governance: CLAUDE.md rules 15–17.
 
-**Status 2026-08-26: BUILT AND VENDORED.** `play/vendor/` carries the
+**Status 2026-08-26: PHASE 1.2.3 COMPLETE.** `play/vendor/` carries the
 patched pair (built from the pins below + `patches/dead-squares.patch`,
 emsdk 1.39.16 / 2.0.26); the rule-16 gate ran green end to end — Node
 suite, headless-Chromium `play/selftest.html` 29/29 with SharedArrayBuffer
-live, depth-cap re-measure, spike10 rerun. The ONE remaining 1.2.3 item is
-the designer's phone feel check (`depth 22 movetime 10000`, ~6 `^` on
-board); revert `play/vendor/` from git history if it fails.
+live, depth-cap re-measure, spike10 rerun — and the designer's phone feel
+check passed (2026-08-26; duel feel unchanged, selftest green on device).
+The "~6 crates in a live duel" feel reading arrives with Phase 1.2.4's
+stage support — nothing can author `^` into a playable board until then.
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
@@ -172,8 +173,11 @@ Compilation: zero warnings from the changed files under `-Wall -Wextra
   at the old 1/30 crash rate; rule 11 unchanged)
 - [x] spike10 rerun — **32/32**, and `phase0/lib/selftest.mjs` ALL PASSED,
   both under the vendored-pair overlay (A-prime no-draw internals intact)
-- [ ] **phone feel check** at `depth 22 movetime 10000` with ~6 `^` on
-  board — the one item left, designer-side
+- [x] **phone feel check** — passed 2026-08-26 (designer: duel feel
+  unchanged on the new pair; selftest green on device). The crates-dense
+  live-duel reading lands with 1.2.4 stage support — re-check feel once
+  `^` boards are playable, as part of 1.2.4's exit ("crates in live phone
+  duels")
 
 Gate-run notes: two spike-era harness bugs were fixed while running it —
 `test-engine.cjs` parsed a "Legal uci moves" line this engine's `d` does
