@@ -12,9 +12,19 @@
 // PILOT=1 runs the vendored engine against itself instead (determinism pilot:
 // run this first on any new machine; if it fails, node counts jitter there
 // and only bestmove+score should be compared).
+// BASELINE_JS picks the comparison engine (default: the vendored pair).
+// 2026-08-26 gate run: the patched engine matched BOTH baselines exactly -
+// the vendored 1.1.11 AND a stock build of the same wasm-tree pin (2e874fd
+// searches identically to shipped 1.1.11 on these fixtures). If a future
+// upgrade moves the pin and this check fails against the VENDORED baseline,
+// rebuild a STOCK engine from the new pin and compare against that instead -
+// strict identity is only owed vs the same upstream version. (Beware:
+// the MAINLINE tree's search differs from the wasm tree's at fixed depth -
+// measured 48847/f1e2 vs 26462/c1d1 on fixture 2 - so a native mainline
+// build is NOT a valid baseline for the wasm engine.)
 const path=require('path');
 const DEPTH=parseInt(process.env.DEPTH||'12',10);
-const VENDORED=path.resolve(__dirname,'../../play/vendor/stockfish.js');
+const VENDORED=process.env.BASELINE_JS||path.resolve(__dirname,'../../play/vendor/stockfish.js');
 const PATCHED=process.env.PILOT?VENDORED:process.env.ENGINE_JS;
 if(!PATCHED){console.error('set ENGINE_JS=/path/to/patched/stockfish.js (or PILOT=1)');process.exit(2);}
 const INI=`[crate6x6:chess]\nmaxRank = 6\nmaxFile = 6\ncastling = false\nstalemateValue = loss\nnMoveRule = 0\nnFoldRule = 0\nnFoldValue = loss\nextinctionValue = loss\nextinctionPieceTypes = *\nextinctionPieceCount = 1\nextinctionPseudoRoyal = false\npromotionRegionWhite = *6\npromotionRegionBlack = *1\n`;

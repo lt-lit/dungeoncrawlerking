@@ -1,14 +1,29 @@
 # The Forge — Phase 1.2.3 patch kit (capturable walls, `^`)
 
-Canon: brief §4.6. Governance: CLAUDE.md rules 15–17. `play/vendor/` still
-holds the STOCK 1.1.11 / 0.7.9 pair — nothing here is vendored yet.
+Canon: brief §4.6. Governance: CLAUDE.md rules 15–17.
 
-**Status 2026-08-25: the patch is AUTHORED and natively validated.**
+**Status 2026-08-26: BUILT AND VENDORED.** `play/vendor/` carries the
+patched pair (built from the pins below + `patches/dead-squares.patch`,
+emsdk 1.39.16 / 2.0.26); the rule-16 gate ran green end to end — Node
+suite, headless-Chromium `play/selftest.html` 29/29 with SharedArrayBuffer
+live, depth-cap re-measure, spike10 rerun. The ONE remaining 1.2.3 item is
+the designer's phone feel check (`depth 22 movetime 10000`, ~6 `^` on
+board); revert `play/vendor/` from git history if it fails.
+
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
 diff. `patches/pr29-dead-squares-full.diff` (KOTH-Stockfish PR #29) is
 **reference only**: internet code, three known defects (below), do not port
-from it. Remaining 1.2.3 work: the two WASM builds + the rule-16 gate.
+from it.
+
+**phase0 caveat:** `phase0/` loads the pair from npm (`npm install` →
+STOCK 1.1.11/0.7.9). Any phase0 run that must play the SHIPPED rules —
+the 1.2.5 corpus above all (the meter-lab law: calibration is only valid
+under the exact shipped ruleset) — must first overlay the vendored
+artifacts: `cp play/vendor/ffish.{js,wasm} phase0/node_modules/ffish/ &&
+cp play/vendor/stockfish.{js,wasm,worker.js}
+phase0/node_modules/fairy-stockfish-nnue.wasm/`. The 2026-08-26 gate ran
+`lib/selftest.mjs` and spike10 under exactly this overlay.
 
 ## The authored patch (`patches/dead-squares.patch`)
 
@@ -127,36 +142,44 @@ Compilation: zero warnings from the changed files under `-Wall -Wextra
 4. **Engine variant config goes through the virtual FS**: `sf.FS.writeFile('/variants.ini', ini)` + `setoption name VariantPath value /variants.ini` + `setoption name UCI_Variant value <name>`. Host paths silently no-op and without UCI_Variant you are playing 8×8 chess.
 5. The engine Makefile tries to download a 47.7 MB NNUE net from tests.stockfishchess.org even with `embedded_nnue=no` — cache `nn-3475407dc199.nnue` next to the Makefile or the build needs that host reachable. (Native builds want it too; the host was reachable through this container's proxy on 2026-08-25.)
 
-## Validation gate (rule 16) — proven vs owed
-
-Native evidence above covers movegen/search semantics on this machine; the
-WASM pair must still pass everything itself.
+## Validation gate (rule 16) — run 2026-08-26, all container items green
 
 - [x] patch applies to both pinned trees; native `^`-free perft AND
   fixed-depth search-transcript equivalence vs stock; crate semantics +
   mirror-exactness + hand-verified d1 (see Native validation)
-- [ ] WASM: `test-ffish.cjs` (19 crate-semantics asserts incl.
-  promotion-capture push/pop, SAN, mustCapture ruling, 60-catalog)
-- [ ] WASM: `test-engine.cjs` (renders `^`, crate capture, validated perft
-  counts incl. the promo fixture, d12 bestmove)
-- [ ] WASM: `xcheck.cjs` — ffish↔engine perft agreement on all 8 crate
-  fixtures + the promo mirror-pair identity
-- [ ] WASM: `regress.cjs` — engine `^`-free perft equivalence vs vendored 1.1.11
-- [ ] WASM: `regress-ffish.cjs` — ffish `^`-free equivalence vs vendored 0.7.9
-- [ ] WASM: `search-identity.cjs` — fixed-depth transcript identity vs the
-  vendored pair on `^`-free boards (run `PILOT=1` first on the build
-  machine; if the pilot fails there, compare bestmove+score only). Native
-  run of the same check was exact, and fixed-depth single-thread proved
-  deterministic here.
-- [ ] `play/selftest.html` + full 60-variant catalog under the new pair in a
-  REAL browser (SharedArrayBuffer / pthreads / coi-serviceworker); headless
-  Chromium in the build container counts, the phone feel check does not
-- [ ] re-measure rule 11's depth cap on the new pair (~110 searches minimum —
-  the crash base rate is ~1/30 at d60, so small samples prove nothing) and
-  update CLAUDE.md
-- [ ] phone feel check at `depth 22 movetime 10000` with ~6 `^` on board
-- [ ] spike10 rerun on the new pair (A-prime no-draw config is
-  undocumented-internals behavior — re-pin it on every engine change)
+- [x] WASM: `test-ffish.cjs` — **19/19** (incl. promotion-capture push/pop,
+  SAN, mustCapture ruling, 60-catalog)
+- [x] WASM: `test-engine.cjs` — **7/7** (renders `^`, crate capture,
+  validated perft counts incl. the promo fixture, d12 bestmove)
+- [x] WASM: `xcheck.cjs` — ffish↔engine agreement on all 8 crate fixtures
+  + the promo mirror-pair identity: **PASS**
+- [x] WASM: `regress.cjs` — engine `^`-free perft 1–4 identical to vendored
+  1.1.11 on all 3 fixtures incl. the wall board
+- [x] WASM: `regress-ffish.cjs` — ffish `^`-free perft/moves/validateFen/
+  12x10 identical to vendored 0.7.9
+- [x] WASM: `search-identity.cjs` — PILOT deterministic; patched
+  node-for-node identical to BOTH a stock same-pin build AND the vendored
+  1.1.11 at depth 12 (19459/26462/35136 nodes — the wasm tree at `2e874fd`
+  searches identically to shipped 1.1.11 on these fixtures; see the
+  baseline note in the script)
+- [x] `play/selftest.html` in headless Chromium over a COOP/COEP server —
+  **29/29** (SharedArrayBuffer live, pthread worker path, 60-catalog, the
+  new §4.6 furniture block: perft agreement, promotion-capture push/pop,
+  strip-mate bestmove on a `^` board)
+- [x] depth-cap re-measure (`depthcap.cjs`, mixed 4–6-file arenas incl. `^`
+  and `*`, production watchdog): **d22 110/110 clean, slowest 1553 ms; d60
+  30/30 clean** — cap STAYS at d22 (0/30 at d60 is not evidence of a fix
+  at the old 1/30 crash rate; rule 11 unchanged)
+- [x] spike10 rerun — **32/32**, and `phase0/lib/selftest.mjs` ALL PASSED,
+  both under the vendored-pair overlay (A-prime no-draw internals intact)
+- [ ] **phone feel check** at `depth 22 movetime 10000` with ~6 `^` on
+  board — the one item left, designer-side
+
+Gate-run notes: two spike-era harness bugs were fixed while running it —
+`test-engine.cjs` parsed a "Legal uci moves" line this engine's `d` does
+not print (and its Fen-line wait raced the output; moves now come from
+`go perft 1`), and `search-identity.cjs` gained the BASELINE_JS override
+plus the mainline-vs-wasm-tree warning.
 
 ## Tests
 
@@ -170,6 +193,7 @@ ENGINE_JS=... node engine/tests/regress.cjs                              # engin
 FFISH_JS=... node engine/tests/regress-ffish.cjs                         # ffish ^-free equivalence vs play/vendor
 PILOT=1 node engine/tests/search-identity.cjs                            # determinism pilot (vendored vs itself)
 ENGINE_JS=... node engine/tests/search-identity.cjs                      # fixed-depth transcript identity vs vendored
+ENGINE_JS=... node engine/tests/depthcap.cjs                             # rule-11 re-measure (110 d22 + 30 d60)
 ```
 
 `regress.cjs`, `regress-ffish.cjs` and `search-identity.cjs` read the

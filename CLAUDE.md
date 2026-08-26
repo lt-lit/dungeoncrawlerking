@@ -75,11 +75,15 @@ carries THREE defects (the two known movegen ones, which the authored
 design is immune to by construction, plus a promotion-capture undo
 corruption found in the audit); the §4.6 terrain-is-not-a-victim ruling
 (mustCapture / capture-gated promotion ignore crate captures) is
-implemented engine-wide. Remaining: the two emsdk WASM builds, then rule
-16's gate (now incl. `regress-ffish.cjs`, `search-identity.cjs`, the
-promo mirror fixtures, a spike10 rerun — see `engine/README.md`). The
-walled-passer eval fix stays deliberately NOT shipped, and upstreaming
-is not planned (designer 2026-08-25). Then **Phase 1.2.4 — Set
+implemented engine-wide. **The pair is BUILT and VENDORED (2026-08-26)**:
+rule 16's gate ran green end to end — full Node suite (incl.
+`regress-ffish.cjs`, `search-identity.cjs` node-exact vs both baselines,
+the promo mirror fixtures), `play/selftest.html` 29/29 in headless
+Chromium with SharedArrayBuffer live, depth-cap re-measure (rule 11
+unchanged), spike10 32/32. The ONE item left before 1.2.3 closes is the
+designer's phone feel check; Phase 1.2.4 is unblocked. The walled-passer
+eval fix stays deliberately NOT shipped, and upstreaming is not planned
+(designer 2026-08-25). Then **Phase 1.2.4 — Set
 Dressing**: retire the hard-coded `'*'` tests for a terrain helper
 (~50–60 sites / ~24 files; known landmines: `director.mjs` counts `^` as
 a white piece via the `toUpperCase()` idiom, `pushReaches` reads it as
@@ -112,12 +116,14 @@ twice — and finally **Phase 2 — exploration slice**.
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
   `play/index.html` (rule 10). `play/selftest.html` is the in-browser infra
   cross-check — keep it PASSing.
-- `engine/` — the Phase 1.2.3 patch kit: the dead-squares reference diff
-  (full KOTH PR #29 src diff, UNSTRIPPED — the port must drop
-  selfCapture/ironPieceTypes/deathOnCaptureTypes/fatalgiveaway), the
-  sandbox spike's cross-check tests, and `engine/README.md` (recipe,
-  resolved conflicts, gotchas, gate). `play/vendor/` stays the STOCK
-  1.1.11/0.7.9 pair until 1.2.3 passes rule 16's gate.
+- `engine/` — the Phase 1.2.3 patch kit: `patches/dead-squares.patch` (the
+  AUTHORED patch of record), the KOTH PR #29 reference diff (reference
+  only — three known defects), the rule-16 gate tests (`tests/*.cjs`), and
+  `engine/README.md` (recipe, gotchas, gate results, validation evidence).
+  **`play/vendor/` carries the PATCHED pair since 2026-08-26** (gate green;
+  only the phone feel check outstanding). phase0's npm `node_modules` are
+  still the STOCK pair — overlay `play/vendor/` artifacts before any
+  phase0 run that must play the shipped rules (see `engine/README.md`).
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)
@@ -204,9 +210,13 @@ run one sweep at a time.
     worker scope), not in a subdirectory. Ship `Threads=1`.
 11. **Engine searches: cap at `depth 22`.** `movetime` does NOT bind on 4–6
     file arenas — the engine reaches depth 55+ and ultra-deep searches
-    crash this WASM build's pthread (`index out of bounds`). Measured: d60
-    crashed 1/30 searches, d22 crashed 0/110 and still returns <200 ms.
-    Not a handicap; live play was reaching d22–23 anyway.
+    crash this WASM build's pthread (`index out of bounds`). Measured on
+    1.1.11: d60 crashed 1/30 searches, d22 crashed 0/110 and still returns
+    <200 ms. Re-measured on the dead-squares pair (2026-08-26, Node,
+    `engine/tests/depthcap.cjs`, arenas incl. `^` and `*`): d22 110/110
+    clean (slowest 1553 ms), d60 30/30 clean — the cap STAYS at d22 (0/30
+    at d60 is not evidence of a fix at a 1/30 base rate). Not a handicap;
+    live play was reaching d22–23 anyway.
 12. **Any long-lived auxiliary search needs its own recovery.** The duel's
     stall ladder only fires on the duel's own searches — the cheat/hint
     MultiPV probe had none and died permanently and silently when its
