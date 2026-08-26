@@ -1,0 +1,19 @@
+{
+ "schema": 2,
+ "id": "s56-the-archive",
+ "title": "The Archive",
+ "notes": "FLOORPLAN: two long shelf-rows make three aisles in the stacks; the reading room behind the double door is the only way to the far side (verifier-flagged smash-in), and an inner cage with its own weak door guards the rarest holdings.",
+ "map": [
+  "......#..",
+  "......^..",
+  "......#..",
+  "###^^####",
+  ".........",
+  ".^^^.^^^.",
+  ".........",
+  ".^^^.^^^.",
+  ".........",
+  "........."
+ ],
+ "wave": 5
+}

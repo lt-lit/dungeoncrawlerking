@@ -105,10 +105,12 @@ so capture dissolve works unchanged), the stage-map `^` character, the
 king-anchored auto-crop (see the ground rules above), and the
 REPLACEMENT stage set — the designer retired the original 33 on
 2026-08-26; wave 4 (s01–s33, the furniture bed) is ACCEPTED/locked
-2026-08-26, wave 5 (s34–s50, rooms & breaches: sectioned maps, crate
+2026-08-26, wave 5 (s34–s58, rooms & breaches: sectioned maps, crate
 clusters, furniture integrated into wall structures, breakable double
-doors) is PROPOSED, gallery-reviewed accept/tweak/kill — exit is
-crates in live phone duels.
+doors, and the s51+ FLOORPLANS — multi-room maps with hallways, doors
+to and BETWEEN rooms, per-room furniture; designer: big boards play
+fine on-phone, 10-wide confirmed) is PROPOSED, gallery-reviewed
+accept/tweak/kill — exit is crates in live phone duels.
 After both land, **PHASE 1.2.5** resumes; its
 remaining half is the LAB RIG — all automated-playtest plumbing, no duel
 rules change: (a) the **corpus materializer** (33 stages × both

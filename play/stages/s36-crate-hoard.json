@@ -2,11 +2,11 @@
  "schema": 2,
  "id": "s36-crate-hoard",
  "title": "Crate Hoard",
- "notes": "A holed corner room with the hoard inside: three clustered crates behind a stone wall whose only entrance is a 1-square gap. The defender can mold in with the loot.",
+ "notes": "A holed corner room with the hoard inside — and now a breakable floor-edge (c5, d5) so the room can be cracked open from below as well as entered through the gap. Designer tweak 2026-08-26.",
  "map": [
   ".^^.#...",
   "..^.....",
-  "....#...",
+  "..^^#...",
   "#####...",
   "........",
   "........",

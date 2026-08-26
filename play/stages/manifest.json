@@ -1,6 +1,6 @@
 {
  "schema": 2,
- "count": 50,
+ "count": 58,
  "stages": [
   {
    "schema": 2,
@@ -604,11 +604,11 @@
    "schema": 2,
    "id": "s36-crate-hoard",
    "title": "Crate Hoard",
-   "notes": "A holed corner room with the hoard inside: three clustered crates behind a stone wall whose only entrance is a 1-square gap. The defender can mold in with the loot.",
+   "notes": "A holed corner room with the hoard inside — and now a breakable floor-edge (c5, d5) so the room can be cracked open from below as well as entered through the gap. Designer tweak 2026-08-26.",
    "map": [
     ".^^.#...",
     "..^.....",
-    "....#...",
+    "..^^#...",
     "#####...",
     "........",
     "........",
@@ -725,12 +725,12 @@
    "schema": 2,
    "id": "s43-the-breach",
    "title": "The Breach",
-   "notes": "A castle wall two ranks THICK, its only passage a rubble-choked breach column — smash twice to get through. The verifier-flagged deep smash-in.",
+   "notes": "A castle wall two ranks thick. The breach column is rubble-choked — and the collapse spilled forward: d5 joins the breach and d6 lies in the approach. Smash a path, or smash a wider one. Designer tweak 2026-08-26.",
    "map": [
     "........",
     "........",
-    "........",
-    "####^###",
+    "...^....",
+    "###^^###",
     "####^###",
     "........",
     "........",
@@ -795,15 +795,15 @@
    "schema": 2,
    "id": "s47-the-warrens",
    "title": "The Warrens",
-   "notes": "Two full walls and an offset middle divider; every passage is a weak point and they do not line up. The winding two-smash route — verifier-flagged.",
+   "notes": "Two full walls and an offset divider, now multiply breached: two weak points per wall and a breakable stub on the divider — every route is a smash, and there are many routes. Verifier-flagged. Designer tweak 2026-08-26.",
    "map": [
     ".........",
     ".........",
     ".........",
-    "###^#####",
-    ".........",
+    "###^###^#",
+    "....^....",
     "....#....",
-    "#####^###",
+    "#^###^###",
     ".........",
     ".........",
     "........."
@@ -857,6 +857,156 @@
     "........",
     "........",
     "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s51-the-corridor",
+   "title": "The Corridor",
+   "notes": "FLOORPLAN: a full-width hallway with two rooms off each side — five areas. Each wall has an open door and a weak door; the room pairs also connect to each other through breakable party doors (e8, f1). NW stocks a crate pair, NE one against the wall, SE an L of three, SW stands bare.",
+   "map": [
+    "....#.....",
+    ".^^.^.....",
+    "....#...^.",
+    "##.####^##",
+    "..........",
+    "..........",
+    "##^####.##",
+    ".....#.^^.",
+    ".....^..^.",
+    ".....#...."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s52-the-apartments",
+   "title": "The Apartments",
+   "notes": "FLOORPLAN: three rooms upstairs, two down, six doors — every room reachable two ways, party doors between neighbours (d7, g8, e2). Furnishings differ room to room: a wardrobe pair, a lone chest, a corner stack, a bare parlor.",
+   "map": [
+    "...#..#...",
+    "...#.^....",
+    "..^^..#...",
+    "..^#..#^^.",
+    "#^##.###^#",
+    "....#.....",
+    "....#...^.",
+    ".^^.^.....",
+    "....#.....",
+    "....#....."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s53-the-cellblock",
+   "title": "The Cellblock",
+   "notes": "FLOORPLAN: a central hallway with three cells off each side — seven areas. Left doors are all breakable; right doors alternate open and weak. Some cells hold contraband, some are swept bare.",
+   "map": [
+    "...#..#...",
+    ".^.^..^...",
+    "...#..####",
+    "####..^...",
+    "...^..#.^.",
+    "...#..####",
+    "####......",
+    ".^.^..#...",
+    "...#..#..."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s54-banquet-and-kitchens",
+   "title": "Banquet & Kitchens",
+   "notes": "FLOORPLAN: a great hall dominated by a four-crate banquet table, and three kitchens behind a wall with a double door and a weak service hatch. The kitchens connect to each other (d7 breakable, g7 open), each stocked differently.",
+   "map": [
+    "...#..#...",
+    ".^.#^.#.^.",
+    "...^......",
+    "####^^##^#",
+    "..........",
+    "...^^^^...",
+    "..........",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s55-gate-and-bailey",
+   "title": "Gate & Bailey",
+   "notes": "FLOORPLAN: an outer wall with a double gate and an open postern, a bailey with stabled crates along the west wall, and a stone keep with one weak door — which the defender may mold inside. Three zones deep.",
+   "map": [
+    "..#...#...",
+    "..#.^.#...",
+    "..#...#...",
+    "..##^##...",
+    ".^........",
+    ".^........",
+    "###^^###.#",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s56-the-archive",
+   "title": "The Archive",
+   "notes": "FLOORPLAN: two long shelf-rows make three aisles in the stacks; the reading room behind the double door is the only way to the far side (verifier-flagged smash-in), and an inner cage with its own weak door guards the rarest holdings.",
+   "map": [
+    "......#..",
+    "......^..",
+    "......#..",
+    "###^^####",
+    ".........",
+    ".^^^.^^^.",
+    ".........",
+    ".^^^.^^^.",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s57-crossroads-market",
+   "title": "Crossroads Market",
+   "notes": "FLOORPLAN: two hallways cross at an open square, with an L-walled stall in each quadrant — five areas, every stall door different (two weak, two placements), every stall stocked differently: one chest, a pair, a spill of three, one empty.",
+   "map": [
+    "...#..#...",
+    ".^.#..^.^^",
+    ".#^#..###.",
+    "..........",
+    "..........",
+    "..........",
+    ".#^#..#^#.",
+    "^^.#..#...",
+    ".^.#..#..."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s58-drowned-halls",
+   "title": "Drowned Halls",
+   "notes": "FLOORPLAN: the dense one — six areas. Two full walls with mixed doors bracket a mid band split into three chambers by dividers with party doors (d4, g5); the north territory splits again behind a weak door. Flooded chambers hold flotsam; the center hall is scoured bare.",
+   "map": [
+    ".....#....",
+    ".....^....",
+    ".....#....",
+    "#^####.###",
+    ".^.#..^.^.",
+    "...^..#.^.",
+    "####^###^#",
+    "..........",
+    "..........",
+    ".........."
    ],
    "wave": 5
   }

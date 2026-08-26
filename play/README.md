@@ -118,8 +118,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `stages/*.json` — the stage set, authored with §4.6 capturable walls
   from the start (wave 4, s01–s33: the furniture bed — locked, all 33
   accepted 2026-08-26, replacing the retired waves 1–3; wave 5,
-  s34–s50: rooms & breaches — sectioned maps, crate clusters,
-  furniture in wall structures, breakable double doors — proposed);
+  s34–s58: rooms & breaches — sectioned maps, crate clusters,
+  furniture in wall structures, breakable double doors, and the s51+
+  floorplans (multi-room maps: hallways, doors to and between rooms,
+  per-room furniture patterns) — proposed);
   `stages/manifest.json` is the
   generated browser bundle (regenerate with
   `phase0/harness/gen-stage-manifest.mjs` after any stage edit —
