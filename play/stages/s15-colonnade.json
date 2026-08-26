@@ -1,18 +1,18 @@
 {
-  "schema": 2,
-  "wave": 2,
-  "id": "s15-colonnade",
-  "title": "Colonnade",
-  "notes": "Wave 2. Pillar pairs INSIDE both pawn ranks (2 and 8) plus midfield columns. Pawn screens must form around the pillars — the pawn-row molding case.",
-  "map": [
-    ".......",
-    ".#...#.",
-    ".......",
-    "...#...",
-    ".......",
-    "..#..#.",
-    ".......",
-    ".#...#.",
-    "......."
-  ]
+ "schema": 2,
+ "id": "s15-colonnade",
+ "title": "Colonnade",
+ "notes": "Pillar pairs with furniture stacked between them — the colonnade reads solid until somebody starts clearing the shelving.",
+ "map": [
+  ".......",
+  ".......",
+  ".#...#.",
+  "..^.^..",
+  ".......",
+  "..^.^..",
+  ".#...#.",
+  ".......",
+  "......."
+ ],
+ "wave": 4
 }

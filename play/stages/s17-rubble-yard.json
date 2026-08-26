@@ -1,0 +1,17 @@
+{
+ "schema": 2,
+ "id": "s17-rubble-yard",
+ "title": "Rubble Yard",
+ "notes": "Mixed stone-and-crate rubble strictly in midfield, deployment rows clean. The workhorse mixed-density case for the corpus.",
+ "map": [
+  ".........",
+  ".........",
+  "...#^....",
+  ".^....#..",
+  "....^.#..",
+  "..#.^....",
+  ".........",
+  "........."
+ ],
+ "wave": 4
+}

@@ -1,16 +1,16 @@
 {
-  "schema": 2,
-  "wave": 2,
-  "id": "s22-sinkhole",
-  "title": "Sinkhole",
-  "notes": "Wave 2. A 2x2 central sink plus one wall in each back rank. The minimal broken-deployment stage — one obstruction per army, one hazard mid-board.",
-  "map": [
-    "...#..",
-    "......",
-    "..##..",
-    "..##..",
-    "......",
-    "......",
-    ".#...."
-  ]
+ "schema": 2,
+ "id": "s22-sinkhole",
+ "title": "Sinkhole",
+ "notes": "A 2x2 stone sink with furniture heaped on its flanks — the hole is forever, the heap is not.",
+ "map": [
+  "......",
+  "......",
+  "..##..",
+  ".^##^.",
+  "......",
+  "......",
+  "......"
+ ],
+ "wave": 4
 }

@@ -1,18 +1,18 @@
 {
-  "schema": 2,
-  "wave": 3,
-  "id": "s31-ruined-l",
-  "title": "Ruined L",
-  "notes": "Wave 3. The NE quadrant is gone: an L-shaped playfield. Black deploys on a 5-wide shelf, white on the full 9 — the non-rectangular, unequal-area case.",
-  "map": [
-    "....#####",
-    "....#####",
-    "....#####",
-    "....#####",
-    ".........",
-    ".........",
-    ".........",
-    "..#......",
-    "........."
-  ]
+ "schema": 2,
+ "id": "s31-ruined-l",
+ "title": "Ruined L",
+ "notes": "A solid collapsed quadrant makes an L-shaped playfield; two weak-masonry cells on the ruin's edge can be dug out for nooks.",
+ "map": [
+  ".....####",
+  ".....####",
+  ".....^###",
+  ".....^###",
+  ".........",
+  ".........",
+  ".........",
+  ".........",
+  "........."
+ ],
+ "wave": 4
 }
