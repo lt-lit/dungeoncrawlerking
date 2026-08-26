@@ -51,11 +51,17 @@ childSeed), Rematch/Re-deal;
 the legacy arenas, placement screen, enemyEdit cheat and
 `play/js/arena.mjs` are RETIRED (`armygen.dealMatchup` is the single
 composed deal entry point — UI, `phase0/harness/verify-stages.mjs`, and
-the future corpus builder all share it). Two designer rules from that
-build are canon: **crop redraws the boundary by REMOVING ranks (never
-walling them), and the promotion zone is ALWAYS the entire actual far
-rank of the playable area, both sides, at every crop** (no stage or crop
-may produce a fully-walled extreme rank); and **human play caps the
+the future corpus builder all share it). Designer rules from that build
+plus the 2026-08-26 ground rules are canon: **crop redraws the boundary
+by REMOVING ranks (never walling them)**; **KINGS ANCHOR THE ARENA**
+(brief §4.2: stages are emergent, not authored — guarantees live in the
+DEAL, not in authoring lints; the player's king always starts on the
+first row and the enemy king on the last, and `dealMatchup` AUTO-CROPS
+any rows behind either king — floor 5 ranks, a deal that would crop
+below it is rejected; the promotion zone is ALWAYS the enemy king's
+starting row, guaranteed usable because the king stands on it — this
+SUPERSEDES the old "no fully-walled extreme rank" lint, now retired
+from `stage.mjs`/the verifier); and **human play caps the
 engine at 10 s/move** (`depth 22 movetime 10000` — d22 stays as the WASM
 stability cap; perf/optimization work is deliberately parked, labs keep
 faster limits). **CAPTURABLE WALLS ARE CANON — brief §4.6** (designer decision
@@ -84,12 +90,22 @@ unchanged), spike10 32/32, and the designer's phone feel check passed
 (2026-08-26 — duel feel unchanged, selftest green on device). The
 walled-passer eval fix stays deliberately NOT shipped, and upstreaming is
 not planned (designer 2026-08-25). **PHASE 1.2.4 — SET DRESSING — IS THE
-ACTIVE PHASE**: retire the hard-coded `'*'` tests for a terrain helper
-(~50–60 sites / ~24 files; known landmines: `director.mjs` counts `^` as
-a white piece via the `toUpperCase()` idiom, `pushReaches` reads it as
-open), interim Director rule "furniture is stone to the gods" (the
-rework owns the real policy), a sprite, the stage-map `^` character, and
-`^` authored into all 33 stages — exit is crates in live phone duels.
+ACTIVE PHASE**: retire the hard-coded `'*'` tests for the shared
+terrain helper (`fen.mjs` `WALL`/`FURNITURE`/`isTerrain`; the audit
+found 65 sites / 24 files — the two known landmines confirmed, plus
+furniture-as-displaceable and furniture-as-white-crumble-victim in
+`director.mjs`, `^`-painted-as-white-piece in `board-ui.mjs`, and
+silent `^`-dropping emitters in `armygen.mjs`/`main.mjs`; sed hazards:
+ffish RESULT strings `=== '*'` in both `crumbleFilter.mjs` copies +
+spike11/12, and the variants.ini `*` wildcards), interim Director rule
+"furniture is stone to the gods" (never displaced, never a crumble
+candidate, silent in every census, NO new reason codes — the rework
+owns the real policy), a sprite (neutral piece-like glyph + cell tint,
+so capture dissolve works unchanged), the stage-map `^` character, the
+king-anchored auto-crop (see the ground rules above), and the
+REPLACEMENT stage set (~33 fresh stages authored WITH furniture — the
+designer retired the original 33 on 2026-08-26; gallery-reviewed,
+accept/tweak/kill) — exit is crates in live phone duels.
 After both land, **PHASE 1.2.5** resumes; its
 remaining half is the LAB RIG — all automated-playtest plumbing, no duel
 rules change: (a) the **corpus materializer** (33 stages × both
