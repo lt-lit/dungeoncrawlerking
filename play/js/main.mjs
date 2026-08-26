@@ -35,7 +35,7 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion } from './board-ui.mjs';
@@ -700,7 +700,7 @@ function godsTraceLine(t) {
     const via = t.fellThrough ? ` — FELL THROUGH (${t.path.includes('no-first-leg') ? 'no first leg' : 'unpairable, held'})` : '';
     const cr = t.chosen?.crumble;
     const pool = c?.crumble ? c.crumble.neutral + c.crumble.terminal : '?';
-    bits.push(`${t.outcome === 'terminal' ? 'TERMINAL ' : ''}crumble ${cr.square}${cr.pieceLost && cr.pieceLost !== '*' ? ` swallows ${cr.pieceLost}` : ''} of ${pool}${via}`);
+    bits.push(`${t.outcome === 'terminal' ? 'TERMINAL ' : ''}crumble ${cr.square}${cr.pieceLost && !isTerrain(cr.pieceLost) ? ` swallows ${cr.pieceLost}` : ''} of ${pool}${via}`);
   } else if (t.outcome === 'starved') {
     bits.push(`STARVED — no legal candidate anywhere${t.fellThrough ? ' (displace leg empty too)' : ''}`);
   }
@@ -971,11 +971,12 @@ function applySetupParams() {
   }
 }
 
-/** Tiny terrain thumbnail: the ASCII map as it is authored (far rank on top). */
+/** Tiny terrain thumbnail: the ASCII map as it is authored (far rank on
+ *  top). Stone solid, furniture shaded, floor a dot. */
 function stageMiniMap(stage) {
   const rows = [];
   for (let r = stage.ranks - 1; r >= 0; r--) {
-    rows.push(stage.grid[r].map((c) => (c === '*' ? '█' : '·')).join(''));
+    rows.push(stage.grid[r].map((c) => (c === WALL ? '█' : c === FURNITURE ? '▒' : '·')).join(''));
   }
   return rows.join('\n');
 }
@@ -1098,9 +1099,11 @@ function terrainOnly() {
   } catch {
     t = setup.flip ? flipStageVertical(stage) : stage; // the crop is the invalid part
   }
+  // Stamp the grid VERBATIM — both terrain glyphs (copying only '*' would
+  // silently hide authored furniture from the preview).
   const board = emptyBoard(t.files, t.ranks);
   for (let r = 0; r < t.ranks; r++) {
-    for (let f = 0; f < t.files; f++) if (t.grid[r][f] === '*') board[t.ranks - 1 - r][f] = '*';
+    for (let f = 0; f < t.files; f++) if (t.grid[r][f] !== null) board[t.ranks - 1 - r][f] = t.grid[r][f];
   }
   return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1` };
 }
@@ -1475,7 +1478,9 @@ async function onQuake(ev) {
   }
   if (crumble) {
     let c = `${crumble.square} collapses`;
-    if (crumble.pieceLost && crumble.pieceLost !== '*') {
+    // isTerrain, not just '*': swallowed furniture (rework-era) must never
+    // read as "your ^" — terrain is nobody's piece.
+    if (crumble.pieceLost && !isTerrain(crumble.pieceLost)) {
       const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.session.playerColor;
       c += ` · ${yours ? 'your' : 'enemy'} ${pieceName(crumble.pieceLost)} is swallowed`;
     }

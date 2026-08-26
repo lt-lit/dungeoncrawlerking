@@ -13,6 +13,7 @@ import { loadFfish } from '../lib/load.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from '../../play/js/stage.mjs';
 import { makeArmy, armyValue, layoutArmy, buildMatchup, armiesConnected, lintMatchupFen, dealMatchup, campLineRank, PIECE_VALUES } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
+import { isTerrain } from '../../play/js/fen.mjs';
 import { mulberry32 } from '../../play/js/prng.mjs';
 
 let failures = 0;
@@ -147,7 +148,7 @@ function checkSide(name, army, layout, side, ranks) {
   check('bitten corner still lays out', !!l);
   if (l) {
     checkSide('bitten-corner black', army, l, 'black', 8);
-    check('bitten corner avoids walls', l.cells.every((c) => stage.grid[c.r][c.f] !== '*'));
+    check('bitten corner avoids terrain', l.cells.every((c) => !isTerrain(stage.grid[c.r][c.f])));
   }
   pass('wall pocket');
 }

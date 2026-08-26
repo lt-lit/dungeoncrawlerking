@@ -1,10 +1,24 @@
 // FEN utilities for largeboard Fairy-Stockfish positions.
 //
-// Handles: multi-digit empty runs (boards up to 12 files), wall squares `*`,
-// pockets `[...]`, and per-square editing. The board is represented as a 2D
-// array indexed [rankFromTop][file] where rankFromTop 0 is the highest rank
-// (first FEN rank). Cell values: piece char ('K', 'p', ...), '*' for wall,
-// or null for empty.
+// Handles: multi-digit empty runs (boards up to 12 files), terrain squares
+// (`*` stone wall, `^` furniture), pockets `[...]`, and per-square editing.
+// The board is represented as a 2D array indexed [rankFromTop][file] where
+// rankFromTop 0 is the highest rank (first FEN rank). Cell values: piece
+// char ('K', 'p', ...), '*' wall, '^' furniture, or null for empty.
+
+// The two terrain glyphs (brief §4.6). '*' is stone — forever; crumbles
+// write it and nothing ever converts it back. '^' is furniture — a neutral
+// occupant either side may capture (an ordinary capture, priced natively by
+// the patched engine pair); it is stage-authored only, NOTHING creates one
+// mid-duel, and it is TERRAIN to every game system except the capture
+// itself (molding, crop, the camp line, the gods). This module is the leaf
+// every consumer already imports — cell tests belong here, not hand-rolled
+// (the '^'-as-white-piece toUpperCase() landmine class).
+export const WALL = '*';
+export const FURNITURE = '^';
+
+/** Is this cell terrain (stone wall or furniture)? Safe on null/undefined. */
+export const isTerrain = (c) => c === WALL || c === FURNITURE;
 
 /** Split a full FEN into its fields. Returns { board, pocket, turn, castling, ep, halfmove, fullmove, rest } */
 export function splitFen(fen) {
@@ -41,8 +55,8 @@ export function parseBoard(boardField) {
         const n = parseInt(rankStr.slice(i, j), 10);
         for (let k = 0; k < n; k++) cells.push(null);
         i = j;
-      } else if (ch === '*') {
-        cells.push('*');
+      } else if (ch === '*' || ch === '^') {
+        cells.push(ch); // terrain: stone wall / furniture (§4.6)
         i++;
       } else if (ch === '+') {
         // promoted-piece prefix (shogi-style); keep attached to next char
@@ -99,8 +113,8 @@ export function parseSquare(name) {
 }
 
 /**
- * Edit one square of a FEN. `value` is a piece char, '*', or null (empty).
- * Returns the new FEN. Board dimensions are taken from the FEN itself.
+ * Edit one square of a FEN. `value` is a piece char, '*', '^', or null
+ * (empty). Returns the new FEN. Board dimensions come from the FEN itself.
  */
 export function setSquare(fen, square, value) {
   const f = splitFen(fen);
@@ -116,7 +130,7 @@ export function setSquare(fen, square, value) {
   return joinFen(f);
 }
 
-/** Get the value of one square of a FEN (piece char, '*', or null). */
+/** Get the value of one square of a FEN (piece char, '*', '^', or null). */
 export function getSquare(fen, square) {
   const f = splitFen(fen);
   const board = parseBoard(f.board);

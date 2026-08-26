@@ -35,7 +35,7 @@
 //
 // The variant must already be registered via ffish.loadVariantConfig().
 
-import { setSquare, getSquare, clearEp, splitFen, joinFen } from '../lib/fen.mjs';
+import { setSquare, getSquare, clearEp, splitFen, joinFen, isTerrain } from '../lib/fen.mjs';
 
 // (ffish module) → Map(variantName → reused Board)
 const boardCache = new WeakMap();
@@ -86,7 +86,11 @@ export function validateCrumbleCandidate(ffish, variant, fen, square) {
     return { ok: false, reason: 'offboard' };
   }
   if (occ === undefined) return { ok: false, reason: 'offboard' };
-  if (occ === '*') return { ok: false, reason: 'already_wall' };
+  // Terrain is never a collapse candidate. '^' rides the '*' verdict —
+  // furniture is stone to the gods (§4.6 interim) and the Director skips it
+  // before ever calling here; this is the belt-and-braces layer, and the
+  // reason string stays 'already_wall' so the census schema doesn't fork.
+  if (isTerrain(occ)) return { ok: false, reason: 'already_wall' };
   if (occ !== null && occ.replace('+', '').toLowerCase() === 'k') {
     return { ok: false, reason: 'king_square' };
   }

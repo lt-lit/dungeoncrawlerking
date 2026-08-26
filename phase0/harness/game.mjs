@@ -7,7 +7,7 @@ import { CrumbleController, applyCrumble } from './crumble.mjs';
 // Spike 12's validated filter (exposure via turn-flip + isCheck; instant-end
 // via numberLegalMoves===0 and result(false)) — see results/spike12-crumble-filter.md
 import { validateCrumbleCandidate } from '../spikes/crumbleFilter.mjs';
-import { findSquares } from '../lib/fen.mjs';
+import { findSquares, isTerrain } from '../lib/fen.mjs';
 
 /**
  * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
@@ -181,7 +181,7 @@ export async function playGame({ engine, ffish, arena, opts }) {
         for (let tries = 0; tries < 60; tries++) {
           const sq = crumbler.randomSquare(files, ranks);
           const cell = findSquares(fenNow, (c, f, r) => `${String.fromCharCode(97 + f)}${r + 1}` === sq)[0]?.cell;
-          if (cell === '*') continue; // already a pit
+          if (isTerrain(cell)) continue; // already terrain (pit or furniture — the owner test below must never see '^')
           // A crumble must never strip a side's last piece — crumbles
           // pressure games, they don't end them (§4.5).
           if (cell && cell !== 'K' && cell !== 'k') {

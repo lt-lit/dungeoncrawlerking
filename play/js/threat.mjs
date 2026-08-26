@@ -16,10 +16,13 @@
 // will build on these same primitives.
 //
 // Pure: no ffish, no engine, no FEN parsing. Callers pass the
-// [rankFromBottom][file] cell grid that fenGrid() produces ('*' walls, null
-// empty, piece letters otherwise), so this costs a few array walks per
-// candidate — far cheaper than the ffish Board probes the filter already
-// runs per candidate.
+// [rankFromBottom][file] cell grid that fenGrid() produces ('*' walls,
+// '^' furniture, null empty, piece letters otherwise), so this costs a few
+// array walks per candidate — far cheaper than the ffish Board probes the
+// filter already runs per candidate. Terrain — furniture included — blocks
+// rays and is never an attacker or victim here: to the gods' safety guard
+// '^' is stone (§4.6 interim; whether SEE must price ^-captures is 1.3's
+// question, decided with the whole-board rule).
 //
 // Known gaps (deliberate — Phase 1.3 closes them):
 //  - pins and absolute-pin legality are ignored (a "defender" that is pinned
@@ -28,6 +31,8 @@
 //    DIFFERENT friendly piece, and that is not checked here;
 //  - rescuing an already-hanging piece is a gift too, and is not checked.
 
+import { isTerrain } from './fen.mjs';
+
 /** Centipawn values. Only relative order matters to the swap-off. */
 export const PIECE_VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
@@ -35,6 +40,7 @@ const ORTHO = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
 const KNIGHT_HOPS = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
 
+// Only ever called on piece letters — terrain never enters a chain (below).
 const isWhitePiece = (ch) => ch === ch.toUpperCase();
 const valueOf = (ch) => PIECE_VALUE[ch.toLowerCase()] ?? 0;
 
@@ -66,8 +72,11 @@ function raySees(ch, ortho, dr, dist) {
  * attack blocks its ray permanently — it is not on the contested square, so
  * nothing in the swap-off removes it.
  *
- * Walls terminate a ray exactly like a piece would: FSF blocks sliders on
- * pit squares (brief §4.5).
+ * Terrain terminates a ray exactly like a piece would: FSF blocks sliders
+ * on pit squares (brief §4.5), and furniture blocks them until captured
+ * (§4.6) — the gods' guard treats it as stone, so it never enters a chain
+ * (before this was explicit, '^' entered as an inert piece and blocked by
+ * ACCIDENT — raySees matched no type for it; do not rely on that again).
  */
 function buildChains(grid, tf, tr, files, ranks) {
   const chains = [];
@@ -79,7 +88,7 @@ function buildChains(grid, tf, tr, files, ranks) {
       let dist = 1;
       while (f >= 0 && f < files && r >= 0 && r < ranks) {
         const ch = grid[r][f];
-        if (ch === '*') break;
+        if (isTerrain(ch)) break;
         if (ch) cells.push({ ch, dist });
         f += df;
         r += dr;
@@ -99,7 +108,7 @@ function knightAttackers(grid, tf, tr, files, ranks) {
     const r = tr + dr;
     if (f < 0 || f >= files || r < 0 || r >= ranks) continue;
     const ch = grid[r][f];
-    if (ch && ch !== '*' && ch.toLowerCase() === 'n') out.push({ ch, used: false });
+    if (ch && !isTerrain(ch) && ch.toLowerCase() === 'n') out.push({ ch, used: false });
   }
   return out;
 }
@@ -141,11 +150,11 @@ function swapOff(state, white, occupantValue) {
 /**
  * Centipawns the opponent of (tf, tr)'s occupant wins by capturing there.
  * 0 means the square is safe for it — nothing to win, or only an even trade.
- * Returns 0 for empty squares and walls.
+ * Returns 0 for empty squares and terrain (furniture is nobody's material).
  */
 export function captureLoss(grid, tf, tr, files, ranks) {
   const occ = grid[tr]?.[tf];
-  if (!occ || occ === '*') return 0;
+  if (!occ || isTerrain(occ)) return 0;
   const state = {
     chains: buildChains(grid, tf, tr, files, ranks),
     knights: knightAttackers(grid, tf, tr, files, ranks),

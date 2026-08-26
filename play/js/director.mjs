@@ -30,6 +30,13 @@
 //    displacement targets only empty squares, quakes never give check and
 //    never leave the non-mover in check, a crumble never strips a side's
 //    last piece.
+//  - Furniture is STONE to the gods. `[Phase 1.2.4 interim — §4.6; the
+//    Director rework owns the real policy]` A `^` square is terrain in every
+//    enumeration exactly like `*`: never displaced, never a landing square
+//    (non-null already excludes it), never a crumble candidate, and silent
+//    in every census — no entry in any tier, `rejected` bucket, or reason
+//    code (a new code would fork the census schema between pre- and
+//    post-furniture corpora, and 1.3 reads the comparison).
 //  - Displacements never hand out material. `[Phase 1.1 stopgap]` The guards
 //    above are all KING-safety guards; ordinary piece safety went unchecked,
 //    so a "symmetric" quake could step a piece onto an already-attacked
@@ -52,7 +59,7 @@
 //    draw sequence is byte-identical to the untraced v2 Director, so seeded
 //    sweeps replay exactly (§7).
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { getSquare, setSquare, clearEp, splitFen, joinFen } from './fen.mjs';
+import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain } from './fen.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { landingIsSafe } from './threat.mjs';
 
@@ -64,7 +71,8 @@ function flipTurn(fen) {
   return joinFen(f);
 }
 
-/** Board field → cell grid indexed [rankFromBottom][file]; '*' walls, null empty. */
+/** Board field → cell grid indexed [rankFromBottom][file]; '*' walls,
+ *  '^' furniture, null empty, piece letters otherwise. */
 export function fenGrid(fen, files, ranks) {
   const g = Array.from({ length: ranks }, () => Array(files).fill(null));
   fen.split(' ')[0].split('/').forEach((row, ri) => {
@@ -80,13 +88,16 @@ export function fenGrid(fen, files, ranks) {
   return g;
 }
 
-/** Can this pawn reach its promotion rank by straight pushes through non-walls? */
+/** Can this pawn reach its promotion rank by straight pushes through
+ *  non-terrain? Furniture blocks a push exactly like stone — a pawn can
+ *  never capture straight ahead, so it can't clear its own blocker (§4.6:
+ *  the CLAUDE.md landmine — '^' read as open inverted this metric). */
 function pushReaches(grid, f, r, white, ranks) {
   const target = white ? ranks - 1 : 0;
   let rr = r;
   while (rr !== target) {
     rr += white ? 1 : -1;
-    if (grid[rr][f] === '*') return false;
+    if (isTerrain(grid[rr][f])) return false;
   }
   return true;
 }
@@ -132,7 +143,9 @@ function stuckCount(ffish, variant, fen) {
         const m = row.slice(i).match(/^\d+/);
         if (m) { fi += parseInt(m[0], 10); i += m[0].length - 1; continue; }
         const ch = row[i];
-        if (ch !== '*' && (ch === ch.toUpperCase()) === whiteToMove && ch.toLowerCase() !== 'k') {
+        // isTerrain first: '^' === '^'.toUpperCase(), so without the guard
+        // every crate counts as a stuck white piece (the landmine class).
+        if (!isTerrain(ch) && (ch === ch.toUpperCase()) === whiteToMove && ch.toLowerCase() !== 'k') {
           if (!froms.has(SQ(fi, ranks - 1 - ri))) stuck++;
         }
         fi++;
@@ -154,8 +167,9 @@ const KING_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], 
  *   rejected — `[Phase 1.2]` every OTHER exclusion, with its reason
  *              ('last_piece', 'exposes_king', …), for the census/heat
  *              overlay. Collecting them is free: the filter already computed
- *              each verdict and the old code just dropped it. Walls and
- *              offboard squares stay silent — they were never candidates.
+ *              each verdict and the old code just dropped it. Terrain
+ *              (walls AND furniture — §4.6 interim) and offboard squares
+ *              stay silent — they were never candidates.
  */
 export function crumbleCandidates(ffish, variant, fen, files, ranks) {
   const neutral = [];
@@ -167,7 +181,11 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
       const sq = SQ(f, r);
       let occ;
       try { occ = getSquare(fen, sq); } catch { continue; }
-      if (occ === undefined || occ === '*') continue;
+      // Terrain stays silent — never a candidate. '^' rides the same skip
+      // ('*' would misclassify it as WHITE at the owner test below, tripping
+      // last_piece vetoes and counting crates as white material): furniture
+      // is stone to the gods, and no crumble ever lands on or swallows it.
+      if (occ === undefined || isTerrain(occ)) continue;
       if (occ && occ !== 'K' && occ !== 'k') {
         const owner = occ === occ.toUpperCase() ? 'white' : 'black';
         if (counts[owner] === 1) {
@@ -193,14 +211,15 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
  *   A — frees a terrain-locked pawn (its new file has a clear push path).
  *   B — lowers the board's stuck-piece count.
  *   C — cosmetic (legal, changes little) — the camouflage tier.
- * Rejected: kings, occupied/wall/offboard targets, pawn to rank 1 or the
+ * Rejected: kings, occupied/terrain/offboard targets, pawn to rank 1 or the
  * promotion rank, any check either way, any zero-legal-move result, and any
- * landing square where the opponent wins material (threat.mjs).
+ * landing square where the opponent wins material (threat.mjs). Furniture
+ * is neither a mover nor a target (stone to the gods — §4.6 interim).
  *
  * `[Phase 1.2]` Substantive rejections come back in `rejected` with reasons
  * ('unsafe_landing', 'exposes_king', 'gives_check', 'no_moves', …) for the
  * census/heat overlay — pure bookkeeping on verdicts the filters already
- * reached. Geometry that was never a candidate (kings, walls, occupied or
+ * reached. Geometry that was never a candidate (kings, terrain, occupied or
  * offboard targets, pawn rank limits) stays silent. `rejected.unsafe_landing`
  * per side is the Phase 1.3 starvation-risk metric: it counts what a stricter
  * symmetric rule would additionally have to survive.
@@ -216,7 +235,10 @@ export function displacementCandidates(ffish, variant, fen, files, ranks) {
   for (let f = 0; f < files; f++) {
     for (let r = 0; r < ranks; r++) {
       const occ = g0[r][f];
-      if (!occ || occ === '*' || occ.toLowerCase() === 'k') continue;
+      // Terrain is not a piece: '^' must ride the same skip as '*' or the
+      // gods would pick a crate up and scoot it ('^'.toLowerCase() !== 'k'
+      // let it through). Landing ON terrain is excluded below (non-null).
+      if (!occ || isTerrain(occ) || occ.toLowerCase() === 'k') continue;
       const from = SQ(f, r);
       const isPawn = occ.toLowerCase() === 'p';
       for (const [df, dr] of KING_STEPS) {

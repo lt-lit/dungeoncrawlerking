@@ -28,7 +28,7 @@
 // files a wall makes uncoverable are reported in `violations`, judged by
 // eye in the stage gallery rather than enforced.
 import { mulberry32, childSeed } from './prng.mjs';
-import { emptyBoard, serializeBoard } from './fen.mjs';
+import { emptyBoard, serializeBoard, isTerrain, WALL } from './fen.mjs';
 import { catalogVariantName, dealVariant } from './variant.mjs';
 import { flipStageVertical, cropStage } from './stage.mjs';
 
@@ -165,7 +165,8 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     : anchor === 'right' ? files - w
     : Math.max(0, Math.min(files - w, anchor | 0));
   const rowRank = (i) => (side === 'white' ? i : ranks - 1 - i);
-  const open = (i, f) => grid[rowRank(i)][f] !== '*';
+  // Furniture eats molding slots exactly like stone (§4.6: a wall to molding).
+  const open = (i, f) => !isTerrain(grid[rowRank(i)][f]);
   const depthCap = Math.min(maxDepth ?? ranks, ranks);
 
   // Back units, royal first; the archetype orders the rest (first-placed
@@ -210,7 +211,8 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     if (c.piece === 'P' || pawnFiles.has(c.f) || openFiles.has(c.f)) continue;
     let walled = false;
     for (let r = c.r + dir; r >= 0 && r < ranks; r += dir) {
-      if (grid[r][c.f] === '*') {
+      if (isTerrain(grid[r][c.f])) {
+        // furniture screens too (blocks sliders until captured) — soft report
         walled = true;
         break;
       }
@@ -265,10 +267,12 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
   const gap = bBottom - wTop - 1;
   if (gap < gapMin) return { error: `gap ${gap} < ${gapMin}`, white: wArmy, black: bArmy };
 
-  // Compose the FEN: board arrays are [rankFromTop][file] (fen.mjs).
+  // Compose the FEN: board arrays are [rankFromTop][file] (fen.mjs). Stamp
+  // the grid VERBATIM — both terrain glyphs; copying only '*' silently
+  // deleted authored furniture from the dealt board (the emitter landmine).
   const board = emptyBoard(files, ranks);
   for (let r = 0; r < ranks; r++) {
-    for (let f = 0; f < files; f++) if (grid[r][f] === '*') board[ranks - 1 - r][f] = '*';
+    for (let f = 0; f < files; f++) if (grid[r][f] !== null) board[ranks - 1 - r][f] = grid[r][f];
   }
   for (const c of wl.cells) board[ranks - 1 - c.r][c.f] = c.piece.toUpperCase();
   for (const c of bl.cells) board[ranks - 1 - c.r][c.f] = c.piece.toLowerCase();
@@ -284,9 +288,17 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
 }
 
 /** King-step BFS: can the two armies reach each other through non-walls?
- *  (pieces are passable — they move). Grid-pure §6-style check. */
-export function armiesConnected(stage, matchup) {
+ *  (pieces are passable — they move). Grid-pure §6-style check.
+ *
+ *  Furniture is deliberately PASSABLE by default (§4.6 [designer-final]):
+ *  armies can smash through a `^`, so a furniture-only seal never rejects a
+ *  deal — "a chamber you must smash into" is legal. The verifier passes
+ *  `furnitureBlocks: true` for a second look and WARNS when the two
+ *  readings differ (stone-connected but furniture-sealed), flagging the
+ *  stage for the gallery eye. */
+export function armiesConnected(stage, matchup, { furnitureBlocks = false } = {}) {
   const { grid, files, ranks } = stage;
+  const blocked = (cell) => (furnitureBlocks ? isTerrain(cell) : cell === WALL);
   const key = (r, f) => r * 16 + f;
   const targets = new Set(matchup.black.layout.cells.map((c) => key(c.r, c.f)));
   const seen = new Set(matchup.white.layout.cells.map((c) => key(c.r, c.f)));
@@ -300,7 +312,7 @@ export function armiesConnected(stage, matchup) {
         const nr = r + dr;
         const nf = f + df;
         if (nr < 0 || nr >= ranks || nf < 0 || nf >= files) continue;
-        if (seen.has(key(nr, nf)) || grid[nr][nf] === '*') continue;
+        if (seen.has(key(nr, nf)) || blocked(grid[nr][nf])) continue;
         seen.add(key(nr, nf));
         queue.push([nr, nf]);
       }

@@ -2,7 +2,7 @@
 //
 // Every duel is a generated variant: a config block (board dims, regions,
 // win conditions) plus a start FEN (pieces, walls). See brief §3, §4.
-import { emptyBoard, serializeBoard } from './fen.mjs';
+import { emptyBoard, serializeBoard, isTerrain } from './fen.mjs';
 
 /**
  * Emit a variants.ini snippet for a duel arena.
@@ -98,14 +98,14 @@ export function buildDuelBoard(spec) {
     const start = side.backRankStart ?? 0;
     const pawnAt = (file) => {
       if (file < 0 || file >= files) return;
-      if (board[ranks - 1 - pawnRow][file] !== '*') {
+      if (!isTerrain(board[ranks - 1 - pawnRow][file])) {
         put(file, pawnRow, isWhite ? 'P' : 'p');
       }
     };
     side.backRank.forEach((piece, i) => {
       const file = start + i;
       if (file >= files) return; // clipped by board edge
-      if (board[ranks - 1 - row][file] === '*') return; // walls eat slots (§4.2)
+      if (isTerrain(board[ranks - 1 - row][file])) return; // terrain eats slots (§4.2/§4.6)
       if (piece) put(file, row, isWhite ? piece.toUpperCase() : piece.toLowerCase());
       if (!side.pawnFiles) pawnAt(file); // automatic full-width row (§4.2 default)
     });
