@@ -1144,6 +1144,7 @@ function refreshLiveDeal() {
   const extras = [];
   if (deal.attempt > 0) extras.push(`re-dealt ×${deal.attempt}`);
   if (deal.violations.length) extras.push(`${deal.violations.length} open file${deal.violations.length > 1 ? 's' : ''}`);
+  if (deal.autoCrop.top || deal.autoCrop.bottom) extras.push('cropped behind the kings');
   out.textContent = `✓ ${deal.files}×${deal.ranks} · gap ${deal.gap} · ${edge}${extras.length ? ' · ' + extras.join(' · ') : ''}`;
   out.className = 'ok';
   $('btnBegin').disabled = false;

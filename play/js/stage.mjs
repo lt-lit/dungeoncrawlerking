@@ -1,6 +1,6 @@
 // Stage schema v2 (slice refresh): terrain only, drawn as ASCII.
 //
-// A stage is GROUND — walls and dimensions, nothing else. Armies are not
+// A stage is GROUND — terrain and dimensions, nothing else. Armies are not
 // part of a stage (they come from armygen.mjs and mold to the terrain at
 // duel time), and stages are stand-ins for dungeon-generated terrain, so
 // they are authored as reviewable text, not through an editor:
@@ -8,12 +8,36 @@
 //   { "schema": 2, "id": "s03-the-squeeze", "title": "The Squeeze",
 //     "notes": "why this terrain exists / what it tests",
 //     "map": ["#....",     <- top rank first (visual order, like FEN)
-//             ".....", ...] }
+//             ".^...", ...] }
 //
-// '.' floor · '#' wall ('*' accepted — it is the FEN wall glyph).
-// Rectangular, 3–12 files × 5–10 ranks (the engine's largeboard caps are
-// 12×10; the catalog registers duel_<files>x<ranks> for 3–12 × 5–10).
+// '.' floor · '#' stone wall ('*' accepted — it is the FEN wall glyph) ·
+// '^' furniture (§4.6: the neutral capturable occupant — a wall to molding
+// and crop, an ordinary capture in play; `^`→`.` derives the stone-only
+// corpus control arm from the same file). Rectangular, 3–12 files × 5–10
+// ranks (the engine's largeboard caps; the catalog registers
+// duel_<files>x<ranks> for 3–12 × 5–10).
+//
+// The old "no fully-walled extreme rank" load/crop guards are RETIRED
+// (designer ground rules 2026-08-26): kings anchor the arena — dealMatchup
+// AUTO-CROPS every row behind either king, so the promotion row is the
+// enemy king's starting row by construction and stage-level policing was
+// the wrong layer. A stage whose fully-terrain edge rows leave fewer than
+// 5 playable ranks can never deal; the verifier flags that as a data bug.
 import { catalogVariantName } from './variant.mjs';
+import { WALL, FURNITURE } from './fen.mjs';
+
+/** Square-name lists of each terrain kind in a grid. */
+function terrainLists(grid, files, ranks) {
+  const walls = [];
+  const furniture = [];
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) {
+      if (grid[r][f] === WALL) walls.push(`${String.fromCharCode(97 + f)}${r + 1}`);
+      else if (grid[r][f] === FURNITURE) furniture.push(`${String.fromCharCode(97 + f)}${r + 1}`);
+    }
+  }
+  return { walls, furniture };
+}
 
 export function loadStageV2(json) {
   if (json.schema !== 2) throw new Error(`stage ${json.id ?? '?'}: schema ${json.schema} (want 2)`);
@@ -25,33 +49,23 @@ export function loadStageV2(json) {
   if (files < 3 || files > 12 || ranks < 5 || ranks > 10) {
     throw new Error(`stage ${json.id}: ${files}x${ranks} outside 3-12 x 5-10`);
   }
-  // grid[rankFromBottom][file] — '*' wall, null floor (the fenGrid convention
-  // shared with director.mjs / armygen.mjs).
+  // grid[rankFromBottom][file] — '*' wall, '^' furniture, null floor (the
+  // fenGrid convention shared with director.mjs / armygen.mjs).
   const grid = Array.from({ length: ranks }, () => Array(files).fill(null));
-  const walls = [];
   json.map.forEach((row, i) => {
     if (row.length !== files) throw new Error(`stage ${json.id}: ragged map row ${i}`);
     const r = ranks - 1 - i;
     for (let f = 0; f < files; f++) {
       const ch = row[f];
-      if (ch === '#' || ch === '*') {
-        grid[r][f] = '*';
-        walls.push(`${String.fromCharCode(97 + f)}${r + 1}`);
+      if (ch === '#' || ch === WALL) {
+        grid[r][f] = WALL;
+      } else if (ch === FURNITURE) {
+        grid[r][f] = FURNITURE;
       } else if (ch !== '.') {
         throw new Error(`stage ${json.id}: bad map char "${ch}" at row ${i} file ${f}`);
       }
     }
   });
-  // Designer rule (2026-08): the promotion zone is ALWAYS the entire
-  // actual far rank of the playable area — a stage whose extreme rank is
-  // all wall would make promotion unreachable, so it is rejected at load
-  // (the manifest build fails, not the phone; cropStage guards crops the
-  // same way).
-  for (const edge of [0, ranks - 1]) {
-    if (!grid[edge].some((c) => c === null)) {
-      throw new Error(`stage ${json.id}: rank ${edge + 1} is all wall — the promotion row must be playable`);
-    }
-  }
   return {
     id: json.id,
     title: json.title ?? json.id,
@@ -59,7 +73,7 @@ export function loadStageV2(json) {
     files,
     ranks,
     grid,
-    walls,
+    ...terrainLists(grid, files, ranks),
     variantName: catalogVariantName(files, ranks),
   };
 }
@@ -73,13 +87,7 @@ export function loadStageV2(json) {
 export function flipStageVertical(stage) {
   const { files, ranks } = stage;
   const grid = Array.from({ length: ranks }, (_, r) => [...stage.grid[ranks - 1 - r]]);
-  const walls = [];
-  for (let r = 0; r < ranks; r++) {
-    for (let f = 0; f < files; f++) {
-      if (grid[r][f] === '*') walls.push(`${String.fromCharCode(97 + f)}${r + 1}`);
-    }
-  }
-  return { ...stage, id: `${stage.id}~flipped`, grid, walls };
+  return { ...stage, id: `${stage.id}~flipped`, grid, ...terrainLists(grid, files, ranks) };
 }
 
 /**
@@ -87,15 +95,16 @@ export function flipStageVertical(stage) {
  * edge and `bottom` ranks off the near edge. Designer rule (2026-08): to
  * every piece a boundary is a boundary — a rank of solid wall and the
  * board simply ending are identical — so cropping REMOVES the ranks
- * instead of walling them, and the promotion zone is then ALWAYS the
- * entire actual far rank for both sides (the catalog variant for the
- * smaller board already says so). This is how a duel trigger will draw
- * arena boundaries inside a dungeon, and it lets every stage test
- * smaller gaps than its full height supports.
+ * instead of walling them (terrain in a removed rank, furniture included,
+ * goes with it), and the cropped board rides the smaller catalog variant.
+ * This is both how the setup screen tests smaller gaps AND the mechanism
+ * of the king-anchored AUTO-CROP (ground rules 2026-08-26 — dealMatchup
+ * crops every row behind either king after molding).
  *
- * Throws on a crop that leaves fewer than 5 ranks (the catalog floor) or
- * whose new extreme rank is fully walled (an unreachable promotion row —
- * never legal; callers surface it as "doesn't fit").
+ * Throws on a crop that leaves fewer than 5 ranks (the catalog floor —
+ * gap 1; a duel can't start any closer). The old fully-walled-extreme-rank
+ * guard is retired: the auto-crop makes the promotion-row guarantee true
+ * by construction, so a crop no longer needs to police it.
  */
 export function cropStage(stage, top = 0, bottom = 0) {
   if (!top && !bottom) return stage;
@@ -105,23 +114,12 @@ export function cropStage(stage, top = 0, bottom = 0) {
     throw new Error(`crop ${top}t/${bottom}b leaves ${ranks} ranks (min 5)`);
   }
   const grid = Array.from({ length: ranks }, (_, r) => [...stage.grid[r + bottom]]);
-  for (const edge of [0, ranks - 1]) {
-    if (grid[edge].every((c) => c === '*')) {
-      throw new Error(`crop ${top}t/${bottom}b makes rank ${edge + 1} all wall — promotion row must be playable`);
-    }
-  }
-  const walls = [];
-  for (let r = 0; r < ranks; r++) {
-    for (let f = 0; f < files; f++) {
-      if (grid[r][f] === '*') walls.push(`${String.fromCharCode(97 + f)}${r + 1}`);
-    }
-  }
   return {
     ...stage,
     id: `${stage.id}~crop${top}t${bottom}b`,
     ranks,
     grid,
-    walls,
+    ...terrainLists(grid, files, ranks),
     variantName: catalogVariantName(files, ranks),
   };
 }

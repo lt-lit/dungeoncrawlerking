@@ -83,6 +83,12 @@ async function main() {
     return wallFen.split(' ')[0];
   });
 
+  await check('setSquare furniture', async () => {
+    const crateFen2 = setSquare(fens[0], 'e4', '^');
+    if (getSquare(crateFen2, 'e4') !== '^') throw new Error('setSquare/getSquare disagree on ^e4');
+    return crateFen2.split(' ')[0];
+  });
+
   // --- Full 60-variant catalog into BOTH libraries (rule 7: load once at
   // boot; ranks 5-10 since the slice refresh added the 3x5 minimum stage) ---
   const catalogIni = makeCatalogIni();
@@ -137,12 +143,11 @@ async function main() {
     if (stages.length !== manifest.count || stages.length < 33) {
       throw new Error(`expected ≥33 stages (count ${manifest.count}), loaded ${stages.length}`);
     }
-    for (const s of stages) {
-      if (!s.grid[0].some((c) => c === null) || !s.grid[s.ranks - 1].some((c) => c === null)) {
-        throw new Error(`${s.id}: an extreme rank is all wall — the promotion row must be playable`);
-      }
-    }
-    return `${stages.length} stages, all promotion rows playable`;
+    // (The extreme-rank promotion check is retired — ground rules
+    // 2026-08-26: the king-anchored auto-crop makes the promotion-row
+    // guarantee true by construction; see the dealMatchup check below.)
+    const furn = stages.reduce((n, s) => n + s.furniture.length, 0);
+    return `${stages.length} stages, ${furn} furniture squares`;
   });
 
   await check('flipStageVertical is an involution on every stage', () => {
@@ -153,37 +158,73 @@ async function main() {
       if (JSON.stringify([...back.walls].sort()) !== JSON.stringify([...s.walls].sort())) {
         throw new Error(`${s.id}: double flip changed the wall set`);
       }
+      if (JSON.stringify([...back.furniture].sort()) !== JSON.stringify([...s.furniture].sort())) {
+        throw new Error(`${s.id}: double flip changed the furniture set`);
+      }
     }
-    return `${stages.length} stages round-trip`;
+    return `${stages.length} stages round-trip (walls + furniture)`;
   });
 
+  // Synthetic fixtures from here down — deliberately NOT tied to stage ids,
+  // so the designer can accept/tweak/kill the live set without breaking
+  // infra checks (the set-level checks above cover the real files).
+  const kingsAnchorStage = loadStageV2({
+    schema: 2,
+    id: 'selftest-keep',
+    title: 'Selftest Keep',
+    notes: 'synthetic: fully-walled near row exercises the king-anchored auto-crop',
+    map: [
+      '..........',
+      '..#....^..',
+      '..........',
+      '....##....',
+      '..^.......',
+      '..........',
+      '.......#..',
+      '..........',
+      '..........',
+      '##########', // rank 1: all stone — legal since 2026-08-26, auto-crops away
+    ],
+  });
   const dealKnobs = {
     white: { spec: { width: 6, budget: 30 } },
     black: { spec: { width: 5, budget: 20 } },
     seed: 7,
   };
-  await check('dealMatchup is deterministic and self-checking', () => {
-    const s21 = stages.find((s) => s.id === 's21-collapsed-keep');
-    if (!s21) throw new Error('s21-collapsed-keep missing from the manifest');
-    const a = dealMatchup({ stage: s21, flip: true, cropTop: 1, cropBottom: 1, ...dealKnobs, turn: 'b', ffish });
+  await check('dealMatchup: deterministic, kings anchored, auto-crop fires', () => {
+    const a = dealMatchup({ stage: kingsAnchorStage, ...dealKnobs, turn: 'b', ffish });
     if (!a.ok) throw new Error(`deal failed: ${a.error}`);
-    const b = dealMatchup({ stage: s21, flip: true, cropTop: 1, cropBottom: 1, ...dealKnobs, turn: 'b', ffish });
+    const b = dealMatchup({ stage: kingsAnchorStage, ...dealKnobs, turn: 'b', ffish });
     if (a.fen !== b.fen || a.directorSeed !== b.directorSeed) throw new Error('same inputs dealt different duels');
-    if (!a.variantName.startsWith(`${catalogVariantName(10, 8)}__w`) || !a.variantIni) {
-      throw new Error(`crop 1t1b of 10x10 should ride a duel_10x8 DEAL variant, got ${a.variantName}`);
+    if (a.autoCrop.bottom < 1) throw new Error(`walled near row should auto-crop, got ${JSON.stringify(a.autoCrop)}`);
+    const wK = findSquares(a.fen, (c) => c === 'K')[0];
+    const bK = findSquares(a.fen, (c) => c === 'k')[0];
+    if (wK.rankFromBottom !== 0) throw new Error(`white king on rank ${wK.rankFromBottom + 1}, not the first row`);
+    if (bK.rankFromBottom !== a.ranks - 1) throw new Error(`black king on rank ${bK.rankFromBottom + 1}, not the far row`);
+    if (!a.variantName.startsWith(`${catalogVariantName(a.files, a.ranks)}__w`) || !a.variantIni) {
+      throw new Error(`deal variant does not match the cropped board: ${a.variantName} vs ${a.files}x${a.ranks}`);
     }
     if (a.fen.split(' ')[1] !== 'b') throw new Error('turn field lost — enemy-first deals must start black to move');
-    return `10x10→${a.files}x${a.ranks} flipped deal replays exactly (gap ${a.gap}, edge ${a.edge >= 0 ? '+' : ''}${a.edge})`;
+    // Flipped, the walled row faces the enemy — the crop moves to the top.
+    const f = dealMatchup({ stage: kingsAnchorStage, flip: true, ...dealKnobs, ffish });
+    if (!f.ok) throw new Error(`flipped deal failed: ${f.error}`);
+    if (f.autoCrop.top < 1) throw new Error(`flipped walled row should crop from the top, got ${JSON.stringify(f.autoCrop)}`);
+    return `10x10→${a.files}x${a.ranks} deal replays exactly, kings on the extreme rows both orientations (gap ${a.gap})`;
   });
 
   // The designer's double-step rule (spike 14, camp line): each side's
   // deal variant grants the leap at or behind its front-most dealt pawn
   // rank — past the line, never again. Quake-scooted pawns behind the
   // line keep it, which is the whole point of rows over dealt squares.
+  const flatsStage = loadStageV2({
+    schema: 2,
+    id: 'selftest-flats',
+    title: 'Selftest Flats',
+    notes: 'synthetic: open wide-shallow ground for the camp-line check',
+    map: ['..........', '..........', '..........', '..........', '..........', '..........'],
+  });
   await check('double-step follows the camp line on a dealt board', () => {
-    const s26 = stages.find((s) => s.id === 's26-flats');
-    if (!s26) throw new Error('s26-flats missing from the manifest');
-    const deal = dealMatchup({ stage: s26, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 18 } }, seed: 4, ffish });
+    const deal = dealMatchup({ stage: flatsStage, white: { spec: { width: 5, budget: 22 } }, black: { spec: { width: 5, budget: 18 } }, seed: 4, ffish });
     if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
     const whitePawns = deal.white.layout.cells.filter((c) => c.piece === 'P');
     const wLine = campLineRank(deal.white.layout.cells, 1); // mode pawn rank, ties toward the enemy
@@ -229,10 +270,26 @@ async function main() {
     return `${doubles.length} camp-line doubles at ply 0; crossing the line kills the leap; a scooted pawn on ${scootTo.name} still leaps`;
   });
 
+  const hallStage = loadStageV2({
+    schema: 2,
+    id: 'selftest-hall',
+    title: 'Selftest Hall',
+    notes: 'synthetic: 10x10 with scattered pillars for the molding check',
+    map: [
+      '..........',
+      '..........',
+      '...#......',
+      '..........',
+      '......#...',
+      '..#.......',
+      '..........',
+      '.......#..',
+      '..........',
+      '..........',
+    ],
+  });
   await check('molding invariants hold on a dealt board', () => {
-    const s11 = stages.find((s) => s.id === 's11-grand-hall');
-    if (!s11) throw new Error('s11-grand-hall missing from the manifest');
-    const deal = dealMatchup({ stage: s11, white: { spec: { width: 8, budget: 40 } }, black: { spec: { width: 8, budget: 40 } }, seed: 3, ffish });
+    const deal = dealMatchup({ stage: hallStage, white: { spec: { width: 8, budget: 40 } }, black: { spec: { width: 8, budget: 40 } }, seed: 3, ffish });
     if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
     for (const [layout, isWhite] of [[deal.white.layout, true], [deal.black.layout, false]]) {
       const rearward = (r) => (isWhite ? r : deal.ranks - 1 - r); // rows from the side's home edge
@@ -255,13 +312,12 @@ async function main() {
     return `royal-rearmost + per-file pawn screen hold for both 8x2 armies (gap ${deal.gap})`;
   });
 
-  // The designer's promotion rule: the promotion zone is ALWAYS the entire
-  // actual far rank of the playable area, both sides — cropping redraws the
-  // boundary (the rank is REMOVED, never walled off), so the smaller
-  // catalog variant's promotion region is the real far rank by construction.
+  // The designer's promotion rule (king-anchored since 2026-08-26): the
+  // promotion zone is the enemy king's starting row — always the real far
+  // rank, because cropping redraws the boundary (the rank is REMOVED,
+  // never walled off) and the auto-crop anchors the kings on the extremes.
   await check('cropping keeps promotion on the actual far rank', () => {
-    const s21 = stages.find((s) => s.id === 's21-collapsed-keep');
-    const cropped = cropStage(s21, 2, 1); // 10x10 → 10x7
+    const cropped = cropStage(hallStage, 2, 1); // 10x10 → 10x7
     if (cropped.ranks !== 7 || cropped.variantName !== catalogVariantName(10, 7)) {
       throw new Error(`crop 2t1b: expected 10x7 duel_10x7, got ${cropped.files}x${cropped.ranks} ${cropped.variantName}`);
     }
@@ -393,6 +449,34 @@ async function main() {
     return 'bestmove a1a6 — extinction (rule 4) intact with crates on board';
   });
 
+  // --- §4.6 furniture through the STAGE pipeline (Set Dressing) ---
+  const crateStage = loadStageV2({
+    schema: 2,
+    id: 'selftest-crates',
+    title: 'Selftest Crates',
+    notes: 'synthetic: furniture in midfield + deployment reach',
+    map: ['......', '..^...', '.^....', '......', '...^..', '..##..', '......'],
+  });
+  await check('furniture: a ^ stage deals — crates survive into the FEN', () => {
+    const deal = dealMatchup({ stage: crateStage, white: { spec: { width: 4, budget: 16 } }, black: { spec: { width: 4, budget: 12 } }, seed: 2, ffish });
+    if (!deal.ok) throw new Error(`deal failed: ${deal.error}`);
+    const crates = findSquares(deal.fen, (c) => c === '^');
+    const expected = deal.stage.furniture.length;
+    if (crates.length !== expected) {
+      throw new Error(`dealt FEN carries ${crates.length} crates, stage has ${expected} — an emitter dropped furniture`);
+    }
+    const onFurniture = [...deal.white.layout.cells, ...deal.black.layout.cells].filter((c) =>
+      deal.stage.furniture.includes(`${String.fromCharCode(97 + c.f)}${c.r + 1}`)
+    );
+    if (onFurniture.length) throw new Error(`molding placed pieces on furniture: ${JSON.stringify(onFurniture)}`);
+    const wK = findSquares(deal.fen, (c) => c === 'K')[0];
+    const bK = findSquares(deal.fen, (c) => c === 'k')[0];
+    if (wK.rankFromBottom !== 0 || bK.rankFromBottom !== deal.ranks - 1) {
+      throw new Error('kings not anchored on a furniture stage');
+    }
+    return `${crates.length} crates dealt onto ${deal.files}x${deal.ranks}, ffish lints clean, kings anchored`;
+  });
+
   // --- §4.5 crumble filter on a catalog variant ---
   await check('crumble filter accepts legal candidate', async () => {
     const v = validateCrumbleCandidate(ffish, duelVariant, startFen, 'b5');
@@ -501,9 +585,9 @@ async function main() {
           post: q.postFen,
           ends: q.endsGame,
         };
-  const runDirector = (seed, exercise) => {
+  const runDirector = (seed, exercise, startFen = dirFen) => {
     const d = new Director({ ...dirCfg, seed });
-    let fen = dirFen;
+    let fen = startFen;
     const out = [];
     const traces = [];
     for (let ply = 1; ply <= 14; ply++) {
@@ -541,6 +625,31 @@ async function main() {
       dirEvents = dirEvents.concat(plain.out);
     }
     return `2 seeds × 14 plies replay exactly (${dirTraces.length} traces)`;
+  });
+
+  // Furniture is stone to the gods (§4.6 interim rule, Set Dressing): the
+  // same fixture with the wall swapped for a crate must (a) replay
+  // identically with the overlay exercised, and (b) never displace, land
+  // on, or crumble the crate — terrain in every enumeration.
+  const dirFenCrate = dirFen.replace('2*2', '2^2'); // the c4 wall becomes a crate
+  await check('seeded ^ quake sequence: identical replay, crate untouched', () => {
+    if (ffish.validateFen(dirFenCrate, dirVariant) !== 1) throw new Error('crate director fixture FEN rejected');
+    for (const seed of [3, 7]) {
+      const plain = runDirector(seed, false, dirFenCrate);
+      const hammered = runDirector(seed, true, dirFenCrate);
+      if (JSON.stringify(plain.out) !== JSON.stringify(hammered.out)) {
+        throw new Error(`seed ${seed}: overlay perturbed the ^ quake sequence`);
+      }
+      for (const ev of plain.out) {
+        if (ev === null) continue;
+        for (const move of ev.d) if (move.includes('c4')) throw new Error(`gods touched the crate square: ${move}`);
+        if (ev.c && ev.c.startsWith('c4:')) throw new Error(`gods crumbled the crate: ${ev.c}`);
+        if (findSquares(ev.post, (c) => c === '^').length !== 1) {
+          throw new Error(`crate count changed: ${ev.post}`);
+        }
+      }
+    }
+    return '2 seeds × 14 plies replay exactly; the crate on c4 is stone to the gods';
   });
 
   await check('roll trace records every ply with consistent reason codes', () => {
