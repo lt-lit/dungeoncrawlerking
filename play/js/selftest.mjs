@@ -320,6 +320,79 @@ async function main() {
     return `bestmove ${res.bestmove}, score ${score ? `${score.type} ${score.value}` : 'n/a'}`;
   });
 
+  // --- §4.6 furniture (^) on the patched pair, in-browser ---
+  // Counts pinned by the Forge gate (engine/README.md): [10,88,1024] and the
+  // promotion-capture fixture's [24 legal, d1 hand-verified]. These run on a
+  // CATALOG variant (full duel baseline), not a test-only config.
+  const crateVariant = catalogVariantName(6, 6);
+  const crateFen = '2r2k/6/2^3/6/6/2R2K w - - 0 1';
+  const promoFen = 'r^1^1k/2P3/6/6/6/R4K w - - 0 1';
+
+  await check('furniture: ^ accepted + round-trips (ffish + fen.mjs)', async () => {
+    if (ffish.validateFen(crateFen, crateVariant) !== 1) throw new Error('validateFen rejected ^');
+    const b = new ffish.Board(crateVariant, crateFen);
+    const rt = b.fen();
+    b.delete();
+    if (rt !== crateFen) throw new Error(`ffish round-trip: ${rt}`);
+    const f = splitFen(crateFen);
+    const js = serializeBoard(parseBoard(f.board));
+    if (js !== f.board) throw new Error(`fen.mjs round-trip: ${js}`);
+    return crateFen.split(' ')[0];
+  });
+
+  await check('furniture: ffish vs engine perft 1-3 on a ^ board', async () => {
+    const jsPerft = (fen, d) => {
+      const rec = (b, dd) => {
+        if (!dd) return 1;
+        let n = 0;
+        for (const m of b.legalMoves().trim().split(/\s+/).filter(Boolean)) {
+          b.push(m);
+          n += rec(b, dd - 1);
+          b.pop();
+        }
+        return n;
+      };
+      const b = new ffish.Board(crateVariant, fen);
+      const n = rec(b, d);
+      b.delete();
+      return n;
+    };
+    const fp = [1, 2, 3].map((d) => jsPerft(crateFen, d));
+    engine.setoption('UCI_Variant', crateVariant);
+    const ep = [];
+    for (const d of [1, 2, 3]) {
+      engine.position({ fen: crateFen });
+      const ls = await engine.sendUntil(`go perft ${d}`, (l) => l.startsWith('Nodes searched'));
+      ep.push(parseInt(ls[ls.length - 1].split(':')[1], 10));
+    }
+    if (JSON.stringify(fp) !== JSON.stringify(ep)) throw new Error(`MISMATCH: ffish ${fp} vs engine ${ep}`);
+    if (JSON.stringify(fp) !== JSON.stringify([10, 88, 1024])) throw new Error(`expected [10,88,1024], got ${fp}`);
+    return `[${fp.join(',')}] on both sides`;
+  });
+
+  await check('furniture: promotion-capture of a crate pushes and pops exactly', async () => {
+    const b = new ffish.Board(crateVariant, promoFen);
+    const moves = b.legalMoves().trim().split(/\s+/).filter(Boolean);
+    const fail = (msg) => { b.delete(); throw new Error(msg); };
+    if (moves.length !== 24) fail(`expected 24 legal moves, got ${moves.length}`);
+    if (!moves.includes('c5b6q')) fail('missing c5b6q');
+    b.push('c5b6q');
+    const after = b.fen();
+    b.pop();
+    const restored = b.fen();
+    b.delete();
+    if (!after.startsWith('rQ1^1k/')) throw new Error(`push: ${after}`);
+    if (restored !== promoFen) throw new Error(`pop did not restore the crate: ${restored}`);
+    return 'c5b6q promotes; pop restores the crate (the reference-diff undo-bug class)';
+  });
+
+  await check('furniture: engine plays the ^ board (finds the strip mate)', async () => {
+    engine.position({ variant: crateVariant, fen: promoFen });
+    const res = await engine.go('depth 8 movetime 4000');
+    if (res.bestmove !== 'a1a6') throw new Error(`expected the bare-army strip a1a6, got ${res.bestmove}`);
+    return 'bestmove a1a6 — extinction (rule 4) intact with crates on board';
+  });
+
   // --- §4.5 crumble filter on a catalog variant ---
   await check('crumble filter accepts legal candidate', async () => {
     const v = validateCrumbleCandidate(ffish, duelVariant, startFen, 'b5');

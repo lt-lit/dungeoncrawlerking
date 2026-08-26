@@ -19,6 +19,9 @@ extinctionPieceCount = 1
 extinctionPseudoRoyal = false
 promotionRegionWhite = *6
 promotionRegionBlack = *1
+
+[crate6x6mc:crate6x6]
+mustCapture = true
 `);
   // Both sides K+R (neither bare, rule 4b). Crate on c4. Both rooks bear on it.
   const fen='2r2k/6/2^3/6/6/2R2K w - - 0 1';
@@ -43,6 +46,32 @@ promotionRegionBlack = *1
   ok('pawn CAPTURES crate diagonally (c2b3)', pm.includes('c2b3'), pm.join(',')||'(none)');
   ok('pawn CANNOT push onto crate ahead (no c2c3)', !pm.includes('c2c3'));
   ok('wall + crate coexist', new ffish.Board('crate6x6','2k2r/6/2*3/2^3/6/2K2R w - - 0 1').fen()==='2k2r/6/2*3/2^3/6/2K2R w - - 0 1');
+
+  // SAN choice on record: crate captures are written as captures.
+  const sb=new ffish.Board('crate6x6',fen);
+  ok("crate capture SAN is 'Rxc4'", sb.sanMove('c1c4')==='Rxc4', sb.sanMove('c1c4'));
+
+  // Promotion-capture of a crate (brief 4.6: legal, intended) + push/pop round-trip.
+  // This position class is the one the reference diff's undo bug corrupts
+  // (native counts, hand-verified d1: perft 1-3 = 24, 177, 3345).
+  const PROMO='r^1^1k/2P3/6/6/6/R4K w - - 0 1';
+  const pr=new ffish.Board('crate6x6',PROMO);
+  const prm=pr.legalMoves().split(' ').filter(Boolean);
+  ok('promo fixture has 24 legal moves', prm.length===24, String(prm.length));
+  ok('pawn promotes by capturing crate (c5b6q, c5d6n)', prm.includes('c5b6q')&&prm.includes('c5d6n'));
+  pr.push('c5b6q');
+  ok('crate replaced by promoted queen', pr.fen().startsWith('rQ1^1k/'), pr.fen());
+  pr.pop();
+  ok('pop restores the crate exactly (undo path)', pr.fen()===PROMO, pr.fen());
+
+  // Designer ruling 2026-08-25: terrain is not a victim. mustCapture neither
+  // forces a crate capture nor is satisfied by one.
+  const mc1=new ffish.Board('crate6x6mc','2r2k/6/2^3/6/6/2R2K w - - 0 1');
+  const mc1m=mc1.legalMoves().split(' ').filter(Boolean);
+  ok('mustCapture: lone crate capture forces nothing (10 moves)', mc1m.length===10, String(mc1m.length));
+  const mc2=new ffish.Board('crate6x6mc','2r2k/6/2^3/6/4r1/2R2K w - - 0 1');
+  const mc2m=mc2.legalMoves().split(' ').filter(Boolean);
+  ok('mustCapture: real capture forced, crate capture illegal', mc2m.length===1&&mc2m[0]==='f1e2', mc2m.join(','));
   let cat=0; for(let f=3;f<=12;f++) for(let r=5;r<=10;r++){ffish.loadVariantConfig(`[duel_${f}x${r}:chess]\nmaxRank = ${r}\nmaxFile = ${f}\ncastling = false\n`);cat++;}
   ok('all 60 catalog variants register', cat===60);
   console.log(`\nffish: ${pass} passed, ${fail} failed`);
