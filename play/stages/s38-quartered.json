@@ -1,0 +1,18 @@
+{
+ "schema": 2,
+ "id": "s38-quartered",
+ "title": "Quartered",
+ "notes": "A cross of walls cuts the board into four rooms. Two passages are open holes, two are weak points — the generator's room-graph made literal.",
+ "map": [
+  ".........",
+  "....#....",
+  "....^....",
+  "....#....",
+  "##.###^##",
+  "....#....",
+  ".........",
+  "....#....",
+  "........."
+ ],
+ "wave": 5
+}

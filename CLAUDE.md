@@ -103,9 +103,12 @@ candidate, silent in every census, NO new reason codes — the rework
 owns the real policy), a sprite (neutral piece-like glyph + cell tint,
 so capture dissolve works unchanged), the stage-map `^` character, the
 king-anchored auto-crop (see the ground rules above), and the
-REPLACEMENT stage set (~33 fresh stages authored WITH furniture — the
-designer retired the original 33 on 2026-08-26; gallery-reviewed,
-accept/tweak/kill) — exit is crates in live phone duels.
+REPLACEMENT stage set — the designer retired the original 33 on
+2026-08-26; wave 4 (s01–s33, the furniture bed) is ACCEPTED/locked
+2026-08-26, wave 5 (s34–s50, rooms & breaches: sectioned maps, crate
+clusters, furniture integrated into wall structures, breakable double
+doors) is PROPOSED, gallery-reviewed accept/tweak/kill — exit is
+crates in live phone duels.
 After both land, **PHASE 1.2.5** resumes; its
 remaining half is the LAB RIG — all automated-playtest plumbing, no duel
 rules change: (a) the **corpus materializer** (33 stages × both

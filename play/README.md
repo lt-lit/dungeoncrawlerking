@@ -115,9 +115,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `phase0/harness/verify-stages.mjs`, and the meter-lab corpus builder —
   never re-assemble the pipeline by hand (the crumbleFilter split is the
   cautionary tale).
-- `stages/*.json` — the stage set (wave 4: the furniture bed — 33
-  proposed replacements for the retired waves 1–3, authored with §4.6
-  capturable walls from the start); `stages/manifest.json` is the
+- `stages/*.json` — the stage set, authored with §4.6 capturable walls
+  from the start (wave 4, s01–s33: the furniture bed — locked, all 33
+  accepted 2026-08-26, replacing the retired waves 1–3; wave 5,
+  s34–s50: rooms & breaches — sectioned maps, crate clusters,
+  furniture in wall structures, breakable double doors — proposed);
+  `stages/manifest.json` is the
   generated browser bundle (regenerate with
   `phase0/harness/gen-stage-manifest.mjs` after any stage edit —
   `verify-stages.mjs` fails on a stale bundle). Designer review gallery:

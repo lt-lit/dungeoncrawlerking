@@ -1,0 +1,18 @@
+{
+ "schema": 2,
+ "id": "s43-the-breach",
+ "title": "The Breach",
+ "notes": "A castle wall two ranks THICK, its only passage a rubble-choked breach column — smash twice to get through. The verifier-flagged deep smash-in.",
+ "map": [
+  "........",
+  "........",
+  "........",
+  "####^###",
+  "####^###",
+  "........",
+  "........",
+  "........",
+  "........"
+ ],
+ "wave": 5
+}

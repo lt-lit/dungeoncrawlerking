@@ -1,0 +1,16 @@
+{
+ "schema": 2,
+ "id": "s48-barricaded-bridge",
+ "title": "Barricaded Bridge",
+ "notes": "Stone flanks force everything over a center bridge, and the bridge is half-blocked by a two-crate barricade. One open file under fire, or clear the barricade.",
+ "map": [
+  ".......",
+  ".......",
+  ".......",
+  "##^^.##",
+  ".......",
+  ".......",
+  "......."
+ ],
+ "wave": 5
+}

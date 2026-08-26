@@ -1,6 +1,6 @@
 {
  "schema": 2,
- "count": 33,
+ "count": 50,
  "stages": [
   {
    "schema": 2,
@@ -562,6 +562,303 @@
     "....."
    ],
    "wave": 4
+  },
+  {
+   "schema": 2,
+   "id": "s34-double-doors",
+   "title": "Double Doors",
+   "notes": "The requested archetype, plain: one full wall, one ^^ double door, no other way through. Furniture alone joins the halves — the verifier flags it; you smash in.",
+   "map": [
+    "........",
+    "........",
+    "........",
+    "........",
+    "###^^###",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s35-the-antechamber",
+   "title": "The Antechamber",
+   "notes": "Two partitions in sequence: an open door into the antechamber, then a ^^ double door into the far hall. Room-corridor-room the way a generator would draw it.",
+   "map": [
+    ".......",
+    ".......",
+    ".......",
+    "###^^##",
+    ".......",
+    ".......",
+    "##.####",
+    ".......",
+    ".......",
+    "......."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s36-crate-hoard",
+   "title": "Crate Hoard",
+   "notes": "A holed corner room with the hoard inside: three clustered crates behind a stone wall whose only entrance is a 1-square gap. The defender can mold in with the loot.",
+   "map": [
+    ".^^.#...",
+    "..^.....",
+    "....#...",
+    "#####...",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s37-twin-vaults",
+   "title": "Twin Vaults",
+   "notes": "A full-height spine splits the field into two vaults — one open hole, one weak point — with a crate cluster stored in each half. Two sub-battles, three ways to merge them.",
+   "map": [
+    "..........",
+    ".....#....",
+    ".^^..#....",
+    "..........",
+    ".....^.^^.",
+    ".....#....",
+    ".....#....",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s38-quartered",
+   "title": "Quartered",
+   "notes": "A cross of walls cuts the board into four rooms. Two passages are open holes, two are weak points — the generator's room-graph made literal.",
+   "map": [
+    ".........",
+    "....#....",
+    "....^....",
+    "....#....",
+    "##.###^##",
+    "....#....",
+    ".........",
+    "....#....",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s39-the-vestibule",
+   "title": "The Vestibule",
+   "notes": "A sealed central chamber with ^^ double doors facing BOTH armies. Take the flanks around it, or smash into the middle and hold the room.",
+   "map": [
+    "........",
+    "........",
+    "........",
+    "..#^^#..",
+    ".#....#.",
+    ".#....#.",
+    "..#^^#..",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s40-broken-cloister",
+   "title": "Broken Cloister",
+   "notes": "A solid garden block with clutter heaped at its four bends — the ring corridor narrows to single files exactly where the crates sit.",
+   "map": [
+    ".........",
+    ".........",
+    "..^...^..",
+    "...###...",
+    "...###...",
+    "...###...",
+    "..^...^..",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s41-supply-line",
+   "title": "Supply Line",
+   "notes": "A full wall with one ^^ double door, and supply crates stacked AGAINST the wall on both sides. Furniture integrated into the wall structure; the door is the only way through.",
+   "map": [
+    "..........",
+    "..........",
+    "..^^......",
+    "####^^####",
+    "......^^..",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s42-guardroom",
+   "title": "Guardroom",
+   "notes": "Three rooms in a row. One door is open, one is weak — and the weak one has a crate shoved behind it as a barricade. Wide-shallow room-graph with clean deployment rows.",
+   "map": [
+    "..........",
+    "..........",
+    "...#..#...",
+    "...#......",
+    "...^^.#...",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s43-the-breach",
+   "title": "The Breach",
+   "notes": "A castle wall two ranks THICK, its only passage a rubble-choked breach column — smash twice to get through. The verifier-flagged deep smash-in.",
+   "map": [
+    "........",
+    "........",
+    "........",
+    "####^###",
+    "####^###",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s44-double-gatehouse",
+   "title": "Double Gatehouse",
+   "notes": "One wall, TWO ^^ double doors at the thirds, nothing open. Pick a gate — or price both and let the engine tell you which.",
+   "map": [
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "##^^##^^##",
+    "..........",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s45-collapsed-arch",
+   "title": "Collapsed Arch",
+   "notes": "A wall whose arch came down: a 3-wide rubble cluster IN the wall itself, plus one intact slip at the edge. Clear the rubble for the broad front or file through the slip.",
+   "map": [
+    ".......",
+    ".......",
+    ".......",
+    "#.^^^##",
+    ".......",
+    ".......",
+    ".......",
+    "......."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s46-cellar-steps",
+   "title": "Cellar Steps",
+   "notes": "A tiny sealed cellar in the near corner — stone on two sides, a weak ceiling slab, a crate on the stairs. Molding can put your own pieces inside; someone has to dig them out.",
+   "map": [
+    "......",
+    "......",
+    "......",
+    "......",
+    "......",
+    "#^....",
+    "^.#...",
+    "..#..."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s47-the-warrens",
+   "title": "The Warrens",
+   "notes": "Two full walls and an offset middle divider; every passage is a weak point and they do not line up. The winding two-smash route — verifier-flagged.",
+   "map": [
+    ".........",
+    ".........",
+    ".........",
+    "###^#####",
+    ".........",
+    "....#....",
+    "#####^###",
+    ".........",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s48-barricaded-bridge",
+   "title": "Barricaded Bridge",
+   "notes": "Stone flanks force everything over a center bridge, and the bridge is half-blocked by a two-crate barricade. One open file under fire, or clear the barricade.",
+   "map": [
+    ".......",
+    ".......",
+    ".......",
+    "##^^.##",
+    ".......",
+    ".......",
+    "......."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s49-crate-quarry",
+   "title": "Crate Quarry",
+   "notes": "Clusters only, no stone: a 2x2 block, a 1x3 run, a 2x1 pair. The pure-cluster control — its stone-only arm is an empty field.",
+   "map": [
+    ".........",
+    ".....^^^.",
+    ".^^......",
+    ".^^......",
+    "....^^...",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s50-last-stand",
+   "title": "Last Stand",
+   "notes": "The redoubt evolved: a far-side pocket with a ^^ double door AND a crate shoring it from inside — three smashes through the center, or come around the flank files.",
+   "map": [
+    ".#....#.",
+    ".#.^..#.",
+    "..#^^#..",
+    "........",
+    "........",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
   }
  ]
 }

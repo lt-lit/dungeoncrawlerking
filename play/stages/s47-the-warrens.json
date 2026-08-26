@@ -1,0 +1,19 @@
+{
+ "schema": 2,
+ "id": "s47-the-warrens",
+ "title": "The Warrens",
+ "notes": "Two full walls and an offset middle divider; every passage is a weak point and they do not line up. The winding two-smash route — verifier-flagged.",
+ "map": [
+  ".........",
+  ".........",
+  ".........",
+  "###^#####",
+  ".........",
+  "....#....",
+  "#####^###",
+  ".........",
+  ".........",
+  "........."
+ ],
+ "wave": 5
+}

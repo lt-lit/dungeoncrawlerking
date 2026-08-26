@@ -1,0 +1,18 @@
+{
+ "schema": 2,
+ "id": "s40-broken-cloister",
+ "title": "Broken Cloister",
+ "notes": "A solid garden block with clutter heaped at its four bends — the ring corridor narrows to single files exactly where the crates sit.",
+ "map": [
+  ".........",
+  ".........",
+  "..^...^..",
+  "...###...",
+  "...###...",
+  "...###...",
+  "..^...^..",
+  ".........",
+  "........."
+ ],
+ "wave": 5
+}
