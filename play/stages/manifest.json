@@ -1,560 +1,1014 @@
 {
  "schema": 2,
- "count": 33,
+ "count": 58,
  "stages": [
   {
    "schema": 2,
-   "id": "s01-the-closet",
-   "title": "The Closet",
-   "notes": "Minimum board (3x5), open. Two armies one rank apart — the knife-fight lower bound. Tests: does a duel this cramped even read as chess?",
+   "id": "s01-bare-cell",
+   "title": "Bare Cell",
+   "notes": "The minimum board, zero terrain — the pure-duel control and the smallest arena the trigger can draw. Deliberately untouched by furniture.",
    "map": [
     "...",
     "...",
     "...",
     "...",
     "..."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s02-cracked-hall",
-   "title": "Cracked Hall",
-   "notes": "Narrow hall, sparse rubble offset left-then-right. Lightest possible terrain interference.",
+   "id": "s02-cluttered-closet",
+   "title": "Cluttered Closet",
+   "notes": "Smallest crate fight: two pieces of furniture on otherwise open minimum-width ground. Every capture-the-clutter line is worth a tempo question even at 3 files.",
+   "map": [
+    "...",
+    "...",
+    ".^.",
+    "^..",
+    "...",
+    "..."
+   ],
+   "wave": 4
+  },
+  {
+   "schema": 2,
+   "id": "s03-the-pantry",
+   "title": "The Pantry",
+   "notes": "Small mixed ground: one stone pillar among shelves of clutter, packed toward midfield so both armies still deploy. First taste of stone-vs-furniture reading at a glance.",
    "map": [
     "....",
     "....",
-    ".#..",
-    "....",
-    "..#.",
-    "....",
+    ".#^.",
+    ".^..",
+    "..^.",
     "...."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s03-the-squeeze",
-   "title": "The Squeeze",
-   "notes": "Off-center waist: the left side collapses to a 2-wide pass. Armies must fight through or around one choke. Asymmetric on purpose.",
+   "id": "s04-barrel-row",
+   "title": "Barrel Row",
+   "notes": "A broken furniture line across midfield, no stone at all. The stone-only control arm of this stage is an open field — the crates ARE the terrain.",
    "map": [
     ".....",
     ".....",
     ".....",
+    "^^.^^",
     ".....",
-    "###..",
-    "##...",
     ".....",
     "....."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s04-pillared-court",
-   "title": "Pillared Court",
-   "notes": "Two lone pillars, diagonal offset. Classic cover: cuts long files/diagonals without shaping rooms.",
+   "id": "s05-the-squeeze",
+   "title": "The Squeeze",
+   "notes": "Stone waist leaving a 2-wide pass, with one crate narrowing it further — pay a capture to widen the pass, or file through under fire.",
+   "map": [
+    ".....",
+    ".....",
+    "##...",
+    "##^..",
+    ".....",
+    ".....",
+    ".....",
+    "....."
+   ],
+   "wave": 4
+  },
+  {
+   "schema": 2,
+   "id": "s06-crate-court",
+   "title": "Crate Court",
+   "notes": "Pillared court with loose clutter: two stone pillars, four crates. Baseline mixed-density middle-size arena.",
    "map": [
     "......",
     "......",
-    "..#...",
-    "......",
-    "....#.",
-    "......",
+    "..#..^",
+    ".^....",
+    "....^.",
+    "^..#..",
     "......",
     "......"
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s05-collapsed-gallery",
-   "title": "Collapsed Gallery",
-   "notes": "Rubble clump on the left flank mid-board; right flank fully open. Flank-choice terrain.",
-   "map": [
-    ".......",
-    ".......",
-    ".......",
-    ".......",
-    "..#....",
-    ".###...",
-    ".##....",
-    ".......",
-    "......."
-   ]
-  },
-  {
-   "schema": 2,
-   "id": "s06-the-doorway",
+   "id": "s07-the-doorway",
    "title": "The Doorway",
-   "notes": "A wall line with one 2-wide door, off-center. The purest chokepoint: all traffic funnels through files d-e.",
+   "notes": "A full wall with a 2-wide door — one leaf open, one leaf furniture. Smash the door for the wide file or funnel through the open half.",
    "map": [
     "......",
     "......",
     "......",
-    "###..#",
+    "##.^##",
     "......",
     "......",
     "......",
     "......",
     "......"
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s07-twin-chambers",
-   "title": "Twin Chambers",
-   "notes": "Partial spine splits the board into two rooms connected top and bottom. Two-theater duels; rook files die at the spine.",
+   "id": "s08-storeroom",
+   "title": "Storeroom",
+   "notes": "One-sided clutter: five crates crowd one deployment approach, the other is clean. Asymmetric by design — the flip convention tests it facing each side.",
    "map": [
-    "........",
-    "........",
-    "...##...",
-    "...#....",
-    "...#....",
-    "...##...",
-    "........",
-    "........"
-   ]
+    "......",
+    "......",
+    ".^^...",
+    ".^....",
+    "..^^..",
+    "......",
+    "......"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s08-the-shelf",
-   "title": "The Shelf",
-   "notes": "Corner bite INTO the north deployment zone — the molding showcase: black cannot deploy wide-left and must squish right. Tests deployment on broken ground.",
-   "map": [
-    "##.......",
-    "##.......",
-    "#........",
-    ".........",
-    ".........",
-    ".........",
-    "........."
-   ]
-  },
-  {
-   "schema": 2,
-   "id": "s09-long-nave",
-   "title": "Long Nave",
-   "notes": "Long and narrow (4x10) with staggered pillars. Deep approach marches; promotion runs matter.",
+   "id": "s09-long-gallery",
+   "title": "Long Gallery",
+   "notes": "Narrow-tall pure-stone gallery, staggered pillars. The stone-only reference point among the tall boards — no furniture on purpose.",
    "map": [
     "....",
+    "..#.",
     "....",
     "....",
     ".#..",
-    "....",
     "....",
     "..#.",
     "....",
     "....",
     "...."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s10-broken-crossing",
-   "title": "Broken Crossing",
-   "notes": "Two broken wall arms leave three routes of different widths. Route-choice terrain at mid scale.",
+   "id": "s10-broken-barricade",
+   "title": "Broken Barricade",
+   "notes": "A furniture barricade spanning the field between stone end-stubs, one open gap. Fight for the gap or smash a second one — the engine prices both.",
    "map": [
     "........",
     "........",
-    "...#....",
-    ".###....",
     "........",
-    "....###.",
-    "....#...",
+    "........",
+    "#^^.^^^#",
+    "........",
+    "........",
     "........",
     "........",
     "........"
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
    "id": "s11-grand-hall",
    "title": "Grand Hall",
-   "notes": "The 10x10 upper bound: mostly open, three scattered pillars, a two-cell alcove on the east wall. Tests wide-board play, search cost, and phone rendering.",
+   "notes": "The big open hall: three stone pillars, five scattered furnishings. Light terrain at maximum size — long diagonals still live here.",
    "map": [
     "..........",
     "..........",
-    "..#.......",
-    "......#...",
+    "...#...^..",
     "..........",
-    ".........#",
-    ".........#",
-    "...#......",
+    ".^...#....",
+    "......^...",
+    "..^.......",
+    "....#...^.",
     "..........",
     ".........."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "id": "s12-rat-warren",
-   "title": "Rat Warren",
-   "notes": "Dense pockets (13 walls): parallel 1-2 wide runs and dead ends. The wall-density stress case — quake starvation, locked pawns, fall-through.",
+   "id": "s12-rat-nest",
+   "title": "Rat Nest",
+   "notes": "Density stress: dense mixed pockets of stone and clutter, including one crate in each deployment approach. The generator must still deal every army width here.",
    "map": [
     "..........",
-    "..........",
-    "......#.##",
-    ".##...#...",
-    "....#.....",
-    ".#..#..##.",
-    ".#..#.....",
+    "....^.....",
+    ".##....^^.",
+    "...^#.....",
+    ".^....##..",
+    "..#..^....",
+    ".....^....",
     ".........."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s13-gatehouse",
    "title": "Gatehouse",
-   "notes": "Wave 2. Wall stubs inside BOTH back ranks: black loses its corners, white loses its left pair. Each army molds around its own gate before the fight starts.",
+   "notes": "Stone stubs in BOTH back ranks with a furniture gate-leaf beside each. Crates on the king rows are capture-promotion squares (§4.6) — march a pawn and smash in.",
    "map": [
-    "#....#",
-    "......",
-    "..#...",
+    "##^...",
     "......",
     "......",
-    "...#..",
     "......",
-    "##...."
-   ]
+    "......",
+    "......",
+    "......",
+    "...^##"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
-   "id": "s14-buried-flank",
-   "title": "Buried Flank",
-   "notes": "Wave 2. Opposite flanks of the two back ranks are rubbled over (3 cells each, plus spill into the second rank). Armies deploy shifted toward opposite sides — built-in diagonal confrontation.",
+   "id": "s14-weak-wall",
+   "title": "Weak Wall",
+   "notes": "A full-width stone wall whose only ways through are two furniture breaches. Furniture alone separates the armies — legal (§4.6), the verifier flags it: you MUST smash in.",
    "map": [
-    ".....###",
-    "......#.",
-    "........",
-    "...#....",
     "........",
     "........",
-    "#.......",
-    "###....."
-   ]
+    "........",
+    "##^###^#",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s15-colonnade",
    "title": "Colonnade",
-   "notes": "Wave 2. Pillar pairs INSIDE both pawn ranks (2 and 8) plus midfield columns. Pawn screens must form around the pillars — the pawn-row molding case.",
+   "notes": "Pillar pairs with furniture stacked between them — the colonnade reads solid until somebody starts clearing the shelving.",
    "map": [
     ".......",
-    ".#...#.",
-    ".......",
-    "...#...",
-    ".......",
-    "..#..#.",
     ".......",
     ".#...#.",
+    "..^.^..",
+    ".......",
+    "..^.^..",
+    ".#...#.",
+    ".......",
     "......."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s16-cave-mouth",
    "title": "Cave Mouth",
-   "notes": "Wave 2. White back rank is walled except a 2-cell mouth (b1-c1): the whole army molds forward through it, royal wedged in the mouth. Black side open — maximum deployment asymmetry.",
+   "notes": "The near back rank is rock except a 1-square mouth and a weak-masonry plug. The king molds into the mouth; the enemy can capture-promote onto the plug.",
    "map": [
     ".....",
     ".....",
-    "....#",
     ".....",
     ".....",
     ".....",
-    "#..##"
-   ]
+    ".....",
+    "##.^#"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
-   "id": "s17-rubble-start",
-   "title": "Rubble Start",
-   "notes": "Wave 2. The inverse of wave 1: rubble concentrated in ranks 1-2 and 7-8, midfield CLEAR. All the terrain pain is at deployment, none in the fight.",
+   "id": "s17-rubble-yard",
+   "title": "Rubble Yard",
+   "notes": "Mixed stone-and-crate rubble strictly in midfield, deployment rows clean. The workhorse mixed-density case for the corpus.",
    "map": [
-    ".#....#..",
-    "...#.....",
     ".........",
     ".........",
+    "...#^....",
+    ".^....#..",
+    "....^.#..",
+    "..#.^....",
     ".........",
-    ".........",
-    "..#....#.",
-    "....#...."
-   ]
+    "........."
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
-   "id": "s18-split-pockets",
-   "title": "Split Pockets",
-   "notes": "Wave 2. Wall spurs divide both back ranks into two pockets. A wide army must mold into two clumps around its spur — the split-deployment case.",
+   "id": "s18-split-cellars",
+   "title": "Split Cellars",
+   "notes": "Stone spurs split both deployment areas into cellar pockets; crates sit where a door would be. Molding pours armies around the spurs.",
    "map": [
-    "...##.....",
     "..........",
+    "...#......",
+    ".^.#....^.",
+    "..........",
+    "..........",
+    ".^....#.^.",
     "......#...",
-    "..........",
-    "..........",
-    "..#.......",
-    "....#.....",
-    "....##...."
-   ]
+    ".........."
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s19-diagonal-scar",
    "title": "Diagonal Scar",
-   "notes": "Wave 2. A broken diagonal streak from a1 to h9 touching both deployment zones. Neither side deploys clean; the scar leaves slip-gaps for king-steps and diagonal sliders.",
+   "notes": "A broken diagonal alternating stone and furniture. The scar can be partially reopened — every second segment is smashable.",
    "map": [
-    "......##",
-    ".....#..",
     "........",
-    "...#....",
+    "......#.",
+    ".....^..",
     "....#...",
+    "...^....",
     "..#.....",
-    "........",
-    ".#......",
-    "#......."
-   ]
+    ".^......",
+    "#.......",
+    "........"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s20-the-anvil",
    "title": "The Anvil",
-   "notes": "Wave 2. Narrow board; white SECOND rank has a center wall pair (the pawn screen must split around it), black back corners clipped. Pawn-rank molding under compression.",
+   "notes": "Mirrored materials: stone pair on one side's second rank, crate pair on the other's. Same shape, different permanence — the cleanest A/B of wall vs furniture in deployment.",
    "map": [
-    "#..#",
+    "....",
+    ".^^.",
     "....",
     "....",
-    "..#.",
     "....",
     "....",
     "....",
     ".##.",
     "...."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s21-collapsed-keep",
    "title": "Collapsed Keep",
-   "notes": "Wave 2. The big broken-ground case at 10x10: rubble in both first AND second ranks plus midfield rooms. Everything molds, everywhere, at the size ceiling.",
+   "notes": "Big-board stress: rubble in both deployment zones, room walls midfield, loose crates in the wreckage. The 10x10 everything-at-once case.",
    "map": [
-    "..##......",
-    "....#.....",
     "..........",
-    "......##..",
-    ".##.......",
-    ".......#..",
+    ".#...^...#",
+    "..#.....^.",
     "..........",
     "...##.....",
-    ".........#",
-    "###......."
-   ]
+    ".....##...",
+    ".^......#.",
+    "..........",
+    "#...^...#.",
+    ".........."
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 2,
    "id": "s22-sinkhole",
    "title": "Sinkhole",
-   "notes": "Wave 2. A 2x2 central sink plus one wall in each back rank. The minimal broken-deployment stage — one obstruction per army, one hazard mid-board.",
+   "notes": "A 2x2 stone sink with furniture heaped on its flanks — the hole is forever, the heap is not.",
    "map": [
-    "...#..",
+    "......",
     "......",
     "..##..",
-    "..##..",
+    ".^##^.",
     "......",
     "......",
-    ".#...."
-   ]
+    "......"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s23-the-neck",
    "title": "The Neck",
-   "notes": "Wave 3. Room-corridor-room: two open chambers joined by a weaving 2-wide neck (ranks 4-6). The duel starts in separate rooms — covers the topology no locked stage has.",
+   "notes": "Room-corridor-room with offset throats sharing one furniture column. The only stone-open cells are NOT adjacent — clearing the crate column is the fast route. Verifier-flagged smash-in (§4.6).",
    "map": [
     ".......",
     ".......",
     ".......",
-    "###..##",
-    "##..###",
-    "###..##",
+    "##.^###",
+    "###^.##",
+    ".......",
     ".......",
     ".......",
     "......."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s24-hypostyle",
-   "title": "Hypostyle Hall",
-   "notes": "Wave 3. A pillar LATTICE across ranks 4-5 (alternating cells): no file crosses cleanly — sliders are denied vertically, knights and kings weave through. The dense-pillar case.",
+   "title": "Hypostyle",
+   "notes": "Alternating pillar lattice — half the pillars are stone, half furniture. The lattice thins as the duel burns through it.",
    "map": [
     ".........",
     ".........",
+    ".#.^.#.^.",
     ".........",
-    "#.#.#.#.#",
-    ".#.#.#.#.",
+    ".^.#.^.#.",
     ".........",
     ".........",
     "........."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s25-the-divide",
    "title": "The Divide",
-   "notes": "Wave 3. A full spine (ranks 2-8) splits the board into two corridors joined only at the deployment ranks: fight both fronts or race the ends. The two-front case.",
+   "notes": "A full central spine with two corridors — except one spine cell is furniture. Route A: the corridor. Route B: make your own door.",
    "map": [
     "........",
-    "....#...",
-    "....#...",
-    "....#...",
-    "....#...",
-    "....#...",
-    "....#...",
-    "....#...",
+    "........",
+    "...##...",
+    "...##...",
+    "...#^...",
+    "...##...",
+    "...##...",
+    "........",
     "........"
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s26-flats",
-   "title": "The Flats",
-   "notes": "Wave 3. WIDE-SHALLOW (10x6): armies start two ranks apart across a broad front — immediate contact chess, never covered by the tall locked sets. Light rubble incl. deployment intrusions.",
+   "title": "Flats",
+   "notes": "Wide-shallow ground with only light clutter and no stone. Wide flanks, short files — the cavalry board.",
    "map": [
     "..........",
-    ".........#",
-    "..#...#...",
-    "......#...",
-    "#.........",
+    "..........",
+    "...^..^...",
+    ".^........",
+    "..........",
     ".........."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s27-posterngate",
    "title": "Posterngate",
-   "notes": "Wave 3. Each back rank is walled except a 2-cell gate at OPPOSITE corners: both royals start cornered, armies mold diagonally. The cornered-royal case.",
+   "notes": "Both back ranks walled except opposite-corner gates — one leaf open, one furniture. Kings mold into the gates; the auto-crop and camp lines earn their keep here.",
    "map": [
-    "####..",
-    "......",
-    "...#..",
+    "####^.",
     "......",
     "......",
-    "..#...",
     "......",
-    "..####"
-   ]
+    "......",
+    "......",
+    "......",
+    ".^####"
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s28-parapet",
-   "title": "The Parapet",
-   "notes": "Wave 3. White second rank walled except two slots: the pawn screen is forced DEEP (rank 3+) — the universal double-step earning its keep. Black side lightly bitten for contrast.",
+   "title": "Parapet",
+   "notes": "The near second rank is a parapet with one open slot and one weak slot — pawns deploy DEEP, and the camp line sits forward of the king row.",
    "map": [
-    "...#...",
-    "......#",
-    ".......",
-    "...#...",
     ".......",
     ".......",
-    "##.#.##",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "##.#^##",
     "......."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s29-the-redoubt",
    "title": "The Redoubt",
-   "notes": "Wave 3. A one-door corner chamber (door at h6) in black-deployment territory, rest open: the natural FORTRESS pocket — the stall scenario the Director exists to break. Prime meter-lab terrain.",
+   "notes": "A sealed corner chamber in the far side's territory whose only door is furniture. Sometimes the defender molds INTO it — a fortress with a capturable door is the §4.6 thesis stage.",
    "map": [
     ".....#..",
+    ".....^..",
     ".....#..",
-    "#....#.#",
+    "......##",
     "........",
-    "...#....",
     "........",
-    "......#.",
+    "........",
     "........"
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s30-the-serpent",
    "title": "The Serpent",
-   "notes": "Wave 3. Overlapping wall arms force an S-weave up the long board: no straight path exists. Approach marches under permanent cover, the serpentine case.",
+   "notes": "S-weave of stone arms with crates at two bends. The long way is safe; the short way is bought with captures.",
    "map": [
     ".....",
     ".....",
     "###..",
     ".....",
-    "..###",
+    "..^..",
+    ".####",
     ".....",
-    "###..",
-    ".....",
-    ".....",
+    "^....",
+    "####.",
     "....."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
    "id": "s31-ruined-l",
    "title": "Ruined L",
-   "notes": "Wave 3. The NE quadrant is gone: an L-shaped playfield. Black deploys on a 5-wide shelf, white on the full 9 — the non-rectangular, unequal-area case.",
+   "notes": "A solid collapsed quadrant makes an L-shaped playfield; two weak-masonry cells on the ruin's edge can be dug out for nooks.",
    "map": [
-    "....#####",
-    "....#####",
-    "....#####",
-    "....#####",
+    ".....####",
+    ".....####",
+    ".....^###",
+    ".....^###",
     ".........",
     ".........",
     ".........",
-    "..#......",
+    ".........",
     "........."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
-   "id": "s32-knifework",
-   "title": "Knifework",
-   "notes": "Wave 3. Minimum width WITH terrain: staggered walls turn a 3-wide corridor into alternating 2-wide passes. Single-file knife fight — 3-wide has only ever been tested open.",
+   "id": "s32-smugglers-hold",
+   "title": "Smugglers' Hold",
+   "notes": "Three-wide staggered passes, one plugged with contraband. Knife-fight geometry at minimum width.",
    "map": [
     "...",
+    ".##",
     "...",
-    ".#.",
+    "^..",
     "...",
-    "#..",
-    "...",
+    "##.",
     "..."
-   ]
+   ],
+   "wave": 4
   },
   {
    "schema": 2,
-   "wave": 3,
-   "id": "s33-the-cell",
-   "title": "The Cell",
-   "notes": "Wave 3. The smallest square (5x5), one off-center pillar in the single gap rank. Shallow, tiny, instant: the lower-bound brawl with terrain.",
+   "id": "s33-the-vault",
+   "title": "The Vault",
+   "notes": "The minimum square: one crate, one pillar, gap 1. The smallest board where stone and furniture coexist.",
    "map": [
     ".....",
     ".....",
-    "..#..",
+    ".^.#.",
     ".....",
     "....."
-   ]
+   ],
+   "wave": 4
+  },
+  {
+   "schema": 2,
+   "id": "s34-double-doors",
+   "title": "Double Doors",
+   "notes": "The requested archetype, plain: one full wall, one ^^ double door, no other way through. Furniture alone joins the halves — the verifier flags it; you smash in.",
+   "map": [
+    "........",
+    "........",
+    "........",
+    "........",
+    "###^^###",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s35-the-antechamber",
+   "title": "The Antechamber",
+   "notes": "Two partitions in sequence: an open door into the antechamber, then a ^^ double door into the far hall. Room-corridor-room the way a generator would draw it.",
+   "map": [
+    ".......",
+    ".......",
+    ".......",
+    "###^^##",
+    ".......",
+    ".......",
+    "##.####",
+    ".......",
+    ".......",
+    "......."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s36-crate-hoard",
+   "title": "Crate Hoard",
+   "notes": "A holed corner room with the hoard inside — and now a breakable floor-edge (c5, d5) so the room can be cracked open from below as well as entered through the gap. Designer tweak 2026-08-27.",
+   "map": [
+    ".^^.#...",
+    "..^.....",
+    "..^^#...",
+    "#####...",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s37-twin-vaults",
+   "title": "Twin Vaults",
+   "notes": "A full-height spine splits the field into two vaults — one open hole, one weak point — with a crate cluster stored in each half. Two sub-battles, three ways to merge them.",
+   "map": [
+    "..........",
+    ".....#....",
+    ".^^..#....",
+    "..........",
+    ".....^.^^.",
+    ".....#....",
+    ".....#....",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s38-quartered",
+   "title": "Quartered",
+   "notes": "A cross of walls cuts the board into four rooms. Two passages are open holes, two are weak points — the generator's room-graph made literal.",
+   "map": [
+    ".........",
+    "....#....",
+    "....^....",
+    "....#....",
+    "##.###^##",
+    "....#....",
+    ".........",
+    "....#....",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s39-the-vestibule",
+   "title": "The Vestibule",
+   "notes": "A sealed central chamber with ^^ double doors facing BOTH armies. Take the flanks around it, or smash into the middle and hold the room.",
+   "map": [
+    "........",
+    "........",
+    "........",
+    "..#^^#..",
+    ".#....#.",
+    ".#....#.",
+    "..#^^#..",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s40-broken-cloister",
+   "title": "Broken Cloister",
+   "notes": "A solid garden block with clutter heaped at its four bends — the ring corridor narrows to single files exactly where the crates sit.",
+   "map": [
+    ".........",
+    ".........",
+    "..^...^..",
+    "...###...",
+    "...###...",
+    "...###...",
+    "..^...^..",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s41-supply-line",
+   "title": "Supply Line",
+   "notes": "A full wall with one ^^ double door, and supply crates stacked AGAINST the wall on both sides. Furniture integrated into the wall structure; the door is the only way through.",
+   "map": [
+    "..........",
+    "..........",
+    "..^^......",
+    "####^^####",
+    "......^^..",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s42-guardroom",
+   "title": "Guardroom",
+   "notes": "Three rooms in a row. One door is open, one is weak — and the weak one has a crate shoved behind it as a barricade. Wide-shallow room-graph with clean deployment rows.",
+   "map": [
+    "..........",
+    "..........",
+    "...#..#...",
+    "...#......",
+    "...^^.#...",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s43-the-breach",
+   "title": "The Breach",
+   "notes": "A castle wall two ranks thick. The breach column is rubble-choked — and the collapse spilled forward: d5 joins the breach and d6 lies in the approach. Smash a path, or smash a wider one. Designer tweak 2026-08-27.",
+   "map": [
+    "........",
+    "........",
+    "...^....",
+    "###^^###",
+    "####^###",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s44-double-gatehouse",
+   "title": "Double Gatehouse",
+   "notes": "One wall, TWO ^^ double doors at the thirds, nothing open. Pick a gate — or price both and let the engine tell you which.",
+   "map": [
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "##^^##^^##",
+    "..........",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s45-collapsed-arch",
+   "title": "Collapsed Arch",
+   "notes": "A wall whose arch came down: a 3-wide rubble cluster IN the wall itself, plus one intact slip at the edge. Clear the rubble for the broad front or file through the slip.",
+   "map": [
+    ".......",
+    ".......",
+    ".......",
+    "#.^^^##",
+    ".......",
+    ".......",
+    ".......",
+    "......."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s46-cellar-steps",
+   "title": "Cellar Steps",
+   "notes": "A tiny sealed cellar in the near corner — stone on two sides, a weak ceiling slab, a crate on the stairs. Molding can put your own pieces inside; someone has to dig them out.",
+   "map": [
+    "......",
+    "......",
+    "......",
+    "......",
+    "......",
+    "#^....",
+    "^.#...",
+    "..#..."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s47-the-warrens",
+   "title": "The Warrens",
+   "notes": "Two full walls and an offset divider, now multiply breached: two weak points per wall and a breakable stub on the divider — every route is a smash, and there are many routes. Verifier-flagged. Designer tweak 2026-08-27.",
+   "map": [
+    ".........",
+    ".........",
+    ".........",
+    "###^###^#",
+    "....^....",
+    "....#....",
+    "#^###^###",
+    ".........",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s48-barricaded-bridge",
+   "title": "Barricaded Bridge",
+   "notes": "Stone flanks force everything over a center bridge, and the bridge is half-blocked by a two-crate barricade. One open file under fire, or clear the barricade.",
+   "map": [
+    ".......",
+    ".......",
+    ".......",
+    "##^^.##",
+    ".......",
+    ".......",
+    "......."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s49-crate-quarry",
+   "title": "Crate Quarry",
+   "notes": "Clusters only, no stone: a 2x2 block, a 1x3 run, a 2x1 pair. The pure-cluster control — its stone-only arm is an empty field.",
+   "map": [
+    ".........",
+    ".....^^^.",
+    ".^^......",
+    ".^^......",
+    "....^^...",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s50-last-stand",
+   "title": "Last Stand",
+   "notes": "The redoubt evolved: a far-side pocket with a ^^ double door AND a crate shoring it from inside — three smashes through the center, or come around the flank files.",
+   "map": [
+    ".#....#.",
+    ".#.^..#.",
+    "..#^^#..",
+    "........",
+    "........",
+    "........",
+    "........",
+    "........",
+    "........"
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s51-the-corridor",
+   "title": "The Corridor",
+   "notes": "FLOORPLAN: a full-width hallway with two rooms off each side — five areas. Each wall has an open door and a weak door; the room pairs also connect to each other through breakable party doors (e8, f1). NW stocks a crate pair, NE one against the wall, SE an L of three, SW stands bare.",
+   "map": [
+    "....#.....",
+    ".^^.^.....",
+    "....#...^.",
+    "##.####^##",
+    "..........",
+    "..........",
+    "##^####.##",
+    ".....#.^^.",
+    ".....^..^.",
+    ".....#...."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s52-the-apartments",
+   "title": "The Apartments",
+   "notes": "FLOORPLAN: three rooms upstairs, two down, six doors — every room reachable two ways, party doors between neighbours (d7, g8, e2). Furnishings differ room to room: a wardrobe pair, a lone chest, a corner stack, a bare parlor.",
+   "map": [
+    "...#..#...",
+    "...#.^....",
+    "..^^..#...",
+    "..^#..#^^.",
+    "#^##.###^#",
+    "....#.....",
+    "....#...^.",
+    ".^^.^.....",
+    "....#.....",
+    "....#....."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s53-the-cellblock",
+   "title": "The Cellblock",
+   "notes": "FLOORPLAN: a central hallway with three cells off each side — seven areas. Left doors are all breakable; right doors alternate open and weak. Some cells hold contraband, some are swept bare.",
+   "map": [
+    "...#..#...",
+    ".^.^..^...",
+    "...#..####",
+    "####..^...",
+    "...^..#.^.",
+    "...#..####",
+    "####......",
+    ".^.^..#...",
+    "...#..#..."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s54-banquet-and-kitchens",
+   "title": "Banquet & Kitchens",
+   "notes": "FLOORPLAN: a great hall dominated by a four-crate banquet table, and three kitchens behind a wall with a double door and a weak service hatch. The kitchens connect to each other (d7 breakable, g7 open), each stocked differently.",
+   "map": [
+    "...#..#...",
+    ".^.#^.#.^.",
+    "...^......",
+    "####^^##^#",
+    "..........",
+    "...^^^^...",
+    "..........",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s55-gate-and-bailey",
+   "title": "Gate & Bailey",
+   "notes": "FLOORPLAN: an outer wall with a double gate and an open postern, a bailey with stabled crates along the west wall, and a stone keep with one weak door — which the defender may mold inside. Three zones deep.",
+   "map": [
+    "..#...#...",
+    "..#.^.#...",
+    "..#...#...",
+    "..##^##...",
+    ".^........",
+    ".^........",
+    "###^^###.#",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s56-the-archive",
+   "title": "The Archive",
+   "notes": "FLOORPLAN: two long shelf-rows make three aisles in the stacks; the reading room behind the double door is the only way to the far side (verifier-flagged smash-in), and an inner cage with its own weak door guards the rarest holdings.",
+   "map": [
+    "......#..",
+    "......^..",
+    "......#..",
+    "###^^####",
+    ".........",
+    ".^^^.^^^.",
+    ".........",
+    ".^^^.^^^.",
+    ".........",
+    "........."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s57-crossroads-market",
+   "title": "Crossroads Market",
+   "notes": "FLOORPLAN: two hallways cross at an open square, with an L-walled stall in each quadrant — five areas, every stall door different (two weak, two placements), every stall stocked differently: one chest, a pair, a spill of three, one empty.",
+   "map": [
+    "...#..#...",
+    ".^.#..^.^^",
+    ".#^#..###.",
+    "..........",
+    "..........",
+    "..........",
+    ".#^#..#^#.",
+    "^^.#..#...",
+    ".^.#..#..."
+   ],
+   "wave": 5
+  },
+  {
+   "schema": 2,
+   "id": "s58-drowned-halls",
+   "title": "Drowned Halls",
+   "notes": "FLOORPLAN: the dense one — six areas. Two full walls with mixed doors bracket a mid band split into three chambers by dividers with party doors (d4, g5); the north territory splits again behind a weak door. Flooded chambers hold flotsam; the center hall is scoured bare.",
+   "map": [
+    ".....#....",
+    ".....^....",
+    ".....#....",
+    "#^####.###",
+    ".^.#..^.^.",
+    "...^..#.^.",
+    "####^###^#",
+    "..........",
+    "..........",
+    ".........."
+   ],
+   "wave": 5
   }
  ]
 }

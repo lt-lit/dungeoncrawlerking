@@ -13,6 +13,7 @@ import { loadFfish } from '../lib/load.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from '../../play/js/stage.mjs';
 import { makeArmy, armyValue, layoutArmy, buildMatchup, armiesConnected, lintMatchupFen, dealMatchup, campLineRank, PIECE_VALUES } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
+import { isTerrain } from '../../play/js/fen.mjs';
 import { mulberry32 } from '../../play/js/prng.mjs';
 
 let failures = 0;
@@ -147,7 +148,7 @@ function checkSide(name, army, layout, side, ranks) {
   check('bitten corner still lays out', !!l);
   if (l) {
     checkSide('bitten-corner black', army, l, 'black', 8);
-    check('bitten corner avoids walls', l.cells.every((c) => stage.grid[c.r][c.f] !== '*'));
+    check('bitten corner avoids terrain', l.cells.every((c) => !isTerrain(stage.grid[c.r][c.f])));
   }
   pass('wall pocket');
 }
@@ -261,14 +262,17 @@ ffish.loadVariantConfig(makeCatalogIni());
     threw = true;
   }
   check('crop below 5 ranks throws', threw);
-  threw = false;
-  try {
-    // walling the would-be far rank must be rejected (promotion row rule)
-    cropStage(loadStageV2({ schema: 2, id: 'walltop', map: ['......', '######', '......', '......', '......', '......', '......'] }), 1, 0);
-  } catch {
-    threw = true;
-  }
-  check('crop onto an all-wall far rank throws', threw);
+  // Ground rules 2026-08-26: cropping onto an all-wall far rank is LEGAL
+  // now — the king-anchored auto-crop removes dead rows at deal time, so
+  // the promotion-row guarantee no longer needs crop-time policing.
+  const walltop = cropStage(
+    loadStageV2({ schema: 2, id: 'walltop', map: ['......', '######', '......', '......', '......', '......', '......'] }),
+    1,
+    0
+  );
+  check('crop onto an all-wall far rank is legal (auto-crop owns the guarantee)', walltop.ranks === 6);
+  const wd = dealMatchup({ stage: walltop, white: { spec: { width: 3, budget: 10 } }, black: { spec: { width: 3, budget: 8 } }, seed: 1 });
+  check('a deal on it auto-crops the dead far rank away', wd.ok && wd.autoCrop.top === 1 && wd.ranks === 5, wd.ok ? JSON.stringify(wd.autoCrop) : wd.error);
   pass('flip + crop');
 }
 

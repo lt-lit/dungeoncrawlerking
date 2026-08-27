@@ -1,0 +1,16 @@
+{
+ "schema": 2,
+ "id": "s41-supply-line",
+ "title": "Supply Line",
+ "notes": "A full wall with one ^^ double door, and supply crates stacked AGAINST the wall on both sides. Furniture integrated into the wall structure; the door is the only way through.",
+ "map": [
+  "..........",
+  "..........",
+  "..^^......",
+  "####^^####",
+  "......^^..",
+  "..........",
+  ".........."
+ ],
+ "wave": 5
+}

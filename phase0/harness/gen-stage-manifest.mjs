@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Bundle play/stages/*.json into play/stages/manifest.json — the single
 // fetch the game's setup screen loads at boot (GitHub Pages serves no
-// directory listing, and 33 stages total ~14KB, so one bundle beats 33
-// round trips). Every stage is validated through loadStageV2 before it
+// directory listing, and the whole bed is a few tens of KB, so one bundle
+// beats N round trips). Every stage is validated through loadStageV2 before it
 // is admitted; a bad stage fails the build, not the phone.
 //
 //   node harness/gen-stage-manifest.mjs      (from phase0/)

@@ -1,0 +1,18 @@
+{
+ "schema": 2,
+ "id": "s53-the-cellblock",
+ "title": "The Cellblock",
+ "notes": "FLOORPLAN: a central hallway with three cells off each side — seven areas. Left doors are all breakable; right doors alternate open and weak. Some cells hold contraband, some are swept bare.",
+ "map": [
+  "...#..#...",
+  ".^.^..^...",
+  "...#..####",
+  "####..^...",
+  "...^..#.^.",
+  "...#..####",
+  "####......",
+  ".^.^..#...",
+  "...#..#..."
+ ],
+ "wave": 5
+}

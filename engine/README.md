@@ -8,8 +8,9 @@ emsdk 1.39.16 / 2.0.26); the rule-16 gate ran green end to end — Node
 suite, headless-Chromium `play/selftest.html` 29/29 with SharedArrayBuffer
 live, depth-cap re-measure, spike10 rerun — and the designer's phone feel
 check passed (2026-08-26; duel feel unchanged, selftest green on device).
-The "~6 crates in a live duel" feel reading arrives with Phase 1.2.4's
-stage support — nothing can author `^` into a playable board until then.
+The crates-dense feel reading landed with Phase 1.2.4's stage support:
+**1.2.4's exit passed 2026-08-27** — crate duels live on-device with
+Earthquakes on (designer verdict: "surprisingly really fun").
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference

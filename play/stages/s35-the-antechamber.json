@@ -1,0 +1,19 @@
+{
+ "schema": 2,
+ "id": "s35-the-antechamber",
+ "title": "The Antechamber",
+ "notes": "Two partitions in sequence: an open door into the antechamber, then a ^^ double door into the far hall. Room-corridor-room the way a generator would draw it.",
+ "map": [
+  ".......",
+  ".......",
+  ".......",
+  "###^^##",
+  ".......",
+  ".......",
+  "##.####",
+  ".......",
+  ".......",
+  "......."
+ ],
+ "wave": 5
+}

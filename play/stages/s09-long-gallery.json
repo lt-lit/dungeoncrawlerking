@@ -1,0 +1,19 @@
+{
+ "schema": 2,
+ "id": "s09-long-gallery",
+ "title": "Long Gallery",
+ "notes": "Narrow-tall pure-stone gallery, staggered pillars. The stone-only reference point among the tall boards — no furniture on purpose.",
+ "map": [
+  "....",
+  "..#.",
+  "....",
+  "....",
+  ".#..",
+  "....",
+  "..#.",
+  "....",
+  "....",
+  "...."
+ ],
+ "wave": 4
+}

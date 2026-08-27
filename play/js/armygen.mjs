@@ -28,7 +28,7 @@
 // files a wall makes uncoverable are reported in `violations`, judged by
 // eye in the stage gallery rather than enforced.
 import { mulberry32, childSeed } from './prng.mjs';
-import { emptyBoard, serializeBoard } from './fen.mjs';
+import { emptyBoard, serializeBoard, isTerrain, WALL } from './fen.mjs';
 import { catalogVariantName, dealVariant } from './variant.mjs';
 import { flipStageVertical, cropStage } from './stage.mjs';
 
@@ -165,7 +165,8 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     : anchor === 'right' ? files - w
     : Math.max(0, Math.min(files - w, anchor | 0));
   const rowRank = (i) => (side === 'white' ? i : ranks - 1 - i);
-  const open = (i, f) => grid[rowRank(i)][f] !== '*';
+  // Furniture eats molding slots exactly like stone (§4.6: a wall to molding).
+  const open = (i, f) => !isTerrain(grid[rowRank(i)][f]);
   const depthCap = Math.min(maxDepth ?? ranks, ranks);
 
   // Back units, royal first; the archetype orders the rest (first-placed
@@ -210,7 +211,8 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     if (c.piece === 'P' || pawnFiles.has(c.f) || openFiles.has(c.f)) continue;
     let walled = false;
     for (let r = c.r + dir; r >= 0 && r < ranks; r += dir) {
-      if (grid[r][c.f] === '*') {
+      if (isTerrain(grid[r][c.f])) {
+        // furniture screens too (blocks sliders until captured) — soft report
         walled = true;
         break;
       }
@@ -265,14 +267,7 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
   const gap = bBottom - wTop - 1;
   if (gap < gapMin) return { error: `gap ${gap} < ${gapMin}`, white: wArmy, black: bArmy };
 
-  // Compose the FEN: board arrays are [rankFromTop][file] (fen.mjs).
-  const board = emptyBoard(files, ranks);
-  for (let r = 0; r < ranks; r++) {
-    for (let f = 0; f < files; f++) if (grid[r][f] === '*') board[ranks - 1 - r][f] = '*';
-  }
-  for (const c of wl.cells) board[ranks - 1 - c.r][c.f] = c.piece.toUpperCase();
-  for (const c of bl.cells) board[ranks - 1 - c.r][c.f] = c.piece.toLowerCase();
-  const fen = `${serializeBoard(board)} ${turn} - - 0 1`;
+  const fen = composeFen(grid, files, ranks, wl.cells, bl.cells, turn);
   return {
     fen,
     variantName: catalogVariantName(files, ranks),
@@ -283,10 +278,31 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
   };
 }
 
+/** Compose a start FEN: terrain stamped VERBATIM (both glyphs — copying
+ *  only '*' silently deleted authored furniture, the emitter landmine),
+ *  then the two layouts. Board arrays are [rankFromTop][file] (fen.mjs). */
+function composeFen(grid, files, ranks, wCells, bCells, turn) {
+  const board = emptyBoard(files, ranks);
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) if (grid[r][f] !== null) board[ranks - 1 - r][f] = grid[r][f];
+  }
+  for (const c of wCells) board[ranks - 1 - c.r][c.f] = c.piece.toUpperCase();
+  for (const c of bCells) board[ranks - 1 - c.r][c.f] = c.piece.toLowerCase();
+  return `${serializeBoard(board)} ${turn} - - 0 1`;
+}
+
 /** King-step BFS: can the two armies reach each other through non-walls?
- *  (pieces are passable — they move). Grid-pure §6-style check. */
-export function armiesConnected(stage, matchup) {
+ *  (pieces are passable — they move). Grid-pure §6-style check.
+ *
+ *  Furniture is deliberately PASSABLE by default (§4.6 [designer-final]):
+ *  armies can smash through a `^`, so a furniture-only seal never rejects a
+ *  deal — "a chamber you must smash into" is legal. The verifier passes
+ *  `furnitureBlocks: true` for a second look and WARNS when the two
+ *  readings differ (stone-connected but furniture-sealed), flagging the
+ *  stage for the gallery eye. */
+export function armiesConnected(stage, matchup, { furnitureBlocks = false } = {}) {
   const { grid, files, ranks } = stage;
+  const blocked = (cell) => (furnitureBlocks ? isTerrain(cell) : cell === WALL);
   const key = (r, f) => r * 16 + f;
   const targets = new Set(matchup.black.layout.cells.map((c) => key(c.r, c.f)));
   const seen = new Set(matchup.white.layout.cells.map((c) => key(c.r, c.f)));
@@ -300,7 +316,7 @@ export function armiesConnected(stage, matchup) {
         const nr = r + dr;
         const nf = f + df;
         if (nr < 0 || nr >= ranks || nf < 0 || nf >= files) continue;
-        if (seen.has(key(nr, nf)) || grid[nr][nf] === '*') continue;
+        if (seen.has(key(nr, nf)) || blocked(grid[nr][nf])) continue;
         seen.add(key(nr, nf));
         queue.push([nr, nf]);
       }
@@ -334,10 +350,23 @@ export function armiesConnected(stage, matchup) {
  *                               (start-position legality, checks, decided)
  * }
  *
+ * KING-ANCHORED AUTO-CROP (designer ground rules 2026-08-27): after
+ * molding, every row behind either king is cropped out of the playable
+ * area, so the player's king always starts on the first row and the enemy
+ * king on the last. Molding puts each royal in its army's rearmost
+ * occupied row, so removed rows are guaranteed free of pieces (terrain in
+ * them — furniture included — goes too, §4.6). The promotion zone (the
+ * entire extreme rank in every catalog variant) is then the enemy king's
+ * starting row by construction, and always holds a usable square: the
+ * king is standing on it. A crop below 5 ranks (gap 1 — a duel can't
+ * start closer) REJECTS the attempt; connectivity, camp lines, the deal
+ * variant and the FEN are all computed on the cropped board.
+ *
  * Success: { ok: true, stageId, flip, cropTop, cropBottom, stage (the
- *   transformed terrain), files, ranks, variantName, fen, turn, white,
- *   black, gap, edge (white value − black value), violations, seed,
- *   attempt, attemptSeed, directorSeed }.
+ *   transformed terrain, auto-crop applied — its id carries the ~crop
+ *   suffix), files, ranks, autoCrop: {top, bottom}, variantName, fen,
+ *   turn, white, black, gap, edge (white value − black value),
+ *   violations, seed, attempt, attemptSeed, directorSeed }.
  * Failure: { ok: false, error, reasons: [per-attempt reason strings] }.
  */
 export function dealMatchup({
@@ -358,7 +387,28 @@ export function dealMatchup({
       reasons.push(`attempt ${attempt}: ${m.error}`);
       continue;
     }
-    if (!armiesConnected(terrain, m)) {
+    // King-anchored auto-crop (see the doc above). The royal cell IS the
+    // army's rearmost occupied row (molding invariant 1), so nothing but
+    // terrain is ever removed.
+    let arena = terrain;
+    const royalRow = (side) => side.layout.cells.find((c) => c.piece === side.army.royal).r;
+    const autoBottom = royalRow(m.white);
+    const autoTop = terrain.ranks - 1 - royalRow(m.black);
+    if (autoBottom || autoTop) {
+      try {
+        arena = cropStage(terrain, autoTop, autoBottom);
+      } catch {
+        reasons.push(`attempt ${attempt}: auto-crop behind the kings leaves ${terrain.ranks - autoTop - autoBottom} ranks (min 5)`);
+        continue;
+      }
+      for (const side of [m.white.layout, m.black.layout]) {
+        side.cells = side.cells.map((c) => ({ ...c, r: c.r - autoBottom }));
+      }
+      m.fen = composeFen(arena.grid, arena.files, arena.ranks, m.white.layout.cells, m.black.layout.cells, turn);
+    }
+    // Connectivity on the board the duel actually gets: a path that only
+    // existed through the cropped rows is not a path.
+    if (!armiesConnected(arena, m)) {
       reasons.push(`attempt ${attempt}: disconnected`);
       continue;
     }
@@ -370,8 +420,8 @@ export function dealMatchup({
     // zone is that rank plus everything behind it; a pawn dealt AHEAD of
     // the line is already advanced and never leaps.
     const variant = dealVariant(
-      terrain.files,
-      terrain.ranks,
+      arena.files,
+      arena.ranks,
       campLineRank(m.white.layout.cells, 1),
       campLineRank(m.black.layout.cells, -1)
     );
@@ -389,9 +439,10 @@ export function dealMatchup({
       flip,
       cropTop,
       cropBottom,
-      stage: terrain,
-      files: terrain.files,
-      ranks: terrain.ranks,
+      stage: arena,
+      files: arena.files,
+      ranks: arena.ranks,
+      autoCrop: { top: autoTop, bottom: autoBottom },
       variantName: variant.name,
       variantIni: variant.ini,
       fen: m.fen,

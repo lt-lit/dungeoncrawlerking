@@ -9,7 +9,7 @@
 // fatigue limit).
 //
 // Setup flow (slice refresh — replaces the retired arena menu + placement
-// screen): pick a stage (33 designer-locked terrains, fetched as one
+// screen): pick a stage (the designer-locked stage bed, fetched as one
 // manifest bundle) → knobs (per-side army width/composition/archetype/
 // anchor, flip, crop, initiative, ONE master seed — army, molding and
 // Director streams all derive from it via childSeed) → armygen.dealMatchup
@@ -35,7 +35,7 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion } from './board-ui.mjs';
@@ -514,7 +514,17 @@ async function runEvalProbes() {
     const mySeq = ++evalProbe.seq;
     const engine = app.engine;
     evalProbe.engine = engine;
-    engine.setoption('MultiPV', '1');
+    try {
+      engine.setoption('MultiPV', '1');
+    } catch (e) {
+      // postMessage threw — the idle instance is gone. Without this guard
+      // the whole idle-probes flight rejected unhandled: no visible
+      // failure, no recycle, and the queued jobs re-threw every turn (the
+      // exact silent-dead-probe mode rule 12 exists to prevent).
+      evalProbe.engine = null;
+      await evalProbeFailed(engine, e);
+      return;
+    }
     let before;
     let after;
     const run = (async () => {
@@ -700,7 +710,7 @@ function godsTraceLine(t) {
     const via = t.fellThrough ? ` — FELL THROUGH (${t.path.includes('no-first-leg') ? 'no first leg' : 'unpairable, held'})` : '';
     const cr = t.chosen?.crumble;
     const pool = c?.crumble ? c.crumble.neutral + c.crumble.terminal : '?';
-    bits.push(`${t.outcome === 'terminal' ? 'TERMINAL ' : ''}crumble ${cr.square}${cr.pieceLost && cr.pieceLost !== '*' ? ` swallows ${cr.pieceLost}` : ''} of ${pool}${via}`);
+    bits.push(`${t.outcome === 'terminal' ? 'TERMINAL ' : ''}crumble ${cr.square}${cr.pieceLost && !isTerrain(cr.pieceLost) ? ` swallows ${cr.pieceLost}` : ''} of ${pool}${via}`);
   } else if (t.outcome === 'starved') {
     bits.push(`STARVED — no legal candidate anywhere${t.fellThrough ? ' (displace leg empty too)' : ''}`);
   }
@@ -818,6 +828,19 @@ function godsCensusNow() {
   }, 30);
 }
 
+/** JSON.stringify turns Infinity into null, which silently corrupts an
+ *  exported config (the 'off' preset is onsetPly: Infinity — a replay
+ *  built from null ramps quakes from ply 0 in a duel that had the gods
+ *  OFF). Export non-finite numbers as strings; Number('Infinity') revives
+ *  them exactly, so consumers map values through Number() and lose
+ *  nothing. */
+function jsonSafeNumbers(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : String(v);
+  if (Array.isArray(v)) return v.map(jsonSafeNumbers);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, jsonSafeNumbers(x)]));
+  return v;
+}
+
 /** Everything a replay or offline analysis needs, from the one ledger. */
 function godsExportData() {
   const d = app.duel;
@@ -843,8 +866,8 @@ function godsExportData() {
     variant: d.variantName,
     startFen: d.startFen,
     seed: dir.seed,
-    config0: dir.config0, // starting config — what a replay constructs with
-    config: {
+    config0: jsonSafeNumbers(dir.config0), // starting config — what a replay constructs with
+    config: jsonSafeNumbers({
       // live config at export time (tunes applied); the tunes ledger maps
       // one to the other, undo markers included
       onsetPly: dir.onsetPly,
@@ -853,9 +876,9 @@ function godsExportData() {
       debtCap: dir.debtCap,
       asymOnsetPly: dir.asymOnsetPly,
       asymRamp: dir.asymRamp,
-    },
+    }),
     favor: dir.favor,
-    tunes: d.record.tunes,
+    tunes: jsonSafeNumbers(d.record.tunes),
     moves: d.record.moves,
     sans: d.record.sans,
     quakes: d.record.quakes.map(({ trace, ...rest }) => rest), // traces carried once, below
@@ -971,11 +994,12 @@ function applySetupParams() {
   }
 }
 
-/** Tiny terrain thumbnail: the ASCII map as it is authored (far rank on top). */
+/** Tiny terrain thumbnail: the ASCII map as it is authored (far rank on
+ *  top). Stone solid, furniture shaded, floor a dot. */
 function stageMiniMap(stage) {
   const rows = [];
   for (let r = stage.ranks - 1; r >= 0; r--) {
-    rows.push(stage.grid[r].map((c) => (c === '*' ? '█' : '·')).join(''));
+    rows.push(stage.grid[r].map((c) => (c === WALL ? '█' : c === FURNITURE ? '▒' : '·')).join(''));
   }
   return rows.join('\n');
 }
@@ -1098,9 +1122,11 @@ function terrainOnly() {
   } catch {
     t = setup.flip ? flipStageVertical(stage) : stage; // the crop is the invalid part
   }
+  // Stamp the grid VERBATIM — both terrain glyphs (copying only '*' would
+  // silently hide authored furniture from the preview).
   const board = emptyBoard(t.files, t.ranks);
   for (let r = 0; r < t.ranks; r++) {
-    for (let f = 0; f < t.files; f++) if (t.grid[r][f] === '*') board[t.ranks - 1 - r][f] = '*';
+    for (let f = 0; f < t.files; f++) if (t.grid[r][f] !== null) board[t.ranks - 1 - r][f] = t.grid[r][f];
   }
   return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1` };
 }
@@ -1141,6 +1167,7 @@ function refreshLiveDeal() {
   const extras = [];
   if (deal.attempt > 0) extras.push(`re-dealt ×${deal.attempt}`);
   if (deal.violations.length) extras.push(`${deal.violations.length} open file${deal.violations.length > 1 ? 's' : ''}`);
+  if (deal.autoCrop.top || deal.autoCrop.bottom) extras.push('cropped behind the kings');
   out.textContent = `✓ ${deal.files}×${deal.ranks} · gap ${deal.gap} · ${edge}${extras.length ? ' · ' + extras.join(' · ') : ''}`;
   out.className = 'ok';
   $('btnBegin').disabled = false;
@@ -1475,7 +1502,9 @@ async function onQuake(ev) {
   }
   if (crumble) {
     let c = `${crumble.square} collapses`;
-    if (crumble.pieceLost && crumble.pieceLost !== '*') {
+    // isTerrain, not just '*': swallowed furniture (rework-era) must never
+    // read as "your ^" — terrain is nobody's piece.
+    if (crumble.pieceLost && !isTerrain(crumble.pieceLost)) {
       const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.session.playerColor;
       c += ` · ${yours ? 'your' : 'enemy'} ${pieceName(crumble.pieceLost)} is swallowed`;
     }

@@ -1,0 +1,18 @@
+{
+ "schema": 2,
+ "id": "s34-double-doors",
+ "title": "Double Doors",
+ "notes": "The requested archetype, plain: one full wall, one ^^ double door, no other way through. Furniture alone joins the halves — the verifier flags it; you smash in.",
+ "map": [
+  "........",
+  "........",
+  "........",
+  "........",
+  "###^^###",
+  "........",
+  "........",
+  "........",
+  "........"
+ ],
+ "wave": 5
+}

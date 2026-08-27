@@ -4,7 +4,7 @@
 // — spike 6 — so a typo produces legal-looking wrong rules) and the fixed
 // 60-variant catalog (variant names are single-use — spike 1 — so the game
 // loads every duel_<files>x<ranks> once at boot and never redefines).
-import { emptyBoard, serializeBoard } from './fen.mjs';
+import { emptyBoard, serializeBoard, isTerrain } from './fen.mjs';
 
 // Keys the duel baseline is allowed to emit. Extend deliberately, never ad hoc.
 const KNOWN_INI_KEYS = new Set([
@@ -188,14 +188,14 @@ export function buildDuelBoard(spec) {
     const start = side.backRankStart ?? 0;
     const pawnAt = (file) => {
       if (file < 0 || file >= files) return;
-      if (board[ranks - 1 - pawnRow][file] !== '*') {
+      if (!isTerrain(board[ranks - 1 - pawnRow][file])) {
         put(file, pawnRow, isWhite ? 'P' : 'p');
       }
     };
     side.backRank.forEach((piece, i) => {
       const file = start + i;
       if (file >= files) return; // clipped by board edge
-      if (board[ranks - 1 - row][file] === '*') return; // walls eat slots (§4.2)
+      if (isTerrain(board[ranks - 1 - row][file])) return; // terrain eats slots (§4.2/§4.6)
       if (piece) put(file, row, isWhite ? piece.toUpperCase() : piece.toLowerCase());
       if (!side.pawnFiles) pawnAt(file); // automatic full-width row (§4.2 default)
     });

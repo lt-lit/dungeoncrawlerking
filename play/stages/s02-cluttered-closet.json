@@ -1,0 +1,15 @@
+{
+ "schema": 2,
+ "id": "s02-cluttered-closet",
+ "title": "Cluttered Closet",
+ "notes": "Smallest crate fight: two pieces of furniture on otherwise open minimum-width ground. Every capture-the-clutter line is worth a tempo question even at 3 files.",
+ "map": [
+  "...",
+  "...",
+  ".^.",
+  "^..",
+  "...",
+  "..."
+ ],
+ "wave": 4
+}

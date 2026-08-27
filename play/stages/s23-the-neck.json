@@ -1,18 +1,18 @@
 {
-  "schema": 2,
-  "wave": 3,
-  "id": "s23-the-neck",
-  "title": "The Neck",
-  "notes": "Wave 3. Room-corridor-room: two open chambers joined by a weaving 2-wide neck (ranks 4-6). The duel starts in separate rooms — covers the topology no locked stage has.",
-  "map": [
-    ".......",
-    ".......",
-    ".......",
-    "###..##",
-    "##..###",
-    "###..##",
-    ".......",
-    ".......",
-    "......."
-  ]
+ "schema": 2,
+ "id": "s23-the-neck",
+ "title": "The Neck",
+ "notes": "Room-corridor-room with offset throats sharing one furniture column. The only stone-open cells are NOT adjacent — clearing the crate column is the fast route. Verifier-flagged smash-in (§4.6).",
+ "map": [
+  ".......",
+  ".......",
+  ".......",
+  "##.^###",
+  "###^.##",
+  ".......",
+  ".......",
+  ".......",
+  "......."
+ ],
+ "wave": 4
 }

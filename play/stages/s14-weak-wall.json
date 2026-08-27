@@ -1,0 +1,17 @@
+{
+ "schema": 2,
+ "id": "s14-weak-wall",
+ "title": "Weak Wall",
+ "notes": "A full-width stone wall whose only ways through are two furniture breaches. Furniture alone separates the armies — legal (§4.6), the verifier flags it: you MUST smash in.",
+ "map": [
+  "........",
+  "........",
+  "........",
+  "##^###^#",
+  "........",
+  "........",
+  "........",
+  "........"
+ ],
+ "wave": 4
+}

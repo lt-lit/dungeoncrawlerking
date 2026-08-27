@@ -1,16 +1,16 @@
 {
-  "schema": 2,
-  "wave": 2,
-  "id": "s16-cave-mouth",
-  "title": "Cave Mouth",
-  "notes": "Wave 2. White back rank is walled except a 2-cell mouth (b1-c1): the whole army molds forward through it, royal wedged in the mouth. Black side open — maximum deployment asymmetry.",
-  "map": [
-    ".....",
-    ".....",
-    "....#",
-    ".....",
-    ".....",
-    ".....",
-    "#..##"
-  ]
+ "schema": 2,
+ "id": "s16-cave-mouth",
+ "title": "Cave Mouth",
+ "notes": "The near back rank is rock except a 1-square mouth and a weak-masonry plug. The king molds into the mouth; the enemy can capture-promote onto the plug.",
+ "map": [
+  ".....",
+  ".....",
+  ".....",
+  ".....",
+  ".....",
+  ".....",
+  "##.^#"
+ ],
+ "wave": 4
 }

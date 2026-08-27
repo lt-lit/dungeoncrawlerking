@@ -1,0 +1,16 @@
+{
+ "schema": 2,
+ "id": "s32-smugglers-hold",
+ "title": "Smugglers' Hold",
+ "notes": "Three-wide staggered passes, one plugged with contraband. Knife-fight geometry at minimum width.",
+ "map": [
+  "...",
+  ".##",
+  "...",
+  "^..",
+  "...",
+  "##.",
+  "..."
+ ],
+ "wave": 4
+}
