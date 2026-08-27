@@ -90,8 +90,9 @@ Chromium with SharedArrayBuffer live, depth-cap re-measure (rule 11
 unchanged), spike10 32/32, and the designer's phone feel check passed
 (2026-08-26 — duel feel unchanged, selftest green on device). The
 walled-passer eval fix stays deliberately NOT shipped, and upstreaming is
-not planned (designer 2026-08-25). **Phase 1.2.4 — Set Dressing ✅ done
-(2026-08-27)**: retired the hard-coded `'*'` tests for the shared
+not planned (designer 2026-08-25). **Phase 1.2.4 — Set Dressing — built and
+MERGED (PR #15, 2026-08-27); exit re-check PENDING (see below)**:
+retired the hard-coded `'*'` tests for the shared
 terrain helper (`fen.mjs` `WALL`/`FURNITURE`/`isTerrain`; the audit
 found 65 sites / 24 files — the two known landmines confirmed, plus
 furniture-as-displaceable and furniture-as-white-crumble-victim in
@@ -111,10 +112,16 @@ crate clusters, furniture in wall structures, breakable double doors,
 and the s51+ FLOORPLANS — multi-room maps with hallways, doors to and
 BETWEEN rooms, per-room furniture; designer: big boards play fine
 on-phone, 10-wide confirmed) is ACCEPTED/locked 2026-08-27 — the full
-58-stage bed is designer-locked, and the **exit PASSED 2026-08-27**:
-crate duels live on-device with Earthquakes on (designer verdict —
-"surprisingly really fun").
-**PHASE 1.2.5 — THE PROVING GROUNDS — IS THE ACTIVE PHASE**; its
+58-stage bed is designer-locked. **The first "exit passed" record was
+VOID**: the designer's phone session unknowingly ran against the
+pre-merge Pages deployment (the crate-free 1.2.3 build — PR #15 was
+still unmerged), so the "surprisingly really fun" verdict measured the
+baseline duels, not crates. PR #15 merged 2026-08-27; **the one
+remaining 1.2.4 item is the real crate feel check on the live build**
+(verify the new build first: the picker's first card reads "Bare
+Cell", not "The Closet", and selftest.html shows 32 passed).
+**PHASE 1.2.5 — THE PROVING GROUNDS — becomes the active phase the
+moment that re-check passes**; its
 remaining half is the LAB RIG — all automated-playtest plumbing, no duel
 rules change: (a) the **corpus materializer** (the locked 58-stage bed ×
 both orientations × {stone-only, furniture} arms (§4.6: `^`→`.` derives
