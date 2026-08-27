@@ -217,6 +217,16 @@ vendored ffish artifacts are unchanged.
   and d30/20M-node searches all complete with the instance alive — the
   cap STAYS at d22 (rule 11: live pacing unchanged; 0/30 at d60 remains
   weak evidence at the historical 1/30 rate)
+- [x] POST-MERGE revalidation (2026-08-27, after PR #15 / Phase 1.2.4
+  merged into the branch): `play/selftest.html` on the merged tree
+  **32/32** (the 1.2.4 furniture checks included; ran twice, identical),
+  and a furniture-stage browser run through the NEW `dealMatchup` —
+  s52-the-apartments (10×10 floorplan, 12 `^` on the dealt board), two
+  seeds × 15 production-limit searches (8 of them full-10s at 2.4–2.7M
+  nodes, the regime that stalled ~3/100 on the old pair): 30/30
+  bestmove, **0 deaths**, 0 page errors, final liveness proven by a real
+  follow-up search. Fast Node suite re-run green on the merged tree
+  (stack-regress 5/5, test-engine 7/7, regress, search-identity pilot).
 - [ ] phone feel check — pending (post-merge, on Pages)
 
 ## Provenance (pin these)
