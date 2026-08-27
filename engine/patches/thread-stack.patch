@@ -1,0 +1,42 @@
+Raise the search-thread stack from 8MB to 32MB.
+
+Fairy-Stockfish pins every search thread's stack at TH_STACK_SIZE via
+pthread_attr_setstacksize (active under USE_PTHREADS, which includes the
+emscripten build; the wasm glue honors the attribute). Largeboard builds
+carry ~70KB per recursive search frame (MAX_MOVES=8192 -> a 64KB ExtMove
+buffer in each MovePicker), so a deep re-search line toward MAX_PLY needs
+17-24MB and overflows the 8MB stack: natively a SIGSEGV / ASan
+stack-overflow on the search thread, in wasm a silent overwrite of
+adjacent linear memory that corrupts the instance before (or without)
+trapping. Upstream: FSF issue #804; the structural fix is draft PR #1031
+(per-thread MovePicker buffer pool) - adopt it when it lands and drop
+this patch. Deterministic repro of record: engine/tests/stack-regress.cjs
+(investigation 2026-08-27, evidence in engine/README.md).
+
+Search-behavior-identical by construction: same tree, more room to walk
+it. Applies to both pinned trees (the file is byte-identical); it is dead
+code in the threadless ffish build, so only the engine artifact rebuilds.
+
+diff --git a/src/thread_win32_osx.h b/src/thread_win32_osx.h
+--- a/src/thread_win32_osx.h
++++ b/src/thread_win32_osx.h
+@@ -26,14 +26,18 @@
+ /// somewhat more than 1MB stack, so adjust it to TH_STACK_SIZE.
+ /// The implementation calls pthread_create() with the stack size parameter
+ /// equal to the linux 8MB default, on platforms that support it.
++/// Largeboard builds need far more: with MAX_MOVES=8192 a search frame
++/// carries a ~64KB MovePicker move buffer (~70KB per frame in total), so
++/// deep re-search lines toward MAX_PLY need 17-24MB of stack (FSF issue
++/// #804, measured 2026-08-27) - hence 32MB, one block per search thread.
+
+ #if defined(__APPLE__) || defined(__MINGW32__) || defined(__MINGW64__) || defined(USE_PTHREADS)
+
+ #include <pthread.h>
+
+ namespace Stockfish {
+
+-static const size_t TH_STACK_SIZE = 8 * 1024 * 1024;
++static const size_t TH_STACK_SIZE = 32 * 1024 * 1024;
+
+ template <class T, class P = std::pair<T*, void(T::*)()>>
+ void* start_routine(void* ptr)
