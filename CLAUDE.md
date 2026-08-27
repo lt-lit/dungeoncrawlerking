@@ -90,7 +90,20 @@ Chromium with SharedArrayBuffer live, depth-cap re-measure (rule 11
 unchanged), spike10 32/32, and the designer's phone feel check passed
 (2026-08-26 — duel feel unchanged, selftest green on device). The
 walled-passer eval fix stays deliberately NOT shipped, and upstreaming is
-not planned (designer 2026-08-25). **Phase 1.2.4 — Set Dressing ✅ done
+not planned (designer 2026-08-25). **2026-08-27 — the engine-stall ROOT
+CAUSE is FIXED**: the live-duel stalls ("engine stalled", "hint probe
+failed" — worst on big boards, browser-independent) were FSF's largeboard
+search-thread STACK OVERFLOW (upstream issue #804): silent wasm memory
+corruption — a search can emit a legal bestmove and the instance is
+already dead. NOT a dead-squares bug and NOT a 1.1.11 regression (the old
+base crashes natively too — never roll back; its deep-largeboard output
+is untrusted). `engine/patches/thread-stack.patch` (TH_STACK_SIZE 8→32MB;
+dead code in threadless ffish, so ONLY the engine wasm changed — js and
+worker rebuilt byte-identical, wasm +2 bytes) is vendored behind a full
+rule-16 gate; `engine/tests/stack-regress.cjs` guards the deterministic
+P60 kill-fixture (the old pair dies on it 19/19). Adopt upstream PR #1031
+(per-thread MovePicker pool) when it lands and drop the patch. Phone feel
+check pending. **Phase 1.2.4 — Set Dressing ✅ done
 (2026-08-27)**: retired the hard-coded `'*'` tests for the shared
 terrain helper (`fen.mjs` `WALL`/`FURNITURE`/`isTerrain`; the audit
 found 65 sites / 24 files — the two known landmines confirmed, plus
@@ -151,8 +164,9 @@ twice — and finally **Phase 2 — exploration slice**.
   AUTHORED patch of record), the KOTH PR #29 reference diff (reference
   only — three known defects), the rule-16 gate tests (`tests/*.cjs`), and
   `engine/README.md` (recipe, gotchas, gate results, validation evidence).
-  **`play/vendor/` carries the PATCHED pair since 2026-08-26** (gate green;
-  only the phone feel check outstanding). phase0's npm `node_modules` are
+  **`play/vendor/` carries the PATCHED pair** (dead-squares 2026-08-26 +
+  thread-stack 2026-08-27, each behind a green rule-16 gate; the 08-27
+  phone feel check is outstanding). phase0's npm `node_modules` are
   still the STOCK pair — overlay `play/vendor/` artifacts before any
   phase0 run that must play the shipped rules (see `engine/README.md`).
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
@@ -217,7 +231,10 @@ run one sweep at a time.
    (`lib/load.mjs.go()` has the watchdog).
 6. **Recycle the engine instance every ~40 games / between duels** — the WASM
    instance corrupts under sustained multi-game use. Never call `quit()` in
-   Node (Emscripten kills the whole process); drop the reference.
+   Node (Emscripten kills the whole process); drop the reference. (2026-08-27:
+   the stack-overflow diagnosis — `engine/README.md`, thread-stack patch — is
+   the likely root cause of this corruption; keep the recycle discipline
+   until re-measured on the fixed pair.)
 7. **Variant names are single-use** (redefinition silently no-ops). Use the
    dims-keyed catalog pattern: `duel_<files>x<ranks>`, all 60 loaded once at
    boot. Incremental ADDITION of new names is safe in both libraries
@@ -240,14 +257,21 @@ run one sweep at a time.
     coi-serviceworker required, and it must sit NEXT TO index.html (service
     worker scope), not in a subdirectory. Ship `Threads=1`.
 11. **Engine searches: cap at `depth 22`.** `movetime` does NOT bind on 4–6
-    file arenas — the engine reaches depth 55+ and ultra-deep searches
-    crash this WASM build's pthread (`index out of bounds`). Measured on
-    1.1.11: d60 crashed 1/30 searches, d22 crashed 0/110 and still returns
-    <200 ms. Re-measured on the dead-squares pair (2026-08-26, Node,
-    `engine/tests/depthcap.cjs`, arenas incl. `^` and `*`): d22 110/110
-    clean (slowest 1553 ms), d60 30/30 clean — the cap STAYS at d22 (0/30
-    at d60 is not evidence of a fix at a 1/30 base rate). Not a handicap;
-    live play was reaching d22–23 anyway.
+    file arenas — the engine reaches depth 55+. The crash behind this cap
+    (`index out of bounds`; 1.1.11 d60 1/30, d22 0/110; dead-squares pair
+    2026-08-26: d22 110/110, d60 30/30) is ROOT-CAUSED as of 2026-08-27:
+    largeboard search-thread stack overflow (`engine/README.md`, thread-stack
+    patch) — depth was only a proxy, and BIG boards hit the same crash BELOW
+    d22 (~3 stalls/100 searches at `depth 22 movetime 10000` on 10×10 before
+    the fix; the 4–6-file measurements never covered that regime).
+    Re-measured on the thread-stack pair (2026-08-27,
+    `engine/tests/depthcap.cjs` + 10×10 spot-checks): d22 110/110 clean
+    (slowest 1619 ms), d60 30/30 clean, and on 10×10 d22/10s, d26/12M-node
+    and d30/20M-node searches all complete with the instance alive (d26
+    node-identical to the native reference). The cap still STAYS at d22 —
+    live pacing is unchanged and deep-search evidence stays thin (0/30 at
+    d60 vs the old 1/30 base rate). Not a handicap; live play was reaching
+    d22–23 anyway. `stack-regress.cjs` is the permanent kill-fixture guard.
 12. **Any long-lived auxiliary search needs its own recovery.** The duel's
     stall ladder only fires on the duel's own searches — the cheat/hint
     MultiPV probe had none and died permanently and silently when its
@@ -276,7 +300,10 @@ run one sweep at a time.
     two toolchains.** ffish comes from FSF mainline (`src/Makefile_js`,
     emsdk 1.39.16); the engine from `fairy-stockfish/fairy-stockfish.wasm`
     branch `nnue` (emsdk 2.0.26) — but every rule-bearing source file is
-    byte-identical between them, so ONE patch feeds both. Any rules change
+    byte-identical between them, so ONE patch (set) feeds both —
+    `dead-squares.patch` + `thread-stack.patch`, and the latter is dead
+    code in the threadless ffish build, so its 2026-08-27 rebuild
+    legitimately touched only the engine artifact. Any RULES change
     rebuilds BOTH or the game desyncs (ffish is the legality gate at
     `duel.mjs`). Build gotchas that already bit: emsdk activation is
     stateful (installing one version deactivates the other — build ffish

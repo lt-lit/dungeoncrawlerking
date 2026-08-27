@@ -12,6 +12,15 @@ The crates-dense feel reading landed with Phase 1.2.4's stage support:
 **1.2.4's exit passed 2026-08-27** — crate duels live on-device with
 Earthquakes on (designer verdict: "surprisingly really fun").
 
+**Status 2026-08-27: the STACK patch shipped.** `patches/thread-stack.patch`
+(TH_STACK_SIZE 8MB→32MB) fixes the live-duel engine stalls — FSF's
+largeboard search-thread stack overflow, upstream issue #804. Engine
+artifact rebuilt from the same pins (js+worker byte-identical to the
+2026-08-26 pair, wasm +2 bytes); ffish unchanged (the constant is dead
+code in its threadless build); full rule-16 gate green (see "The stack
+patch" below). Phone feel check pending. Adopt upstream PR #1031 when it
+lands and drop the patch.
+
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
 diff. `patches/pr29-dead-squares-full.diff` (KOTH-Stockfish PR #29) is
@@ -129,6 +138,97 @@ crate6x6 config the WASM tests use.
 Compilation: zero warnings from the changed files under `-Wall -Wextra
 -Wshadow` in both trees.
 
+## The stack patch (`patches/thread-stack.patch`) — 2026-08-27
+
+One hunk: `TH_STACK_SIZE` 8MB → 32MB in `src/thread_win32_osx.h` (a file
+byte-identical across both pinned trees, untouched upstream since 2022).
+Fixes the live-duel engine stalls ("engine stalled — recycling instance" /
+"hint probe failed … — reforming"): FSF pins every search thread's stack
+via `pthread_attr_setstacksize` (active under USE_PTHREADS, em++
+included; the wasm glue honors the attribute), while largeboard search
+frames run ~70KB each (`MAX_MOVES=8192` → a 64KB ExtMove buffer per
+MovePicker) — a deep re-search line toward MAX_PLY needs 17–24MB and
+overflows. Natively that is a SIGSEGV / ASan `stack-overflow` on the
+search thread (~118 recursive plies, 124 frames in gdb); in wasm it is a
+SILENT overwrite of adjacent linear memory — the search often still emits
+a legal bestmove, then the instance never answers again. One bug, five
+error wordings: `index out of bounds` (Firefox wasm), `memory access out
+of bounds` (Chromium/Node wasm), `too much recursion` (Firefox glue),
+`TypeError: a is not a function` (Chromium glue), `Maximum call stack
+size exceeded` (Node pthread message).
+
+Findings of record (investigation 2026-08-27; the P60 golden fixture is
+now `engine/tests/stack-regress.cjs`):
+
+- The old pair dies on ONE search: variant `duel_10x10__w2__b9`, the P60
+  FEN, `go depth 22 nodes 3000000` — 19/19 in headless Chromium, 4/4 in
+  Node. Field rate on big boards at production limits: ~3 deaths/100
+  searches (4×7 control: 0/20). With 32MB the same search completes at
+  the exact stock node count (1,786,533, sd 32) — search-identical by
+  construction, and verified node-for-node against native (d26 =
+  4,894,925 in both).
+- Depth/nodes/movetime caps do NOT mitigate — they resample which tree is
+  walked (a 4-node timing jitter flips dead↔alive); a Hash change dodges
+  by path luck. And `isready` is NOT proof of life: one Node failure mode
+  leaves the UCI queue answering `readyok` over a dead search thread
+  (rule 12 applies — liveness checks must be a real search).
+- NOT a 1.1.11→1.1.12 regression: native builds SIGSEGV at BOTH vintages;
+  with an adequate stack both complete byte-identically. The old base's
+  "clean" deep largeboard searches are layout luck (upstream documents
+  corrupt-before-trap) — treat them as untrusted, and do NOT roll back.
+  This likely also explains rule 6's sustained-use corruption and the
+  rule-11 d60 crash rate.
+- Upstream: FSF issue #804 (open since 2024); the structural fix is draft
+  PR fairy-stockfish/Fairy-Stockfish#1031 (per-thread MovePicker buffer
+  pool — its own numbers match these). ADOPT IT when it lands and drop
+  this patch. Cost of ours: one 32MB block per search thread (Threads=1
+  live, so 32MB total).
+
+Rebuild provenance (2026-08-27): same pins and toolchain as 1.2.3, both
+patches applied (dead-squares hunk 12 at the known −2 offset). The
+rebuilt `stockfish.js` and `stockfish.worker.js` are BYTE-IDENTICAL to
+the previous vendored pair; `stockfish.wasm` differs by +2 bytes — the
+delta is the stack constant and nothing else. ffish is NOT rebuilt: the
+constant is dead code in its threadless build (no USE_PTHREADS), so the
+vendored ffish artifacts are unchanged.
+
+### Validation gate (rule 16) — run 2026-08-27, all container items green
+
+- [x] Node suite: test-ffish 19/19 (vendored ffish control) ·
+  test-engine 7/7 · xcheck 8 fixtures + mirror PASS · regress: candidate
+  `^`-free perft == vendored exactly · regress-ffish PASS ·
+  search-identity: PILOT + candidate node-for-node identical to vendored
+  at d12 (19459/26462/35136)
+- [x] stack-regress (the new test): kill-search completes, nodes
+  1,786,533, sd 32, post-kill search answers. Against the OLD pair it
+  fails (dead instance; `Maximum call stack size exceeded`) — the test
+  demonstrably detects the bug.
+- [x] `play/selftest.html` headless Chromium over COOP/COEP: **29/29**,
+  SharedArrayBuffer live, pthread worker path
+- [x] Browser P60 fixture 5/5 complete+alive (3× node-capped, 2×
+  `movetime 10000` form); browser crash-arm rerun (30 production-limit
+  searches on developed Collapsed-Keep 10×10 boards, same deal as the
+  original investigation arm): **0 deaths** — the old pair scored 1/30
+  on this arm, ~3/100 across arms
+- [x] phase0 overlay: `lib/selftest.mjs` ALL PASSED, spike10 32/32,
+  node_modules restored to stock (md5-verified)
+- [x] depth-cap re-measure: d22 110/110 clean (slowest 1619 ms), d60
+  30/30 clean; NEW 10×10 tier (previously unmeasured): d22/10s, d26/12M
+  and d30/20M-node searches all complete with the instance alive — the
+  cap STAYS at d22 (rule 11: live pacing unchanged; 0/30 at d60 remains
+  weak evidence at the historical 1/30 rate)
+- [x] POST-MERGE revalidation (2026-08-27, after PR #15 / Phase 1.2.4
+  merged into the branch): `play/selftest.html` on the merged tree
+  **32/32** (the 1.2.4 furniture checks included; ran twice, identical),
+  and a furniture-stage browser run through the NEW `dealMatchup` —
+  s52-the-apartments (10×10 floorplan, 12 `^` on the dealt board), two
+  seeds × 15 production-limit searches (8 of them full-10s at 2.4–2.7M
+  nodes, the regime that stalled ~3/100 on the old pair): 30/30
+  bestmove, **0 deaths**, 0 page errors, final liveness proven by a real
+  follow-up search. Fast Node suite re-run green on the merged tree
+  (stack-regress 5/5, test-engine 7/7, regress, search-identity pilot).
+- [ ] phone feel check — pending (post-merge, on Pages)
+
 ## Provenance (pin these)
 
 - ffish tree: `fairy-stockfish/Fairy-Stockfish` master @ `6d9d0f5` (2026-08-23), emsdk **1.39.16**, `make -f src/Makefile_js build` → `tests/js/ffish.{js,wasm}`
@@ -199,6 +299,7 @@ FFISH_JS=... node engine/tests/regress-ffish.cjs                         # ffish
 PILOT=1 node engine/tests/search-identity.cjs                            # determinism pilot (vendored vs itself)
 ENGINE_JS=... node engine/tests/search-identity.cjs                      # fixed-depth transcript identity vs vendored
 ENGINE_JS=... node engine/tests/depthcap.cjs                             # rule-11 re-measure (110 d22 + 30 d60)
+node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
 ```
 
 `regress.cjs`, `regress-ffish.cjs` and `search-identity.cjs` read the
@@ -222,6 +323,8 @@ Fixing it would break eval-equivalence with the shipped pair for zero play
 value. It is documented here so a future engine upgrade or upstream sync
 knows to look for it.
 
-Context: rule 11's crash is `fairy-stockfish/fairy-stockfish.wasm` issue
-#14 ("pthread issue", open since 2024-01, undiagnosed) — a self-built pair
-neither fixes nor worsens it on current evidence.
+Context: rule 11's crash family — `fairy-stockfish/fairy-stockfish.wasm`
+issue #14 ("pthread issue", open since 2024-01) — is DIAGNOSED as of
+2026-08-27: it is the largeboard search-thread stack overflow fixed by
+`patches/thread-stack.patch` (see "The stack patch" above; upstream FSF
+issue #804, structural fix in draft PR #1031).
