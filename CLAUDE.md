@@ -30,7 +30,8 @@ automated-playtest rig; its evidence work is paused there (`play/SLICE-REFRESH-P
 data (`phase0/harness/meterlab/`, results + findings in
 `phase0/results/`) showed the ply-ramp trigger is the wrong half of the
 Director; final numbers wait on the representative test bed. **The test
-bed's data half is DONE**: 33 designer-locked stages (`play/stages/`,
+bed's data half is DONE**: the designer-locked stage bed (58 stages
+since 1.2.4 — `play/stages/`,
 gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
 (`play/js/armygen.mjs` — W×2 unit bags, W 3–8, molding layout with two
 invariants: royal rearmost, pawns in front PER FILE; army size is
@@ -52,7 +53,7 @@ the legacy arenas, placement screen, enemyEdit cheat and
 `play/js/arena.mjs` are RETIRED (`armygen.dealMatchup` is the single
 composed deal entry point — UI, `phase0/harness/verify-stages.mjs`, and
 the future corpus builder all share it). Designer rules from that build
-plus the 2026-08-26 ground rules are canon: **crop redraws the boundary
+plus the 2026-08-27 ground rules are canon: **crop redraws the boundary
 by REMOVING ranks (never walling them)**; **KINGS ANCHOR THE ARENA**
 (brief §4.2: stages are emergent, not authored — guarantees live in the
 DEAL, not in authoring lints; the player's king always starts on the
@@ -89,8 +90,8 @@ Chromium with SharedArrayBuffer live, depth-cap re-measure (rule 11
 unchanged), spike10 32/32, and the designer's phone feel check passed
 (2026-08-26 — duel feel unchanged, selftest green on device). The
 walled-passer eval fix stays deliberately NOT shipped, and upstreaming is
-not planned (designer 2026-08-25). **PHASE 1.2.4 — SET DRESSING — IS THE
-ACTIVE PHASE**: retire the hard-coded `'*'` tests for the shared
+not planned (designer 2026-08-25). **Phase 1.2.4 — Set Dressing ✅ done
+(2026-08-27)**: retired the hard-coded `'*'` tests for the shared
 terrain helper (`fen.mjs` `WALL`/`FURNITURE`/`isTerrain`; the audit
 found 65 sites / 24 files — the two known landmines confirmed, plus
 furniture-as-displaceable and furniture-as-white-crumble-victim in
@@ -104,22 +105,30 @@ owns the real policy), a sprite (neutral piece-like glyph + cell tint,
 so capture dissolve works unchanged), the stage-map `^` character, the
 king-anchored auto-crop (see the ground rules above), and the
 REPLACEMENT stage set — the designer retired the original 33 on
-2026-08-26; wave 4 (s01–s33, the furniture bed) is ACCEPTED/locked
-2026-08-26, and wave 5 (s34–s58, rooms & breaches: sectioned maps,
+2026-08-27; wave 4 (s01–s33, the furniture bed) is ACCEPTED/locked
+2026-08-27, and wave 5 (s34–s58, rooms & breaches: sectioned maps,
 crate clusters, furniture in wall structures, breakable double doors,
 and the s51+ FLOORPLANS — multi-room maps with hallways, doors to and
 BETWEEN rooms, per-room furniture; designer: big boards play fine
-on-phone, 10-wide confirmed) is ACCEPTED/locked 2026-08-26 — the full
-58-stage bed is designer-locked; the remaining exit is crates in live
-phone duels.
-After both land, **PHASE 1.2.5** resumes; its
+on-phone, 10-wide confirmed) is ACCEPTED/locked 2026-08-27 — the full
+58-stage bed is designer-locked, and the **exit PASSED 2026-08-27**:
+crate duels live on-device with Earthquakes on (designer verdict —
+"surprisingly really fun").
+**PHASE 1.2.5 — THE PROVING GROUNDS — IS THE ACTIVE PHASE**; its
 remaining half is the LAB RIG — all automated-playtest plumbing, no duel
-rules change: (a) the **corpus materializer** (33 stages × both
-orientations × {stone-only, furniture} arms (§4.6: `^`→`.` derives the
-control from the same stage files) × `dealMatchup` → the stage-file sets `harness/meterlab/
+rules change: (a) the **corpus materializer** (the locked 58-stage bed ×
+both orientations × {stone-only, furniture} arms (§4.6: `^`→`.` derives
+the control from the same stage files) × `dealMatchup` → the stage-file sets `harness/meterlab/
 run.mjs` consumes, §7 player-favored edge + a full-strength mirror arm);
 (b) the **mirror-canary drift metric** in `harness/meterlab/analyze.mjs`;
-(c) the **meter-lab rerun** on the new bed. Ask the designer FIRST which
+(c) the **meter-lab rerun** on the new bed; (d) two rig defects from the
+1.2.4 pre-merge review, fix BEFORE the rerun: corpus lines must record
+`variantName`/`variantIni` (run.mjs plays deal variants but its output
+omits them, so `replay.mjs` reconstructs the catalog baseline — the
+camp-line double-step is lost and deal-variant corpora cannot replay
+byte-exact), and run.mjs's MultiPV human-seat path lacks the
+fresh-engine retry (an engine death mid-corpus crashes the arm instead
+of retrying). Ask the designer FIRST which
 arms run, seeds/matchups per stage-orientation, and the favored-seat
 model (depth-2 proxy vs human-shaped MultiPV) — switching mid-corpus
 forks the evidence. The phase ends when the evidence is on the table.

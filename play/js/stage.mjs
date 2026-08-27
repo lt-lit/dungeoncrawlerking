@@ -18,7 +18,7 @@
 // duel_<files>x<ranks> for 3–12 × 5–10).
 //
 // The old "no fully-walled extreme rank" load/crop guards are RETIRED
-// (designer ground rules 2026-08-26): kings anchor the arena — dealMatchup
+// (designer ground rules 2026-08-27): kings anchor the arena — dealMatchup
 // AUTO-CROPS every row behind either king, so the promotion row is the
 // enemy king's starting row by construction and stage-level policing was
 // the wrong layer. A stage whose fully-terrain edge rows leave fewer than
@@ -98,7 +98,7 @@ export function flipStageVertical(stage) {
  * instead of walling them (terrain in a removed rank, furniture included,
  * goes with it), and the cropped board rides the smaller catalog variant.
  * This is both how the setup screen tests smaller gaps AND the mechanism
- * of the king-anchored AUTO-CROP (ground rules 2026-08-26 — dealMatchup
+ * of the king-anchored AUTO-CROP (ground rules 2026-08-27 — dealMatchup
  * crops every row behind either king after molding).
  *
  * Throws on a crop that leaves fewer than 5 ranks (the catalog floor —

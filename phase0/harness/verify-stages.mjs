@@ -58,7 +58,7 @@ const totalFurniture = stages.reduce((n, s) => n + s.furniture.length, 0);
 console.log(`${stages.length} stages loaded (${totalFurniture} furniture squares across the set)`);
 
 // The old extreme-rank promotion check is RETIRED (ground rules
-// 2026-08-26): the king-anchored auto-crop makes the promotion-row
+// 2026-08-27): the king-anchored auto-crop makes the promotion-row
 // guarantee true by construction. What CAN still be a data bug is a stage
 // whose fully-terrain edge rows leave fewer than 5 playable ranks — every
 // deal on it auto-crops below the floor and is rejected, so the
@@ -75,7 +75,7 @@ for (const s of stages) {
 
 /** Molding invariants on one accepted deal (royal rearmost + per-file
  *  screen), plus the king-anchor guarantee: after auto-crop each royal
- *  STARTS on its side's extreme row (ground rules 2026-08-26). */
+ *  STARTS on its side's extreme row (ground rules 2026-08-27). */
 function checkInvariants(label, deal) {
   for (const [layout, side] of [[deal.white.layout, 'white'], [deal.black.layout, 'black']]) {
     const depth = (c) => (side === 'white' ? c.r : deal.ranks - 1 - c.r);

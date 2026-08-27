@@ -144,7 +144,7 @@ async function main() {
       throw new Error(`expected ≥33 stages (count ${manifest.count}), loaded ${stages.length}`);
     }
     // (The extreme-rank promotion check is retired — ground rules
-    // 2026-08-26: the king-anchored auto-crop makes the promotion-row
+    // 2026-08-27: the king-anchored auto-crop makes the promotion-row
     // guarantee true by construction; see the dealMatchup check below.)
     const furn = stages.reduce((n, s) => n + s.furniture.length, 0);
     return `${stages.length} stages, ${furn} furniture squares`;
@@ -183,7 +183,7 @@ async function main() {
       '.......#..',
       '..........',
       '..........',
-      '##########', // rank 1: all stone — legal since 2026-08-26, auto-crops away
+      '##########', // rank 1: all stone — legal since 2026-08-27, auto-crops away
     ],
   });
   const dealKnobs = {
@@ -213,9 +213,12 @@ async function main() {
   });
 
   // The designer's double-step rule (spike 14, camp line): each side's
-  // deal variant grants the leap at or behind its front-most dealt pawn
-  // rank — past the line, never again. Quake-scooted pawns behind the
-  // line keep it, which is the whole point of rows over dealt squares.
+  // deal variant grants the leap at or behind its CAMP LINE — the rank
+  // holding the MOST of its dealt pawns, ties toward the enemy (NOT the
+  // front-most pawn rank; that reading was tried and rejected — a lone
+  // straggler must never drag the line forward). Past the line, never
+  // again. Quake-scooted pawns behind the line keep it, which is the
+  // whole point of rows over dealt squares.
   const flatsStage = loadStageV2({
     schema: 2,
     id: 'selftest-flats',
@@ -312,7 +315,7 @@ async function main() {
     return `royal-rearmost + per-file pawn screen hold for both 8x2 armies (gap ${deal.gap})`;
   });
 
-  // The designer's promotion rule (king-anchored since 2026-08-26): the
+  // The designer's promotion rule (king-anchored since 2026-08-27): the
   // promotion zone is the enemy king's starting row — always the real far
   // rank, because cropping redraws the boundary (the rank is REMOVED,
   // never walled off) and the auto-crop anchors the kings on the extremes.

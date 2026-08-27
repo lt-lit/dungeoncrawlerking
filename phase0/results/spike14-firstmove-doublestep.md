@@ -72,8 +72,12 @@ it stands on the square it was dealt onto.**
 `variant.mjs → dealVariant(files, ranks, whiteLineRank, blackLineRank)`
 builds the per-deal block (`duel_<f>x<r>__w<line>__b<line>`, regions =
 rank spans from each home edge to the line); `armygen.dealMatchup`
-derives the camp lines from the molded layouts (front-most pawn rank per
-side), registers the variant in ffish before its own FEN lint, and
+derives the camp lines from the molded layouts (the MODE pawn rank per
+side, ties toward the enemy — `[corrected]`: this line originally said
+"front-most pawn rank", the second formulation, which the designer
+rejected on the straggler reading — see the header; `campLineRank` has
+always shipped mode-rank), registers the variant in ffish before its own
+FEN lint, and
 returns `variantName` + `variantIni`; the game appends the block to its
 cumulative ini and reloads the engine per duel (recycle paths reload the
 same cumulative text, so a mid-duel engine swap keeps the live variant).

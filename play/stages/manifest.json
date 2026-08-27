@@ -604,7 +604,7 @@
    "schema": 2,
    "id": "s36-crate-hoard",
    "title": "Crate Hoard",
-   "notes": "A holed corner room with the hoard inside — and now a breakable floor-edge (c5, d5) so the room can be cracked open from below as well as entered through the gap. Designer tweak 2026-08-26.",
+   "notes": "A holed corner room with the hoard inside — and now a breakable floor-edge (c5, d5) so the room can be cracked open from below as well as entered through the gap. Designer tweak 2026-08-27.",
    "map": [
     ".^^.#...",
     "..^.....",
@@ -725,7 +725,7 @@
    "schema": 2,
    "id": "s43-the-breach",
    "title": "The Breach",
-   "notes": "A castle wall two ranks thick. The breach column is rubble-choked — and the collapse spilled forward: d5 joins the breach and d6 lies in the approach. Smash a path, or smash a wider one. Designer tweak 2026-08-26.",
+   "notes": "A castle wall two ranks thick. The breach column is rubble-choked — and the collapse spilled forward: d5 joins the breach and d6 lies in the approach. Smash a path, or smash a wider one. Designer tweak 2026-08-27.",
    "map": [
     "........",
     "........",
@@ -795,7 +795,7 @@
    "schema": 2,
    "id": "s47-the-warrens",
    "title": "The Warrens",
-   "notes": "Two full walls and an offset divider, now multiply breached: two weak points per wall and a breakable stub on the divider — every route is a smash, and there are many routes. Verifier-flagged. Designer tweak 2026-08-26.",
+   "notes": "Two full walls and an offset divider, now multiply breached: two weak points per wall and a breakable stub on the divider — every route is a smash, and there are many routes. Verifier-flagged. Designer tweak 2026-08-27.",
    "map": [
     ".........",
     ".........",

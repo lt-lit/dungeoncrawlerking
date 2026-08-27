@@ -9,7 +9,7 @@
 // fatigue limit).
 //
 // Setup flow (slice refresh — replaces the retired arena menu + placement
-// screen): pick a stage (33 designer-locked terrains, fetched as one
+// screen): pick a stage (the designer-locked stage bed, fetched as one
 // manifest bundle) → knobs (per-side army width/composition/archetype/
 // anchor, flip, crop, initiative, ONE master seed — army, molding and
 // Director streams all derive from it via childSeed) → armygen.dealMatchup
@@ -514,7 +514,17 @@ async function runEvalProbes() {
     const mySeq = ++evalProbe.seq;
     const engine = app.engine;
     evalProbe.engine = engine;
-    engine.setoption('MultiPV', '1');
+    try {
+      engine.setoption('MultiPV', '1');
+    } catch (e) {
+      // postMessage threw — the idle instance is gone. Without this guard
+      // the whole idle-probes flight rejected unhandled: no visible
+      // failure, no recycle, and the queued jobs re-threw every turn (the
+      // exact silent-dead-probe mode rule 12 exists to prevent).
+      evalProbe.engine = null;
+      await evalProbeFailed(engine, e);
+      return;
+    }
     let before;
     let after;
     const run = (async () => {
@@ -818,6 +828,19 @@ function godsCensusNow() {
   }, 30);
 }
 
+/** JSON.stringify turns Infinity into null, which silently corrupts an
+ *  exported config (the 'off' preset is onsetPly: Infinity — a replay
+ *  built from null ramps quakes from ply 0 in a duel that had the gods
+ *  OFF). Export non-finite numbers as strings; Number('Infinity') revives
+ *  them exactly, so consumers map values through Number() and lose
+ *  nothing. */
+function jsonSafeNumbers(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : String(v);
+  if (Array.isArray(v)) return v.map(jsonSafeNumbers);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, jsonSafeNumbers(x)]));
+  return v;
+}
+
 /** Everything a replay or offline analysis needs, from the one ledger. */
 function godsExportData() {
   const d = app.duel;
@@ -843,8 +866,8 @@ function godsExportData() {
     variant: d.variantName,
     startFen: d.startFen,
     seed: dir.seed,
-    config0: dir.config0, // starting config — what a replay constructs with
-    config: {
+    config0: jsonSafeNumbers(dir.config0), // starting config — what a replay constructs with
+    config: jsonSafeNumbers({
       // live config at export time (tunes applied); the tunes ledger maps
       // one to the other, undo markers included
       onsetPly: dir.onsetPly,
@@ -853,9 +876,9 @@ function godsExportData() {
       debtCap: dir.debtCap,
       asymOnsetPly: dir.asymOnsetPly,
       asymRamp: dir.asymRamp,
-    },
+    }),
     favor: dir.favor,
-    tunes: d.record.tunes,
+    tunes: jsonSafeNumbers(d.record.tunes),
     moves: d.record.moves,
     sans: d.record.sans,
     quakes: d.record.quakes.map(({ trace, ...rest }) => rest), // traces carried once, below

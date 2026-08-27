@@ -44,8 +44,11 @@ export async function loadFfish() {
  * Call it right after loading the variant catalog; `variantName` must be a
  * registered ≥5×5 variant (the catalog's `duel_5x5` by default).
  */
-export function assertFurnitureSupport(ffish, variantName = 'duel_5x5') {
-  const probe = 'kq3/5/2^2/5/KQ3 w - - 0 1'; // 5x5, no bare king (rule 4b)
+export function assertFurnitureSupport(ffish, variantName = 'duel_5x5', probeFen = null) {
+  // Default probe is 5x5, no bare king (rule 4b) — callers whose loaded
+  // variants have other dims (the meter-lab corpus) pass their own
+  // `^`-bearing FEN + matching variant instead.
+  const probe = probeFen ?? 'kq3/5/2^2/5/KQ3 w - - 0 1';
   if (ffish.validateFen(probe, variantName) === 1) return;
   throw new Error(
     'this ffish build rejects the furniture glyph ^ — phase0/node_modules holds the STOCK pair.\n' +

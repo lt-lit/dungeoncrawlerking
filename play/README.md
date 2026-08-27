@@ -117,11 +117,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   cautionary tale).
 - `stages/*.json` — the stage set, authored with §4.6 capturable walls
   from the start (wave 4, s01–s33: the furniture bed — locked, all 33
-  accepted 2026-08-26, replacing the retired waves 1–3; wave 5,
+  accepted 2026-08-27, replacing the retired waves 1–3; wave 5,
   s34–s58: rooms & breaches — sectioned maps, crate clusters,
   furniture in wall structures, breakable double doors, and the s51+
   floorplans (multi-room maps: hallways, doors to and between rooms,
-  per-room furniture patterns) — locked, all 25 accepted 2026-08-26);
+  per-room furniture patterns) — locked, all 25 accepted 2026-08-27);
   `stages/manifest.json` is the
   generated browser bundle (regenerate with
   `phase0/harness/gen-stage-manifest.mjs` after any stage edit —
@@ -216,7 +216,7 @@ jump; rear pawns behind the line can single-step then double once lanes
 open (tied stacks put the line at the front wall).
 
 **Crop = redrawing the boundary, and KINGS ANCHOR THE ARENA (designer
-ground rules, 2026-08-26).** To every piece a rank of solid wall and the
+ground rules, 2026-08-27).** To every piece a rank of solid wall and the
 board simply ending are identical, so `cropStage` REMOVES far/near ranks
 instead of walling them; the cropped board uses the smaller catalog
 variant. On top of that, the deal itself enforces the king anchors: the

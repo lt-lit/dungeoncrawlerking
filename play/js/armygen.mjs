@@ -350,7 +350,7 @@ export function armiesConnected(stage, matchup, { furnitureBlocks = false } = {}
  *                               (start-position legality, checks, decided)
  * }
  *
- * KING-ANCHORED AUTO-CROP (designer ground rules 2026-08-26): after
+ * KING-ANCHORED AUTO-CROP (designer ground rules 2026-08-27): after
  * molding, every row behind either king is cropped out of the playable
  * area, so the player's king always starts on the first row and the enemy
  * king on the last. Molding puts each royal in its army's rearmost

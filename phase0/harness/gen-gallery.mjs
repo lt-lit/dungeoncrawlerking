@@ -217,8 +217,8 @@ ${Object.keys(cardsByWave)
   .sort((a, b) => b - a)
   .map((w) => {
     const label = {
-      5: 'Wave 5 — locked (rooms & breaches + the s51+ floorplans — all 25 accepted 2026-08-26)',
-      4: 'Wave 4 — locked (the furniture bed — all 33 accepted 2026-08-26; replaced the retired waves 1–3)',
+      5: 'Wave 5 — locked (rooms & breaches + the s51+ floorplans — all 25 accepted 2026-08-27)',
+      4: 'Wave 4 — locked (the furniture bed — all 33 accepted 2026-08-27; replaced the retired waves 1–3)',
       3: 'Wave 3 — locked (the coverage-gap set: necks, lattices, two-front, wide-shallow, cornered royals, deep pawns, fortress pocket, serpentine, L-board, 3-wide terrain, minimum square)',
       2: 'Wave 2 — locked (broken deployment ground)',
       1: 'Wave 1 — locked (clean ground)',

@@ -41,7 +41,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadFfish, loadEngine } from '../../lib/load.mjs';
+import { loadFfish, loadEngine, assertFurnitureSupport } from '../../lib/load.mjs';
 import { DuelController } from '../../../play/js/duel.mjs';
 import { makeDuelVariantIni } from '../../../play/js/variant.mjs';
 import { MeterDirector, RestlessnessMeter, PositionLog, moveEvents, METER_DEFAULTS } from './meter.mjs';
@@ -392,6 +392,13 @@ if (!arenas.length) {
 const catalogIni = [...new Map(arenas.map((a) => [a.variantName, a.ini])).values()].join('\n');
 const ffish = await loadFfish();
 ffish.loadVariantConfig(catalogIni);
+// Stage bed carries furniture (§4.6) since 1.2.4 — fail loudly with the
+// overlay recipe when node_modules holds the stock pair, instead of dying
+// on the first '^' FEN mid-corpus (the meter-lab law: calibration is only
+// valid under the exact shipped ruleset). Probe with the corpus's own
+// first crate arena so the variant dims always match.
+const crateArena = arenas.find((a) => a.startFen?.includes('^'));
+if (crateArena) assertFurnitureSupport(ffish, crateArena.variantName, crateArena.startFen);
 let engine = await freshEngine(catalogIni);
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
