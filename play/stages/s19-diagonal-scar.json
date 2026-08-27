@@ -1,18 +1,18 @@
 {
-  "schema": 2,
-  "wave": 2,
-  "id": "s19-diagonal-scar",
-  "title": "Diagonal Scar",
-  "notes": "Wave 2. A broken diagonal streak from a1 to h9 touching both deployment zones. Neither side deploys clean; the scar leaves slip-gaps for king-steps and diagonal sliders.",
-  "map": [
-    "......##",
-    ".....#..",
-    "........",
-    "...#....",
-    "....#...",
-    "..#.....",
-    "........",
-    ".#......",
-    "#......."
-  ]
+ "schema": 2,
+ "id": "s19-diagonal-scar",
+ "title": "Diagonal Scar",
+ "notes": "A broken diagonal alternating stone and furniture. The scar can be partially reopened — every second segment is smashable.",
+ "map": [
+  "........",
+  "......#.",
+  ".....^..",
+  "....#...",
+  "...^....",
+  "..#.....",
+  ".^......",
+  "#.......",
+  "........"
+ ],
+ "wave": 4
 }

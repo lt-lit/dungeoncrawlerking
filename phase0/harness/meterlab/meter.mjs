@@ -44,7 +44,7 @@
 // (forecast() is NOT meaningful here: it extrapolates pQuake over future
 // plies, and future meter values are unknowable. The lab never calls it.)
 import { Director, fenGrid } from '../../../play/js/director.mjs';
-import { getSquare } from '../../../play/js/fen.mjs';
+import { getSquare, isTerrain, WALL } from '../../../play/js/fen.mjs';
 
 export const METER_DEFAULTS = {
   sate: 4, // meter points refunded by one forcing ply (sateMode 'sub')
@@ -189,7 +189,10 @@ function zoneCount(grid, moverWhite, ek) {
   for (let r = 0; r < grid.length; r++) {
     for (let f = 0; f < grid[r].length; f++) {
       const c = grid[r][f];
-      if (!c || c === '*') continue;
+      // isTerrain first: '^' would otherwise count as a mover-side piece
+      // whenever the mover is white (the toUpperCase landmine class) and
+      // skew the net-progress meter the 1.2.5 rerun reads.
+      if (!c || isTerrain(c)) continue;
       if ((c === c.toUpperCase()) !== moverWhite) continue;
       if (cheb({ f, r }, ek) <= 2) n++;
     }
@@ -236,7 +239,10 @@ export function moveEvents(prevFen, uci, postBoard, opts = {}) {
     }
   }
   return {
-    capture: (destOcc != null && destOcc !== '*') || (isPawn && fileChanged),
+    // A move onto furniture IS a capture (§4.6 — an ordinary capture to
+    // search and SAN; its meter WEIGHT is the rework's question, §11).
+    // Stone can never be a move destination, so excluding WALL suffices.
+    capture: (destOcc != null && destOcc !== WALL) || (isPawn && fileChanged),
     check: postBoard.isCheck(),
     pawnAdvance: isPawn,
     promotion: !!promo,

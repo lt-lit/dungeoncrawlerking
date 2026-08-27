@@ -1,17 +1,17 @@
 {
-  "schema": 2,
-  "wave": 3,
-  "id": "s29-the-redoubt",
-  "title": "The Redoubt",
-  "notes": "Wave 3. A one-door corner chamber (door at h6) in black-deployment territory, rest open: the natural FORTRESS pocket — the stall scenario the Director exists to break. Prime meter-lab terrain.",
-  "map": [
-    ".....#..",
-    ".....#..",
-    "#....#.#",
-    "........",
-    "...#....",
-    "........",
-    "......#.",
-    "........"
-  ]
+ "schema": 2,
+ "id": "s29-the-redoubt",
+ "title": "The Redoubt",
+ "notes": "A sealed corner chamber in the far side's territory whose only door is furniture. Sometimes the defender molds INTO it — a fortress with a capturable door is the §4.6 thesis stage.",
+ "map": [
+  ".....#..",
+  ".....^..",
+  ".....#..",
+  "......##",
+  "........",
+  "........",
+  "........",
+  "........"
+ ],
+ "wave": 4
 }

@@ -5,9 +5,18 @@
 // data-square attributes and all callbacks stay absolute. Pieces render as
 // the filled Unicode glyph set for BOTH colors (fonts render the filled set
 // far more consistently than the outline set); color comes from CSS classes.
-import { splitFen, parseBoard } from './fen.mjs';
+//
+// Terrain: a stone wall '*' is a CELL treatment (the sunken pit — no child
+// element). Furniture '^' (§4.6) deliberately renders like a PIECE — a
+// neutral-colored glyph span over a raised cell tint — because it behaves
+// like a victim: it can be captured, so the capture-dissolve path
+// (animateSlide's dst .piece query) and the ringed target mark must treat
+// it as one. The flavor is per-stage fiction (crates, doors, weak masonry);
+// the renderer knows only the one neutral sprite.
+import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
 
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const FURNITURE_GLYPH = '▦';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const CELL = 10; // SVG units per cell (viewBox space)
 
@@ -127,19 +136,30 @@ export class BoardUI {
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
       const v = grid[this.ranks - rank]?.[f] ?? null;
-      cell.classList.toggle('wall', v === '*');
+      cell.classList.toggle('wall', v === WALL);
+      cell.classList.toggle('furniture', v === FURNITURE);
       let glyph = cell.querySelector('.piece');
-      if (v && v !== '*') {
-        const letter = v.replace('+', '');
-        const isWhite = letter === letter.toUpperCase();
+      if (v && v !== WALL) {
         if (!glyph) {
           glyph = document.createElement('span');
           glyph.className = 'piece';
           cell.appendChild(glyph);
         }
-        glyph.textContent = GLYPHS[letter.toLowerCase()] ?? letter;
-        glyph.classList.toggle('white', isWhite);
-        glyph.classList.toggle('black', !isWhite);
+        if (v === FURNITURE) {
+          // Neutral sprite — neither side's color. Without this branch '^'
+          // fell through to the piece path as a literal glyph styled WHITE
+          // (the toUpperCase landmine, renderer edition).
+          glyph.textContent = FURNITURE_GLYPH;
+          glyph.classList.remove('white', 'black');
+          glyph.classList.add('neutral');
+        } else {
+          const letter = v.replace('+', '');
+          const isWhite = letter === letter.toUpperCase();
+          glyph.textContent = GLYPHS[letter.toLowerCase()] ?? letter;
+          glyph.classList.toggle('white', isWhite);
+          glyph.classList.toggle('black', !isWhite);
+          glyph.classList.remove('neutral');
+        }
       } else if (glyph) {
         glyph.remove();
       }

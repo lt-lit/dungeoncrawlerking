@@ -1,15 +1,15 @@
 {
-  "schema": 2,
-  "wave": 3,
-  "id": "s26-flats",
-  "title": "The Flats",
-  "notes": "Wave 3. WIDE-SHALLOW (10x6): armies start two ranks apart across a broad front — immediate contact chess, never covered by the tall locked sets. Light rubble incl. deployment intrusions.",
-  "map": [
-    "..........",
-    ".........#",
-    "..#...#...",
-    "......#...",
-    "#.........",
-    ".........."
-  ]
+ "schema": 2,
+ "id": "s26-flats",
+ "title": "Flats",
+ "notes": "Wide-shallow ground with only light clutter and no stone. Wide flanks, short files — the cavalry board.",
+ "map": [
+  "..........",
+  "..........",
+  "...^..^...",
+  ".^........",
+  "..........",
+  ".........."
+ ],
+ "wave": 4
 }

@@ -1,0 +1,17 @@
+{
+ "schema": 2,
+ "id": "s37-twin-vaults",
+ "title": "Twin Vaults",
+ "notes": "A full-height spine splits the field into two vaults — one open hole, one weak point — with a crate cluster stored in each half. Two sub-battles, three ways to merge them.",
+ "map": [
+  "..........",
+  ".....#....",
+  ".^^..#....",
+  "..........",
+  ".....^.^^.",
+  ".....#....",
+  ".....#....",
+  ".........."
+ ],
+ "wave": 5
+}

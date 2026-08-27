@@ -1,17 +1,17 @@
 {
-  "schema": 2,
-  "wave": 3,
-  "id": "s24-hypostyle",
-  "title": "Hypostyle Hall",
-  "notes": "Wave 3. A pillar LATTICE across ranks 4-5 (alternating cells): no file crosses cleanly — sliders are denied vertically, knights and kings weave through. The dense-pillar case.",
-  "map": [
-    ".........",
-    ".........",
-    ".........",
-    "#.#.#.#.#",
-    ".#.#.#.#.",
-    ".........",
-    ".........",
-    "........."
-  ]
+ "schema": 2,
+ "id": "s24-hypostyle",
+ "title": "Hypostyle",
+ "notes": "Alternating pillar lattice — half the pillars are stone, half furniture. The lattice thins as the duel burns through it.",
+ "map": [
+  ".........",
+  ".........",
+  ".#.^.#.^.",
+  ".........",
+  ".^.#.^.#.",
+  ".........",
+  ".........",
+  "........."
+ ],
+ "wave": 4
 }

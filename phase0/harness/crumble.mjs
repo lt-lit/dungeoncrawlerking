@@ -1,7 +1,7 @@
 // Crumble system (brief §4.5): repetition crumbles + pacing crumbles as
 // orchestration-layer arena regeneration. The harness rewrites the FEN
 // between plies; every state the engine sees is FSF-pure.
-import { splitFen, setSquare, clearEp, findSquares, squareName } from '../lib/fen.mjs';
+import { splitFen, setSquare, clearEp, findSquares, squareName, isTerrain } from '../lib/fen.mjs';
 
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 
@@ -86,7 +86,7 @@ export class CrumbleController {
 export function applyCrumble(fen, square) {
   const found = findSquares(fen, (c, file, rb) => squareName(file, rb) === square);
   const cell = found[0]?.cell;
-  const pieceLost = cell && cell !== '*' ? cell : null;
+  const pieceLost = cell && !isTerrain(cell) ? cell : null; // terrain is nobody's piece
   const postFen = clearEp(setSquare(fen, square, '*'));
   return { postFen, pieceLost };
 }

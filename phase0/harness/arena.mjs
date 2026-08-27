@@ -7,6 +7,7 @@
 // check regenerates layouts whose walls fully sever the two formations —
 // mirroring the §6 linter guarantee that duels have duel-capable ground.
 import { makeDuelVariantIni, buildDuelBoard, boardToFen } from '../lib/variant.mjs';
+import { isTerrain } from '../lib/fen.mjs';
 import { mulberry32, childSeed, randInt, shuffle } from './prng.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
@@ -120,8 +121,9 @@ export const ARCHETYPES = {
 
 /** 8-directional BFS: can a king-step path connect the two pawn rows through non-walls? */
 function connected(board, files, ranks) {
-  // board is [rankFromTop][file]; walls '*'. Treat pieces as passable (they move).
-  const blocked = (rt, f) => board[rt][f] === '*';
+  // board is [rankFromTop][file]; terrain '*'/'^'. Pieces are passable (they
+  // move). Legacy generator: it never authors '^', but the test stays honest.
+  const blocked = (rt, f) => isTerrain(board[rt][f]);
   const start = [];
   const targetRank = 1; // top pawn row (rankFromTop 1)
   const startRank = ranks - 2; // bottom pawn row
