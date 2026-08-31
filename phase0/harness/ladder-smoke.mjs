@@ -51,6 +51,20 @@ const GO = arg('go', 'depth 8 movetime 250');
 // stage bed is 2-3x the area of the four legacy arenas every published ply
 // count came from, solong games might simply be the boards.
 const GODS = arg('gods', 'on');
+// The shipped presets, mirrored from play/js/main.mjs GOD_PRESETS. They were
+// picked by argument, not measurement — this flag is how they stop being
+// guesses. Keep in sync or the smoke is measuring something the game does not
+// ship.
+const GOD_PRESETS = {
+  calm: { onsetPly: 20, rampPlies: 26, sate: 5, debtCap: 12, extraActions: 1 },
+  restless: { onsetPly: 8, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
+  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
+};
+const PRESET = arg('preset', 'restless');
+if (!(PRESET in GOD_PRESETS)) {
+  console.error(`unknown preset "${PRESET}" — valid: ${Object.keys(GOD_PRESETS).join(', ')}`);
+  process.exit(1);
+}
 
 const stages = readdirSync(STAGE_DIR)
   .filter((f) => /^s\d+.*\.json$/.test(f))
@@ -118,7 +132,7 @@ for (let i = 0; i < picks.length; i++) {
     files: deal.files,
     ranks: deal.ranks,
     go: GO,
-    director: GODS === 'off' ? { seed, onsetPly: Infinity } : { seed },
+    director: GODS === 'off' ? { seed, onsetPly: Infinity } : { seed, ...GOD_PRESETS[PRESET] },
   });
   const t0 = Date.now();
   try {
@@ -172,7 +186,7 @@ const plies = played.map((r) => r.plies);
 const totalQuakes = played.reduce((a, r) => a + r.quakes, 0);
 const totalActions = played.reduce((a, r) => a + r.actions, 0);
 
-console.log(`\n=== ladder smoke (gods ${GODS}, ${GO}) ===`);
+console.log(`\n=== ladder smoke (gods ${GODS}, preset ${PRESET}, ${GO}) ===`);
 for (const r of rows) {
   if (r.skipped) console.log(`  ${r.stage}: SKIPPED (${r.skipped})`);
   else if (r.error) console.log(`  ${r.stage}: ERROR ${r.error}`);
