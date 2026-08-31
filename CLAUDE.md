@@ -7,9 +7,21 @@ summarizes 12 verified spikes and the sweep results. **Phase 1 — the duel
 vertical slice — is built and lives in `play/`** (hand-authored arena →
 playable duel vs engine on a phone; placement UI, win/loss, promotion, live
 Earthquakes; no overworld). See `play/README.md` for its layout and the arena
-JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON**
-— Earthquakes (symmetric displacement + rare rising crumbles, NO repetition
-rules) replaced the old crumble system in both the build and brief §4.5.
+JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON, and v3
+GUTTED its decision layer (designer 2026-08-31, brief §4.5).** The gods now
+trigger on TWO METERS — restlessness (`play/js/meter.mjs`, the game record:
+"nothing has happened") and staleness (`play/js/staleness.mjs`, the position:
+"nothing CAN happen", the fun score, which sets the fill rate) — never on a
+ply ramp, which survives only as a late backstop floor, and never while a king
+is in check. They act on a SEVERITY LADDER: weaken (`*`→`^`, a wall cracks —
+safe by construction, telegraphs the breach) → breach (`^`→floor, the line
+opens) → displace (v2's quake, rules unchanged) → crumble (a permanent HOLE,
+demoted to the closer). Rung by meter, target by seeded weighted pick over a
+STRUCTURAL impact score — never an eval, which would both pick a winner and
+destroy seeded replay. `*` now means wall OR hole; FSF cannot tell them apart
+so `director.holes` does, and holes are permanent (that is the termination
+guarantee — see brief §4.5's amended "Holes are forever"). Sanity harness:
+`phase0/harness/ladder-smoke.mjs` (`--gods off` is the control).
 Next per brief §10, a Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
@@ -20,16 +32,14 @@ path, candidate census + board heat, RNG-free probability getters +
 nominal forecast, live ramp dials, eval delta per quake — see
 `play/README.md` § "The Gods debug overlay"; `play/selftest.html` asserts
 a seeded quake sequence replays identically with the overlay exercised);
-**Phase 1.3 — redefine "symmetric"** (promote the stopgap to
-"no new winning capture for either side", retune — the 1.2 instrument
-supplies the evidence: eval-delta flips decide whether SEE suffices,
-`rejected.unsafe_landing` counts starvation risk, fall-through rates show
-the crumble-rate shift). **1.3 is BLOCKED on Phase 1.2.5 — The
-Proving Grounds** (brief §10), the calibration test bed +
-automated-playtest rig; its evidence work is paused there (`play/SLICE-REFRESH-PLAN.md`): the meter-lab
-data (`phase0/harness/meterlab/`, results + findings in
-`phase0/results/`) showed the ply-ramp trigger is the wrong half of the
-Director; final numbers wait on the representative test bed. **The test
+**Phase 1.3 — THE GODS REWORK ✅ built 2026-08-31** (it WIDENED from
+"redefine symmetric" to replacing the whole decision layer — see the v3
+ladder above and brief §4.5; the meter-lab data in `phase0/results/` supplied
+the trigger half of the case and live play supplied the rest). The old 1.3
+scope — promote the landing-safety stopgap to "no new winning capture for
+either side" — is DEFERRED, not done: on the ladder most god activity moved
+to rungs that cannot hand out material, and the designer's call is to see
+whether the problem still shows up in play before writing a rule against it. **The test
 bed's data half is DONE**: the designer-locked stage bed (58 stages
 since 1.2.4 — `play/stages/`,
 gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
@@ -70,7 +80,8 @@ faster limits). **CAPTURABLE WALLS ARE CANON — brief §4.6** (designer decisio
 owned by neither side, capturable by EITHER side by moving onto it, and
 priced natively by the engine (the point). Furniture is TERRAIN
 everywhere except the capture itself — a wall to molding, crop, the camp
-line, and the gods — and NOTHING ever creates a `^` mid-duel. It needs a
+line, and displacement. Since v3 the GODS create and destroy `^` (weaken /
+breach, §4.5); nothing else does. It needs a
 patched engine pair, so two phases now precede the Proving Grounds.
 **Phase 1.2.3 — The Forge ✅ done (2026-08-26)**: both vendored
 WASM artifacts rebuilt from ONE dead-squares patch on current FSF master.
@@ -127,8 +138,22 @@ on-phone, 10-wide confirmed) is ACCEPTED/locked 2026-08-27 — the full
 58-stage bed is designer-locked, and the **exit PASSED 2026-08-27**:
 crate duels live on-device with Earthquakes on (designer verdict —
 "surprisingly really fun").
-**PHASE 1.2.5 — THE PROVING GROUNDS — IS THE ACTIVE PHASE**; its
-remaining half is the LAB RIG — all automated-playtest plumbing, no duel
+**PHASE 1.3 — THE GODS REWORK — IS THE ACTIVE PHASE** (designer
+2026-08-31). The meter-lab evidence pass had already answered its question —
+the ply-ramp trigger was the wrong half — and live play answered the rest:
+the mechanic was game-breaking, so it was GUTTED rather than tuned. v3 (the
+ladder, above) is built and shipped for playtesting; **feel on the phone is
+the test**, not a corpus. The `ladder-smoke.mjs` sanity pass on 14 stages ×
+both orientations: 14/14 terminated, median 103 plies vs **268 with the gods
+off (5 of 14 never terminating at all)**, zero quakes fired into check, ladder
+split weaken 31% / breach 23% / displace 27% / crumble 18%.
+
+**Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
+specified (58 stages × both orientations × both terrain arms × generated
+matchups × eleven arms) costs ~550 h of serial CPU and answers calibration
+questions this rework does not need; the designer cut it 2026-08-31 as
+overkill. Do not resurrect it without being asked. If it ever comes back its
+remaining half was the LAB RIG — all automated-playtest plumbing, no duel
 rules change: (a) the **corpus materializer** (the locked 58-stage bed ×
 both orientations × {stone-only, furniture} arms (§4.6: `^`→`.` derives
 the control from the same stage files) × `dealMatchup` → the stage-file sets `harness/meterlab/
@@ -141,14 +166,10 @@ omits them, so `replay.mjs` reconstructs the catalog baseline — the
 camp-line double-step is lost and deal-variant corpora cannot replay
 byte-exact), and run.mjs's MultiPV human-seat path lacks the
 fresh-engine retry (an engine death mid-corpus crashes the arm instead
-of retrying). Ask the designer FIRST which
-arms run, seeds/matchups per stage-orientation, and the favored-seat
-model (depth-2 proxy vs human-shaped MultiPV) — switching mid-corpus
-forks the evidence. The phase ends when the evidence is on the table.
-Only then **Phase 1.3** (the rule decision — and note the
-meter-lab first pass may widen it from "redefine symmetric" to replacing
-the whole decision layer; §4.5 is LOCKED in shape, so that needs a design
-conversation first). Then **Phase 1.5 — Director calibration** (port
+of retrying), and the designer would have to settle which arms run,
+seeds/matchups per stage-orientation, and the favored-seat model before any
+compute is burned. Next up instead: **playtest v3 on the phone** and tune the
+ladder from feel. Then **Phase 1.5 — Director calibration** (port
 `harness/game.mjs` off the retired crumble system, add the §6 promotion
 lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
 twice — and finally **Phase 2 — exploration slice**.

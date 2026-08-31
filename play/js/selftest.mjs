@@ -13,7 +13,7 @@ import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns } from './director.mjs';
+import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { captureLoss } from './threat.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
@@ -545,60 +545,98 @@ async function main() {
     const a = new Director({ seed: 42 });
     for (let ply = 0; ply < 120; ply++) {
       a.pQuake(ply);
-      a.pCrumble(ply);
+      a.pressure(ply);
+      a.rungWeights(ply);
       a.pOneSided(ply);
     }
-    a.forecast(10, { freeSquares: 20 });
+    a.forecast(10);
     const b = new Director({ seed: 42 });
     for (let i = 0; i < 5; i++) {
       if (a.rng() !== b.rng()) throw new Error('a getter consumed a draw from the seeded stream');
     }
-    return 'pQuake/pCrumble/pOneSided/forecast leave the stream untouched';
+    return 'pQuake/pressure/rungWeights/pOneSided/forecast leave the stream untouched';
   });
 
   await check('director probability math matches the rolls', () => {
-    const d = new Director({ seed: 1, onsetPly: 8, quakeRamp: 60, crumbleRamp: 100, debtCap: 10 });
+    // v3: the trigger is the METER, so pQuake is driven by restlessness, not
+    // by ply. Only the backstop floor is a ply ramp.
+    const d = new Director({ seed: 1, onsetPly: 8, rampPlies: 16, debtCap: 10 });
     if (d.pQuake(7) !== 0) throw new Error('pQuake before onset must be 0');
-    if (d.pQuake(68) !== 1) throw new Error('pQuake at onset+ramp must be 1');
+    if (d.pQuake(20) !== 0) throw new Error('a calm meter must leave pQuake at 0');
+    d.meter.value = 16;
+    if (d.pQuake(20) !== 1) throw new Error('a full meter must drive pQuake to 1');
     d.setFavor(0);
-    if (d.pQuake(68) !== 0) throw new Error('favor 0 must silence pQuake');
+    if (d.pQuake(20) !== 0) throw new Error('favor 0 must silence pQuake');
     d.setFavor(1);
-    d.debt = 10;
-    if (d.pCrumble(20) !== 1) throw new Error('debt cap must force pCrumble to 1');
-    d.debt = 0;
-    const applied = d.tune({ quakeRamp: 30, bogus: 5 });
-    if (applied.quakeRamp !== 30 || 'bogus' in applied) throw new Error(`tune misapplied: ${JSON.stringify(applied)}`);
-    if (d.pQuake(38) !== 1) throw new Error('tuned quakeRamp not reflected in pQuake');
-    const f = d.forecast(10, { freeSquares: 15 });
-    if (!(f.nextQuake > 10) || !(f.firstCrumble >= f.nextQuake)) throw new Error(`implausible forecast ${JSON.stringify(f)}`);
-    return `tune + getters consistent; forecast ${JSON.stringify(f)}`;
+    d.meter.value = 0;
+    if (d.pQuake(300) !== 1) throw new Error('the backstop floor must force pQuake late');
+    const applied = d.tune({ rampPlies: 8, bogus: 5 });
+    if (applied.rampPlies !== 8 || 'bogus' in applied) throw new Error(`tune misapplied: ${JSON.stringify(applied)}`);
+    d.meter.value = 8;
+    if (d.pQuake(20) !== 1) throw new Error('tuned rampPlies not reflected in pQuake');
+    // The ladder escalates: crumble weight is zero at low pressure and the
+    // top rungs only open up as the meter climbs.
+    d.meter.value = 0;
+    const lo = d.rungWeights(20);
+    if (lo.crumble !== 0 || lo.displace !== 0) throw new Error('low pressure must not reach the destructive rungs');
+    if (!(lo.weaken > 0)) throw new Error('weaken must always be on the menu');
+    d.meter.value = 8; // full ramp after the tune above → pressure 1
+    const hi = d.rungWeights(20);
+    if (!(hi.crumble > 0) || !(hi.displace > lo.displace)) throw new Error('high pressure must open the destructive rungs');
+    const f = d.forecast(20);
+    if (!(f.nextQuake > 20)) throw new Error(`implausible forecast ${JSON.stringify(f)}`);
+    return `tune + getters consistent; ladder escalates; forecast ${JSON.stringify(f)}`;
+  });
+
+  await check('holes are permanent — the gods never re-crack a pit', () => {
+    const files = 4;
+    const ranks = 4;
+    // Two walls, one of which we declare a hole. Only the other is weakenable.
+    const fen = '4/1*1*/4/4 w - - 0 1';
+    const all = weakenCandidates(fen, files, ranks, new Set());
+    const withHole = weakenCandidates(fen, files, ranks, new Set(['b3']));
+    if (!all.some((c) => c.sq === 'b3')) throw new Error('b3 should be weakenable when it is an authored wall');
+    if (withHole.some((c) => c.sq === 'b3')) throw new Error('a hole must never be offered as a weaken candidate');
+    if (withHole.length !== all.length - 1) throw new Error('only the hole should have been removed');
+    const census = terrainCensus(fen, files, ranks, new Set(['b3']));
+    if (census.walls !== 1 || census.holes !== 1) throw new Error(`terrain census miscounts: ${JSON.stringify(census)}`);
+    return `${all.length} weakenable walls, ${withHole.length} once b3 is a hole`;
   });
 
   // Seeded replay with the instrument hammered between rolls. Uses a small
   // 5x6 fixture so the whole check stays in the low seconds on a phone.
   const dirVariant = catalogVariantName(5, 6);
   const dirFen = '1rk1n/ppp2/2*2/5/1PP2/1KR1N w - - 0 1';
-  const dirCfg = { onsetPly: 2, quakeRamp: 8, crumbleRamp: 30, debtCap: 3, asymOnsetPly: 6, asymRamp: 10 };
+  const dirCfg = { onsetPly: 2, rampPlies: 4, debtCap: 3, asymOnsetPly: 6, asymRamp: 10 };
   const quakeSummary = (q) =>
     q === null
       ? null
       : {
           d: q.displacements.map((x) => `${x.piece}${x.from}${x.to}`),
           c: q.crumble ? `${q.crumble.square}:${q.crumble.pieceLost ?? '-'}` : null,
+          t: q.terrain ? `${q.terrain.kind}:${q.terrain.square}` : null,
           post: q.postFen,
           ends: q.endsGame,
         };
+  // v3: the trigger is the METER, so a fixture that only calls quake() in a
+  // loop never fires — restlessness has to be fed. A quiet ply is the whole
+  // point of the fixture (nothing is happening, so the gods get bored), and
+  // feeding it keeps the replay checks below meaningful rather than vacuously
+  // comparing two all-quiet sequences.
+  const QUIET_PLY = { capture: false, check: false, pawnAdvance: false, promotion: false, repetition: false };
   const runDirector = (seed, exercise, startFen = dirFen) => {
     const d = new Director({ ...dirCfg, seed });
     let fen = startFen;
     const out = [];
     const traces = [];
     for (let ply = 1; ply <= 14; ply++) {
+      d.observePly(ffish, dirVariant, fen, 5, 6, QUIET_PLY);
       if (exercise) {
         d.pQuake(ply);
-        d.pCrumble(ply);
+        d.pressure(ply);
+        d.rungWeights(ply);
         d.pOneSided(ply);
-        d.forecast(ply, { freeSquares: 10 });
+        d.forecast(ply);
         if (ply === 6) {
           displacementCandidates(ffish, dirVariant, fen, 5, 6);
           crumbleCandidates(ffish, dirVariant, fen, 5, 6);
@@ -630,13 +668,17 @@ async function main() {
     return `2 seeds × 14 plies replay exactly (${dirTraces.length} traces)`;
   });
 
-  // Furniture is stone to the gods (§4.6 interim rule, Set Dressing): the
-  // same fixture with the wall swapped for a crate must (a) replay
-  // identically with the overlay exercised, and (b) never displace, land
-  // on, or crumble the crate — terrain in every enumeration.
+  // Furniture is a TARGET now, not stone (v3 — §4.6's `[1.2.4 interim]`
+  // clause handed the real policy to this rework). The crate fixture asserts
+  // what still has to hold once the gods can edit terrain: the sequence
+  // replays identically with the overlay exercised, a crate is never picked
+  // up and carried by a displacement (breaching is the only way to remove
+  // one), and every post-quake FEN is legal.
   const dirFenCrate = dirFen.replace('2*2', '2^2'); // the c4 wall becomes a crate
-  await check('seeded ^ quake sequence: identical replay, crate untouched', () => {
+  await check('seeded ^ quake sequence: identical replay, crate breachable not portable', () => {
     if (ffish.validateFen(dirFenCrate, dirVariant) !== 1) throw new Error('crate director fixture FEN rejected');
+    let breaches = 0;
+    let weakens = 0;
     for (const seed of [3, 7]) {
       const plain = runDirector(seed, false, dirFenCrate);
       const hammered = runDirector(seed, true, dirFenCrate);
@@ -645,14 +687,20 @@ async function main() {
       }
       for (const ev of plain.out) {
         if (ev === null) continue;
-        for (const move of ev.d) if (move.includes('c4')) throw new Error(`gods touched the crate square: ${move}`);
-        if (ev.c && ev.c.startsWith('c4:')) throw new Error(`gods crumbled the crate: ${ev.c}`);
-        if (findSquares(ev.post, (c) => c === '^').length !== 1) {
-          throw new Error(`crate count changed: ${ev.post}`);
+        // A displacement may never move a crate: '^' is not a piece, and the
+        // toUpperCase() landmine class is exactly how it would become one.
+        for (const move of ev.d) if (move.startsWith('^')) throw new Error(`gods carried a crate: ${move}`);
+        if (ffish.validateFen(ev.post, dirVariant) !== 1) throw new Error(`quake produced an illegal FEN: ${ev.post}`);
+        if (ev.t?.startsWith('breach')) breaches++;
+        if (ev.t?.startsWith('weaken')) weakens++;
+        // A weaken must always land on a WALL, never on a crate that is
+        // already weakened — the supply is walls, and holes are excluded.
+        if (ev.t?.startsWith('weaken') && findSquares(ev.post, (c) => c === '^').length < 1) {
+          throw new Error(`weaken produced no furniture: ${ev.post}`);
         }
       }
     }
-    return '2 seeds × 14 plies replay exactly; the crate on c4 is stone to the gods';
+    return `2 seeds × 14 plies replay exactly; ${weakens} weakens, ${breaches} breaches, no crate carried`;
   });
 
   await check('roll trace records every ply with consistent reason codes', () => {
@@ -667,13 +715,21 @@ async function main() {
           ? ['quiet', 'starved']
           : ev.ends
             ? ['terminal']
-            : ev.c
-              ? ['crumble']
-              : [ev.d.length === 2 ? 'paired' : 'one-sided'];
+            : ev.t
+              ? [ev.t.split(':')[0]] // 'weaken' | 'breach'
+              : ev.c
+                ? ['crumble']
+                : [ev.d.length === 2 ? 'paired' : 'one-sided'];
       if (!want.includes(t.outcome)) throw new Error(`ply ${t.ply}: outcome ${t.outcome} disagrees with the event`);
-      const reachedCrumbleLeg = t.path.includes('crumble-neutral') || t.path.includes('crumble-terminal') || t.path.includes('starved');
-      const crumbleWanted = t.path.includes('crumble-forced') || t.path.includes('crumble-roll-passed');
-      if (t.fellThrough !== (reachedCrumbleLeg && !crumbleWanted)) throw new Error(`ply ${t.ply}: fellThrough bookkeeping wrong (${t.path.join(',')})`);
+      // v3: `fellThrough` marks the ROLLED rung coming up empty, and
+      // `rungFallback` records which rung actually served. They must agree —
+      // a fallback without a fall-through (or vice versa) means the ladder
+      // walk lost track of what it did.
+      if (t.outcome !== 'quiet') {
+        const fellBack = Array.isArray(t.rungFallback) && t.rungFallback.length > 0;
+        if (fellBack !== t.fellThrough) throw new Error(`ply ${t.ply}: fellThrough ${t.fellThrough} vs rungFallback ${JSON.stringify(t.rungFallback)}`);
+        if (!t.p.crumbleForced && !t.rung) throw new Error(`ply ${t.ply}: quake recorded no rung`);
+      }
       if (t.outcome === 'quiet' && t.census !== null) throw new Error(`ply ${t.ply}: quiet ply computed a census`);
       if (t.outcome !== 'quiet') {
         if (!t.census || typeof t.census.lockedPawns !== 'number') throw new Error(`ply ${t.ply}: quake trace lacks census`);

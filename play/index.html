@@ -68,6 +68,7 @@
           <span id="godsFavorVal">1.0</span>
         </label>
       </div>
+      <div id="gods-meters" class="gods-row"></div>
       <div id="gods-summary" class="gods-row"></div>
       <div id="gods-forecast" class="gods-row"></div>
       <div class="gods-actions">
@@ -118,8 +119,8 @@
     </label>
     <div id="god-knobs">
       <label class="opt sub">First stir (ply) <input type="number" id="god_onsetPly" min="1" step="1"></label>
-      <label class="opt sub">Quake ramp (plies to certain) <input type="number" id="god_quakeRamp" min="1" step="1"></label>
-      <label class="opt sub">Collapse ramp (plies to certain) <input type="number" id="god_crumbleRamp" min="1" step="1"></label>
+      <label class="opt sub">Restlessness ramp (quiet plies to certain) <input type="number" id="god_rampPlies" min="1" step="1"></label>
+      <label class="opt sub">Sate (meter refunded per forcing ply) <input type="number" id="god_sate" min="0" step="1"></label>
       <label class="opt sub">Max quakes between collapses <input type="number" id="god_debtCap" min="1" step="1"></label>
       <label class="opt sub">One-sided stirs allowed after (ply) <input type="number" id="god_asymOnsetPly" min="1" step="1"></label>
       <label class="opt sub">One-sided patience ramp <input type="number" id="god_asymRamp" min="1" step="1"></label>

@@ -1,66 +1,94 @@
-// The Board State Director ("THE GODS") — arena regeneration, v2.
+// The Board State Director ("THE GODS") — arena regeneration, v3.
 //
-// Replaces the §4.5 repetition+pacing crumble system with Earthquakes:
-// past a rising hazard ramp, the arena stirs — pieces scoot to adjacent
-// squares (displacement) and, increasingly as the duel runs long, squares
-// collapse into pits (crumbles). Everything the engine sees stays FSF-pure;
-// the Director rewrites the FEN between plies exactly like the old crumble
-// system (Prime Directive carve-out, brief §2).
+// v3 GUTS v2's decision layer (designer, 2026-08-31). Everything the engine
+// sees still stays FSF-pure; the Director rewrites the FEN between plies
+// exactly as before (Prime Directive carve-out, brief §2). What changed is
+// WHEN the gods act and WHAT they do.
 //
-// Design rules (validated in the 2026-08 prototype sweeps; see the session's
-// walled-arena head-to-heads):
-//  - Repetition is not punished. No position tracking, no repetition crumble.
-//    Termination now rests on crumbles alone: free squares only ever shrink,
-//    so a duel provably ends via stalemate-as-loss (§4.4) once the board
-//    closes. The debt cap guarantees crumbles keep landing.
-//  - Displacements lead, crumbles are rare mid-game and certain late.
-//    Displacement is the only mechanic that can free a terrain-locked pawn
-//    (a crumble never can — measured 0/7073); crumbles are the only
-//    mechanic that closes the board.
-//  - Symmetric displacement preferred: if the arena breaks a lock, it breaks
-//    it evenly — one piece per side per quake. One-sided moves hand whole
-//    games to the favored side (measured: median flip = a mate-score
-//    transition). Patience for a pairable quake runs out on its own ramp.
-//  - Crumbles never kill the game by dice: candidates are enumerated
-//    EXHAUSTIVELY (not sampled — sampling starves on late walled boards)
-//    and split into neutral (safe) and terminal (instant stalemate/mate for
-//    the mover). Terminal fires only when no neutral candidate exists —
-//    the arena finishing a duel that had already closed.
-//  - Kings are never displaced, pawns never land on rank 1 / promotion rank,
-//    displacement targets only empty squares, quakes never give check and
-//    never leave the non-mover in check, a crumble never strips a side's
-//    last piece.
-//  - Furniture is STONE to the gods. `[Phase 1.2.4 interim — §4.6; the
-//    Director rework owns the real policy]` A `^` square is terrain in every
-//    enumeration exactly like `*`: never displaced, never a landing square
-//    (non-null already excludes it), never a crumble candidate, and silent
-//    in every census — no entry in any tier, `rejected` bucket, or reason
-//    code (a new code would fork the census schema between pre- and
-//    post-furniture corpora, and 1.3 reads the comparison).
-//  - Displacements never hand out material. `[Phase 1.1 stopgap]` The guards
-//    above are all KING-safety guards; ordinary piece safety went unchecked,
-//    so a "symmetric" quake could step a piece onto an already-attacked
-//    square and gift it (observed: arena03, black rook a7->b7 into a white
-//    rook bearing down the open b-file, with White to move). Symmetric meant
-//    symmetric in COUNT, not in CONSEQUENCE. Landing squares now go through
-//    an SEE check (threat.mjs). The full rule — a quake may create no new
-//    winning capture for EITHER side, judged on the composite post-quake
-//    position — is Phase 1.3; see that module's header for what this
-//    narrower guard still misses (discovered attacks, rescues, pins).
-//  - The Director is instrumented from the inside. `[Phase 1.2]` Every
-//    quake() call — including the null returns — records a roll trace on
-//    `lastTrace`: each RNG draw with its threshold, a census of what the
-//    enumerations produced, and a reason-coded path. The three rolls share
-//    one seeded stream and the draw pattern is state-dependent (no draw
-//    before onset, the debt cap skips the crumble roll, the displacement leg
-//    consumes a variable number of picks), so probabilities for display come
-//    from the RNG-FREE getters (pQuake/pCrumble/pOneSided/forecast) — never
-//    from re-rolling. Tracing is unconditional and pure bookkeeping: the
-//    draw sequence is byte-identical to the untraced v2 Director, so seeded
-//    sweeps replay exactly (§7).
+// Why: v2 fired on a ply ramp — `pQuake` was a function of duel length alone,
+// blind to the board — so the gods stirred into mating attacks and dead
+// shuffles with equal enthusiasm, and the one-directional candidate filters
+// then guaranteed the intervention LOOSENED whatever the position was
+// building. Measured over 96 games: 23.3% of quakes wrecked a mate or flipped
+// the eval (3.27 per game), 11.1% fired while a king was in check — where the
+// postcondition filters rescue that king by construction. The mechanic built
+// to shorten duels was lengthening them by dissolving the mates that would
+// have ended them.
+//
+// THE LADDER. Restlessness buys escalation, and the cheap rungs are the safe
+// ones, so most god activity now lands where it cannot wreck a game:
+//
+//   weaken   `*` → `^`   a solid wall cracks. Opens no line yet (the crate
+//                        still blocks) — it only adds a capture option for
+//                        BOTH sides, so it is safe by construction rather
+//                        than by filter. The telegraph: players see the
+//                        breach coming before it arrives.
+//   breach   `^` → floor the crate is smashed and the line opens for real.
+//                        Filtered like a displacement (discovered checks).
+//   displace piece → adjacent square. v2's quake, rules unchanged.
+//   crumble  square → a HOLE. The closer; demoted from mid-game event to
+//                        endgame pressure, kept landing by the debt cap.
+//
+// Terrain edits are the point, not decoration. Three v2 findings argue for
+// them harder than the design conversation did:
+//  - "Displacement is the only mechanic that can free a terrain-locked pawn
+//    (a crumble never can — measured 0/7073)." Displacement was carrying the
+//    unlocking job and is bad at it: it moves the PIECE, not the wall.
+//    Weaken/breach attack terrain locks directly.
+//  - Displacement is also the only rung that can hand out material — the
+//    whole arena03 free-rook class (rule 13), which needed two fixes. A wall
+//    cracking moves nobody.
+//  - "One-sided moves hand whole games to the favored side (measured: median
+//    flip = a mate-score transition)" — which is why pairing exists, and
+//    pairing is expensive and often unsatisfiable. A wall is not a move FOR
+//    anyone, so the terrain rungs are side-neutral and need no pairing.
+//
+// HOLES vs WALLS. `*` means two different things now and FSF cannot tell them
+// apart, so the Director does: `this.holes` is the set of squares a crumble
+// created. A hole is permanent — never weakened, never re-opened — which is
+// what keeps termination provable. Free squares are no longer monotone (a
+// breach adds one), but the wall supply is finite, so breaches can add at
+// most W squares across the whole duel while holes accumulate without bound.
+// The board still provably closes and the duel still ends via
+// stalemate-as-loss (§4.4); it just closes later. Hole-ness cannot be derived
+// from the FEN — an authored wall that was weakened, breached, occupied and
+// then crumbled reads as `*` on a square the stage authored as `*` — so it is
+// real Director state, restored alongside `debt` (duel.mjs #snapshot).
+//
+// THE TRIGGER. Two meters, because they catch different deaths:
+//   meter.mjs      the RECORD — "nothing has happened lately"
+//   staleness.mjs  the POSITION — "nothing CAN happen here" (the fun score)
+// Staleness sets the meter's fill rate; the meter drives P(quake), floored
+// late by a slow ply ramp as the termination backstop. Neither consults the
+// engine: eval answers "who is winning", which is the one question the gods
+// must never act on (§4.5) and the one a player would eventually catch them
+// acting on — and a movetime-bounded search in the trigger would destroy
+// seeded replay outright.
+//
+// TARGETING. The rung comes from the meter; the target comes from a seeded
+// weighted pick over a STRUCTURAL impact score (how much would this unstick?)
+// — never from an evaluation. A structural criterion never references a side,
+// so "feels random" and "never picks a winner" hold by construction instead
+// of needing to be engineered.
+//
+// Retained from v2 unchanged: exhaustive candidate enumeration (sampling
+// starves on late walled boards), the SEE landing guard on displacements
+// (threat.mjs) judged on the COMPOSITE board, kings never displaced, pawns
+// never landed on rank 1 or the promotion rank, no quake gives check or
+// leaves the non-mover in check, no crumble strips a side's last piece, and
+// full inside-out instrumentation — every quake() call including null returns
+// leaves a roll trace on `lastTrace`, with probabilities for display coming
+// from the RNG-FREE getters, never from re-rolling.
+//
+// Furniture is no longer stone to the gods (§4.6's `[Phase 1.2.4 interim]`
+// clause said the rework owns the real policy — this is that policy). It is
+// still terrain to molding, crop, the camp line, and to displacement, which
+// neither moves a crate nor lands on one.
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain } from './fen.mjs';
+import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE } from './fen.mjs';
+import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
+import { stalenessOf } from './staleness.mjs';
 import { landingIsSafe } from './threat.mjs';
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
@@ -203,6 +231,131 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
     }
   }
   return { neutral, terminal, rejected };
+}
+
+const ORTHO = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+/** Terrain tally for one board — the cheap grid scan the rung weights need
+ *  before any candidate is enumerated. `holes` are Director state, so a `*`
+ *  is only a weakenable WALL if the gods did not put it there. */
+export function terrainCensus(fen, files, ranks, holes) {
+  const g = fenGrid(fen, files, ranks);
+  let walls = 0;
+  let crates = 0;
+  let holeCount = 0;
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) {
+      const c = g[r][f];
+      if (c === FURNITURE) crates++;
+      else if (c === WALL) (holes.has(SQ(f, r)) ? holeCount++ : walls++);
+    }
+  }
+  return { walls, crates, holes: holeCount };
+}
+
+/**
+ * Every wall the gods may crack (`*` → `^`), with a structural impact score.
+ *
+ * Holes are excluded: a crumble's pit is permanent, and that permanence is
+ * what keeps termination provable. Walls buried inside stone are excluded
+ * too — cracking one opens nothing, and a crate nobody can ever reach is
+ * just scenery.
+ *
+ * Impact is deliberately STRUCTURAL, never evaluative: open orthogonal
+ * neighbours (how much of a passage this square would become) plus a bonus
+ * for standing on a locked pawn's file (the lock the gods exist to break).
+ * Nothing here references a side, so the pick cannot favour one.
+ *
+ * Safe by construction — no filtering needed. The square stays blocking, so
+ * no line opens, no check can be discovered and no side can be stalemated;
+ * the edit only ADDS a capture option, symmetrically, to both armies.
+ */
+export function weakenCandidates(fen, files, ranks, holes) {
+  const g = fenGrid(fen, files, ranks);
+  const lockedFiles = new Set(lockedPawns(fen, files, ranks).map((p) => p.f));
+  const out = [];
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) {
+      if (g[r][f] !== WALL) continue;
+      const sq = SQ(f, r);
+      if (holes.has(sq)) continue;
+      let open = 0;
+      for (const [df, dr] of ORTHO) {
+        const nf = f + df;
+        const nr = r + dr;
+        if (nf < 0 || nf >= files || nr < 0 || nr >= ranks) continue;
+        if (!isTerrain(g[nr][nf])) open++;
+      }
+      if (open < 2) continue; // walled in on all sides — cracking it opens nothing
+      out.push({ sq, impact: open + (lockedFiles.has(f) ? 3 : 0) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Every crate the gods may smash (`^` → floor), scored and filtered.
+ *
+ * Unlike a weaken this genuinely OPENS a line, so it runs the same king
+ * guards a displacement does: it may not give check, may not leave the mover
+ * able to take the other king, and may not leave anyone with zero legal moves
+ * (that is the crumble leg's job, and only when the board has already
+ * closed). Impact counts locked pawns actually freed — the direct read on the
+ * mechanic's purpose — plus the space the square opens onto.
+ *
+ * Costs two ffish Boards per crate, which is why the caller only enumerates
+ * this rung once the roll has already chosen it (rule 14).
+ */
+export function breachCandidates(ffish, variant, fen, files, ranks) {
+  const ok = [];
+  const rejected = [];
+  const g = fenGrid(fen, files, ranks);
+  const lockedBefore = lockedPawns(fen, files, ranks).length;
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) {
+      if (g[r][f] !== FURNITURE) continue;
+      const sq = SQ(f, r);
+      const veto = (reason) => rejected.push({ sq, reason });
+      let opened;
+      try {
+        opened = clearEp(setSquare(fen, sq, null));
+      } catch {
+        veto('fen_edit_failed');
+        continue;
+      }
+      if (ffish.validateFen(opened, variant) !== 1) {
+        veto('invalid_fen');
+        continue;
+      }
+      {
+        const probe = new ffish.Board(variant, flipTurn(opened));
+        const exposed = probe.isCheck();
+        probe.delete();
+        if (exposed) {
+          veto('exposes_king');
+          continue;
+        }
+      }
+      const b = new ffish.Board(variant, opened);
+      const givesCheck = b.isCheck();
+      const noMoves = b.numberLegalMoves() === 0;
+      b.delete();
+      if (givesCheck || noMoves) {
+        veto(givesCheck ? 'gives_check' : 'no_moves');
+        continue;
+      }
+      let space = 0;
+      for (const [df, dr] of ORTHO) {
+        const nf = f + df;
+        const nr = r + dr;
+        if (nf < 0 || nf >= files || nr < 0 || nr >= ranks) continue;
+        if (!isTerrain(g[nr][nf])) space++;
+      }
+      const freed = lockedBefore - lockedPawns(opened, files, ranks).length;
+      ok.push({ sq, fen: opened, impact: space + 4 * Math.max(0, freed), freed });
+    }
+  }
+  return { ok, rejected };
 }
 
 /**
@@ -360,12 +513,34 @@ function censusOfTiers(tiers) {
 
 export const DIRECTOR_DEFAULTS = {
   onsetPly: 8, // first ply a quake can fire
-  quakeRamp: 60, // plies from onset to P(quake)=1
-  crumbleRamp: 100, // plies from onset to P(crumble|quake)=1 (squared — rare early)
-  debtCap: 10, // consecutive crumble-less quakes before one is forced
-  asymOnsetPly: 50, // ply where one-sided displacement becomes acceptable...
+  debtCap: 10, // consecutive hole-less quakes before a crumble is forced
+  holdInCheck: true, // never stir while the side to move is in check — the
+  //                    gods exist to reopen inert boards, and a board with a
+  //                    king in check is the opposite of inert. v2 fired here
+  //                    11.1% of the time and the filters then rescued the
+  //                    king by construction.
+  asymOnsetPly: 50, // ply where one-sided DISPLACEMENT becomes acceptable...
   asymRamp: 60, // ...ramping to always-acceptable over this many plies
+
+  // --- the ladder: pressure thresholds and biases -------------------------
+  // Each rung's weight is `bias × max(0, pressure − at)`, except weaken which
+  // is always available and fades as pressure climbs. The rung is then a
+  // seeded weighted pick, so the gods VARY at equal pressure instead of
+  // stepping deterministically through a staircase — that variety is most of
+  // what sells the mechanic as random.
+  weakenBias: 1, // ...at pressure 0; falls to weakenBias×0.4 at pressure 1
+  breachAt: 0.15,
+  breachBias: 2,
+  displaceAt: 0.35,
+  displaceBias: 2.5,
+  crumbleAt: 0.7,
+  crumbleBias: 3,
+  crateBrake: true, // damp weaken as furniture comes to outnumber walls, so a
+  //                   long duel does not dissolve the whole dungeon into crates
 };
+
+/** Rung order for the fallback walk when the rolled rung has no candidates. */
+const RUNGS = ['weaken', 'breach', 'displace', 'crumble'];
 
 /**
  * The Director. One instance per duel, seeded, deterministic given the seed
@@ -380,26 +555,80 @@ export class Director {
   constructor(config = {}) {
     const c = { ...DIRECTOR_DEFAULTS, ...config };
     this.onsetPly = c.onsetPly;
-    this.quakeRamp = Math.max(1, c.quakeRamp);
-    this.crumbleRamp = Math.max(1, c.crumbleRamp);
     this.debtCap = Math.max(1, c.debtCap);
+    this.holdInCheck = c.holdInCheck !== false;
     this.asymOnsetPly = c.asymOnsetPly;
     this.asymRamp = Math.max(1, c.asymRamp);
+    this.weakenBias = Math.max(0, c.weakenBias);
+    this.breachAt = c.breachAt;
+    this.breachBias = Math.max(0, c.breachBias);
+    this.displaceAt = c.displaceAt;
+    this.displaceBias = Math.max(0, c.displaceBias);
+    this.crumbleAt = c.crumbleAt;
+    this.crumbleBias = Math.max(0, c.crumbleBias);
+    this.crateBrake = c.crateBrake !== false;
     this.seed = c.seed ?? 1; // kept for the export — a trace without its seed cannot be replayed
     this.rng = mulberry32(childSeed(this.seed, 'director'));
-    this.debt = 0; // displacement-only quakes since the last crumble
+    this.debt = 0; // quakes since the last crumble (ALL rungs count — the
+    //                cheap rungs are where most activity lives now, so a
+    //                displacement-only counter would never force a hole)
     this.favor = 1;
-    this.lastTrace = null; // roll trace of the most recent quake() call (Phase 1.2)
+    this.lastTrace = null; // roll trace of the most recent quake() call
+    // The two meters. The host must call observePly() after every completed
+    // ply, BEFORE the quake phase (duel.mjs does this itself). Meter knobs
+    // are accepted FLAT as well as nested, so a preset and a live dial name
+    // the same thing (`rampPlies`, `sate`, …) — the nested form wins.
+    const flatMeter = {};
+    for (const k of ['sate', 'repBonus', 'rampPlies', 'stalenessFloor', 'stalenessGain', 'floorOnsetPly', 'floorRampPlies']) {
+      if (typeof c[k] === 'number' && !Number.isNaN(c[k])) flatMeter[k] = c[k];
+    }
+    this.meter = new RestlessnessMeter({ ...flatMeter, ...(c.meter ?? {}) });
+    this.stalenessConfig = c.staleness ?? {};
+    this.lastStaleness = null; // full stalenessOf() record, for the overlay
+    // Holes: squares a crumble created. FSF sees the same '*' as an authored
+    // wall; the gods must not, because a hole is permanent (never weakened,
+    // never reopened) and that permanence is the termination guarantee. Not
+    // derivable from the FEN — see this module's header.
+    this.holes = new Set();
+    this._held = false; // holdInCheck, stamped per quake() from the preFen
     // Post-guard STARTING config, frozen — tune() mutates the live knobs, so
     // an exported record needs this to reconstruct the duel from ply 0.
     this.config0 = Object.freeze({
       onsetPly: this.onsetPly,
-      quakeRamp: this.quakeRamp,
-      crumbleRamp: this.crumbleRamp,
       debtCap: this.debtCap,
+      holdInCheck: this.holdInCheck,
       asymOnsetPly: this.asymOnsetPly,
       asymRamp: this.asymRamp,
+      weakenBias: this.weakenBias,
+      breachAt: this.breachAt,
+      breachBias: this.breachBias,
+      displaceAt: this.displaceAt,
+      displaceBias: this.displaceBias,
+      crumbleAt: this.crumbleAt,
+      crumbleBias: this.crumbleBias,
+      crateBrake: this.crateBrake,
+      meter: this.meter.config0,
+      staleness: { ...this.stalenessConfig },
     });
+  }
+
+  /**
+   * Feed one completed ply to the trigger. `ev` is a meter.moveEvents()
+   * record for the move just played; the position is read for staleness (one
+   * ffish Board, no search). Call after every ply, before the quake phase.
+   * Returns { meter, staleness } for the overlay.
+   */
+  observePly(ffish, variant, fen, files, ranks, ev) {
+    let stale = { staleness: 0, fun: 1 };
+    if (ffish.validateFen(fen, variant) === 1) {
+      const b = new ffish.Board(variant, fen);
+      const legal = b.legalMoves();
+      b.delete();
+      stale = stalenessOf(fenGrid(fen, files, ranks), legal, files, ranks, this.stalenessConfig);
+    }
+    this.lastStaleness = stale;
+    const meter = this.meter.observe(ev, stale.staleness);
+    return { meter, staleness: stale };
   }
 
   /** Active trace collector; set only for the duration of a quake() call. */
@@ -421,16 +650,34 @@ export class Director {
     const applied = {};
     const set = {
       onsetPly: (v) => (this.onsetPly = v),
-      quakeRamp: (v) => (this.quakeRamp = Math.max(1, v)),
-      crumbleRamp: (v) => (this.crumbleRamp = Math.max(1, v)),
       debtCap: (v) => (this.debtCap = Math.max(1, v)),
       asymOnsetPly: (v) => (this.asymOnsetPly = v),
       asymRamp: (v) => (this.asymRamp = Math.max(1, v)),
+      weakenBias: (v) => (this.weakenBias = Math.max(0, v)),
+      breachAt: (v) => (this.breachAt = v),
+      breachBias: (v) => (this.breachBias = Math.max(0, v)),
+      displaceAt: (v) => (this.displaceAt = v),
+      displaceBias: (v) => (this.displaceBias = Math.max(0, v)),
+      crumbleAt: (v) => (this.crumbleAt = v),
+      crumbleBias: (v) => (this.crumbleBias = Math.max(0, v)),
+      // meter knobs, reachable through the same dial surface
+      rampPlies: (v) => (this.meter.rampPlies = Math.max(1, v)),
+      sate: (v) => (this.meter.sate = v),
+      repBonus: (v) => (this.meter.repBonus = v),
+      floorOnsetPly: (v) => (this.meter.floorOnsetPly = v),
+      floorRampPlies: (v) => (this.meter.floorRampPlies = Math.max(1, v)),
+    };
+    const read = {
+      rampPlies: () => this.meter.rampPlies,
+      sate: () => this.meter.sate,
+      repBonus: () => this.meter.repBonus,
+      floorOnsetPly: () => this.meter.floorOnsetPly,
+      floorRampPlies: () => this.meter.floorRampPlies,
     };
     for (const [k, v] of Object.entries(partial ?? {})) {
       if (!(k in set) || typeof v !== 'number' || Number.isNaN(v)) continue;
       set[k](v);
-      applied[k] = this[k];
+      applied[k] = read[k] ? read[k]() : this[k];
     }
     return applied;
   }
@@ -445,20 +692,46 @@ export class Director {
   // stream. The rolls below draw against exactly these values — one source
   // of truth for the math, one owner of the stream.
 
-  /** P(a quake fires at `ply`). 0 before onset. Pure — no RNG. */
-  pQuake(ply) {
-    if (ply < this.onsetPly) return 0;
-    return Math.min(1, this.#ramp(ply, this.quakeRamp) * this.favor);
+  /** The trigger pressure at `ply` before favor: the meter, floored late by
+   *  the ply backstop. Pure — no RNG. */
+  pressure(ply) {
+    return this.meter.pAt(ply);
   }
 
-  /** P(the crumble leg is taken | a quake fires) at `debt` (default: now).
-   *  1 when the debt cap forces it — no roll happens in that case, which is
-   *  one of the state-dependent draw patterns the trace exists to expose.
-   *  Pure — no RNG. */
-  pCrumble(ply, debt = this.debt) {
-    if (debt >= this.debtCap) return 1;
-    const p = this.#ramp(ply, this.crumbleRamp);
-    return p * p; // squared: genuinely rare mid-game, certain late
+  /** P(a quake fires at `ply`). 0 before onset, 0 while a king is in check
+   *  (the hold is stamped by quake() from the preFen). Pure — no RNG. */
+  pQuake(ply) {
+    if (ply < this.onsetPly) return 0;
+    if (this._held) return 0;
+    return Math.min(1, this.pressure(ply) * this.favor);
+  }
+
+  /**
+   * Rung weights at `pressure` — the ladder, as a pure function. Weaken is
+   * always on the menu and fades as pressure climbs; every other rung is
+   * `bias × (pressure − threshold)`, clamped at zero. `terrain` (from
+   * terrainCensus) zeroes rungs with no material to work on and applies the
+   * crate brake. Pure — no RNG, no ffish.
+   */
+  rungWeights(ply, terrain = null) {
+    const p = this.pressure(ply);
+    let weaken = this.weakenBias * (1 - 0.6 * p);
+    if (terrain) {
+      if (!terrain.walls) weaken = 0;
+      else if (this.crateBrake) {
+        // As furniture comes to outnumber walls the gods lose interest in
+        // cracking more of it — without this a long duel dissolves the whole
+        // dungeon into crates and the stage stops being the stage.
+        const share = terrain.crates / Math.max(1, terrain.walls + terrain.crates);
+        weaken *= Math.max(0.15, 1 - share);
+      }
+    }
+    return {
+      weaken,
+      breach: terrain && !terrain.crates ? 0 : this.breachBias * Math.max(0, p - this.breachAt),
+      displace: this.displaceBias * Math.max(0, p - this.displaceAt),
+      crumble: this.crumbleBias * Math.max(0, p - this.crumbleAt),
+    };
   }
 
   /** P(a lone displacement is accepted one-sided | its roll happens).
@@ -471,73 +744,53 @@ export class Director {
   }
 
   /**
-   * Analytic forecast (Phase 1.2): median plies of the next quake, the first
-   * crumble, and board closure — pure ramp math over the debt chain, no RNG
-   * consumed, no board knowledge. NOMINAL model only: it prices the crumble
-   * ROLL but not the fall-through (an unpairable displacement also lands in
-   * the crumble leg), so real crumbles run EARLIER than forecast — the roll
-   * trace measures that gap, and this is the baseline it is measured against.
+   * Short-horizon forecast for the overlay: median plies to the next quake
+   * and to the next hole, under the explicit assumption that pressure HOLDS
+   * AT ITS CURRENT VALUE.
    *
-   * Returns { nextQuake, firstCrumble, closure }, each a ply or null (beyond
-   * `horizon`, or never — e.g. favor 0). `closure` needs opts.freeSquares
-   * (empty squares left) and is the crudest of the three: each crumble
-   * consumes one square, closure ≈ the ply where expected crumbles have
-   * consumed them all.
+   * That assumption is the whole caveat. v2's forecast extrapolated a ply
+   * ramp, which was knowable arbitrarily far ahead; v3's trigger is the
+   * meter, and future meter values depend on moves nobody has played yet. So
+   * this is a "if the game stays exactly this interesting" readout, not a
+   * prediction — it moves every ply, and that movement is the useful signal.
+   *
+   * `closure` is dropped: free squares are no longer monotone (a breach adds
+   * one back), so the v2 estimate — expected crumbles versus free squares —
+   * would now be a confident lie. Termination still holds via the hole set
+   * (see this module's header); it just is not a closed form any more.
+   *
+   * Returns { nextQuake, nextHole }, each a ply or null beyond `horizon`.
    */
-  forecast(ply, { freeSquares = null, horizon = 600 } = {}) {
-    const cap = Math.min(this.debtCap, 64); // chain width guard vs huge dials
+  forecast(ply, { horizon = 400 } = {}) {
+    const q = Math.min(1, this.pressure(ply) * this.favor);
+    if (q <= 0) return { nextQuake: null, nextHole: null };
+    // P(crumble | quake): the rung weights at held pressure, plus the debt
+    // force, which is what actually guarantees holes keep landing.
+    const w = this.rungWeights(ply);
+    const total = w.weaken + w.breach + w.displace + w.crumble;
+    const pc = total > 0 ? w.crumble / total : 0;
     let sQuake = 1;
     let nextQuake = null;
-    // chain A absorbs at the first crumble (median of the first-crumble dist)
-    let chainA = new Array(cap + 1).fill(0);
-    chainA[Math.min(this.debt, cap)] = 1;
-    let sCrumble = 1;
-    let firstCrumble = null;
-    // chain B keeps running (debt resets on crumble) for the crumble pace
-    let chainB = chainA.slice();
-    let expCrumbles = 0;
-    let closure = null;
+    let sHole = 1;
+    let nextHole = null;
+    let debt = this.debt;
+    let quakesSoFar = 0;
     for (let k = ply + 1; k <= ply + horizon; k++) {
-      const q = this.pQuake(k);
       if (nextQuake === null) {
         sQuake *= 1 - q;
         if (sQuake <= 0.5) nextQuake = k;
       }
-      if (firstCrumble === null) {
-        const next = new Array(cap + 1).fill(0);
-        let crumbleNow = 0;
-        for (let d = 0; d <= cap; d++) {
-          const m = chainA[d];
-          if (!m) continue;
-          // pCrumble checks d >= this.debtCap itself, so the top bucket is
-          // forced exactly when cap === debtCap; under a >64 dial the chain
-          // just never forces (a mild under-estimate, not a wrong force).
-          const pc = this.pCrumble(k, d);
-          next[d] += m * (1 - q);
-          crumbleNow += m * q * pc;
-          next[Math.min(d + 1, cap)] += m * q * (1 - pc);
-        }
-        chainA = next;
-        sCrumble -= crumbleNow;
-        if (sCrumble <= 0.5) firstCrumble = k;
+      if (nextHole === null) {
+        // Expected quakes accumulate at rate q; each is a hole with prob pc,
+        // and the debt cap forces one every debtCap quakes regardless.
+        quakesSoFar += q;
+        const forced = Math.floor(debt + quakesSoFar) >= this.debtCap;
+        sHole *= 1 - q * (forced ? 1 : pc);
+        if (sHole <= 0.5 || forced) nextHole = k;
       }
-      if (freeSquares !== null && closure === null) {
-        const next = new Array(cap + 1).fill(0);
-        for (let d = 0; d <= cap; d++) {
-          const m = chainB[d];
-          if (!m) continue;
-          const pc = this.pCrumble(k, d);
-          next[d] += m * (1 - q);
-          next[0] += m * q * pc;
-          expCrumbles += m * q * pc;
-          next[Math.min(d + 1, cap)] += m * q * (1 - pc);
-        }
-        chainB = next;
-        if (expCrumbles >= freeSquares) closure = k;
-      }
-      if (nextQuake !== null && firstCrumble !== null && (freeSquares === null || closure !== null)) break;
+      if (nextQuake !== null && nextHole !== null) break;
     }
-    return { nextQuake, firstCrumble, closure };
+    return { nextQuake, nextHole };
   }
 
   // ---- the rolls — the ONLY consumers of the seeded stream ----------------
@@ -563,14 +816,52 @@ export class Director {
     return arr[index];
   }
 
+  /** One recorded weighted pick over `{name: weight}`. Consumes exactly one
+   *  rng() whatever the weights are, so the draw pattern stays stable. */
+  #pickWeighted(name, weights) {
+    const entries = Object.entries(weights).filter(([, w]) => w > 0);
+    const total = entries.reduce((s, [, w]) => s + w, 0);
+    const value = this.rng();
+    let chosen = null;
+    if (total > 0) {
+      let acc = 0;
+      const target = value * total;
+      for (const [k, w] of entries) {
+        acc += w;
+        if (target < acc) {
+          chosen = k;
+          break;
+        }
+      }
+      chosen ??= entries[entries.length - 1][0]; // float slop at the top end
+    }
+    if (this.#activeTrace) {
+      this.#activeTrace.rolls.push({
+        roll: name,
+        value: r6(value),
+        weights: Object.fromEntries(Object.entries(weights).map(([k, w]) => [k, r6(w)])),
+        chosen,
+      });
+    }
+    return chosen;
+  }
+
+  /**
+   * Impact-weighted pick over scored terrain candidates. The score biases
+   * toward squares that would actually unstick something; the randomness
+   * masks that bias, so the player reads the choice as arbitrary. Structural
+   * only — `impact` never references a side, so this cannot favour one.
+   */
+  #pickByImpact(name, candidates) {
+    const weights = {};
+    candidates.forEach((c, i) => (weights[i] = Math.max(0.25, c.impact)));
+    const key = this.#pickWeighted(name, weights);
+    return key === null ? null : candidates[Number(key)];
+  }
+
   quakeDue(ply) {
     if (ply < this.onsetPly) return false;
     return this.#draw('quake', this.pQuake(ply));
-  }
-
-  wantsCrumble(ply) {
-    if (this.debt >= this.debtCap) return true; // forced — NO draw consumed
-    return this.#draw('crumble', this.pCrumble(ply));
   }
 
   acceptsOneSided(ply) {
@@ -612,17 +903,33 @@ export class Director {
    * DISCARDED, not applied — `outcome` says what actually happened.
    */
   quake(ffish, variant, fen, files, ranks, ply) {
+    // holdInCheck is stamped BEFORE the trace is built, because both the
+    // trace's p.quake and the quakeDue draw read pQuake() — so the recorded
+    // probability is the one actually rolled against.
+    if (this.holdInCheck && ffish.validateFen(fen, variant) === 1) {
+      const b = new ffish.Board(variant, fen);
+      this._held = b.isCheck();
+      b.delete();
+    }
+    const terrain = terrainCensus(fen, files, ranks, this.holes);
     const trace = {
       ply,
       debtBefore: this.debt,
       debtAfter: this.debt,
       favor: this.favor,
+      held: this._held,
+      meter: r6(this.meter.value),
+      staleness: this.lastStaleness ? r6(this.lastStaleness.staleness) : null,
+      terrain,
       p: {
         quake: r6(this.pQuake(ply)),
-        crumble: r6(this.pCrumble(ply)),
+        pressure: r6(this.pressure(ply)),
         crumbleForced: this.debt >= this.debtCap,
         oneSided: r6(this.pOneSided(ply)),
       },
+      weights: null,
+      rung: null,
+      rungFallback: null,
       rolls: [],
       path: [],
       census: null,
@@ -634,78 +941,179 @@ export class Director {
     this.lastTrace = trace;
     this.#activeTrace = trace;
     try {
-      return this.#quakeTraced(trace, ffish, variant, fen, files, ranks, ply);
+      return this.#quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain);
     } finally {
       this.#activeTrace = null;
+      this._held = false;
       trace.debtAfter = this.debt;
     }
   }
 
-  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply) {
+  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain) {
     if (!this.quakeDue(ply)) {
-      trace.path.push(ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
+      trace.path.push(this._held ? 'held-in-check' : ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
       return null;
     }
     trace.path.push('quake');
     trace.census = { lockedPawns: lockedPawns(fen, files, ranks).length, displacement: null, displacement2: null, crumble: null };
 
-    // --- displacement leg (unless a crumble is due) ---
-    let postFen = fen;
-    const displacements = [];
+    // --- rung selection ---------------------------------------------------
+    // The debt cap forces a hole outright (no weighted draw consumed — one of
+    // the state-dependent draw patterns the trace exists to expose). Every
+    // rung counts toward debt now, not just displacements: the cheap rungs
+    // are where most activity lives, so a displacement-only counter would
+    // never force one and the board would never close.
     const forced = this.debt >= this.debtCap;
-    const wants = this.wantsCrumble(ply);
-    trace.path.push(forced ? 'crumble-forced' : wants ? 'crumble-roll-passed' : 'crumble-roll-failed');
-    if (!wants) {
-      const tiers = displacementCandidates(ffish, variant, fen, files, ranks);
-      trace.census.displacement = censusOfTiers(tiers);
-      const firstWhite = this.#draw('first-side', 0.5);
-      trace.firstSide = firstWhite ? 'white' : 'black';
-      const p1 = bestTierForSide(tiers, firstWhite);
-      if (!p1) {
-        // The rolled first side has no legal candidate in ANY tier — the
-        // other side may well have had one (the census shows it), but the
-        // Director does not re-roll sides: the quake drops to the crumble leg.
-        trace.path.push('no-first-leg');
-      } else {
-        const c1 = this.#pickTraced('pick-leg1', p1.pool, p1.tier);
-        trace.chosen = { leg1: { from: c1.from, to: c1.to, piece: c1.piece, tier: p1.tier } };
-        const tiers2 = displacementCandidates(ffish, variant, c1.fen, files, ranks);
-        trace.census.displacement2 = censusOfTiers(tiers2);
-        const p2 = bestTierForSide(tiers2, !firstWhite, (c) => leavesFirstLegSafe(c, c1.to, files, ranks));
-        if (p2) {
-          // symmetric: one piece per side — the arena breaks locks evenly
-          const c2 = this.#pickTraced('pick-leg2', p2.pool, p2.tier);
-          trace.chosen.leg2 = { from: c2.from, to: c2.to, piece: c2.piece, tier: p2.tier };
-          displacements.push({ from: c1.from, to: c1.to, piece: c1.piece }, { from: c2.from, to: c2.to, piece: c2.piece });
-          postFen = c2.fen;
-          trace.path.push('paired');
-        } else if (this.acceptsOneSided(ply)) {
-          displacements.push({ from: c1.from, to: c1.to, piece: c1.piece });
-          postFen = c1.fen;
-          trace.path.push('unpaired-one-sided');
-        } else {
-          // hold out for a pairable quake — fall through, maybe crumble
-          trace.path.push('unpaired-held');
-        }
-      }
-      if (displacements.length) {
-        this.debt++;
-        trace.outcome = displacements.length === 2 ? 'paired' : 'one-sided';
-        return { displacements, crumble: null, postFen, endsGame: false, trace };
-      }
-      trace.fellThrough = true; // the fall-through path (§10 Phase 1.2)
+    let rung;
+    if (forced) {
+      rung = 'crumble';
+      trace.path.push('crumble-forced');
+    } else {
+      const weights = this.rungWeights(ply, terrain);
+      trace.weights = Object.fromEntries(Object.entries(weights).map(([k, w]) => [k, r6(w)]));
+      rung = this.#pickWeighted('rung', weights) ?? 'crumble';
     }
+    trace.rung = rung;
 
-    // --- crumble leg ---
-    const { neutral, terminal, rejected } = crumbleCandidates(ffish, variant, postFen, files, ranks);
+    // Walk the ladder from the rolled rung: if it has nothing to work with,
+    // try the others in escalation order rather than wasting the quake.
+    const order = [rung, ...RUNGS.filter((r) => r !== rung)];
+    for (const r of order) {
+      if (r !== rung && trace.rungFallback === null) trace.rungFallback = [];
+      const out = this.#applyRung(r, trace, ffish, variant, fen, files, ranks, ply);
+      if (out) {
+        if (r !== rung) trace.rungFallback.push(r);
+        return out;
+      }
+      if (r !== rung) trace.rungFallback.push(`${r}:empty`);
+      else trace.fellThrough = true; // the rolled rung came up empty-handed
+    }
+    trace.path.push('starved');
+    trace.outcome = 'starved';
+    return null; // nothing legal anywhere — extremely late board; try next ply
+  }
+
+  /** Apply one rung, or return null if it has no candidates. */
+  #applyRung(rung, trace, ffish, variant, fen, files, ranks, ply) {
+    if (rung === 'weaken') return this.#weakenLeg(trace, fen, files, ranks);
+    if (rung === 'breach') return this.#breachLeg(trace, ffish, variant, fen, files, ranks);
+    if (rung === 'displace') return this.#displaceLeg(trace, ffish, variant, fen, files, ranks, ply);
+    return this.#crumbleLeg(trace, ffish, variant, fen, files, ranks);
+  }
+
+  /** Rung 1 — a solid wall cracks into furniture. Safe by construction: the
+   *  square keeps blocking, so no line opens and no check can be discovered;
+   *  the edit only adds a capture option, to both armies equally. */
+  #weakenLeg(trace, fen, files, ranks) {
+    const cands = weakenCandidates(fen, files, ranks, this.holes);
+    trace.census.weaken = cands.length;
+    if (!cands.length) return null;
+    const c = this.#pickByImpact('pick-weaken', cands);
+    if (!c) return null;
+    const postFen = clearEp(setSquare(fen, c.sq, FURNITURE));
+    this.debt++;
+    trace.chosen = { ...(trace.chosen ?? {}), terrain: { kind: 'weaken', square: c.sq, impact: c.impact } };
+    trace.path.push('weaken');
+    trace.outcome = 'weaken';
+    return {
+      displacements: [],
+      crumble: null,
+      terrain: { kind: 'weaken', square: c.sq },
+      postFen,
+      endsGame: false,
+      trace,
+    };
+  }
+
+  /** Rung 2 — furniture is smashed and the line opens for real. Filtered
+   *  like a displacement, because opening a ray can discover a check. */
+  #breachLeg(trace, ffish, variant, fen, files, ranks) {
+    const { ok, rejected } = breachCandidates(ffish, variant, fen, files, ranks);
+    trace.census.breach = { ok: ok.length, rejected: countByReason(rejected) };
+    if (!ok.length) return null;
+    const c = this.#pickByImpact('pick-breach', ok);
+    if (!c) return null;
+    this.debt++;
+    trace.chosen = { ...(trace.chosen ?? {}), terrain: { kind: 'breach', square: c.sq, impact: c.impact, freed: c.freed } };
+    trace.path.push('breach');
+    trace.outcome = 'breach';
+    return {
+      displacements: [],
+      crumble: null,
+      terrain: { kind: 'breach', square: c.sq, freed: c.freed },
+      postFen: c.fen,
+      endsGame: false,
+      trace,
+    };
+  }
+
+  /** Rung 3 — v2's displacement, rules unchanged: symmetric preferred, the
+   *  SEE landing guard judged on the composite board, one-sided only once
+   *  its own ramp has run out. */
+  #displaceLeg(trace, ffish, variant, fen, files, ranks, ply) {
+    const tiers = displacementCandidates(ffish, variant, fen, files, ranks);
+    trace.census.displacement = censusOfTiers(tiers);
+    const firstWhite = this.#draw('first-side', 0.5);
+    trace.firstSide = firstWhite ? 'white' : 'black';
+    const p1 = bestTierForSide(tiers, firstWhite);
+    if (!p1) {
+      // The rolled first side has no legal candidate in ANY tier — the other
+      // side may well have had one (the census shows it), but the Director
+      // does not re-roll sides: the quake falls to the next rung.
+      trace.path.push('no-first-leg');
+      return null;
+    }
+    const c1 = this.#pickTraced('pick-leg1', p1.pool, p1.tier);
+    trace.chosen = { ...(trace.chosen ?? {}), leg1: { from: c1.from, to: c1.to, piece: c1.piece, tier: p1.tier } };
+    const tiers2 = displacementCandidates(ffish, variant, c1.fen, files, ranks);
+    trace.census.displacement2 = censusOfTiers(tiers2);
+    const p2 = bestTierForSide(tiers2, !firstWhite, (c) => leavesFirstLegSafe(c, c1.to, files, ranks));
+    let displacements;
+    let postFen;
+    if (p2) {
+      // symmetric: one piece per side — the arena breaks locks evenly
+      const c2 = this.#pickTraced('pick-leg2', p2.pool, p2.tier);
+      trace.chosen.leg2 = { from: c2.from, to: c2.to, piece: c2.piece, tier: p2.tier };
+      displacements = [
+        { from: c1.from, to: c1.to, piece: c1.piece },
+        { from: c2.from, to: c2.to, piece: c2.piece },
+      ];
+      postFen = c2.fen;
+      trace.path.push('paired');
+    } else if (this.acceptsOneSided(ply)) {
+      displacements = [{ from: c1.from, to: c1.to, piece: c1.piece }];
+      postFen = c1.fen;
+      trace.path.push('unpaired-one-sided');
+    } else {
+      trace.path.push('unpaired-held'); // hold out for a pairable quake
+      return null;
+    }
+    this.debt++;
+    trace.outcome = displacements.length === 2 ? 'paired' : 'one-sided';
+    return { displacements, crumble: null, terrain: null, postFen, endsGame: false, trace };
+  }
+
+  /** Rung 4 — the closer. A square becomes a permanent HOLE, recorded in
+   *  `this.holes` so the gods never crack it open again; that permanence is
+   *  what keeps the duel provably finite. */
+  #crumbleLeg(trace, ffish, variant, fen, files, ranks) {
+    const { neutral, terminal, rejected } = crumbleCandidates(ffish, variant, fen, files, ranks);
     trace.census.crumble = { neutral: neutral.length, terminal: terminal.length, rejected: countByReason(rejected) };
     if (neutral.length) {
       const c = this.#pickTraced('pick-crumble', neutral);
       this.debt = 0;
+      this.holes.add(c.sq);
       trace.chosen = { ...(trace.chosen ?? {}), crumble: { square: c.sq, pieceLost: c.pieceLost } };
       trace.path.push('crumble-neutral');
       trace.outcome = 'crumble';
-      return { displacements, crumble: { square: c.sq, pieceLost: c.pieceLost }, postFen: c.fen, endsGame: false, trace };
+      return {
+        displacements: [],
+        crumble: { square: c.sq, pieceLost: c.pieceLost },
+        terrain: null,
+        postFen: c.fen,
+        endsGame: false,
+        trace,
+      };
     }
     if (terminal.length) {
       // The board has closed: every remaining collapse immobilizes the mover.
@@ -713,14 +1121,20 @@ export class Director {
       // 'earthquake' at the duel layer.
       const t = this.#pickTraced('pick-terminal', terminal);
       this.debt = 0;
-      const collapsed = clearEp(setSquare(postFen, t.sq, '*'));
+      this.holes.add(t.sq);
+      const collapsed = clearEp(setSquare(fen, t.sq, WALL));
       trace.chosen = { ...(trace.chosen ?? {}), crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost } };
       trace.path.push('crumble-terminal');
       trace.outcome = 'terminal';
-      return { displacements: [], crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost }, postFen: collapsed, endsGame: true, trace };
+      return {
+        displacements: [],
+        crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost },
+        terrain: null,
+        postFen: collapsed,
+        endsGame: true,
+        trace,
+      };
     }
-    trace.path.push('starved');
-    trace.outcome = 'starved';
-    return null; // nothing legal anywhere — extremely late board; try next ply
+    return null;
   }
 }

@@ -106,7 +106,47 @@ original clauses below stand only for that interim and as design record.]`
 - **Reserve slot** (single piece in hand, droppable on own back ranks) is a possible high-tier upgrade, not a core mechanic. `[OPEN]`
 - **Gap math:** the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]` `[UNDER RE-INVESTIGATION 2026-08: molded armies are no longer fixed 2-deep, so gap and formation depth decouple; the proving-grounds lab tests gaps 1–6 and whether the ideal gap scales with army size — designer expects a practical trigger band of 2–5. The lint floor for a legal deal is gap ≥ 1.]`
 
-### 4.5 The Board State Director — Earthquakes `[LOCKED in shape, PROVISIONAL in numbers — REPLACES the crumble system]`
+### 4.5 The Board State Director — Earthquakes `[v3 — THE LADDER, designer 2026-08-31; PROVISIONAL in numbers]`
+
+**v3 gutted v2's decision layer.** The lock on §4.5's shape was lifted by the
+design conversation the phase plan required; what follows is its outcome. v2
+triggered on a ply ramp — blind to the board — and the meter-lab pass measured
+the cost: 23.3% of quakes wrecked a mate or flipped the eval (3.27 per game)
+and 11.1% fired while a king was in check, so the mechanic built to shorten
+duels was lengthening them by dissolving the mates that would have ended them.
+
+Three things changed, and nothing else:
+
+1. **The trigger is two meters, not a ply count.** *Restlessness* reads the
+   game record ("nothing has happened lately"); *staleness* reads the position
+   ("nothing CAN happen here" — the fun score) and sets how fast restlessness
+   fills. Neither consults the engine: eval answers *who is winning*, which is
+   the one question the gods must never act on, and a movetime-bounded search
+   in the trigger would destroy seeded replay. The old ply ramp survives only
+   as a late backstop floor. **The gods never stir while a king is in check.**
+2. **A severity ladder, not one move.** Restlessness buys escalation, and the
+   cheap rungs are the safe ones — **weaken** (`*` → `^`, a wall cracks; opens
+   no line, only adds a capture option to both sides, so it is safe by
+   construction rather than by filter, and it telegraphs the breach to come),
+   **breach** (`^` → floor, the line opens for real), **displace** (v2's
+   quake, rules unchanged), **crumble** (a permanent HOLE — demoted from a
+   mid-game event to the closer). Most god activity now lands where it cannot
+   wreck a game. Terrain edits also solve three measured v2 problems at once:
+   they unlock terrain-locked pawns directly (v2's crumbles never could —
+   0/7073), they cannot hand out material (the whole arena03 free-rook class),
+   and they are genuinely side-neutral, so they need no pairing rule.
+3. **Targeting is structural, never evaluative.** The rung comes from the
+   meter; the target is a seeded weighted pick over an impact score (how much
+   would this unstick?). A structural criterion never references a side, so
+   "reads as random" and "never picks a winner" hold by construction.
+
+**Holes are not walls.** `*` now means two things and FSF cannot tell them
+apart, so the Director does: a hole is a square a crumble created, and it is
+permanent — never weakened, never reopened. That is what keeps termination
+provable now that free squares are no longer monotone (see "Walls are forever"
+below, amended). Hole-ness is Director state, not FEN state — an authored wall
+that was weakened, breached, occupied and then crumbled reads as `*` on a
+square the stage authored as `*`.
 
 The dungeon has opinions. As a duel runs long, **THE GODS** stir the arena: the screen shakes, a few pieces scoot to neighbouring squares, and sometimes the floor gives way and a square becomes a pit (`*`). Collectively these events are **Earthquakes**, and the system that chooses them is the **Board State Director**.
 
@@ -161,7 +201,7 @@ All Director RNG is **seeded per duel** so harness sweeps replay exactly.
 - **Quake-sight** — telegraphing what the gods are about to do — is deliberately *not* a base rule, and remains an §8 upgrade.
 - **The Director is tunable in-game** (Options → The Gods: Calm / Restless / Wrathful / Custom / Off). This is a playtest instrument first, but temperament-as-difficulty-axis is a live design option.
 - **Holes persist after the duel** as overworld terrain (§5.1). Persistence policy vs map guarantees is open (§11).
-- **Walls are forever.** Letting rubble refill a pit would be the single best anti-boring tool available and it would destroy the termination guarantee — free squares would stop decreasing monotonically. Ruled out on purpose; do not re-invent it. §4.6's furniture does not touch this: a `^` is an occupant, never a wall — capturing one is an ordinary capture. The bans that carry the guarantee stay exact: nothing ever converts a wall back to a playable square, and nothing ever creates clearable terrain mid-duel.
+- **Holes are forever** `[AMENDED v3 2026-08-31 — was "Walls are forever"]`. The old rule banned every terrain edit because it read the termination guarantee as "free squares only ever shrink". That over-claimed the premise: what actually carries the guarantee is that HOLES accumulate and never reverse. Breaching spends a finite supply — there are only ever W authored walls, each convertible once — so free squares can rise by at most W across a whole duel and then only fall, while holes grow without bound. The board still provably closes and the duel still ends via stalemate-as-loss (§4.4); it just closes later. So the exact bans now are: **nothing ever converts a HOLE back to a playable square, and nothing ever weakens one.** Walls may be cracked to `^` and crates may be smashed open, by the gods (§4.5's ladder) or by a player capturing one. Letting rubble refill a pit is still ruled out on purpose; do not re-invent it.
 
 ### 4.6 Furniture — capturable walls `[NEW 2026-08-25 — designer-approved; engine substrate is Phase 1.2.3]`
 
@@ -174,7 +214,7 @@ The second terrain glyph: **`^` — furniture** (crates, weak masonry, force fie
 - A pawn capturing furniture diagonally into the promotion zone promotes. Legal, intended.
 - Bare-army extinction (§4.4) never sees furniture — it is nobody's piece, in count or in type.
 - **The gods treat `^` as stone** — never displaced, never a landing square, terrain in every census — until the Director rework sets the real policy (a crumble swallowing furniture is monotone and default-allowed; the rework decides). The restlessness meter must not give furniture-smashing full capture credit, or the player farms crates to keep the gods asleep — rework-owned (§11).
-- **Nothing creates a `^` mid-duel, ever.** Furniture is stage-authored only, and only decreases.
+- **The gods create and destroy `^`** `[REPEALED v3 2026-08-31 — was "nothing creates a ^ mid-duel, ever"]`. The `[Phase 1.2.4 interim]` clause handed the real policy to the Director rework, and this is it: §4.5's ladder cracks a wall into furniture (weaken) and smashes furniture open (breach). Nothing ELSE creates one — not a player, not a promotion, not a capture — so furniture is still stage-authored plus god-authored, and it is still terrain to molding, crop, the camp line, and to displacement, which neither carries a crate nor lands on one.
 - **Terrain is not a victim `[designer-final 2026-08-25]`.** Variant rules that reward or compel *capturing* mean enemy pieces, never furniture: `mustCapture` neither forces a crate capture nor is satisfied by one, and capture-gated promotion (`piecePromotionOnCapture`) gives no promotion credit for smashing a crate. No duel variant uses those rules — the engine patch implements the ruling engine-wide for coherence. To search, move ordering, and SAN, a crate capture is still an ordinary capture (this is what makes game-layer capture detection, §4.5's meters included, see crate-smashes — their *weight* is the rework's question, §11).
 
 **Termination (§4.5) is untouched.** Furniture is an occupant, not a wall: the guarantee rests on crumbles converting playable squares to stone, and never rested on occupants. Stone is forever; furniture is mortal, and dies exactly once.

@@ -18,6 +18,7 @@
 // no repetition rules a stale engine history could never adjudicate anyway,
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
+import { moveEvents, PositionLog } from './meter.mjs';
 import { findSquares } from './fen.mjs';
 
 /**
@@ -75,12 +76,13 @@ export class DuelController {
    * opts = {
    *   ffish, engine,                       // initialized modules (catalog loaded)
    *   variantName, startFen, files, ranks,
-   *   director: { onsetPly, quakeRamp, crumbleRamp, debtCap,
-   *               asymOnsetPly, asymRamp, seed },   // see DIRECTOR_DEFAULTS
+   *   director: { onsetPly, debtCap, holdInCheck, asymOnsetPly, asymRamp,
+   *               weakenBias, breachAt/Bias, displaceAt/Bias, crumbleAt/Bias,
+   *               meter: {...}, staleness: {...}, seed },  // DIRECTOR_DEFAULTS
    *   go: 'depth 22 movetime 500',         // paired limits (CLAUDE.md rule 5; 22 is a WASM-stability cap, see main.mjs)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
-   *     onQuake({ displacements, crumble, endedGame, preFen, postFen, trace }),  // awaited (UI animates)
+   *     onQuake({ displacements, crumble, terrain, endedGame, preFen, postFen, trace }),  // awaited (UI animates)
    *     onEnd({ result, winner, termination }),
    *     onEngineInfo({ score, depth }),
    *     onDirectorTrace(trace),            // Phase 1.2: EVERY ply's roll trace,
@@ -106,6 +108,10 @@ export class DuelController {
     this.state = 'idle'; // idle | playing | ended | error
     this.record = { moves: [], sans: [], quakes: [], quakeTraces: [], tunes: [], anomalies: [], result: null, winner: null, termination: null, error: null };
     this.snapshots = []; // undo support (cheat feature) — one per playable state
+    // The Director's restlessness meter is fed from here, not from a host
+    // hook: the trigger is canon now (v3), so a host that forgot to wire it
+    // would silently get a Director that never fires.
+    this.positions = new PositionLog();
   }
 
   /** Register the variant + start position with both libraries. */
@@ -252,6 +258,7 @@ export class DuelController {
   /** Shared post-move pipeline — the harness loop body, verbatim in spirit. */
   async #push(uci, mover) {
     const san = this.board.sanMove(uci);
+    const fenBefore = this.board.fen(); // the meter classifies the move against it
     this.board.push(uci);
     this.movesSinceBase.push(uci);
     this.ply++;
@@ -277,8 +284,16 @@ export class DuelController {
       return this.#fail(`max-plies backstop (${MAX_PLIES}) reached — director config failed to terminate`);
     }
 
-    // --- quake phase (between plies, after EVERY completed ply) ---
+    // --- the trigger (v3): feed both meters BEFORE the quake phase ---------
+    // The record meter classifies the move that was just played; staleness
+    // reads the position it produced. Neither consults the engine, so this
+    // stays a pure function of the ledger and seeded replay is unaffected.
     const fenNow = this.board.fen();
+    const moveEv = moveEvents(fenBefore, uci, this.board);
+    moveEv.repetition = this.positions.record(fenNow) >= 2;
+    this.director.observePly(this.ffish, this.variantName, fenNow, this.files, this.ranks, moveEv);
+
+    // --- quake phase (between plies, after EVERY completed ply) ---
     const quake = this.director.quake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply);
 
     // Duel-layer safety net first, so a veto is stamped on the trace BEFORE
@@ -318,7 +333,7 @@ export class DuelController {
 
     if (adoptBoard) {
       this.#adoptPostQuake(adoptBoard, quake.postFen);
-      const ev = { ply: this.ply, displacements: quake.displacements, crumble: quake.crumble, endedGame: quake.endsGame, preFen: fenNow, postFen: quake.postFen, trace };
+      const ev = { ply: this.ply, displacements: quake.displacements, crumble: quake.crumble, terrain: quake.terrain ?? null, endedGame: quake.endsGame, preFen: fenNow, postFen: quake.postFen, trace };
       this.record.quakes.push(ev);
       if (this.hooks.onQuake) await this.hooks.onQuake(ev);
       if (this.state !== 'playing') return { ended: true };
@@ -349,6 +364,12 @@ export class DuelController {
       moves: [...this.movesSinceBase],
       ply: this.ply,
       debt: this.director.debt,
+      // v3 Director state that is NOT recoverable from the FEN: holes read as
+      // ordinary '*' to FSF and to any observer, and the meter is a running
+      // total over the record. An undo that dropped either would let the gods
+      // re-crack a sealed pit or forget how bored they were.
+      holes: [...this.director.holes],
+      meter: this.director.meter.value,
       lens: {
         moves: this.record.moves.length,
         quakes: this.record.quakes.length,
@@ -383,6 +404,8 @@ export class DuelController {
     this.movesSinceBase = [...s.moves];
     this.ply = s.ply;
     this.director.debt = s.debt;
+    this.director.holes = new Set(s.holes ?? []);
+    this.director.meter.value = s.meter ?? 0;
     this.record.moves.length = s.lens.moves;
     this.record.sans.length = s.lens.moves;
     this.record.quakes.length = s.lens.quakes;

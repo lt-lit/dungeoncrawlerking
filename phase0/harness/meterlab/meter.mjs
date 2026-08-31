@@ -1,3 +1,18 @@
+// SUPERSEDED 2026-08-31 — do not build on this file.
+//
+// The hypothesis below WON its evidence pass, so the meter was promoted into
+// canon: `play/js/meter.mjs` is the shipped RestlessnessMeter, and the v3
+// Director (`play/js/director.mjs`) owns the trigger directly rather than
+// through a lab subclass. This module is kept only so the first-pass corpora
+// in `phase0/results/meterlab/` stay readable against the commit that
+// produced them.
+//
+// MeterDirector below no longer composes with the canon Director: v3 removed
+// pCrumble() (the crumble ramp went away with the ply-ramp trigger) and the
+// variant knobs it overrode. Running it against current `play/js/` will
+// throw. Check out the corpus's own commit to replay pre-1.3 evidence, as
+// `phase0/results/meterlab/README.md` already requires.
+//
 // Meter lab (Phase 1.3 evidence pass) — the RESTLESSNESS METER prototype.
 //
 // Hypothesis under test: the Director's core defect is its trigger, not its
