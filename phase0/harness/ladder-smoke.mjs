@@ -82,7 +82,12 @@ function specFor(stage) {
   return { white: { spec: { width, budget } }, black: { spec: { width, budget } } };
 }
 
-const tally = { weaken: 0, breach: 0, paired: 0, 'one-sided': 0, crumble: 0, terminal: 0, starved: 0 };
+// v3 counts ACTIONS, not quakes: a quake spends a budget, so the interesting
+// numbers are how many rungs fire per quake (is it actually mixing?) and how
+// the actions split across the ladder.
+const tally = { weaken: 0, breach: 0, displace: 0, crumble: 0, terminal: 0 };
+const budgetHist = {};
+let mixedQuakes = 0;
 const rows = [];
 let engine = await loadEngine();
 
@@ -129,10 +134,17 @@ for (let i = 0; i < picks.length; i++) {
   }
 
   const outcomes = {};
+  let actions = 0;
   for (const t of duel.record.quakeTraces) {
     if (t.outcome === 'quiet') continue;
-    outcomes[t.outcome] = (outcomes[t.outcome] ?? 0) + 1;
-    if (t.outcome in tally) tally[t.outcome]++;
+    const spent = t.rungsSpent ?? [];
+    budgetHist[spent.length] = (budgetHist[spent.length] ?? 0) + 1;
+    if (new Set(spent).size > 1) mixedQuakes++;
+    for (const r of spent) {
+      outcomes[r] = (outcomes[r] ?? 0) + 1;
+      if (r in tally) tally[r]++;
+      actions++;
+    }
   }
   const inCheckFires = duel.record.quakeTraces.filter((t) => t.outcome !== 'quiet' && t.held).length;
   rows.push({
@@ -140,7 +152,8 @@ for (let i = 0; i < picks.length; i++) {
     dims: `${deal.files}x${deal.ranks}`,
     plies: duel.ply,
     term: duel.record.termination ?? duel.record.error ?? '?',
-    quakes: Object.values(outcomes).reduce((a, b) => a + b, 0),
+    quakes: duel.record.quakeTraces.filter((t) => t.outcome !== 'quiet').length,
+    actions,
     holes: duel.director.holes.size,
     inCheckFires,
     outcomes,
@@ -157,6 +170,7 @@ const q = (arr, p) => {
 };
 const plies = played.map((r) => r.plies);
 const totalQuakes = played.reduce((a, r) => a + r.quakes, 0);
+const totalActions = played.reduce((a, r) => a + r.actions, 0);
 
 console.log(`\n=== ladder smoke (gods ${GODS}, ${GO}) ===`);
 for (const r of rows) {
@@ -165,7 +179,7 @@ for (const r of rows) {
   else
     console.log(
       `  ${r.stage.padEnd(26)} ${r.dims.padStart(5)} ${String(r.plies).padStart(4)}p ` +
-        `${r.term.padEnd(12)} ${String(r.quakes).padStart(3)}q holes ${String(r.holes).padStart(2)} ` +
+        `${r.term.padEnd(12)} ${String(r.quakes).padStart(3)}q ${String(r.actions).padStart(3)}a holes ${String(r.holes).padStart(2)} ` +
         `${r.s}s  ${JSON.stringify(r.outcomes)}`
     );
 }
@@ -173,12 +187,13 @@ console.log(`\ngames ${played.length}/${rows.length}   plies q1/med/q3: ${q(plie
 console.log(`terminations: ${JSON.stringify(played.reduce((a, r) => ((a[r.term] = (a[r.term] ?? 0) + 1), a), {}))}`);
 const failures = played.filter((r) => r.term === '?' || String(r.term).includes('max-plies'));
 console.log(`TERMINATION FAILURES: ${failures.length}${failures.length ? ' ← ' + failures.map((r) => r.stage).join(', ') : ''}`);
-console.log(`quakes ${totalQuakes} total, ${(totalQuakes / Math.max(1, played.length)).toFixed(1)}/game`);
-const pct = (n) => `${((100 * n) / Math.max(1, totalQuakes)).toFixed(1)}%`;
+console.log(`quakes ${totalQuakes} total (${(totalQuakes / Math.max(1, played.length)).toFixed(1)}/game), actions ${totalActions} (${(totalActions / Math.max(1, totalQuakes)).toFixed(2)}/quake)`);
+console.log(`actions per quake: ${JSON.stringify(budgetHist)} — MIXED-rung quakes ${mixedQuakes}/${totalQuakes} (${((100 * mixedQuakes) / Math.max(1, totalQuakes)).toFixed(1)}%)`);
+const pct = (n) => `${((100 * n) / Math.max(1, totalActions)).toFixed(1)}%`;
 console.log(
-  `ladder: weaken ${tally.weaken} (${pct(tally.weaken)}) · breach ${tally.breach} (${pct(tally.breach)}) · ` +
-    `displace ${tally.paired + tally['one-sided']} (${pct(tally.paired + tally['one-sided'])}) · ` +
-    `crumble ${tally.crumble + tally.terminal} (${pct(tally.crumble + tally.terminal)}) · starved ${tally.starved}`
+  `ladder (by ACTION): weaken ${tally.weaken} (${pct(tally.weaken)}) · breach ${tally.breach} (${pct(tally.breach)}) · ` +
+    `displace ${tally.displace} (${pct(tally.displace)}) · ` +
+    `crumble ${tally.crumble + tally.terminal} (${pct(tally.crumble + tally.terminal)})`
 );
 console.log(`fired while a king was in check: ${played.reduce((a, r) => a + r.inCheckFires, 0)} (v2 baseline: 11.1% of quakes)`);
 process.exit(failures.length ? 1 : 0);

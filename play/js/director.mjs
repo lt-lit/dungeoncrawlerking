@@ -25,7 +25,8 @@
 //                        breach coming before it arrives.
 //   breach   `^` → floor the crate is smashed and the line opens for real.
 //                        Filtered like a displacement (discovered checks).
-//   displace piece → adjacent square. v2's quake, rules unchanged.
+//   displace piece → adjacent square. ONE piece, either side — v2's fixed
+//                        one-per-side pairing is gone (see #displaceLeg).
 //   crumble  square → a HOLE. The closer; demoted from mid-game event to
 //                        endgame pressure, kept landing by the debt cap.
 //
@@ -39,9 +40,10 @@
 //    whole arena03 free-rook class (rule 13), which needed two fixes. A wall
 //    cracking moves nobody.
 //  - "One-sided moves hand whole games to the favored side (measured: median
-//    flip = a mate-score transition)" — which is why pairing exists, and
-//    pairing is expensive and often unsatisfiable. A wall is not a move FOR
-//    anyone, so the terrain rungs are side-neutral and need no pairing.
+//    flip = a mate-score transition)" — which is why v2 paired displacements.
+//    A wall is not a move FOR anyone, so the terrain rungs are side-neutral
+//    and need no pairing at all; and pairing turned out to be the wrong
+//    answer even for displacement (below).
 //
 // HOLES vs WALLS. `*` means two different things now and FSF cannot tell them
 // apart, so the Director does: `this.holes` is the set of squares a crumble
@@ -70,6 +72,13 @@
 // — never from an evaluation. A structural criterion never references a side,
 // so "feels random" and "never picks a winner" hold by construction instead
 // of needing to be engineered.
+//
+// DROPPED from v2: the pairing rule. Exactly one white piece and one black
+// piece moving on every quake is a signature no player misses, and §4.5 needs
+// the gods to read as arbitrary. It also never did its job — pairing is
+// symmetric in COUNT, and count is not consequence; what actually stops a
+// displacement handing a game away is the SEE landing guard (rule 13), which
+// is untouched and now applies across the whole action budget.
 //
 // Retained from v2 unchanged: exhaustive candidate enumeration (sampling
 // starves on late walled boards), the SEE landing guard on displacements
@@ -455,32 +464,47 @@ export function displacementCandidates(ffish, variant, fen, files, ranks) {
   return { A, B, C, rejected };
 }
 
-/** First non-empty tier (A → B → C) for `white`, or null. `[Phase 1.2]`
- *  Returns which tier the pool came from so the roll trace can name it. */
-function bestTierForSide(tiers, white, extraOk = null) {
+/**
+ * First non-empty tier (A → B → C) over BOTH sides, or null.
+ *
+ * v3 dropped the side constraint with the pairing rule. Tiers already encode
+ * usefulness — A frees a terrain-locked pawn, B lowers the stuck-piece count,
+ * C is cosmetic — so picking the best available tier regardless of colour
+ * means the gods unstick whoever is actually stuck. That is the §4.5 charter,
+ * and it is structural rather than evaluative: it reads the board's mobility,
+ * never the score, so it cannot favour whoever is winning.
+ */
+function bestTier(tiers, extraOk = null) {
   for (const [tier, t] of [['A', tiers.A], ['B', tiers.B], ['C', tiers.C]]) {
-    const side = t.filter((c) => c.white === white && (!extraOk || extraOk(c)));
-    if (side.length) return { tier, pool: side };
+    const pool = extraOk ? t.filter(extraOk) : t;
+    if (pool.length) return { tier, pool };
   }
   return null;
 }
 
 /**
- * Does this second-leg displacement leave the FIRST leg's landing square
- * materially safe?
+ * Is every square a piece has landed on THIS quake still materially safe on
+ * the board as it now stands?
  *
- * Each leg is filtered for its own landing safety during enumeration, and
- * the second leg is enumerated on the first leg's board — so leg 1's effect
- * on leg 2 is already covered. The reverse was not, and it is not a corner
- * case: on the arena03 position that prompted this work, the pair
- * (ra7->a6, Rb5->a5) parks the white rook on a5 attacking the black rook it
- * had just relocated to a6 — the same gift as the reported bug, reached
- * through the other ordering. Symmetry has to hold on the COMPOSITE board.
+ * This is rule 13's second half, generalized. Each displacement is filtered
+ * for its own landing safety when it is enumerated, and later actions are
+ * enumerated on earlier ones' boards — so earlier→later is covered and
+ * later→earlier is not. On the arena03 position that prompted the original
+ * work, (r a7→a6, R b5→a5) parks a white rook attacking the black rook it had
+ * just relocated, the same gift as the reported bug reached through the other
+ * ordering. v2 checked this only across a displacement PAIR; v3 spends a
+ * budget of several actions per quake, so it has to hold across all of them.
+ * Symmetry has to hold on the board the player actually receives.
  */
-function leavesFirstLegSafe(cand, firstTo, files, ranks) {
-  const tf = firstTo.charCodeAt(0) - 97;
-  const tr = parseInt(firstTo.slice(1), 10) - 1;
-  return landingIsSafe(fenGrid(cand.fen, files, ranks), tf, tr, files, ranks);
+function landingsStillSafe(fen, landed, files, ranks) {
+  if (!landed.length) return true;
+  const g = fenGrid(fen, files, ranks);
+  for (const sq of landed) {
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq.slice(1), 10) - 1;
+    if (!landingIsSafe(g, f, r, files, ranks)) return false;
+  }
+  return true;
 }
 
 // ---- Phase 1.2 trace helpers (pure bookkeeping — no RNG, no ffish) --------
@@ -519,8 +543,9 @@ export const DIRECTOR_DEFAULTS = {
   //                    king in check is the opposite of inert. v2 fired here
   //                    11.1% of the time and the filters then rescued the
   //                    king by construction.
-  asymOnsetPly: 50, // ply where one-sided DISPLACEMENT becomes acceptable...
-  asymRamp: 60, // ...ramping to always-acceptable over this many plies
+  extraActions: 2, // at full pressure a quake spends 1 + this many actions.
+  //                  The budget is what makes the gods unreadable: neither the
+  //                  kind nor the COUNT of what happens is a signature.
 
   // --- the ladder: pressure thresholds and biases -------------------------
   // Each rung's weight is `bias × max(0, pressure − at)`, except weaken which
@@ -528,11 +553,14 @@ export const DIRECTOR_DEFAULTS = {
   // seeded weighted pick, so the gods VARY at equal pressure instead of
   // stepping deterministically through a staircase — that variety is most of
   // what sells the mechanic as random.
-  weakenBias: 1, // ...at pressure 0; falls to weakenBias×0.4 at pressure 1
+  weakenBias: 1.8, // ...at pressure 0; falls to weakenBias×0.4 at pressure 1
   breachAt: 0.15,
-  breachBias: 2,
+  breachBias: 2.2,
   displaceAt: 0.35,
-  displaceBias: 2.5,
+  displaceBias: 1.6, // held below the terrain rungs on purpose: displacement
+  //                    is the one rung that can still hand out material, and
+  //                    the budget's later actions fall back to it whenever the
+  //                    wall/crate supply on a board runs dry.
   crumbleAt: 0.7,
   crumbleBias: 3,
   crateBrake: true, // damp weaken as furniture comes to outnumber walls, so a
@@ -557,8 +585,7 @@ export class Director {
     this.onsetPly = c.onsetPly;
     this.debtCap = Math.max(1, c.debtCap);
     this.holdInCheck = c.holdInCheck !== false;
-    this.asymOnsetPly = c.asymOnsetPly;
-    this.asymRamp = Math.max(1, c.asymRamp);
+    this.extraActions = Math.max(0, c.extraActions);
     this.weakenBias = Math.max(0, c.weakenBias);
     this.breachAt = c.breachAt;
     this.breachBias = Math.max(0, c.breachBias);
@@ -597,8 +624,7 @@ export class Director {
       onsetPly: this.onsetPly,
       debtCap: this.debtCap,
       holdInCheck: this.holdInCheck,
-      asymOnsetPly: this.asymOnsetPly,
-      asymRamp: this.asymRamp,
+      extraActions: this.extraActions,
       weakenBias: this.weakenBias,
       breachAt: this.breachAt,
       breachBias: this.breachBias,
@@ -651,8 +677,7 @@ export class Director {
     const set = {
       onsetPly: (v) => (this.onsetPly = v),
       debtCap: (v) => (this.debtCap = Math.max(1, v)),
-      asymOnsetPly: (v) => (this.asymOnsetPly = v),
-      asymRamp: (v) => (this.asymRamp = Math.max(1, v)),
+      extraActions: (v) => (this.extraActions = Math.max(0, v)),
       weakenBias: (v) => (this.weakenBias = Math.max(0, v)),
       breachAt: (v) => (this.breachAt = v),
       breachBias: (v) => (this.breachBias = Math.max(0, v)),
@@ -732,15 +757,6 @@ export class Director {
       displace: this.displaceBias * Math.max(0, p - this.displaceAt),
       crumble: this.crumbleBias * Math.max(0, p - this.crumbleAt),
     };
-  }
-
-  /** P(a lone displacement is accepted one-sided | its roll happens).
-   *  Pure — no RNG. The Infinity-onset guard ('off' preset) matters for
-   *  DISPLAY only: (ply - (asym - Infinity)) is NaN, and rng() < NaN is
-   *  false exactly like rng() < 0, so the roll outcome is unchanged. */
-  pOneSided(ply) {
-    if (!Number.isFinite(this.onsetPly)) return 0;
-    return this.#ramp(ply - (this.asymOnsetPly - this.onsetPly), this.asymRamp);
   }
 
   /**
@@ -864,10 +880,6 @@ export class Director {
     return this.#draw('quake', this.pQuake(ply));
   }
 
-  acceptsOneSided(ply) {
-    return this.#draw('one-sided', this.pOneSided(ply));
-  }
-
   pick(arr) {
     return arr[randInt(this.rng, arr.length)];
   }
@@ -875,32 +887,40 @@ export class Director {
   /**
    * Roll one quake against the current position. Pure planning — applies
    * nothing. Returns null (no quake this ply) or:
-   *   { displacements: [{from,to,piece}], crumble: {square,pieceLost}|null,
-   *     postFen, endsGame: false, trace }
-   *   { displacements: [], crumble: {square,reason}, postFen, endsGame: true, trace }
-   * endsGame=true only ever comes from the terminal path (neutral empty):
-   * the caller finishes the duel through the normal mover-loses flow.
+   *   { displacements: [{from,to,piece,tier}],      // 0..budget of them
+   *     crumble: {square,pieceLost}|null,           // at most ONE per quake
+   *     terrain: [{kind:'weaken'|'breach', square}],// 0..budget of them
+   *     postFen, endsGame, trace }
+   * endsGame=true only ever comes from the terminal crumble path (no neutral
+   * candidate left): the caller finishes the duel through the normal
+   * mover-loses flow.
    *
-   * Instrumentation (Phase 1.2): EVERY call — null returns included — leaves
-   * a roll trace on `this.lastTrace` (non-null returns also carry it as
-   * `.trace`). Rolls are recorded inside the draw itself, never by
-   * re-rolling, so the seeded stream and the draw sequence are byte-identical
-   * to the untraced Director. Trace shape:
-   *   { ply, debtBefore, debtAfter, favor,
-   *     p: { quake, crumble, crumbleForced, oneSided },   // RNG-free values
-   *     rolls: [{roll, value, p, pass} | {roll, value, poolSize, index, tier?}],
+   * A quake SPENDS an action budget rather than doing one thing, so the rungs
+   * mix: a wall cracks and a piece scoots, two walls crack, a breach lands
+   * beside a hole. The budget is DRAWN (each extra action its own Bernoulli
+   * trial at the quake probability), never computed from pressure, so the
+   * count varies at identical restlessness. Neither the kind nor the count is
+   * a signature — which is the §4.5 requirement that the gods read as
+   * arbitrary, and the reason v2's fixed one-per-side pairing is gone.
+   *
+   * Instrumentation: EVERY call — null returns included — leaves a roll trace
+   * on `this.lastTrace` (non-null returns also carry it as `.trace`). Rolls
+   * are recorded inside the draw itself, never by re-rolling, so the seeded
+   * stream stays byte-identical to an untraced Director. Trace shape:
+   *   { ply, debtBefore, debtAfter, favor, held, meter, staleness, terrain,
+   *     p: { quake, pressure, crumbleForced },      // RNG-free values
+   *     budget, weights, rung, rungsSpent, rungFallback,
+   *     rolls: [{roll, value, p, pass} | {roll, value, weights, chosen}
+   *             | {roll, value, poolSize, index, tier?}],
    *     path: [reason codes, in order],
-   *     census: { lockedPawns, displacement, displacement2, crumble } | null,
-   *     firstSide, chosen, outcome, fellThrough }
-   * Path codes: pre-onset · quake-roll-failed · quake · crumble-forced ·
-   * crumble-roll-passed · crumble-roll-failed · no-first-leg · paired ·
-   * unpaired-one-sided · unpaired-held · crumble-neutral · crumble-terminal ·
-   * starved. `fellThrough` marks the crucial case the nominal probabilities
-   * hide: the displacement leg came up empty-handed (no-first-leg or
-   * unpaired-held) and the quake dropped into the crumble leg anyway — which
-   * is why crumbles land more often than P(crumble|quake) implies.
-   * `chosen` records picked candidates; on unpaired-held the picked leg1 was
-   * DISCARDED, not applied — `outcome` says what actually happened.
+   *     census: { lockedPawns, displacement, weaken, breach, crumble } | null,
+   *     chosen: { displacements, terrain, crumble }, outcome, fellThrough }
+   * Path codes: pre-onset · held-in-check · quake-roll-failed · quake ·
+   * crumble-forced · weaken · breach · displace · no-displacement ·
+   * crumble-neutral · crumble-terminal · starved. `outcome` is the HEAVIEST
+   * thing that happened (so a mixed quake reads as its biggest event);
+   * `rungsSpent` is the full list in order. `fellThrough` means the budget
+   * ran out of legal actions before it was spent.
    */
   quake(ffish, variant, fen, files, ranks, ply) {
     // holdInCheck is stamped BEFORE the trace is built, because both the
@@ -925,7 +945,6 @@ export class Director {
         quake: r6(this.pQuake(ply)),
         pressure: r6(this.pressure(ply)),
         crumbleForced: this.debt >= this.debtCap,
-        oneSided: r6(this.pOneSided(ply)),
       },
       weights: null,
       rung: null,
@@ -949,56 +968,126 @@ export class Director {
     }
   }
 
-  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain) {
+  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain0) {
     if (!this.quakeDue(ply)) {
       trace.path.push(this._held ? 'held-in-check' : ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
       return null;
     }
     trace.path.push('quake');
-    trace.census = { lockedPawns: lockedPawns(fen, files, ranks).length, displacement: null, displacement2: null, crumble: null };
+    trace.census = { lockedPawns: lockedPawns(fen, files, ranks).length, displacement: null, weaken: null, breach: null, crumble: null };
 
-    // --- rung selection ---------------------------------------------------
-    // The debt cap forces a hole outright (no weighted draw consumed — one of
-    // the state-dependent draw patterns the trace exists to expose). Every
-    // rung counts toward debt now, not just displacements: the cheap rungs
-    // are where most activity lives, so a displacement-only counter would
-    // never force one and the board would never close.
+    // --- the action budget ------------------------------------------------
+    // A quake SPENDS actions rather than performing one; pressure buys more of
+    // them. This is what makes the gods unreadable: at equal pressure one
+    // quake cracks a wall, the next scoots two pieces, the one after that
+    // breaches and drops a hole. Neither the KIND nor the COUNT of what
+    // happens is a signature, which is the §4.5 requirement that the player
+    // read them as arbitrary.
+    // The budget is DRAWN, not computed: `1 + floor(pressure x extraActions)`
+    // would make the action count a deterministic function of pressure, which
+    // is a signature — the same class of tell as v2's one-piece-per-side
+    // pairing. Each extra action is its own Bernoulli trial at `pressure`, so
+    // two quakes at identical restlessness do different amounts, and the top
+    // of the range stays reachable instead of needing pressure to hit exactly
+    // 1.0 for floor() to round up.
+    let budget = 1;
+    for (let i = 0; i < this.extraActions; i++) {
+      if (this.#draw(`budget-${i}`, this.pQuake(ply))) budget++;
+    }
+    trace.budget = budget;
+
     const forced = this.debt >= this.debtCap;
-    let rung;
-    if (forced) {
-      rung = 'crumble';
-      trace.path.push('crumble-forced');
-    } else {
-      const weights = this.rungWeights(ply, terrain);
-      trace.weights = Object.fromEntries(Object.entries(weights).map(([k, w]) => [k, r6(w)]));
-      rung = this.#pickWeighted('rung', weights) ?? 'crumble';
-    }
-    trace.rung = rung;
+    const displacements = [];
+    const terrainEdits = [];
+    const landed = []; // squares pieces have arrived on this quake (rule 13)
+    let crumble = null;
+    let postFen = fen;
+    let endsGame = false;
+    let spent = 0;
 
-    // Walk the ladder from the rolled rung: if it has nothing to work with,
-    // try the others in escalation order rather than wasting the quake.
-    const order = [rung, ...RUNGS.filter((r) => r !== rung)];
-    for (const r of order) {
-      if (r !== rung && trace.rungFallback === null) trace.rungFallback = [];
-      const out = this.#applyRung(r, trace, ffish, variant, fen, files, ranks, ply);
-      if (out) {
-        if (r !== rung) trace.rungFallback.push(r);
-        return out;
+    for (let step = 0; step < budget; step++) {
+      // A quake drops at most ONE hole: a pit is the heaviest thing the gods
+      // do, and two in a breath is a different mechanic.
+      const canCrumble = crumble === null;
+      let rung;
+      if (forced && canCrumble && step === 0) {
+        rung = 'crumble';
+        trace.path.push('crumble-forced');
+      } else {
+        const terrain = terrainCensus(postFen, files, ranks, this.holes);
+        const weights = this.rungWeights(ply, terrain);
+        if (!canCrumble) weights.crumble = 0;
+        if (step === 0) trace.weights = Object.fromEntries(Object.entries(weights).map(([k, w]) => [k, r6(w)]));
+        // A null pick means every rung's weight is zero — low pressure on a
+        // board with no walls and no crates left. That is NOT a reason to
+        // waste the quake: the quake roll already decided something happens,
+        // and the weights only choose WHAT. Fall through to the ladder walk
+        // with no preference. (Skipping this cost 47 of 280 quakes in the
+        // first smoke run — they fired and did nothing.)
+        rung = this.#pickWeighted(`rung${step ? `-${step}` : ''}`, weights) ?? 'displace';
       }
-      if (r !== rung) trace.rungFallback.push(`${r}:empty`);
-      else trace.fellThrough = true; // the rolled rung came up empty-handed
+
+      // Walk the ladder from the rolled rung: if it has nothing to work with,
+      // try the others in escalation order rather than wasting the action.
+      const order = [rung, ...RUNGS.filter((r) => r !== rung && (r !== 'crumble' || canCrumble))];
+      let out = null;
+      for (const r of order) {
+        out = this.#applyRung(r, trace, ffish, variant, postFen, files, ranks, landed);
+        if (out) {
+          if (r !== rung) (trace.rungFallback ??= []).push(`${rung}→${r}`);
+          break;
+        }
+      }
+      if (!out) break; // nothing legal on any rung — stop spending
+
+      if (step === 0) trace.rung = out.outcome;
+      (trace.rungsSpent ??= []).push(out.outcome);
+      displacements.push(...out.displacements);
+      if (out.terrain) terrainEdits.push(out.terrain);
+      if (out.crumble) crumble = out.crumble;
+      if (out.landedOn) landed.push(out.landedOn);
+      postFen = out.postFen;
+      spent++;
+      if (out.endsGame) {
+        endsGame = true;
+        break;
+      }
     }
-    trace.path.push('starved');
-    trace.outcome = 'starved';
-    return null; // nothing legal anywhere — extremely late board; try next ply
+
+    if (!spent) {
+      trace.path.push('starved');
+      trace.outcome = 'starved';
+      return null; // nothing legal anywhere — extremely late board; try next ply
+    }
+
+    trace.chosen = {
+      displacements: displacements.map((d) => ({ from: d.from, to: d.to, piece: d.piece, tier: d.tier })),
+      terrain: terrainEdits,
+      crumble,
+    };
+    // The headline outcome is the heaviest thing that happened, so the trace
+    // log and the status line stay readable; `rungsSpent` has the full list.
+    trace.outcome = endsGame
+      ? 'terminal'
+      : crumble
+        ? 'crumble'
+        : displacements.length
+          ? 'displace'
+          : terrainEdits.some((t) => t.kind === 'breach')
+            ? 'breach'
+            : 'weaken';
+    trace.fellThrough = spent < budget;
+    return { displacements, crumble, terrain: terrainEdits, postFen, endsGame, trace };
   }
 
-  /** Apply one rung, or return null if it has no candidates. */
-  #applyRung(rung, trace, ffish, variant, fen, files, ranks, ply) {
+  /** Apply one rung on the CURRENT board, or return null if it has nothing.
+   *  `landed` carries the squares earlier actions put pieces on, so every rung
+   *  can honour rule 13's composite safety rule. */
+  #applyRung(rung, trace, ffish, variant, fen, files, ranks, landed) {
     if (rung === 'weaken') return this.#weakenLeg(trace, fen, files, ranks);
-    if (rung === 'breach') return this.#breachLeg(trace, ffish, variant, fen, files, ranks);
-    if (rung === 'displace') return this.#displaceLeg(trace, ffish, variant, fen, files, ranks, ply);
-    return this.#crumbleLeg(trace, ffish, variant, fen, files, ranks);
+    if (rung === 'breach') return this.#breachLeg(trace, ffish, variant, fen, files, ranks, landed);
+    if (rung === 'displace') return this.#displaceLeg(trace, ffish, variant, fen, files, ranks, landed);
+    return this.#crumbleLeg(trace, ffish, variant, fen, files, ranks, landed);
   }
 
   /** Rung 1 — a solid wall cracks into furniture. Safe by construction: the
@@ -1010,109 +1099,105 @@ export class Director {
     if (!cands.length) return null;
     const c = this.#pickByImpact('pick-weaken', cands);
     if (!c) return null;
-    const postFen = clearEp(setSquare(fen, c.sq, FURNITURE));
     this.debt++;
-    trace.chosen = { ...(trace.chosen ?? {}), terrain: { kind: 'weaken', square: c.sq, impact: c.impact } };
     trace.path.push('weaken');
-    trace.outcome = 'weaken';
     return {
       displacements: [],
       crumble: null,
-      terrain: { kind: 'weaken', square: c.sq },
-      postFen,
+      terrain: { kind: 'weaken', square: c.sq, impact: c.impact },
+      postFen: clearEp(setSquare(fen, c.sq, FURNITURE)),
       endsGame: false,
-      trace,
+      landedOn: null,
+      outcome: 'weaken',
     };
   }
 
   /** Rung 2 — furniture is smashed and the line opens for real. Filtered
    *  like a displacement, because opening a ray can discover a check. */
-  #breachLeg(trace, ffish, variant, fen, files, ranks) {
+  #breachLeg(trace, ffish, variant, fen, files, ranks, landed) {
     const { ok, rejected } = breachCandidates(ffish, variant, fen, files, ranks);
     trace.census.breach = { ok: ok.length, rejected: countByReason(rejected) };
-    if (!ok.length) return null;
-    const c = this.#pickByImpact('pick-breach', ok);
+    // Opening a ray can expose a square an earlier action landed a piece on,
+    // so the composite check applies to this rung too.
+    const safe = ok.filter((c) => landingsStillSafe(c.fen, landed, files, ranks));
+    if (!safe.length) return null;
+    const c = this.#pickByImpact('pick-breach', safe);
     if (!c) return null;
     this.debt++;
-    trace.chosen = { ...(trace.chosen ?? {}), terrain: { kind: 'breach', square: c.sq, impact: c.impact, freed: c.freed } };
     trace.path.push('breach');
-    trace.outcome = 'breach';
     return {
       displacements: [],
       crumble: null,
-      terrain: { kind: 'breach', square: c.sq, freed: c.freed },
+      terrain: { kind: 'breach', square: c.sq, impact: c.impact, freed: c.freed },
       postFen: c.fen,
       endsGame: false,
-      trace,
+      landedOn: null,
+      outcome: 'breach',
     };
   }
 
-  /** Rung 3 — v2's displacement, rules unchanged: symmetric preferred, the
-   *  SEE landing guard judged on the composite board, one-sided only once
-   *  its own ramp has run out. */
-  #displaceLeg(trace, ffish, variant, fen, files, ranks, ply) {
+  /**
+   * Rung 3 — displacement: ONE piece scoots to an adjacent square.
+   *
+   * v3 dropped v2's pairing rule (designer 2026-08-31). It was a tell before
+   * it was anything else — exactly one white piece and one black piece moving
+   * on every single quake is a signature no player misses, and §4.5 needs the
+   * gods to read as arbitrary. It also never did the job it was added for:
+   * pairing is symmetric in COUNT, and the brief's own note says count is not
+   * consequence — the thing that actually stops a displacement handing a game
+   * away is the SEE landing guard (rule 13), which prices every landing square
+   * and is untouched here. Pairing was v2's patch for a v2 problem; v3 answers
+   * it structurally instead, because displacement is now one rung of four and
+   * the other three cannot favour a side at all.
+   *
+   * Variety comes from the action budget instead: a quake spends 1-3 actions,
+   * so displacements arrive alone, in twos, on one side, on both — and the
+   * COUNT stops being a signature too.
+   */
+  #displaceLeg(trace, ffish, variant, fen, files, ranks, landed) {
     const tiers = displacementCandidates(ffish, variant, fen, files, ranks);
     trace.census.displacement = censusOfTiers(tiers);
-    const firstWhite = this.#draw('first-side', 0.5);
-    trace.firstSide = firstWhite ? 'white' : 'black';
-    const p1 = bestTierForSide(tiers, firstWhite);
-    if (!p1) {
-      // The rolled first side has no legal candidate in ANY tier — the other
-      // side may well have had one (the census shows it), but the Director
-      // does not re-roll sides: the quake falls to the next rung.
-      trace.path.push('no-first-leg');
+    // Every candidate must also leave the squares EARLIER actions landed on
+    // still safe — rule 13's composite rule, now across the whole budget.
+    const best = bestTier(tiers, (c) => landingsStillSafe(c.fen, landed, files, ranks));
+    if (!best) {
+      trace.path.push('no-displacement');
       return null;
     }
-    const c1 = this.#pickTraced('pick-leg1', p1.pool, p1.tier);
-    trace.chosen = { ...(trace.chosen ?? {}), leg1: { from: c1.from, to: c1.to, piece: c1.piece, tier: p1.tier } };
-    const tiers2 = displacementCandidates(ffish, variant, c1.fen, files, ranks);
-    trace.census.displacement2 = censusOfTiers(tiers2);
-    const p2 = bestTierForSide(tiers2, !firstWhite, (c) => leavesFirstLegSafe(c, c1.to, files, ranks));
-    let displacements;
-    let postFen;
-    if (p2) {
-      // symmetric: one piece per side — the arena breaks locks evenly
-      const c2 = this.#pickTraced('pick-leg2', p2.pool, p2.tier);
-      trace.chosen.leg2 = { from: c2.from, to: c2.to, piece: c2.piece, tier: p2.tier };
-      displacements = [
-        { from: c1.from, to: c1.to, piece: c1.piece },
-        { from: c2.from, to: c2.to, piece: c2.piece },
-      ];
-      postFen = c2.fen;
-      trace.path.push('paired');
-    } else if (this.acceptsOneSided(ply)) {
-      displacements = [{ from: c1.from, to: c1.to, piece: c1.piece }];
-      postFen = c1.fen;
-      trace.path.push('unpaired-one-sided');
-    } else {
-      trace.path.push('unpaired-held'); // hold out for a pairable quake
-      return null;
-    }
+    const c = this.#pickTraced('pick-displace', best.pool, best.tier);
     this.debt++;
-    trace.outcome = displacements.length === 2 ? 'paired' : 'one-sided';
-    return { displacements, crumble: null, terrain: null, postFen, endsGame: false, trace };
+    trace.path.push('displace');
+    return {
+      displacements: [{ from: c.from, to: c.to, piece: c.piece, tier: best.tier }],
+      crumble: null,
+      terrain: null,
+      postFen: c.fen,
+      endsGame: false,
+      landedOn: c.to,
+      outcome: 'displace',
+    };
   }
 
   /** Rung 4 — the closer. A square becomes a permanent HOLE, recorded in
    *  `this.holes` so the gods never crack it open again; that permanence is
    *  what keeps the duel provably finite. */
-  #crumbleLeg(trace, ffish, variant, fen, files, ranks) {
+  #crumbleLeg(trace, ffish, variant, fen, files, ranks, landed) {
     const { neutral, terminal, rejected } = crumbleCandidates(ffish, variant, fen, files, ranks);
     trace.census.crumble = { neutral: neutral.length, terminal: terminal.length, rejected: countByReason(rejected) };
-    if (neutral.length) {
-      const c = this.#pickTraced('pick-crumble', neutral);
+    const safe = neutral.filter((c) => landingsStillSafe(c.fen, landed, files, ranks));
+    if (safe.length) {
+      const c = this.#pickTraced('pick-crumble', safe);
       this.debt = 0;
       this.holes.add(c.sq);
-      trace.chosen = { ...(trace.chosen ?? {}), crumble: { square: c.sq, pieceLost: c.pieceLost } };
       trace.path.push('crumble-neutral');
-      trace.outcome = 'crumble';
       return {
         displacements: [],
         crumble: { square: c.sq, pieceLost: c.pieceLost },
         terrain: null,
         postFen: c.fen,
         endsGame: false,
-        trace,
+        landedOn: null,
+        outcome: 'crumble',
       };
     }
     if (terminal.length) {
@@ -1122,17 +1207,15 @@ export class Director {
       const t = this.#pickTraced('pick-terminal', terminal);
       this.debt = 0;
       this.holes.add(t.sq);
-      const collapsed = clearEp(setSquare(fen, t.sq, WALL));
-      trace.chosen = { ...(trace.chosen ?? {}), crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost } };
       trace.path.push('crumble-terminal');
-      trace.outcome = 'terminal';
       return {
         displacements: [],
         crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost },
         terrain: null,
-        postFen: collapsed,
+        postFen: clearEp(setSquare(fen, t.sq, WALL)),
         endsGame: true,
-        trace,
+        landedOn: null,
+        outcome: 'terminal',
       };
     }
     return null;

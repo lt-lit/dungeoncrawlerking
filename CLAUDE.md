@@ -15,10 +15,17 @@ trigger on TWO METERS — restlessness (`play/js/meter.mjs`, the game record:
 ply ramp, which survives only as a late backstop floor, and never while a king
 is in check. They act on a SEVERITY LADDER: weaken (`*`→`^`, a wall cracks —
 safe by construction, telegraphs the breach) → breach (`^`→floor, the line
-opens) → displace (v2's quake, rules unchanged) → crumble (a permanent HOLE,
-demoted to the closer). Rung by meter, target by seeded weighted pick over a
-STRUCTURAL impact score — never an eval, which would both pick a winner and
-destroy seeded replay. `*` now means wall OR hole; FSF cannot tell them apart
+opens) → displace (ONE piece, either side) → crumble (a permanent HOLE,
+demoted to the closer). A quake SPENDS AN ACTION BUDGET (drawn, not computed
+— each extra action is its own Bernoulli trial at P(quake)), so rungs mix and
+neither the kind nor the COUNT of what happens is a signature. **v2's pairing
+rule is GONE** (designer 2026-08-31): one white piece and one black piece
+moving every single quake is a tell, and it never did its job anyway —
+pairing is symmetric in COUNT, and count is not consequence; the SEE landing
+guard (rule 13) is what actually stops a displacement handing a game away,
+and it now applies across the whole budget. Rung by meter, target by seeded
+weighted pick over a STRUCTURAL impact score — never an eval, which would
+both pick a winner and destroy seeded replay. `*` now means wall OR hole; FSF cannot tell them apart
 so `director.holes` does, and holes are permanent (that is the termination
 guarantee — see brief §4.5's amended "Holes are forever"). Sanity harness:
 `phase0/harness/ladder-smoke.mjs` (`--gods off` is the control).
@@ -144,9 +151,14 @@ the ply-ramp trigger was the wrong half — and live play answered the rest:
 the mechanic was game-breaking, so it was GUTTED rather than tuned. v3 (the
 ladder, above) is built and shipped for playtesting; **feel on the phone is
 the test**, not a corpus. The `ladder-smoke.mjs` sanity pass on 14 stages ×
-both orientations: 14/14 terminated, median 103 plies vs **268 with the gods
-off (5 of 14 never terminating at all)**, zero quakes fired into check, ladder
-split weaken 31% / breach 23% / displace 27% / crumble 18%.
+both orientations: 14/14 terminated, median 104 plies vs **268 with the gods
+off (5 of 14 never terminating at all)**, zero quakes fired into check, 1.84
+actions/quake with 33% of quakes mixing rungs, ladder split by ACTION weaken
+22% / breach 19% / displace 50% / crumble 9%. Displacement leads because the
+terrain rungs have a FINITE supply per board — once a board's eligible walls
+and crates are spent, later budget actions fall back to displacement. That is
+structural, not a tuning miss: the finite supply is what makes the termination
+argument work.
 
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated

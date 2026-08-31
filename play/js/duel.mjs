@@ -76,13 +76,16 @@ export class DuelController {
    * opts = {
    *   ffish, engine,                       // initialized modules (catalog loaded)
    *   variantName, startFen, files, ranks,
-   *   director: { onsetPly, debtCap, holdInCheck, asymOnsetPly, asymRamp,
+   *   director: { onsetPly, debtCap, holdInCheck, extraActions,
    *               weakenBias, breachAt/Bias, displaceAt/Bias, crumbleAt/Bias,
    *               meter: {...}, staleness: {...}, seed },  // DIRECTOR_DEFAULTS
    *   go: 'depth 22 movetime 500',         // paired limits (CLAUDE.md rule 5; 22 is a WASM-stability cap, see main.mjs)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
-   *     onQuake({ displacements, crumble, terrain, endedGame, preFen, postFen, trace }),  // awaited (UI animates)
+   *     onQuake({ displacements, crumble, terrain, endedGame, preFen, postFen, trace }),
+   *                                        // awaited (UI animates). `terrain`
+   *                                        // is an ARRAY — a quake spends a
+   *                                        // budget, so rungs mix.
    *     onEnd({ result, winner, termination }),
    *     onEngineInfo({ score, depth }),
    *     onDirectorTrace(trace),            // Phase 1.2: EVERY ply's roll trace,

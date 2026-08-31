@@ -128,10 +128,15 @@ Three things changed, and nothing else:
    cheap rungs are the safe ones — **weaken** (`*` → `^`, a wall cracks; opens
    no line, only adds a capture option to both sides, so it is safe by
    construction rather than by filter, and it telegraphs the breach to come),
-   **breach** (`^` → floor, the line opens for real), **displace** (v2's
-   quake, rules unchanged), **crumble** (a permanent HOLE — demoted from a
-   mid-game event to the closer). Most god activity now lands where it cannot
-   wreck a game. Terrain edits also solve three measured v2 problems at once:
+   **breach** (`^` → floor, the line opens for real), **displace** (ONE piece,
+   either side), **crumble** (a permanent HOLE — demoted from a mid-game event
+   to the closer). A quake SPENDS AN ACTION BUDGET, drawn rather than computed,
+   so the rungs mix and neither the kind nor the COUNT of what happens is a
+   signature. **v2's pairing rule is repealed:** one piece per side on every
+   quake is a tell, and it was symmetric in COUNT, which this document already
+   says is not symmetry in CONSEQUENCE — the SEE landing guard is what actually
+   stops a displacement handing a game away, and it now holds across the whole
+   budget. Terrain edits also solve three measured v2 problems at once:
    they unlock terrain-locked pawns directly (v2's crumbles never could —
    0/7073), they cannot hand out material (the whole arena03 free-rook class),
    and they are genuinely side-neutral, so they need no pairing rule.

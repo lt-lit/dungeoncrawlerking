@@ -206,12 +206,12 @@ const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: fa
 // what one forcing ply refunds. The old quakeRamp/crumbleRamp knobs are gone
 // with the ply-ramp trigger they configured.
 const GOD_PRESETS = {
-  calm: { onsetPly: 20, rampPlies: 26, sate: 5, debtCap: 12, asymOnsetPly: 70, asymRamp: 80 },
-  restless: { onsetPly: 8, rampPlies: 16, sate: 4, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 },
-  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, asymOnsetPly: 30, asymRamp: 30 },
-  off: { onsetPly: Infinity, rampPlies: 16, sate: 4, debtCap: 10, asymOnsetPly: 50, asymRamp: 60 },
+  calm: { onsetPly: 20, rampPlies: 26, sate: 5, debtCap: 12, extraActions: 1 },
+  restless: { onsetPly: 8, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
+  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
+  off: { onsetPly: Infinity, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
 };
-const GOD_KNOBS = ['onsetPly', 'rampPlies', 'sate', 'debtCap', 'asymOnsetPly', 'asymRamp'];
+const GOD_KNOBS = ['onsetPly', 'rampPlies', 'sate', 'debtCap', 'extraActions'];
 
 function godConfig() {
   if (options.godPreset === 'custom' && options.godCustom) return { ...GOD_PRESETS.restless, ...options.godCustom };
@@ -685,7 +685,8 @@ function renderGodsSummary() {
   const held = dir.holdInCheck && dir.lastTrace?.held ? ' · HELD (king in check)' : '';
   $('gods-summary').textContent =
     `next roll p${nextPly}: P(quake) ${pctOf(dir.pQuake(nextPly))} · ` +
-    `P(one-sided) ${pctOf(dir.pOneSided(nextPly))} · debt ${dir.debt}/${dir.debtCap} · favor ${dir.favor.toFixed(1)}${held}`;
+    `budget ${1 + Math.floor(dir.pressure(nextPly) * dir.extraActions)} action(s) · ` +
+    `debt ${dir.debt}/${dir.debtCap} · favor ${dir.favor.toFixed(1)}${held}`;
 
   // The ladder, as it stands right now — rung weights are a pure function of
   // pressure and the terrain census, so showing them costs nothing.
@@ -708,48 +709,50 @@ function renderGodsSummary() {
 function godsTraceCls(t) {
   if (t.outcome === 'quiet') return 'quiet';
   if (t.outcome === 'crumble' || t.outcome === 'terminal' || t.vetoed) return 'crumble';
-  if (t.outcome === 'starved' || t.outcome === 'one-sided') return 'bad';
-  return 'ok'; // weaken / breach / paired — the rungs that cannot wreck a game
+  if (t.outcome === 'starved') return 'bad';
+  return 'ok'; // weaken / breach / displace
 }
 
 /** One compact line per roll trace — the per-ply record, reason codes and all. */
 function godsTraceLine(t) {
+  const meterBit = `meter ${t.meter?.toFixed(1) ?? '?'} · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`;
   if (t.outcome === 'quiet') {
     if (t.held) return `p${t.ply} · HELD — a king is in check, the gods sit it out`;
     const r = t.rolls.find((x) => x.roll === 'quake');
-    const m = `meter ${t.meter?.toFixed(1) ?? '?'} · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`;
-    return `p${t.ply} · ${m} · P(q) ${pctOf(t.p.quake)}${r ? ` roll ${r.value.toFixed(2)} — quiet` : ' — before onset'}`;
+    return `p${t.ply} · ${meterBit} · P(q) ${pctOf(t.p.quake)}${r ? ` roll ${r.value.toFixed(2)} — quiet` : ' — before onset'}`;
   }
-  const bits = [`p${t.ply} QUAKE`];
-  bits.push(`meter ${t.meter?.toFixed(1) ?? '?'} · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`);
+  const bits = [`p${t.ply} QUAKE`, meterBit];
   if (t.p.crumbleForced) bits.push('crumble FORCED (debt cap)');
-  else if (t.rung) bits.push(`rung ${t.rung.toUpperCase()}${t.rungFallback?.length ? ` → fell to ${t.rungFallback.join(', ')}` : ''}`);
-  const ter = t.chosen?.terrain;
-  if (ter) {
-    bits.push(
-      ter.kind === 'weaken'
-        ? `WEAKEN ${ter.square} — a wall cracks into furniture (impact ${ter.impact})`
-        : `BREACH ${ter.square} — the crate is smashed open${ter.freed > 0 ? `, frees ${ter.freed} locked pawn${ter.freed === 1 ? '' : 's'}` : ''}`
-    );
-  }
+  // The budget is the headline now: what makes a quake unreadable is that the
+  // number and kind of actions vary, so the trace shows both.
+  const spent = t.rungsSpent ?? [];
+  bits.push(`budget ${spent.length}/${t.budget ?? '?'} → ${spent.join(' + ') || 'nothing'}`);
+  if (t.rungFallback?.length) bits.push(`fell back: ${t.rungFallback.join(', ')}`);
+
   const c = t.census;
   if (c?.displacement) {
     const s = (x) => `${x.white}w/${x.black}b`;
     bits.push(`cand A ${s(c.displacement.A)} B ${s(c.displacement.B)} C ${s(c.displacement.C)}`);
-    if (t.firstSide) bits.push(`first ${t.firstSide}`);
   }
   if (c && c.lockedPawns > 0) bits.push(`locked pawns ${c.lockedPawns}`);
-  const leg = (l) => `${l.piece} ${l.from}→${l.to} [${l.tier}]`;
-  if (t.outcome === 'paired') bits.push(`paired ${leg(t.chosen.leg1)} + ${leg(t.chosen.leg2)}`);
-  else if (t.outcome === 'one-sided') bits.push(`ONE-SIDED ${leg(t.chosen.leg1)} (P ${pctOf(t.p.oneSided)})`);
-  else if (t.outcome === 'crumble' || t.outcome === 'terminal') {
-    const via = t.fellThrough ? ' — FELL THROUGH (rolled rung had nothing)' : '';
-    const cr = t.chosen?.crumble;
-    const pool = c?.crumble ? c.crumble.neutral + c.crumble.terminal : '?';
-    bits.push(`${t.outcome === 'terminal' ? 'TERMINAL ' : ''}HOLE at ${cr.square}${cr.pieceLost && !isTerrain(cr.pieceLost) ? ` swallows ${cr.pieceLost}` : ''} of ${pool}${via} — permanent`);
-  } else if (t.outcome === 'starved') {
-    bits.push('STARVED — no legal candidate on any rung');
+
+  for (const ter of t.chosen?.terrain ?? []) {
+    bits.push(
+      ter.kind === 'weaken'
+        ? `WEAKEN ${ter.square} — a wall cracks into furniture`
+        : `BREACH ${ter.square} — the crate is smashed open${ter.freed > 0 ? `, frees ${ter.freed} locked pawn${ter.freed === 1 ? '' : 's'}` : ''}`
+    );
   }
+  for (const d of t.chosen?.displacements ?? []) bits.push(`displace ${d.piece} ${d.from}→${d.to} [${d.tier}]`);
+  const cr = t.chosen?.crumble;
+  if (cr) {
+    const pool = c?.crumble ? c.crumble.neutral + c.crumble.terminal : '?';
+    bits.push(
+      `${t.outcome === 'terminal' ? 'TERMINAL ' : ''}HOLE at ${cr.square}` +
+        `${cr.pieceLost && !isTerrain(cr.pieceLost) ? ` swallows ${cr.pieceLost}` : ''} of ${pool} — permanent`
+    );
+  }
+  if (t.outcome === 'starved') bits.push('STARVED — no legal candidate on any rung');
   if (t.vetoed) bits.push(`VETOED by duel layer: ${t.vetoed}`);
   return bits.join(' · ');
 }
@@ -910,8 +913,7 @@ function godsExportData() {
       rampPlies: dir.meter.rampPlies,
       sate: dir.meter.sate,
       debtCap: dir.debtCap,
-      asymOnsetPly: dir.asymOnsetPly,
-      asymRamp: dir.asymRamp,
+      extraActions: dir.extraActions,
     }),
     favor: dir.favor,
     tunes: jsonSafeNumbers(d.record.tunes),
@@ -1303,8 +1305,7 @@ async function beginDuel() {
     rampPlies: intParam('mramp', god.rampPlies, 1),
     sate: intParam('sate', god.sate, 0),
     debtCap: intParam('debt', god.debtCap, 1),
-    asymOnsetPly: intParam('asymonset', god.asymOnsetPly, 1),
-    asymRamp: intParam('asymramp', god.asymRamp, 1),
+    extraActions: intParam('acts', god.extraActions, 0),
     seed: intParam('dirseed', deal.directorSeed, 1),
   };
   app.cheatArrows = [];
@@ -1378,7 +1379,7 @@ function renderPlayMarks() {
     quakeFrom: q?.from ?? [],
     quakeTo: q?.to ?? [],
     pit: q?.pit ?? null,
-    terrain: q?.terrain ?? null,
+    terrain: q?.terrain ?? [],
     heat: app.godsHeat ?? {},
   };
   if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
@@ -1508,10 +1509,14 @@ async function onQuake(ev) {
   // Rung-specific flavor: the ladder differs in KIND, so the line the player
   // reads differs too — that is the whole telegraph (a cracked wall says a
   // breach is coming). Audio hangs off the same split when it lands.
+  // A quake spends a BUDGET now, so several things can happen at once. The
+  // line names the heaviest, which is also the one the eye will land on.
+  const edits = terrain ?? [];
   setStatus(
     crumble ? 'the arena shudders — the floor gives!'
-      : terrain?.kind === 'weaken' ? 'stone groans — a wall is failing…'
-      : terrain?.kind === 'breach' ? 'something gives way — the wall breaks open!'
+      : edits.some((e) => e.kind === 'breach') ? 'something gives way — the wall breaks open!'
+      : displacements.length ? 'the arena shudders…'
+      : edits.length ? 'stone groans — a wall is failing…'
       : 'the arena shudders…'
   );
 
@@ -1526,9 +1531,14 @@ async function onQuake(ev) {
   // Beat 2 — the motion. A quake is displacement-only OR crumble-only
   // (director.quake() returns as soon as it has displacements, and only
   // reaches the crumble leg with none), so these never contend for frames.
+  // Terrain first (the wall shakes where it is failing), then pieces, then
+  // the pit — heaviest last, so a mixed quake reads as an escalation rather
+  // than as several unrelated things.
+  for (const e of edits) await ui.animateCrumble(e.square, FX(300));
+  if (app.duel !== duel) return;
   if (displacements.length) await ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) });
-  else if (crumble) await ui.animateCrumble(crumble.square, FX(450));
-  else if (terrain) await ui.animateCrumble(terrain.square, FX(360)); // the wall shakes where it is failing
+  if (app.duel !== duel) return;
+  if (crumble) await ui.animateCrumble(crumble.square, FX(450));
   if (app.duel !== duel) return; // user backed out mid-animation
 
   // Beat 3 — commit and mark. These marks outlive the enemy's reply.
@@ -1538,8 +1548,8 @@ async function onQuake(ev) {
     to: displacements.map((d) => d.to),
     pit: crumble ? crumble.square : null,
     // Terrain edits get the same persistent mark as a pit: the player needs
-    // to find the square that changed without having memorised the board.
-    terrain: terrain ? terrain.square : null,
+    // to find the squares that changed without having memorised the board.
+    terrain: edits.map((e) => e.square),
   };
   renderPlayMarks();
   await wait(FX(240)); // settle: the reply does not land in the same breath
@@ -1819,7 +1829,7 @@ window.__DCK = {
         staleness: dir.lastStaleness?.staleness ?? null,
         rungWeights: dir.rungWeights(ply),
         crumbleForced: dir.debt >= dir.debtCap,
-        pOneSided: dir.pOneSided(ply),
+        extraActions: dir.extraActions,
         debt: dir.debt,
         debtCap: dir.debtCap,
         favor: dir.favor,

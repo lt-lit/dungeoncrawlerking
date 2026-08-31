@@ -547,14 +547,13 @@ async function main() {
       a.pQuake(ply);
       a.pressure(ply);
       a.rungWeights(ply);
-      a.pOneSided(ply);
     }
     a.forecast(10);
     const b = new Director({ seed: 42 });
     for (let i = 0; i < 5; i++) {
       if (a.rng() !== b.rng()) throw new Error('a getter consumed a draw from the seeded stream');
     }
-    return 'pQuake/pressure/rungWeights/pOneSided/forecast leave the stream untouched';
+    return 'pQuake/pressure/rungWeights/forecast leave the stream untouched';
   });
 
   await check('director probability math matches the rolls', () => {
@@ -607,14 +606,14 @@ async function main() {
   // 5x6 fixture so the whole check stays in the low seconds on a phone.
   const dirVariant = catalogVariantName(5, 6);
   const dirFen = '1rk1n/ppp2/2*2/5/1PP2/1KR1N w - - 0 1';
-  const dirCfg = { onsetPly: 2, rampPlies: 4, debtCap: 3, asymOnsetPly: 6, asymRamp: 10 };
+  const dirCfg = { onsetPly: 2, rampPlies: 4, debtCap: 3, extraActions: 2 };
   const quakeSummary = (q) =>
     q === null
       ? null
       : {
           d: q.displacements.map((x) => `${x.piece}${x.from}${x.to}`),
           c: q.crumble ? `${q.crumble.square}:${q.crumble.pieceLost ?? '-'}` : null,
-          t: q.terrain ? `${q.terrain.kind}:${q.terrain.square}` : null,
+          t: (q.terrain ?? []).map((x) => `${x.kind}:${x.square}`),
           post: q.postFen,
           ends: q.endsGame,
         };
@@ -635,7 +634,6 @@ async function main() {
         d.pQuake(ply);
         d.pressure(ply);
         d.rungWeights(ply);
-        d.pOneSided(ply);
         d.forecast(ply);
         if (ply === 6) {
           displacementCandidates(ffish, dirVariant, fen, 5, 6);
@@ -691,11 +689,14 @@ async function main() {
         // toUpperCase() landmine class is exactly how it would become one.
         for (const move of ev.d) if (move.startsWith('^')) throw new Error(`gods carried a crate: ${move}`);
         if (ffish.validateFen(ev.post, dirVariant) !== 1) throw new Error(`quake produced an illegal FEN: ${ev.post}`);
-        if (ev.t?.startsWith('breach')) breaches++;
-        if (ev.t?.startsWith('weaken')) weakens++;
-        // A weaken must always land on a WALL, never on a crate that is
-        // already weakened — the supply is walls, and holes are excluded.
-        if (ev.t?.startsWith('weaken') && findSquares(ev.post, (c) => c === '^').length < 1) {
+        // `t` is a LIST now — a quake spends a budget, so rungs mix.
+        for (const edit of ev.t) {
+          if (edit.startsWith('breach')) breaches++;
+          if (edit.startsWith('weaken')) weakens++;
+        }
+        // A weaken must always land on a WALL, so furniture exists afterwards
+        // — the supply is walls, and holes are excluded from it.
+        if (ev.t.some((x) => x.startsWith('weaken')) && findSquares(ev.post, (c) => c === '^').length < 1) {
           throw new Error(`weaken produced no furniture: ${ev.post}`);
         }
       }
@@ -710,25 +711,24 @@ async function main() {
       if (!t) throw new Error(`no trace at index ${i}`);
       if (!Array.isArray(t.rolls) || !Array.isArray(t.path) || !t.path.length) throw new Error(`ply ${t?.ply}: empty trace`);
       const ev = dirEvents[i];
-      const want =
-        ev === null
-          ? ['quiet', 'starved']
-          : ev.ends
-            ? ['terminal']
-            : ev.t
-              ? [ev.t.split(':')[0]] // 'weaken' | 'breach'
-              : ev.c
-                ? ['crumble']
-                : [ev.d.length === 2 ? 'paired' : 'one-sided'];
-      if (!want.includes(t.outcome)) throw new Error(`ply ${t.ply}: outcome ${t.outcome} disagrees with the event`);
-      // v3: `fellThrough` marks the ROLLED rung coming up empty, and
-      // `rungFallback` records which rung actually served. They must agree —
-      // a fallback without a fall-through (or vice versa) means the ladder
-      // walk lost track of what it did.
-      if (t.outcome !== 'quiet') {
-        const fellBack = Array.isArray(t.rungFallback) && t.rungFallback.length > 0;
-        if (fellBack !== t.fellThrough) throw new Error(`ply ${t.ply}: fellThrough ${t.fellThrough} vs rungFallback ${JSON.stringify(t.rungFallback)}`);
-        if (!t.p.crumbleForced && !t.rung) throw new Error(`ply ${t.ply}: quake recorded no rung`);
+      // v3: a quake spends a BUDGET, so several rungs can fire at once and
+      // the trace's `outcome` is the HEAVIEST of them. The event has to agree
+      // with that ranking, and `rungsSpent` has to account for every edit.
+      const heaviest = (e) =>
+        e.ends ? 'terminal' : e.c ? 'crumble' : e.d.length ? 'displace' : e.t.some((x) => x.startsWith('breach')) ? 'breach' : 'weaken';
+      const want = ev === null ? ['quiet', 'starved'] : [heaviest(ev)];
+      if (!want.includes(t.outcome)) throw new Error(`ply ${t.ply}: outcome ${t.outcome} disagrees with the event (${JSON.stringify(ev)})`);
+      if (ev !== null) {
+        const spent = t.rungsSpent ?? [];
+        const edits = ev.d.length + ev.t.length + (ev.c ? 1 : 0);
+        if (spent.length !== edits) throw new Error(`ply ${t.ply}: ${spent.length} rungs spent but ${edits} edits applied`);
+        if (!spent.length) throw new Error(`ply ${t.ply}: quake recorded no rungs`);
+        if (spent.length > t.budget) throw new Error(`ply ${t.ply}: spent ${spent.length} over budget ${t.budget}`);
+        // At most one hole per quake — a pit is the heaviest thing the gods
+        // do and two in a breath is a different mechanic.
+        const holes = spent.filter((r) => r === 'crumble' || r === 'terminal').length;
+        if (holes > 1) throw new Error(`ply ${t.ply}: ${holes} crumbles in one quake`);
+        if (t.fellThrough !== spent.length < t.budget) throw new Error(`ply ${t.ply}: fellThrough disagrees with budget spend`);
       }
       if (t.outcome === 'quiet' && t.census !== null) throw new Error(`ply ${t.ply}: quiet ply computed a census`);
       if (t.outcome !== 'quiet') {
