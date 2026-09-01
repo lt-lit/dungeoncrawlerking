@@ -315,7 +315,7 @@ export function weakenCandidates(fen, files, ranks, holes) {
  * Costs two ffish Boards per crate, which is why the caller only enumerates
  * this rung once the roll has already chosen it (rule 14).
  */
-export function breachCandidates(ffish, variant, fen, files, ranks) {
+export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = null) {
   const ok = [];
   const rejected = [];
   const g = fenGrid(fen, files, ranks);
@@ -361,7 +361,10 @@ export function breachCandidates(ffish, variant, fen, files, ranks) {
         if (!isTerrain(g[nr][nf])) space++;
       }
       const freed = lockedBefore - lockedPawns(opened, files, ranks).length;
-      ok.push({ sq, fen: opened, impact: space + 4 * Math.max(0, freed), freed });
+      // +3 for a crate the gods themselves minted (conservation, designer
+      // 2026-09-01): they eat their own crates before the designer's, so
+      // authored furniture outlives god-made rubble. Still structural.
+      ok.push({ sq, fen: opened, impact: space + 4 * Math.max(0, freed) + (godCrates?.has(sq) ? 3 : 0), freed });
     }
   }
   return { ok, rejected };
@@ -565,6 +568,21 @@ export const DIRECTOR_DEFAULTS = {
   crumbleBias: 3,
   crateBrake: true, // damp weaken as furniture comes to outnumber walls, so a
   //                   long duel does not dissolve the whole dungeon into crates
+
+  // --- the conservation brake (designer 2026-09-01) -----------------------
+  // "The stage stays the stage": damp BOTH terrain rungs as STANDING terrain
+  // (walls + crates; holes never count) falls toward stripped, measured
+  // against the AUTHORED census frozen at duel start (anchorTerrain). This
+  // is the breach-side counterpart crateBrake never was — crateBrake keeps
+  // walls from all becoming crates; this keeps the terrain from vanishing
+  // altogether. Armies eating crates draws the brake down exactly like a
+  // breach does (play alone consumed ~1/3 of a board's terrain in the
+  // prelim corpus), which is the point: the census reads the BOARD, not the
+  // gods' own ledger. Structural context only — no eval, no side, replay
+  // re-derives the anchor from the same start FEN.
+  conserveTerrain: true,
+  conserveAt: 0.6, // no damping while standing/authored ≥ this...
+  conserveFloor: 0.3, // ...terrain rungs fall silent at/below this
 };
 
 /** Rung order for the fallback walk when the rolled rung has no candidates. */
@@ -594,6 +612,9 @@ export class Director {
     this.crumbleAt = c.crumbleAt;
     this.crumbleBias = Math.max(0, c.crumbleBias);
     this.crateBrake = c.crateBrake !== false;
+    this.conserveTerrain = c.conserveTerrain !== false;
+    this.conserveAt = c.conserveAt;
+    this.conserveFloor = c.conserveFloor;
     this.seed = c.seed ?? 1; // kept for the export — a trace without its seed cannot be replayed
     this.rng = mulberry32(childSeed(this.seed, 'director'));
     this.debt = 0; // quakes since the last crumble (ALL rungs count — the
@@ -617,6 +638,17 @@ export class Director {
     // never reopened) and that permanence is the termination guarantee. Not
     // derivable from the FEN — see this module's header.
     this.holes = new Set();
+    // The conservation brake's reference point: standing walls+crates at
+    // duel start, frozen once by anchorTerrain(). null = no anchor = brake
+    // off (standalone callers and fixtures keep today's behavior; replay
+    // re-derives the anchor from the same start FEN, so it costs nothing).
+    this.authoredTerrain = null;
+    // Squares whose crate the GODS minted (weaken) — never authored. Breach
+    // targeting prefers these, so the gods eat their own crates before the
+    // designer's. A stale entry (a god-crate an army captured) is harmless:
+    // membership is only ever tested on squares that still hold '^', and
+    // nothing rebuilds a wall on a smashed square.
+    this.godCrates = new Set();
     this._held = false; // holdInCheck, stamped per quake() from the preFen
     // Post-guard STARTING config, frozen — tune() mutates the live knobs, so
     // an exported record needs this to reconstruct the duel from ply 0.
@@ -633,6 +665,9 @@ export class Director {
       crumbleAt: this.crumbleAt,
       crumbleBias: this.crumbleBias,
       crateBrake: this.crateBrake,
+      conserveTerrain: this.conserveTerrain,
+      conserveAt: this.conserveAt,
+      conserveFloor: this.conserveFloor,
       meter: this.meter.config0,
       staleness: { ...this.stalenessConfig },
     });
@@ -688,6 +723,8 @@ export class Director {
       displaceBias: (v) => (this.displaceBias = Math.max(0, v)),
       crumbleAt: (v) => (this.crumbleAt = v),
       crumbleBias: (v) => (this.crumbleBias = Math.max(0, v)),
+      conserveAt: (v) => (this.conserveAt = v),
+      conserveFloor: (v) => (this.conserveFloor = v),
       // meter knobs, reachable through the same dial surface
       rampPlies: (v) => (this.meter.rampPlies = Math.max(1, v)),
       sate: (v) => (this.meter.sate = v),
@@ -708,6 +745,30 @@ export class Director {
       applied[k] = read[k] ? read[k]() : this[k];
     }
     return applied;
+  }
+
+  /** Freeze the AUTHORED terrain count — the conservation brake's reference
+   *  point (designer 2026-09-01). The host calls this once with the duel's
+   *  start position (duel.mjs does it in its constructor); a replay
+   *  re-derives the identical anchor from the identical startFen, so seeded
+   *  replay is untouched. Idempotent; without an anchor the brake is off. */
+  anchorTerrain(fen, files, ranks) {
+    if (this.authoredTerrain !== null) return this.authoredTerrain;
+    const t = terrainCensus(fen, files, ranks, this.holes);
+    this.authoredTerrain = t.walls + t.crates;
+    return this.authoredTerrain;
+  }
+
+  /** The conservation brake as a pure multiplier (no RNG, no ffish): 1
+   *  while the board keeps most of its authored terrain, fading linearly to
+   *  0 as standing terrain approaches stripped. Counts the BOARD's standing
+   *  terrain, so army crate-captures draw it down exactly like breaches. */
+  conserveMult(terrain) {
+    if (!this.conserveTerrain || !this.authoredTerrain || !terrain) return 1;
+    const ratio = (terrain.walls + terrain.crates) / this.authoredTerrain;
+    if (ratio >= this.conserveAt) return 1;
+    if (ratio <= this.conserveFloor) return 0;
+    return (ratio - this.conserveFloor) / (this.conserveAt - this.conserveFloor);
   }
 
   #ramp(ply, length) {
@@ -743,6 +804,10 @@ export class Director {
    */
   rungWeights(ply, terrain = null) {
     const p = this.pressure(ply);
+    // The conservation brake damps BOTH terrain rungs. Breach is the rung
+    // that strips; weaken rides along because a cracked wall is an
+    // army-capturable crate — it feeds the same pipeline one step removed.
+    const conserve = this.conserveMult(terrain);
     let weaken = this.weakenBias * (1 - 0.6 * p);
     if (terrain) {
       if (!terrain.walls) weaken = 0;
@@ -755,8 +820,8 @@ export class Director {
       }
     }
     return {
-      weaken,
-      breach: terrain && !terrain.crates ? 0 : this.breachBias * Math.max(0, p - this.breachAt),
+      weaken: weaken * conserve,
+      breach: (terrain && !terrain.crates ? 0 : this.breachBias * Math.max(0, p - this.breachAt)) * conserve,
       displace: this.displaceBias * Math.max(0, p - this.displaceAt),
       crumble: this.crumbleBias * Math.max(0, p - this.crumbleAt),
     };
@@ -1019,7 +1084,10 @@ export class Director {
         const terrain = terrainCensus(postFen, files, ranks, this.holes);
         const weights = this.rungWeights(ply, terrain);
         if (!canCrumble) weights.crumble = 0;
-        if (step === 0) trace.weights = Object.fromEntries(Object.entries(weights).map(([k, w]) => [k, r6(w)]));
+        if (step === 0) {
+          trace.weights = Object.fromEntries(Object.entries(weights).map(([k, w]) => [k, r6(w)]));
+          trace.conserve = r6(this.conserveMult(terrain)); // the brake, overlay-visible
+        }
         // A null pick means every rung's weight is zero — low pressure on a
         // board with no walls and no crates left. That is NOT a reason to
         // waste the quake: the quake roll already decided something happens,
@@ -1046,6 +1114,10 @@ export class Director {
       (trace.rungsSpent ??= []).push(out.outcome);
       displacements.push(...out.displacements);
       if (out.terrain) terrainEdits.push(out.terrain);
+      // God-crate ledger: weaken mints a crate the gods own; breach consumes
+      // one, authored or god-made. Authored furniture never enters the set.
+      if (out.terrain?.kind === 'weaken') this.godCrates.add(out.terrain.square);
+      else if (out.terrain?.kind === 'breach') this.godCrates.delete(out.terrain.square);
       if (out.crumble) crumble = out.crumble;
       if (out.landedOn) landed.push(out.landedOn);
       postFen = out.postFen;
@@ -1117,7 +1189,7 @@ export class Director {
   /** Rung 2 — furniture is smashed and the line opens for real. Filtered
    *  like a displacement, because opening a ray can discover a check. */
   #breachLeg(trace, ffish, variant, fen, files, ranks, landed) {
-    const { ok, rejected } = breachCandidates(ffish, variant, fen, files, ranks);
+    const { ok, rejected } = breachCandidates(ffish, variant, fen, files, ranks, this.godCrates);
     trace.census.breach = { ok: ok.length, rejected: countByReason(rejected) };
     // Opening a ray can expose a square an earlier action landed a piece on,
     // so the composite check applies to this rung too.

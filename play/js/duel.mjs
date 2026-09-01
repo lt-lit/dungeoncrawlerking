@@ -107,6 +107,10 @@ export class DuelController {
     this.go = opts.go ?? 'depth 22 movetime 500';
     this.hooks = opts.hooks ?? {};
     this.director = new Director(opts.director ?? {});
+    // The conservation brake's reference point (§4.5, designer 2026-09-01):
+    // freeze the authored terrain census from the start position. A replay
+    // re-derives the identical anchor from the identical startFen.
+    this.director.anchorTerrain(opts.startFen, opts.files, opts.ranks);
     this.board = null;
     this.baseFen = opts.startFen;
     this.movesSinceBase = [];
