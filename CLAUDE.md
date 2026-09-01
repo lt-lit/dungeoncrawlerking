@@ -44,9 +44,21 @@ a seeded quake sequence replays identically with the overlay exercised);
 ladder above and brief §4.5; the meter-lab data in `phase0/results/` supplied
 the trigger half of the case and live play supplied the rest). The old 1.3
 scope — promote the landing-safety stopgap to "no new winning capture for
-either side" — is DEFERRED, not done: on the ladder most god activity moved
-to rungs that cannot hand out material, and the designer's call is to see
-whether the problem still shows up in play before writing a rule against it. **The test
+either side" — is ✅ **DONE (2026-09-01)**: the deferral's condition fired
+exactly as written — live play produced the gift (a breach opened a line
+and handed over the player's queen, ~ply 30), because "terrain rungs cannot
+hand out material" was true of MOVING material and false of EXPOSING it.
+The promoted rule is `threat.mjs editExposes`: an edit only changes SEE
+relations for the FIRST piece along each of the 8 rays through an edited
+square, so those pieces are priced pre/post and any candidate that turns a
+SEE-safe piece SEE-losing (either side) is vetoed `hangs_piece` — on
+breach (the observed case), displacement (vacated-square discovery), and
+crumble (severed defence lines); weaken stays exempt, safe by
+construction. Measured: calm's flip rate fell 2.8→0.3%/quake; wrathful's
+did NOT (its flips are multi-action composites and strip-race re-timings
+no per-edit ray test can see), and vetoed unlocks feed staleness back
+into the meter, so wrathful ran HOTTER (21.7→26.1 q/100p) — see
+`results/godlab/tuned-ab-findings.md`. **The test
 bed's data half is DONE**: the designer-locked stage bed (58 stages
 since 1.2.4 — `play/stages/`,
 gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
@@ -229,11 +241,20 @@ god rubble. A/B on the frozen prelim seeds
 18%→32%, wrathful 5%→17%, pacing/alarm/termination flat, displacement
 share up (the fall-through absorbs braked actions — SEE-guarded). Gates
 run: selftest 33/33 headless Chromium, ladder-smoke 12/12. Both knobs are
-live tune() dials for phone feel-tuning; (c) **preset separation** — staleness multiplies the fill rate
-toward 3× on sectioned maps (out of contact + cramped + locked pawns from
-ply 1), which is why Calm ≈ Restless exactly where structure matters;
-presets probably reach into the staleness knobs; (d) settle ramp numbers
-from rig + feel together. The favored-seat model/edge for the live-regime
+live tune() dials for phone feel-tuning; (c) **preset separation — ✅ first pass 2026-09-01**: presets now reach
+into the staleness knobs (the prelim data's verdict — stage class was
+outweighing the preset dial) and `GOD_PRESETS` lives in `director.mjs` as
+the ONE table main.mjs, ladder-smoke and the god lab all import. Calm:
+onset 30, ramp 44, sate 6, debtCap 14, stalenessFloor/Gain 0.35/0.55,
+late floor 160; restless 12/20/4/10 + 0.45/0.85; wrathful untouched (the
+chaos preset anchors the scale). Measured separation 5.9 / 11.7 / 26.1
+quakes/100p (was 12.3/14.3/20.8), calm terrain-remaining 43%, calm flip
+rate 0.3%/quake — `results/godlab/tuned-ab-findings.md`, incl. the honest
+trades (calm's long tail stretched; wrathful runs hotter under the
+exposure guard via staleness feedback); (d) settle ramp numbers
+from rig + feel together — **the phone decides whether new-calm feels
+calm**; `rampPlies`/`stalenessGain` are the walk-back knobs if it now
+feels too passive. The favored-seat model/edge for the live-regime
 arm still needs the designer. Then **Phase 2 — exploration slice**.
 
 ## Layout
@@ -379,7 +400,13 @@ run one sweep at a time.
     board, so leg 1 → leg 2 is covered, but leg 2 → leg 1 is not; on the
     same position the pair (r a7→a6, R b5→a5) recreated the identical gift
     through the other ordering. Any new quake mechanic must be judged on the
-    board the player actually receives.
+    board the player actually receives. (2026-09-01: the "separate" piece
+    safety now exists — `threat.mjs editExposes`, the promoted
+    no-new-winning-capture rule — pricing what an edit UNCOVERS or SEVERS
+    on every line-editing rung, not just where a piece lands. The
+    per-composite caveat stands: `landingsStillSafe` still re-checks landed
+    squares across the budget, and compound geometry two edits only create
+    JOINTLY is caught only where they share a ray.)
 14. **`director.quake()` is expensive and synchronous** — measured 300–720 ms
     per quake on 4×6–6×8 arenas (Node, v2; v3's terrain rungs are cheaper
     per action but a budget can spend several). `displacementCandidates`
