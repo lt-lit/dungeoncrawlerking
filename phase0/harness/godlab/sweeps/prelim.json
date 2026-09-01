@@ -1,0 +1,17 @@
+{
+  "_comment": "Preliminary v3 baseline sized to a 1-2h budget (designer 2026-09-01): 12-stage stratified spread x both orientations x 2 seeds x all four preset arms ~= 192 games at the shallow god-behavior regime. Not the calibration corpus - the first look at preset separation, terrain attrition and lock trajectories.",
+  "name": "prelim",
+  "go": "depth 8 movetime 250",
+  "maxPlies": 600,
+  "seeds": 2,
+  "seedBase": 12000,
+  "stageSpread": 12,
+  "orientations": "both",
+  "refereeGo": "depth 8 movetime 200",
+  "arms": [
+    { "key": "off", "gods": "off" },
+    { "key": "calm", "preset": "calm" },
+    { "key": "restless", "preset": "restless" },
+    { "key": "wrathful", "preset": "wrathful" }
+  ]
+}
