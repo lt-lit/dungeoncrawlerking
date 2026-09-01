@@ -40,7 +40,7 @@ import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
-import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus } from './director.mjs';
+import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS } from './director.mjs';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -199,18 +199,10 @@ function makeSession(deal) {
 const OPT_KEY = 'dck.options.v1';
 const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false };
 
-// The Gods (Board State Director) — tuning presets. Numbers are plies.
-// 'restless' is the sweep-validated baseline; custom exposes every knob.
-// v3 (the ladder): `rampPlies` is the METER ramp — quiet plies, net of
-// sating, from calm to P(quake)=1 — not a ply count from onset. `sate` is
-// what one forcing ply refunds. The old quakeRamp/crumbleRamp knobs are gone
-// with the ply-ramp trigger they configured.
-const GOD_PRESETS = {
-  calm: { onsetPly: 20, rampPlies: 26, sate: 5, debtCap: 12, extraActions: 1 },
-  restless: { onsetPly: 8, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
-  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
-  off: { onsetPly: Infinity, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
-};
+// The Gods (Board State Director) — the preset table lives in director.mjs
+// now (ONE copy, shared with ladder-smoke and the god lab; retuned
+// 2026-09-01 with per-preset staleness knobs). GOD_KNOBS stays the custom
+// dial surface: the classic five, while the staleness knobs ride presets.
 const GOD_KNOBS = ['onsetPly', 'rampPlies', 'sate', 'debtCap', 'extraActions'];
 
 function godConfig() {

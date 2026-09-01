@@ -98,7 +98,7 @@ import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURN
 import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
-import { landingIsSafe } from './threat.mjs';
+import { landingIsSafe, editExposes } from './threat.mjs';
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
 
@@ -213,6 +213,7 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
   const terminal = [];
   const rejected = [];
   const counts = nonKingCounts(fen);
+  const g = fenGrid(fen, files, ranks); // for the editExposes guard below
   for (let f = 0; f < files; f++) {
     for (let r = 0; r < ranks; r++) {
       const sq = SQ(f, r);
@@ -227,6 +228,18 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
         const owner = occ === occ.toUpperCase() ? 'white' : 'black';
         if (counts[owner] === 1) {
           rejected.push({ sq, reason: 'last_piece' }); // never strip a last piece
+          continue;
+        }
+      }
+      // "No new winning capture" (editExposes): a hole SEVERS lines — a
+      // defender behind this square stops defending through it, which can
+      // hang a piece just as surely as opening a line does. Grid-only,
+      // before the ffish-heavy validateCrumbleCandidate (rule 14).
+      {
+        const g2 = g.map((row) => [...row]);
+        g2[r][f] = WALL;
+        if (editExposes(g, g2, [{ f, r }], files, ranks)) {
+          rejected.push({ sq, reason: 'hangs_piece' });
           continue;
         }
       }
@@ -325,6 +338,20 @@ export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = 
       if (g[r][f] !== FURNITURE) continue;
       const sq = SQ(f, r);
       const veto = (reason) => rejected.push({ sq, reason });
+      // "No new winning capture" (threat.mjs editExposes — the promoted
+      // old-1.3 rule): opening this line must not turn any standing piece
+      // SEE-safe → SEE-losing, either side. Live play produced exactly this
+      // gift before the guard existed (a breach handed over a queen,
+      // designer report 2026-09-01). Grid-only, so it runs BEFORE the
+      // ffish probes below (rule 14).
+      {
+        const g2 = g.map((row) => [...row]);
+        g2[r][f] = null;
+        if (editExposes(g, g2, [{ f, r }], files, ranks)) {
+          veto('hangs_piece');
+          continue;
+        }
+      }
       let opened;
       try {
         opened = clearEp(setSquare(fen, sq, null));
@@ -414,17 +441,22 @@ export function displacementCandidates(ffish, variant, fen, files, ranks) {
         if (g0[nr][nf] !== null) continue;
         const to = SQ(nf, nr);
         const veto = (reason) => rejected.push({ from, to, piece: occ, white: occ === occ.toUpperCase(), reason });
-        // Landing safety (Phase 1.1 stopgap): the gods hand out no free
-        // material. Mutate-and-restore on the grid we already have — no FEN
-        // round-trip — and run it BEFORE the ffish probes below, so unsafe
-        // candidates cost a few array walks instead of four ffish Boards.
-        g0[r][f] = null;
-        g0[nr][nf] = occ;
-        const safeLanding = landingIsSafe(g0, nf, nr, files, ranks);
-        g0[r][f] = occ;
-        g0[nr][nf] = null;
-        if (!safeLanding) {
+        // Landing safety (Phase 1.1 stopgap) + the promoted "no new winning
+        // capture" rule (editExposes): the gods hand out no free material,
+        // neither by where the piece LANDS nor by what its move UNCOVERS —
+        // vacating `from` opens rays exactly like a breach does, and
+        // blocking `to` can sever a defence. Grid-only, BEFORE the ffish
+        // probes below, so unsafe candidates cost a few array walks instead
+        // of four ffish Boards (rule 14).
+        const gMoved = g0.map((row) => [...row]);
+        gMoved[r][f] = null;
+        gMoved[nr][nf] = occ;
+        if (!landingIsSafe(gMoved, nf, nr, files, ranks)) {
           veto('unsafe_landing');
+          continue;
+        }
+        if (editExposes(g0, gMoved, [{ f, r }, { f: nf, r: nr }], files, ranks)) {
+          veto('hangs_piece');
           continue;
         }
         let moved;
@@ -583,6 +615,32 @@ export const DIRECTOR_DEFAULTS = {
   conserveTerrain: true,
   conserveAt: 0.6, // no damping while standing/authored ≥ this...
   conserveFloor: 0.3, // ...terrain rungs fall silent at/below this
+};
+
+/**
+ * The temperament presets — the ONE copy. main.mjs, ladder-smoke and the
+ * god lab all import this table: a preset that exists only in the UI is a
+ * preset the labs never measure, and three hand-synced copies is how that
+ * happens. Numbers are plies; `rampPlies` is the METER ramp (quiet plies,
+ * net of sating, from calm to P(quake)=1), `sate` what one forcing ply
+ * refunds.
+ *
+ * Retuned 2026-09-01 (god-lab prelim corpus + phone feel: "calm still
+ * feels overly active"). The presets now reach into the STALENESS knobs —
+ * the prelim data showed stage class outweighing the preset dial (calm
+ * fired 3× harder on floorplans than on core, harder than wrathful's
+ * average), because every preset shared the default staleness multiplier
+ * and sectioned maps pin it near the dead-board ceiling from ply 1. Calm
+ * now fills at roughly a third of its old dead-board rate and holds the
+ * late backstop floor off longer; restless cools mildly and keeps its
+ * identity; wrathful is deliberately untouched — it is the chaos preset,
+ * and it anchors the scale.
+ */
+export const GOD_PRESETS = {
+  calm: { onsetPly: 30, rampPlies: 44, sate: 6, debtCap: 14, extraActions: 1, stalenessFloor: 0.35, stalenessGain: 0.55, floorOnsetPly: 160, floorRampPlies: 140 },
+  restless: { onsetPly: 12, rampPlies: 20, sate: 4, debtCap: 10, extraActions: 2, stalenessFloor: 0.45, stalenessGain: 0.85 },
+  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
+  off: { onsetPly: Infinity, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
 };
 
 /** Rung order for the fallback walk when the rolled rung has no candidates. */

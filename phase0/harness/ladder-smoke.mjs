@@ -32,6 +32,7 @@ import { loadStageV2 } from '../../play/js/stage.mjs';
 import { dealMatchup } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { DuelController } from '../../play/js/duel.mjs';
+import { GOD_PRESETS } from '../../play/js/director.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_DIR = join(HERE, '../../play/stages');
@@ -51,15 +52,9 @@ const GO = arg('go', 'depth 8 movetime 250');
 // stage bed is 2-3x the area of the four legacy arenas every published ply
 // count came from, solong games might simply be the boards.
 const GODS = arg('gods', 'on');
-// The shipped presets, mirrored from play/js/main.mjs GOD_PRESETS. They were
-// picked by argument, not measurement — this flag is how they stop being
-// guesses. Keep in sync or the smoke is measuring something the game does not
-// ship.
-const GOD_PRESETS = {
-  calm: { onsetPly: 20, rampPlies: 26, sate: 5, debtCap: 12, extraActions: 1 },
-  restless: { onsetPly: 8, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
-  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
-};
+// The shipped presets, imported from the ONE table in director.mjs (the
+// old hand-synced copy is gone — the smoke always measures what the game
+// ships). 'off' is not a preset here: --gods off is the control flag below.
 const PRESET = arg('preset', 'restless');
 if (!(PRESET in GOD_PRESETS)) {
   console.error(`unknown preset "${PRESET}" — valid: ${Object.keys(GOD_PRESETS).join(', ')}`);

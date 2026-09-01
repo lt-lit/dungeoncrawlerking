@@ -45,7 +45,7 @@ import { DuelController } from '../../../play/js/duel.mjs';
 import { loadStageV2 } from '../../../play/js/stage.mjs';
 import { dealMatchup } from '../../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../../play/js/variant.mjs';
-import { fenGrid, lockedPawns } from '../../../play/js/director.mjs';
+import { fenGrid, lockedPawns, GOD_PRESETS } from '../../../play/js/director.mjs';
 import { stalenessOf } from '../../../play/js/staleness.mjs';
 import { isTerrain, WALL, FURNITURE } from '../../../play/js/fen.mjs';
 import { mulberry32, childSeed } from '../../../play/js/prng.mjs';
@@ -53,15 +53,9 @@ import { mulberry32, childSeed } from '../../../play/js/prng.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STAGE_DIR = path.join(HERE, '../../../play/stages');
 
-// Mirrored from play/js/main.mjs GOD_PRESETS (like ladder-smoke.mjs — keep in
-// sync or the lab measures presets the game does not ship). Moving the table
-// into director.mjs so everyone imports one copy is queued for the tuning
-// phase, when live code opens up anyway.
-const GOD_PRESETS = {
-  calm: { onsetPly: 20, rampPlies: 26, sate: 5, debtCap: 12, extraActions: 1 },
-  restless: { onsetPly: 8, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
-  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
-};
+// GOD_PRESETS is imported from director.mjs — the ONE table the game ships
+// (the hand-synced copies here and in ladder-smoke died with the 2026-09-01
+// retune; an arm's `preset` key always measures what the phone plays).
 
 const EVAL_PROBE_TIMEOUT_PAD = 4000; // referee movetime + this = watchdog
 const GAME_WALL_CLOCK_MS = 15 * 60 * 1000; // lab backstop, not a game rule

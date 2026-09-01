@@ -24,12 +24,23 @@
 // '^' is stone (§4.6 interim; whether SEE must price ^-captures is 1.3's
 // question, decided with the whole-board rule).
 //
-// Known gaps (deliberate — Phase 1.3 closes them):
+// The discovered-attack gap is CLOSED as of 2026-09-01 (`editExposes`,
+// below — the promoted "no new winning capture" rule, §10 old-1.3 scope):
+// live play produced exactly the predicted failure — a breach opened a line
+// and handed a queen to the side to move (designer report, ply ~30). A
+// board edit only ever changes SEE relations for the FIRST piece outward
+// along each of the 8 rays through an edited square, so the guard prices
+// exactly those pieces on both boards and rejects any candidate that turns
+// a standing SEE-safe piece into a SEE-losing one, either side.
+//
+// Known gaps (deliberate, still):
 //  - pins and absolute-pin legality are ignored (a "defender" that is pinned
 //    still counts), so the guard is occasionally over-permissive;
-//  - discovered attacks are not considered: vacating `from` can expose a
-//    DIFFERENT friendly piece, and that is not checked here;
-//  - rescuing an already-hanging piece is a gift too, and is not checked.
+//  - rescuing an already-hanging piece is a gift too, and is not checked;
+//  - compound geometry across a multi-action budget (two edits jointly
+//    opening a line neither opens alone) is only caught where the edits
+//    share a ray or a landed square (landingsStillSafe covers the rest of
+//    the known composite cases — CLAUDE.md rule 13).
 
 import { isTerrain } from './fen.mjs';
 
@@ -175,4 +186,52 @@ export const SAFE_LANDING_LOSS = 0;
 /** Is `grid` safe for the piece standing on (tf, tr)? */
 export function landingIsSafe(grid, tf, tr, files, ranks) {
   return captureLoss(grid, tf, tr, files, ranks) <= SAFE_LANDING_LOSS;
+}
+
+const RAYS8 = [...ORTHO, ...DIAG];
+
+/**
+ * The "no new winning capture" guard (the promoted §10 old-1.3 rule — see
+ * the header). `edits` is the list of {f, r} squares the candidate changes
+ * (a terrain edit has one; a displacement has two). Walks the 8 rays from
+ * every edited square in BOTH grids (a ray can reach farther in one than
+ * the other), collects the first piece in each direction, and reports the
+ * first STANDING piece — same letter, same square in both grids, so the
+ * moved piece itself stays landing safety's job — that was SEE-safe before
+ * and is SEE-losing after. Either side's piece counts: the gods hand out
+ * no free material, whoever's it is. Returns {f, r, ch, loss} or null.
+ *
+ * Pure grid arithmetic (rule 14: this runs BEFORE any ffish probe). A ray
+ * walk stops at the first non-empty cell; terrain blocks and is never a
+ * victim.
+ */
+export function editExposes(preGrid, postGrid, edits, files, ranks) {
+  const seen = new Set();
+  for (const grid of [preGrid, postGrid]) {
+    for (const { f, r } of edits) {
+      for (const [df, dr] of RAYS8) {
+        let nf = f + df;
+        let nr = r + dr;
+        while (nf >= 0 && nf < files && nr >= 0 && nr < ranks) {
+          const cell = grid[nr][nf];
+          if (cell) {
+            if (!isTerrain(cell)) seen.add(nf + nr * 32);
+            break;
+          }
+          nf += df;
+          nr += dr;
+        }
+      }
+    }
+  }
+  for (const key of seen) {
+    const f = key % 32;
+    const r = (key - f) / 32;
+    const ch = postGrid[r][f];
+    if (!ch || isTerrain(ch) || preGrid[r][f] !== ch) continue;
+    if (captureLoss(preGrid, f, r, files, ranks) > SAFE_LANDING_LOSS) continue; // hanging already — not new
+    const loss = captureLoss(postGrid, f, r, files, ranks);
+    if (loss > SAFE_LANDING_LOSS) return { f, r, ch, loss };
+  }
+  return null;
 }
