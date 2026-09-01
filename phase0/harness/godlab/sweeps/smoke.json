@@ -1,0 +1,15 @@
+{
+  "_comment": "Rig sanity check, not calibration: a few shallow games end to end, referee included. ~2-4 min.",
+  "name": "smoke",
+  "go": "depth 8 movetime 250",
+  "maxPlies": 400,
+  "seeds": 1,
+  "seedBase": 11000,
+  "stageSpread": 3,
+  "orientations": "both",
+  "refereeGo": "depth 8 movetime 200",
+  "arms": [
+    { "key": "calm", "preset": "calm" },
+    { "key": "off", "gods": "off" }
+  ]
+}
