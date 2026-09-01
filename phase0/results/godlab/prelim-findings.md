@@ -65,6 +65,39 @@ By action: weaken 14–26% · breach 16–22% · displace 44–54% · crumble
 with ladder-smoke's split — displacement leads once a board's terrain
 supply is spent, which is the structural fallback, not a preference.
 
+## 7. What the flip quakes actually are (designer question, 2026-09-01)
+
+All 64 flips (of 2,032 refereed quakes) pulled and read individually.
+Only 8 are deadband-adjacent noise (both evals under 150cp). The rest
+fall into three populations, none of which is "nobody can win":
+
+- **Strip races re-timed** (~a quarter, the mate-score flips like
+  −999997→+999997): small or late-game emptied boards, zero captures
+  available, both sides racing to bare the other under extinction + no
+  draws. There is no insufficient material in this ruleset — SOMEONE
+  always wins the race, by exactly one tempo — and displacing one piece
+  one square re-times it. A sub-population fires on the game's last ply
+  or two, where the referee mostly just reads the collapse already in
+  progress.
+- **Lock-break conversions** (the bulk): mildly unbalanced middlegames
+  (paper edge ±100–500cp, usually low contact) where the standing eval is
+  unconvertible — and whatever structural change lands decides WHOSE
+  attack becomes real. Displacements are only modestly overrepresented
+  (67% of flip quakes vs a 56% base rate); pure terrain edits flip games
+  too (a triple-breach flip, several weaken/crumble-only flips). This is
+  §7's structural finding restated per-event: a locked position has no
+  natural winner, so whatever breaks the lock picks one.
+- **Early multi-action remodels** (wrathful-specific): 3–4-action quakes
+  at plies 8–30 reshape the arena before the position has an identity, and
+  the eval follows the new geometry.
+
+Staleness at flip time is indistinguishable from the all-quake average
+(0.40 vs 0.42) — flips are not concentrated on extra-stale boards. And
+the pattern matches §7's standing note that SEE is blind to mate-net
+changes: none of these are hanging-piece gifts (rule 13's guard catches
+those); they are race-timing and attack-geometry changes, which no static
+exchange test can see.
+
 ## What this changes
 
 Nothing is retuned yet — this is the before picture (instrument before
