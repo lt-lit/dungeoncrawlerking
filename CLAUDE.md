@@ -217,12 +217,19 @@ across presets; locked pawns 6.4→<1; alarm flip rate 2.6–3.8%/quake vs
 v2's 31–75% of games — the ladder moved the harm out); the full
 `presets.json` grid stays available if tuning needs tighter error bars;
 (b) the **terrain-context
-change** (designer direction 2026-09-01): a running wall/furniture census
-against the AUTHORED proportions (vs playable area) with a conservation
-brake on the BREACH side — today's crateBrake damps weaken only, so nothing
-protects authored furniture from being eaten — likely tracking god-made
-crates in a set like `director.holes`; structural context only, no eval,
-replay-safe; (c) **preset separation** — staleness multiplies the fill rate
+change — ✅ BUILT and A/B-measured 2026-09-01**: the CONSERVATION BRAKE
+(brief §4.5 item 4) — `director.anchorTerrain()` freezes the authored
+census at duel start (duel.mjs calls it; no anchor = brake off, which is
+what keeps the selftest fixtures byte-identical), `conserveMult` damps
+BOTH terrain rungs from `conserveAt` 0.6 down to silent at `conserveFloor`
+0.3 of authored standing terrain, and the `director.godCrates` ledger
+biases breach +3 toward god-minted crates so authored furniture outlives
+god rubble. A/B on the frozen prelim seeds
+(`results/godlab/brake-ab-findings.md`): calm floorplan terrain remaining
+18%→32%, wrathful 5%→17%, pacing/alarm/termination flat, displacement
+share up (the fall-through absorbs braked actions — SEE-guarded). Gates
+run: selftest 33/33 headless Chromium, ladder-smoke 12/12. Both knobs are
+live tune() dials for phone feel-tuning; (c) **preset separation** — staleness multiplies the fill rate
 toward 3× on sectioned maps (out of contact + cramped + locked pawns from
 ply 1), which is why Calm ≈ Restless exactly where structure matters;
 presets probably reach into the staleness knobs; (d) settle ramp numbers
