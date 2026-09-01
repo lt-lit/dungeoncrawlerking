@@ -53,7 +53,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 
 - `js/fen.mjs`, `js/prng.mjs`, `js/crumbleFilter.mjs` — verbatim ports of the
   validated Phase 0 modules (import paths only). (`js/crumble.mjs` — the old
-  repetition+pacing controller — is deleted; `phase0/harness/crumble.mjs`
+  repetition+pacing controller — is deleted; `phase0/harness/legacy/crumble.mjs`
   remains the historical record.)
 - `js/director.mjs` — **the Board State Director (v3 — the ladder;
   brief §4.5).** Triggered by two meters — restlessness (`js/meter.mjs`,
@@ -143,7 +143,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   class verbatim, incl. the search watchdog. Boot always sets
   `Use NNUE false` (defaults TRUE in this build) and `Threads 1`.
 - `js/duel.mjs` — the live game loop, a structural port of
-  `phase0/harness/game.mjs`: ffish is the source of truth, game end is
+  `phase0/harness/game.mjs` (since frozen in `harness/legacy/`): ffish is the source of truth, game end is
   `numberLegalMoves() === 0` → side to move loses. The bare-army rule (a
   side stripped to a bare king loses — no lone-king chases) is IN-GRAMMAR
   (`extinctionPieceTypes=*`, `extinctionPieceCount=1`), so the engine plays

@@ -145,12 +145,16 @@ on-phone, 10-wide confirmed) is ACCEPTED/locked 2026-08-27 — the full
 58-stage bed is designer-locked, and the **exit PASSED 2026-08-27**:
 crate duels live on-device with Earthquakes on (designer verdict —
 "surprisingly really fun").
-**PHASE 1.3 — THE GODS REWORK — IS THE ACTIVE PHASE** (designer
-2026-08-31). The meter-lab evidence pass had already answered its question —
-the ply-ramp trigger was the wrong half — and live play answered the rest:
-the mechanic was game-breaking, so it was GUTTED rather than tuned. v3 (the
-ladder, above) is built and shipped for playtesting; **feel on the phone is
-the test**, not a corpus. The `ladder-smoke.mjs` sanity pass on 14 stages ×
+**PHASE 1.5 — DIRECTOR CALIBRATION — IS THE ACTIVE PHASE** (2026-09-01;
+1.3 is BUILT and live on Pages). The meter-lab evidence pass had already
+answered 1.3's question — the ply-ramp trigger was the wrong half — and live
+play answered the rest: the mechanic was game-breaking, so it was GUTTED
+rather than tuned. v3 (the ladder, above) shipped for playtesting; **feel on
+the phone is the test**, not a corpus — and the first phone verdict is in
+(designer 2026-09-01, a few games): the gods reshape ENTIRE arenas even on
+Calm + intensity 1.0, breach-heavy, rooms stripped of furniture fast — "fun,
+but I wouldn't call this calm". That report is now Phase 1.5's work list
+(below). The `ladder-smoke.mjs` sanity pass on 14 stages ×
 both orientations: 14/14 terminated, median 104 plies vs **268 with the gods
 off (5 of 14 never terminating at all)**, zero quakes fired into check, 1.84
 actions/quake with 33% of quakes mixing rungs, ladder split by ACTION weaken
@@ -180,11 +184,43 @@ byte-exact), and run.mjs's MultiPV human-seat path lacks the
 fresh-engine retry (an engine death mid-corpus crashes the arm instead
 of retrying), and the designer would have to settle which arms run,
 seeds/matchups per stage-orientation, and the favored-seat model before any
-compute is burned. Next up instead: **playtest v3 on the phone** and tune the
-ladder from feel. Then **Phase 1.5 — Director calibration** (port
-`harness/game.mjs` off the retired crumble system, add the §6 promotion
-lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
-twice — and finally **Phase 2 — exploration slice**.
+compute is burned.
+
+**Phase 1.5's rig half is ✅ built (2026-09-01): the GOD LAB**
+(`phase0/harness/godlab/` — run.mjs, analyze.mjs, sweeps/). It REPLACED the
+brief's original "port `harness/game.mjs` to `director.mjs`" plan (designer
+2026-09-01: no ports — the testing rig must not need fixing every time the
+game changes): a port means two implementations of the shipped loop drifting
+apart (the §7 sweep-validity law's failure mode; `play/js/duel.mjs` already
+IS the ported loop), so the rig drives the CANON DuelController + v3
+Director on the locked stage bed via `dealMatchup` — a Director change is
+measured the moment it lands. Corpus lines record `variantName`/`variantIni`
+(the meter-lab replay defect, fixed by design); per-ply trails cover
+staleness, pressure, locked pawns, and wall/crate counts; an offline eval
+referee feeds the §7 alarm metric; analyze.mjs splits per arm × stage class
+(core/rooms/floorplan). The crumble-era harness is RETIRED: sweep.mjs/
+analyze.mjs/sweeps deleted, loop modules frozen in `harness/legacy/` (spikes
+07/08 still import them — never produce Director data with them), old
+`results/sweep-*` corpora flagged historical (`results/sweep-corpora-RETIRED.md`).
+The §6 promotion-reachability lint is DEFERRED pending the lab's locked-pawn
+trajectory data — v3's ladder already targets locks directly (weaken +3 on
+locked files, breach scores pawns freed, staleness prices locks), so measure
+before writing generator law.
+
+Remaining 1.5 work, in order: (a) the **baseline corpus** on current v3
+(`godlab/sweeps/presets.json`) BEFORE touching the Director — instrument
+before intervention, same as 1.2-before-1.3; (b) the **terrain-context
+change** (designer direction 2026-09-01): a running wall/furniture census
+against the AUTHORED proportions (vs playable area) with a conservation
+brake on the BREACH side — today's crateBrake damps weaken only, so nothing
+protects authored furniture from being eaten — likely tracking god-made
+crates in a set like `director.holes`; structural context only, no eval,
+replay-safe; (c) **preset separation** — staleness multiplies the fill rate
+toward 3× on sectioned maps (out of contact + cramped + locked pawns from
+ply 1), which is why Calm ≈ Restless exactly where structure matters;
+presets probably reach into the staleness knobs; (d) settle ramp numbers
+from rig + feel together. The favored-seat model/edge for the live-regime
+arm still needs the designer. Then **Phase 2 — exploration slice**.
 
 ## Layout
 
@@ -208,11 +244,16 @@ twice — and finally **Phase 2 — exploration slice**.
 - `phase0/spikes/` — one runnable script per §9 spike (deterministic, exit 0 =
   pass). `crumbleFilter.mjs` is production-bound (validated §4.5 filter).
   `spike08-mobile/` is a static phone benchmark page (vendored WASM).
-- `phase0/harness/` — §7 calibration harness: `sweep.mjs <config.json>` plays
-  engine-vs-engine games, JSONL + summary out. **Still runs the RETIRED
-  crumble system (`harness/crumble.mjs`, repetition + fixed-cadence pacing),
-  not the shipped Director — porting it is Phase 1.5. Sweep numbers about
-  arena regeneration are not trustworthy until that lands.**
+- `phase0/harness/` — the calibration + verification tools. **`godlab/` is
+  the §7 Director-calibration rig (Phase 1.5)**: `run.mjs <sweep.json>`
+  plays the canon DuelController + v3 Director over the stage bed
+  (JSONL out), `analyze.mjs` aggregates per arm × stage class. Needs the
+  play/vendor overlay (see engine/README.md) — it fails loudly on the stock
+  pair. `ladder-smoke.mjs` is the cheap post-change sanity pass;
+  `verify-stages.mjs` the static stage verifier; `meterlab/` the shelved 1.3
+  evidence rig (its Director config is v2-era — do not reuse without
+  updating); `legacy/` the frozen crumble-era loop kept only for spikes
+  07/08 — never produce Director data with it.
 - `phase0/results/` — per-spike results docs + sweep outputs.
 
 ## Running things
@@ -222,8 +263,10 @@ cd phase0                      # npm deps live here (node_modules gitignored)
 npm install                    # ffish + fairy-stockfish-nnue.wasm
 node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
-node harness/sweep.mjs harness/sweeps/tiny.json   # 2-game harness check
+node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 ```
+(godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
+pair into node_modules first, per engine/README.md.)
 
 Engine stdout is huge — pipe through `tail`. Engine searches are CPU-bound;
 run one sweep at a time.
