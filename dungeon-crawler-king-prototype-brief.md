@@ -205,7 +205,7 @@ All Director RNG is **seeded per duel** so harness sweeps replay exactly.
 #### Notes
 
 - **FSF wall semantics already match pit fiction:** sliders are blocked (a rook can't roll across a pit), nothing may stand there, and leapers jump clean over. Cavalry leaps the pit for free.
-- **Favor of the Gods `[OPEN]`** — a runtime multiplier on quake probability (`setFavor()` in the shipped module). 0 silences them, 1 is baseline, >1 angers them. In-game effects — items, shrines, shrine-desecration, taunting the dungeon — move it during a run. Theme and economy TBD; the hook is live.
+- **Favor of the Gods `[OPEN]`** — a runtime multiplier on quake probability (`setFavor()` in the shipped module; under v3 it scales quake SIZE too, since the action-budget draws roll against `P(quake)`). 0 silences them, 1 is baseline, >1 angers them. The debug panel drives the same multiplier under the label **intensity** (designer 2026-09-01) — that dial is the tuning instrument; THIS entry is the unbuilt in-game mechanic, and the rename keeps the two from being mistaken for each other. In-game effects — items, shrines, shrine-desecration, taunting the dungeon — move it during a run. Theme and economy TBD; the hook is live.
 - **Quake-sight** — telegraphing what the gods are about to do — is deliberately *not* a base rule, and remains an §8 upgrade.
 - **The Director is tunable in-game** (Options → The Gods: Calm / Restless / Wrathful / Custom / Off). This is a playtest instrument first, but temperament-as-difficulty-axis is a live design option.
 - **Holes persist after the duel** as overworld terrain (§5.1). Persistence policy vs map guarantees is open (§11).

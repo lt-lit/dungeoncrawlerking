@@ -63,9 +63,18 @@
     <div id="gods-debug" hidden>
       <div class="gods-head">
         <span class="gods-title">THE GODS &#183; debug</span>
-        <label class="gods-favor">favor
-          <input type="range" id="godsFavor" min="0" max="3" step="0.1" value="1">
-          <span id="godsFavorVal">1.0</span>
+        <label class="gods-temper">temperament
+          <select id="optGodPreset">
+            <option value="calm">Calm</option>
+            <option value="restless" selected>Restless</option>
+            <option value="wrathful">Wrathful</option>
+            <option value="custom">Custom&#8230;</option>
+            <option value="off">Off (testing)</option>
+          </select>
+        </label>
+        <label class="gods-intensity">intensity
+          <input type="range" id="godsIntensity" min="0" max="3" step="0.1" value="1">
+          <span id="godsIntensityVal">1.0</span>
         </label>
       </div>
       <div id="gods-meters" class="gods-row"></div>
@@ -105,18 +114,14 @@
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
     </div>
     <h2>The Gods</h2>
-    <p class="opt-hint">Earthquakes stir the arena as duels run long: pieces scoot,
-      squares collapse. Applies from the next duel &#8212; or live mid-duel while
-      the debug overlay is on.</p>
-    <label class="opt">Temperament
-      <select id="optGodPreset">
-        <option value="calm">Calm</option>
-        <option value="restless" selected>Restless</option>
-        <option value="wrathful">Wrathful</option>
-        <option value="custom">Custom&#8230;</option>
-        <option value="off">Off (testing)</option>
-      </select>
-    </label>
+    <p class="opt-hint">Earthquakes stir the arena when the game goes stale:
+      walls crack, crates shatter, pieces scoot, squares collapse. Temperament
+      and intensity are dialled in the debug panel (enable the overlay below);
+      custom knob values live here and apply live mid-duel.</p>
+    <!-- Temperament + intensity moved to the debug panel head (designer,
+         2026-09-01): they are tuning dials, and the panel is where tuning
+         happens. The custom knob VALUES stay here; picking Custom in the
+         panel enables them. -->
     <div id="god-knobs">
       <label class="opt sub">First stir (ply) <input type="number" id="god_onsetPly" min="1" step="1"></label>
       <label class="opt sub">Restlessness ramp (quiet plies to certain) <input type="number" id="god_rampPlies" min="1" step="1"></label>

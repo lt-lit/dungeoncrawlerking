@@ -686,7 +686,7 @@ function renderGodsSummary() {
   $('gods-summary').textContent =
     `next roll p${nextPly}: P(quake) ${pctOf(dir.pQuake(nextPly))} · ` +
     `budget ${1 + Math.floor(dir.pressure(nextPly) * dir.extraActions)} action(s) · ` +
-    `debt ${dir.debt}/${dir.debtCap} · favor ${dir.favor.toFixed(1)}${held}`;
+    `debt ${dir.debt}/${dir.debtCap} · intensity ${dir.favor.toFixed(1)}${held}`;
 
   // The ladder, as it stands right now — rung weights are a pure function of
   // pressure and the terrain census, so showing them costs nothing.
@@ -1320,8 +1320,8 @@ async function beginDuel() {
   evalProbe.failures = 0; // fresh duel, fresh engine budget
   $('gods-trace').textContent = '';
   $('gods-census').textContent = '';
-  $('godsFavor').value = '1';
-  $('godsFavorVal').textContent = '1.0';
+  $('godsIntensity').value = '1';
+  $('godsIntensityVal').textContent = '1.0';
   if (app.duel) app.duel.destroy();
   app.duel = new DuelController({
     ffish: app.ffish,
@@ -1728,16 +1728,20 @@ for (const k of GOD_KNOBS) {
     liveTune({ [k]: v });
   });
 }
-// Favor of the Gods (§4.5, hook live / theme TBD): the slider drives the
-// CURRENT duel only, and resets to 1 with each new Director.
-$('godsFavor').addEventListener('input', (e) => {
-  $('godsFavorVal').textContent = parseFloat(e.target.value).toFixed(1);
+// Intensity (designer rename, 2026-09-01 — was "favor"): a DEBUG dial on the
+// quake-probability multiplier, driving the CURRENT duel only; resets to 1
+// with each new Director. The Director API stays setFavor()/favor because
+// "Favor of the Gods" remains the brief's OPEN future mechanic (§4.5:
+// shrines/items/taunting move the same multiplier in-game, theme TBD) — this
+// slider is the instrument, that would be the mechanic.
+$('godsIntensity').addEventListener('input', (e) => {
+  $('godsIntensityVal').textContent = parseFloat(e.target.value).toFixed(1);
 });
-$('godsFavor').addEventListener('change', (e) => {
+$('godsIntensity').addEventListener('change', (e) => {
   const v = parseFloat(e.target.value);
   if (!Number.isFinite(v) || !app.duel || app.duel.state !== 'playing') return;
-  app.duel.setFavor(v); // recorded on the ledger
-  log($('gods-trace'), `favor @p${app.duel.ply}: ${v.toFixed(1)}`, 'ok');
+  app.duel.setFavor(v); // recorded on the ledger (as `favor`)
+  log($('gods-trace'), `intensity @p${app.duel.ply}: ${v.toFixed(1)}`, 'ok');
   renderGodsSummary();
 });
 $('btnGodsCensus').addEventListener('click', godsCensusNow);

@@ -660,7 +660,10 @@ export class Director {
   /** Active trace collector; set only for the duration of a quake() call. */
   #activeTrace = null;
 
-  /** Runtime tuning hook (Favor of the Gods): scales P(quake). */
+  /** Runtime multiplier on P(quake) — and, since the budget draws roll
+   *  against pQuake, on quake SIZE too. The debug panel's "intensity" dial
+   *  drives it today; brief §4.5's Favor-of-the-Gods mechanic (shrines,
+   *  items, taunting — theme TBD) would drive it in-game. */
   setFavor(mult) {
     this.favor = Math.max(0, mult);
   }
