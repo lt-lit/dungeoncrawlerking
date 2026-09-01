@@ -98,6 +98,12 @@ function summarizeGroup(games) {
 
   const heldFires = allQuakes.filter((k) => k.held).length;
 
+  // Swallows: crumbles that ate a piece. Since 2026-09-01 quakes cannot
+  // swallow (occupied squares are not crumble candidates), so this must be
+  // EXACTLY 0 on any corpus from the current Director — a regression guard,
+  // not a tuning dial. A non-zero count means the no-swallow rule broke.
+  const swallows = allQuakes.filter((k) => k.crumble?.pieceLost);
+
   return {
     games: played.length,
     skipped: games.length - played.length,
@@ -115,6 +121,9 @@ function summarizeGroup(games) {
     terrainEnd: mean(attrition.map((a) => a.total)),
     cratesEnd: mean(attrition.map((a) => a.crates).filter((v) => v !== null)),
     holesEnd: mean(ok.map((g) => g.holesEnd ?? 0)),
+    swallowed: swallows.length,
+    swallowedPerGame: ok.length ? swallows.length / ok.length : 0,
+    swallowMedPly: q(swallows.map((k) => k.ply), 0.5),
     lockStart: mean(lock.map((l) => l.start)),
     lockEnd: mean(lock.map((l) => l.end)),
     probed: probed.length,
@@ -139,7 +148,8 @@ function render(label, s) {
   console.log(`  ladder by action: ${lad || '(no god activity)'}`);
   console.log(
     `  terrain remaining at end: ${Number.isFinite(s.terrainEnd) ? pct(s.terrainEnd) : '-'} of authored` +
-      ` (crates ${Number.isFinite(s.cratesEnd) ? pct(s.cratesEnd) : '-'}) · holes ${f1(s.holesEnd)}`
+      ` (crates ${Number.isFinite(s.cratesEnd) ? pct(s.cratesEnd) : '-'}) · holes ${f1(s.holesEnd)}` +
+      ` · swallowed ${s.swallowed} pieces (${s.swallowedPerGame.toFixed(2)}/game${s.swallowed ? `, med ply ${s.swallowMedPly}` : ''})`
   );
   console.log(`  locked pawns start→end: ${f1(s.lockStart)} → ${f1(s.lockEnd)}`);
   console.log(

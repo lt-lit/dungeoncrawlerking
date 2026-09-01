@@ -154,14 +154,6 @@ export function lockedPawns(fen, files, ranks) {
   return out;
 }
 
-function nonKingCounts(fen) {
-  const c = { white: 0, black: 0 };
-  for (const ch of fen.split(' ')[0]) {
-    if (/[A-Z]/.test(ch) && ch !== 'K') c.white++;
-    else if (/[a-z]/.test(ch) && ch !== 'k') c.black++;
-  }
-  return c;
-}
 
 /** Per-side count of pieces with zero legal moves (via turn-flip probe). */
 function stuckCount(ffish, variant, fen) {
@@ -212,7 +204,6 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
   const neutral = [];
   const terminal = [];
   const rejected = [];
-  const counts = nonKingCounts(fen);
   const g = fenGrid(fen, files, ranks); // for the editExposes guard below
   for (let f = 0; f < files; f++) {
     for (let r = 0; r < ranks; r++) {
@@ -224,13 +215,15 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
       // last_piece vetoes and counting crates as white material): furniture
       // is stone to the gods, and no crumble ever lands on or swallows it.
       if (occ === undefined || isTerrain(occ)) continue;
-      if (occ && occ !== 'K' && occ !== 'k') {
-        const owner = occ === occ.toUpperCase() ? 'white' : 'black';
-        if (counts[owner] === 1) {
-          rejected.push({ sq, reason: 'last_piece' }); // never strip a last piece
-          continue;
-        }
-      }
+      // QUAKES CANNOT SWALLOW PIECES [designer-final 2026-09-01]. Occupied
+      // squares are not in the crumble vocabulary at all — a hole opens in
+      // bare floor or not at all — silent like terrain: a piece square is
+      // not a rejected candidate, it is not a candidate. This subsumes the
+      // old last-piece guard (rule 4a's crumble consequence) and closes
+      // §4.5's open value-guard question: no piece is ever a victim, so
+      // neither arises. `pieceLost` stays in the record schema, always
+      // null, so exports and the UI dissolve path need no change.
+      if (occ) continue;
       // "No new winning capture" (editExposes): a hole SEVERS lines — a
       // defender behind this square stops defending through it, which can
       // hang a piece just as surely as opening a line does. Grid-only,
@@ -598,6 +591,10 @@ export const DIRECTOR_DEFAULTS = {
   //                    wall/crate supply on a board runs dry.
   crumbleAt: 0.7,
   crumbleBias: 3,
+  // (No swallow knob: QUAKES CANNOT SWALLOW PIECES is a rule, not a dial —
+  // designer-final 2026-09-01, after a wrathful hole ate a knight at ply
+  // 13. Occupied squares are not crumble candidates; see
+  // crumbleCandidates.)
   crateBrake: true, // damp weaken as furniture comes to outnumber walls, so a
   //                   long duel does not dissolve the whole dungeon into crates
 
@@ -1316,6 +1313,8 @@ export class Director {
   #crumbleLeg(trace, ffish, variant, fen, files, ranks, landed) {
     const { neutral, terminal, rejected } = crumbleCandidates(ffish, variant, fen, files, ranks);
     trace.census.crumble = { neutral: neutral.length, terminal: terminal.length, rejected: countByReason(rejected) };
+    // Every candidate is bare floor by definition now — quakes cannot
+    // swallow pieces (see crumbleCandidates).
     const safe = neutral.filter((c) => landingsStillSafe(c.fen, landed, files, ranks));
     if (safe.length) {
       const c = this.#pickTraced('pick-crumble', safe);

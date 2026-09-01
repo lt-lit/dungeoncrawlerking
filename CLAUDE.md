@@ -16,7 +16,9 @@ ply ramp, which survives only as a late backstop floor, and never while a king
 is in check. They act on a SEVERITY LADDER: weaken (`*`→`^`, a wall cracks —
 safe by construction, telegraphs the breach) → breach (`^`→floor, the line
 opens) → displace (ONE piece, either side) → crumble (a permanent HOLE,
-demoted to the closer). A quake SPENDS AN ACTION BUDGET (drawn, not computed
+demoted to the closer — and NEVER on a piece: QUAKES CANNOT SWALLOW,
+designer-final 2026-09-01; occupied squares are not crumble candidates,
+which subsumes rule 4a's last-piece guard). A quake SPENDS AN ACTION BUDGET (drawn, not computed
 — each extra action is its own Bernoulli trial at P(quake)), so rungs mix and
 neither the kind nor the COUNT of what happens is a signature. **v2's pairing
 rule is GONE** (designer 2026-08-31): one white piece and one black piece
@@ -254,7 +256,14 @@ trades (calm's long tail stretched; wrathful runs hotter under the
 exposure guard via staleness feedback); (d) settle ramp numbers
 from rig + feel together — **the phone decides whether new-calm feels
 calm**; `rampPlies`/`stalenessGain` are the walk-back knobs if it now
-feels too passive. The favored-seat model/edge for the live-regime
+feels too passive. **Wrathful pass 2026-09-01: quakes can no longer
+swallow pieces at all** (designer-final, after a wrathful hole ate a
+knight at ply 13 — the tuned corpus measured wrathful at 1.96
+swallows/game, median ply 51, so the ply-13 knight was typical, not a
+tail). Crumbles now take bare floor only; the debt-forced hole still
+lands (termination untouched), and the closed-endgame `terminal` crumble
+that ends a fully-locked board is unchanged (it immobilizes, it does not
+eat). The favored-seat model/edge for the live-regime
 arm still needs the designer. Then **Phase 2 — exploration slice**.
 
 ## Layout
@@ -327,9 +336,10 @@ run one sweep at a time.
    and a bared side has zero legal moves — no game-layer check needed. The
    king stays fully royal (spike 4 finding 5); check/checkmate/stalemate
    are untouched; spikes 04+10 and selftest re-validated 25/25 + 32/32
-   under this config. Consequences: (a) crumble candidates that would strip
-   a side's LAST piece must be excluded (a crumble would instantly end the
-   game); (b) test/spike fixtures must never use bare-king "victims" — such
+   under this config. Consequences: (a) crumbles can no longer strip ANY
+   piece — since 2026-09-01 quakes cannot swallow (occupied squares are not
+   crumble candidates, superseding the old last-piece exclusion this rule
+   used to require); (b) test/spike fixtures must never use bare-king "victims" — such
    positions are decided at load (this bit four fixtures already); (c) the
    one state extinction cannot see — a captured king with material left
    (surgery-only) — is adjudicated at the game layer, termination
