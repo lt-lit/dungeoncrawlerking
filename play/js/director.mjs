@@ -952,7 +952,6 @@ export class Director {
       rolls: [],
       path: [],
       census: null,
-      firstSide: null,
       chosen: null,
       outcome: 'quiet',
       fellThrough: false,

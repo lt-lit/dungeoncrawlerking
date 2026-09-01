@@ -121,7 +121,7 @@ worker rebuilt byte-identical, wasm +2 bytes) is vendored behind a full
 rule-16 gate; `engine/tests/stack-regress.cjs` guards the deterministic
 P60 kill-fixture (the old pair dies on it 19/19). Adopt upstream PR #1031
 (per-thread MovePicker pool) when it lands and drop the patch. Phone feel
-check pending. **Phase 1.2.4 — Set Dressing ✅ done
+check passed 2026-09-01 (the v3 playtest ran on this pair). **Phase 1.2.4 — Set Dressing ✅ done
 (2026-08-27)**: retired the hard-coded `'*'` tests for the shared
 terrain helper (`fen.mjs` `WALL`/`FURNITURE`/`isTerrain`; the audit
 found 65 sites / 24 files — the two known landmines confirmed, plus
@@ -198,8 +198,8 @@ twice — and finally **Phase 2 — exploration slice**.
   only — three known defects), the rule-16 gate tests (`tests/*.cjs`), and
   `engine/README.md` (recipe, gotchas, gate results, validation evidence).
   **`play/vendor/` carries the PATCHED pair** (dead-squares 2026-08-26 +
-  thread-stack 2026-08-27, each behind a green rule-16 gate; the 08-27
-  phone feel check is outstanding). phase0's npm `node_modules` are
+  thread-stack 2026-08-27, each behind a green rule-16 gate; both phone
+  feel checks passed — thread-stack's on 2026-09-01, on the v3 build). phase0's npm `node_modules` are
   still the STOCK pair — overlay `play/vendor/` artifacts before any
   phase0 run that must play the shipped rules (see `engine/README.md`).
 - `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
@@ -324,8 +324,9 @@ run one sweep at a time.
     through the other ordering. Any new quake mechanic must be judged on the
     board the player actually receives.
 14. **`director.quake()` is expensive and synchronous** — measured 300–720 ms
-    per quake on 4×6–6×8 arenas (Node). It calls `displacementCandidates`
-    twice, and that builds ~4 ffish Boards per candidate (`stuckCount` alone
+    per quake on 4×6–6×8 arenas (Node, v2; v3's terrain rungs are cheaper
+    per action but a budget can spend several). `displacementCandidates`
+    builds ~4 ffish Boards per candidate (`stuckCount` alone
     is 2, and only ever distinguishes tier B from tier C). Cheap filters
     belong BEFORE the ffish probes — that is why the landing-safety check
     runs on the grid. Do not add per-candidate ffish work without measuring.

@@ -7,9 +7,11 @@
 // whose seat is on turn; the post-move pipeline (game-end check + quake
 // phase) mirrors the harness's.
 //
-// Repetition is NOT punished (Director design): no position tracking, no
-// repetition crumble. Termination rests on the Director's crumbles (debt cap
-// guarantees they keep landing) + stalemate-as-loss.
+// Repetition is NOT punished as a RULE (Director design): no repetition
+// crumble. The position log below only feeds the restlessness meter —
+// shuffling bores the gods faster; it never adjudicates anything.
+// Termination rests on the Director's holes (debt cap guarantees crumbles
+// keep landing) + stalemate-as-loss.
 //
 // The ffish Board is the source of truth for legality and game end; the
 // engine is queried per ply with `position fen <base> moves <since-base>`,
@@ -66,9 +68,10 @@ function kinglessSide(fen) {
   return null;
 }
 
-// Backstop only: the Director guarantees termination (debt-capped crumbles
-// shrink the board monotonically); a duel that reaches this many plies is a
-// bug, not a long game.
+// Backstop only: the Director guarantees termination (debt-forced crumbles
+// accumulate permanent holes — the monotone force; breaches can reopen at
+// most the finite authored-wall supply); a duel that reaches this many
+// plies is a bug, not a long game.
 const MAX_PLIES = 1000;
 
 export class DuelController {

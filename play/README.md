@@ -55,31 +55,41 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   validated Phase 0 modules (import paths only). (`js/crumble.mjs` — the old
   repetition+pacing controller — is deleted; `phase0/harness/crumble.mjs`
   remains the historical record.)
-- `js/director.mjs` — **the Board State Director.** Exhaustive crumble
-  candidate enumeration (neutral vs terminal — terminal fires only when the
-  board has closed, termination `earthquake`), tiered displacement
-  (A frees a terrain-locked pawn / B unsticks a piece / C cosmetic
-  camouflage), symmetric-preferred pairing with a patience ramp for
-  one-sided stirs, rising `P(quake)` + slower squared `P(crumble|quake)`
-  + debt cap (termination guarantee), seeded RNG, `setFavor()` hook.
-  Kings are never displaced; pawns never land on rank 1/promotion rank;
-  quakes never give check, never leave a side in check, never end the game
-  except through the terminal-crumble path, and — **Phase 1.1** — never hand
-  out material (see `js/threat.mjs`). **Phase 1.2:** instrumented from the
-  inside — every `quake()` call records a roll trace (`lastTrace`), the
-  enumerators return their rejections with reasons, and RNG-free getters
-  (`pQuake`/`pCrumble`/`pOneSided`/`forecast`) + live dials (`tune()`)
-  expose the math without touching the seeded stream (see the debug-overlay
-  section below).
+- `js/director.mjs` — **the Board State Director (v3 — the ladder;
+  brief §4.5).** Triggered by two meters — restlessness (`js/meter.mjs`,
+  the record) × staleness (`js/staleness.mjs`, the position / fun score,
+  which sets the fill rate) — never by ply (the old ramp survives only as
+  the late backstop floor) and never while a king is in check. Each quake
+  spends a DRAWN action budget across four rungs: weaken (`*`→`^`),
+  breach (`^`→floor, king-filtered), displace (ONE piece, either side,
+  best tier over both — A frees a terrain-locked pawn / B unsticks a
+  piece / C cosmetic camouflage; v2's one-per-side pairing is repealed),
+  and crumble (a permanent HOLE — `director.holes`, Director state, since
+  FSF cannot tell a hole from an authored wall; at most one per quake,
+  debt cap counts every rung). Exhaustive candidate enumeration
+  throughout (neutral vs terminal crumbles — terminal fires only when the
+  board has closed, termination `earthquake`); targets picked
+  seeded-weighted by STRUCTURAL impact, never by eval. Kings are never
+  displaced; pawns never land on rank 1/promotion rank; quakes never give
+  check, never leave a side in check, never end the game except through
+  the terminal-crumble path, and — **Phase 1.1** — never hand out
+  material (see `js/threat.mjs`), a guard that now holds across the whole
+  budget. **Phase 1.2:** instrumented from the inside — every `quake()`
+  call records a roll trace (`lastTrace`), the enumerators return their
+  rejections with reasons, and RNG-free getters
+  (`pQuake`/`pressure`/`rungWeights`/`forecast`) + live dials (`tune()`)
+  expose the math without touching the seeded stream (see the
+  debug-overlay section below).
 - `js/threat.mjs` — **landing safety.** Attack chains + a simplified static
   exchange evaluation over the FEN grid; pure, no ffish, no engine. Exists
   because every other displacement guard is a *king*-safety guard, so a
   "symmetric" quake could step a piece onto an already-attacked square and
   gift it (observed on arena03: enemy rook a7→b7 into a white rook on the
   open b-file, White to move). Two guards use it: each candidate's landing
-  square must be materially safe, and a paired second leg must leave the
-  first leg's landing square safe too — filtering legs independently is not
-  enough, since only leg 1 → leg 2 is covered by enumeration order.
+  square must be materially safe, and every later action in a quake's budget
+  must leave every square this quake already landed a piece on safe too —
+  filtering actions independently is not enough, since only earlier → later
+  is covered by enumeration order (v3 generalized this from v2's leg pair).
   Verified: 420 seeded quakes over 7 realistic positions, zero gifts;
   it rejects ~11% of grid-legal steps overall (0% from opening positions,
   25–35% once files open), and 411/420 quakes still paired symmetrically.
@@ -273,13 +283,13 @@ changed afterwards). It is not gated on Cheater Mode — it is a debug tool,
 not a cheat. The panel renders under the duel log; everything it shows
 derives from `duel.record` plus the Director's pure getters.
 
-**The invariant everything hangs on:** the Director's three rolls share one
+**The invariant everything hangs on:** the Director's draws share one
 seeded stream and the draw pattern is state-dependent (no draw before onset,
-the debt cap skips the crumble roll, the displacement leg consumes a
-variable number of picks). So the overlay NEVER re-rolls to preview:
-probabilities come from RNG-free getters (`pQuake`/`pCrumble`/`pOneSided`/
-`forecast`, pure functions of ply+config+debt+favor), and rolls are recorded
-by instrumentation *inside* `quake()`. Tracing is unconditional. Two
+the debt cap skips the rung roll, the budget consumes a variable number of
+draws and picks). So the overlay NEVER re-rolls to preview: probabilities
+come from RNG-free getters (`pQuake`/`pressure`/`rungWeights`/`forecast` —
+pure functions of the meters, config, debt and favor), and rolls are
+recorded by instrumentation *inside* `quake()`. Tracing is unconditional. Two
 separate guarantees back this: byte-identity of the draw sequence to the
 pre-1.2 Director was verified at development time by a Node A/B harness
 (12 seeds × 24 plies × 2 fixtures, old vs new, getters/census/forecast
