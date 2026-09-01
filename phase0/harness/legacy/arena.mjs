@@ -6,9 +6,9 @@
 // sprinkled only in the gap band, never on formation rows. A connectivity
 // check regenerates layouts whose walls fully sever the two formations —
 // mirroring the §6 linter guarantee that duels have duel-capable ground.
-import { makeDuelVariantIni, buildDuelBoard, boardToFen } from '../lib/variant.mjs';
-import { isTerrain } from '../lib/fen.mjs';
-import { mulberry32, childSeed, randInt, shuffle } from './prng.mjs';
+import { makeDuelVariantIni, buildDuelBoard, boardToFen } from '../../lib/variant.mjs';
+import { isTerrain } from '../../lib/fen.mjs';
+import { mulberry32, childSeed, randInt, shuffle } from '../prng.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 

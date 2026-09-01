@@ -1,9 +1,9 @@
 // Crumble system (brief §4.5): repetition crumbles + pacing crumbles as
 // orchestration-layer arena regeneration. The harness rewrites the FEN
 // between plies; every state the engine sees is FSF-pure.
-import { splitFen, setSquare, clearEp, findSquares, squareName, isTerrain } from '../lib/fen.mjs';
+import { splitFen, setSquare, clearEp, findSquares, squareName, isTerrain } from '../../lib/fen.mjs';
 
-import { mulberry32, childSeed, randInt } from './prng.mjs';
+import { mulberry32, childSeed, randInt } from '../prng.mjs';
 
 /** Position key for repetition tracking: board + turn + ep (castling is always '-'). */
 export function positionKey(fen) {

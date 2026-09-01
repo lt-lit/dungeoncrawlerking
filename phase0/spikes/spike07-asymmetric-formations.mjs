@@ -6,8 +6,8 @@ import { loadFfish, loadEngine } from '../lib/load.mjs';
 import { makeDuelVariantIni, buildDuelBoard, boardToFen } from '../lib/variant.mjs';
 import { splitFen, parseBoard, serializeBoard, joinFen } from '../lib/fen.mjs';
 import { mulberry32, pick, randInt } from '../harness/prng.mjs';
-import { buildArena } from '../harness/arena.mjs';
-import { playGame } from '../harness/game.mjs';
+import { buildArena } from '../harness/legacy/arena.mjs';
+import { playGame } from '../harness/legacy/game.mjs';
 
 let pass = 0;
 let fail = 0;
