@@ -1,3 +1,10 @@
+> **SUPERSEDED — historical record only (2026-09-01).** This plan predates
+> the 1.2.4 stage replacement (it still says 33 stages; the locked bed is
+> 58, most carrying furniture `^`) and the 2026-08-31 Gods v3 rework, and
+> its final work item — the meter-lab rerun / corpus — was deliberately
+> SHELVED by the designer (see CLAUDE.md). Nothing here is the plan of
+> record; read CLAUDE.md and brief §4.5/§10 instead.
+
 # Vertical-slice refresh — the proving grounds (plan)
 
 > **This document is the work plan for PHASE 1.2.5 — The Proving Grounds**

@@ -179,7 +179,7 @@ export class BoardUI {
    *  map painting the Director's candidate census — displacement landing
    *  squares by tier, 't' for terminal crumbles. Debug-only chrome: its CSS
    *  sits before the quake marks so live-game marks win ties. */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, arrows = [], quakeFrom = [], quakeTo = [], pit = null, heat = {} } = {}) {
+  setMarks({ selected = null, targets = [], lastMove = [], check = null, arrows = [], quakeFrom = [], quakeTo = [], pit = null, terrain = [], heat = {} } = {}) {
     const targetSet = new Set(targets);
     const lastSet = new Set(lastMove);
     const quakeFromSet = new Set(quakeFrom);
@@ -192,6 +192,9 @@ export class BoardUI {
       cell.classList.toggle('quake-from', quakeFromSet.has(sq));
       cell.classList.toggle('quake-to', quakeToSet.has(sq));
       cell.classList.toggle('fresh-pit', sq === pit);
+      // A wall the gods just cracked or smashed (v3 terrain rungs) — same
+      // 'they touched this' role as fresh-pit, different meaning and colour.
+      cell.classList.toggle('fresh-terrain', terrain.includes(sq));
       const h = heat[sq];
       cell.classList.toggle('heat-a', h === 'a');
       cell.classList.toggle('heat-b', h === 'b');

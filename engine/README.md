@@ -18,7 +18,7 @@ largeboard search-thread stack overflow, upstream issue #804. Engine
 artifact rebuilt from the same pins (js+worker byte-identical to the
 2026-08-26 pair, wasm +2 bytes); ffish unchanged (the constant is dead
 code in its threadless build); full rule-16 gate green (see "The stack
-patch" below). Phone feel check pending. Adopt upstream PR #1031 when it
+patch" below). Phone feel check passed 2026-09-01. Adopt upstream PR #1031 when it
 lands and drop the patch.
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
@@ -227,7 +227,9 @@ vendored ffish artifacts are unchanged.
   bestmove, **0 deaths**, 0 page errors, final liveness proven by a real
   follow-up search. Fast Node suite re-run green on the merged tree
   (stack-regress 5/5, test-engine 7/7, regress, search-identity pilot).
-- [ ] phone feel check — pending (post-merge, on Pages)
+- [x] phone feel check — passed 2026-09-01 (designer, on Pages, on the
+  v3-Gods build that ships this pair: extended big-board duels, verdict
+  "plays pretty well" — the stall class this patch fixes did not resurface)
 
 ## Provenance (pin these)
 

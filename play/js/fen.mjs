@@ -6,14 +6,20 @@
 // rankFromTop 0 is the highest rank (first FEN rank). Cell values: piece
 // char ('K', 'p', ...), '*' wall, '^' furniture, or null for empty.
 
-// The two terrain glyphs (brief §4.6). '*' is stone — forever; crumbles
-// write it and nothing ever converts it back. '^' is furniture — a neutral
-// occupant either side may capture (an ordinary capture, priced natively by
-// the patched engine pair); it is stage-authored only, NOTHING creates one
-// mid-duel, and it is TERRAIN to every game system except the capture
-// itself (molding, crop, the camp line, the gods). This module is the leaf
-// every consumer already imports — cell tests belong here, not hand-rolled
-// (the '^'-as-white-piece toUpperCase() landmine class).
+// The two terrain glyphs (brief §4.6). '*' is stone. It means two different
+// things that FSF cannot tell apart and the Director can: an authored WALL,
+// which the gods may crack into '^', and a HOLE that a crumble wrote, which
+// is permanent — never weakened, never reopened (that permanence is the
+// termination guarantee, §4.5). Hole-ness lives in Director state, not here.
+//
+// '^' is furniture — a neutral occupant either side may capture (an ordinary
+// capture, priced natively by the patched engine pair). Since v3 the gods
+// both CREATE it (weakening a wall) and REMOVE it (breaching); nothing else
+// does. It is TERRAIN to every game system except the capture itself
+// (molding, crop, the camp line, and displacement, which neither carries a
+// crate nor lands on one). This module is the leaf every consumer already
+// imports — cell tests belong here, not hand-rolled (the '^'-as-white-piece
+// toUpperCase() landmine class).
 export const WALL = '*';
 export const FURNITURE = '^';
 
