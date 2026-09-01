@@ -207,9 +207,16 @@ trajectory data — v3's ladder already targets locks directly (weaken +3 on
 locked files, breach scores pawns freed, staleness prices locks), so measure
 before writing generator law.
 
-Remaining 1.5 work, in order: (a) the **baseline corpus** on current v3
-(`godlab/sweeps/presets.json`) BEFORE touching the Director — instrument
-before intervention, same as 1.2-before-1.3; (b) the **terrain-context
+Remaining 1.5 work, in order: (a) the **baseline corpus** on current v3 —
+**a preliminary 192-game pass ✅ ran 2026-09-01**
+(`results/godlab/prelim-findings.md`: gods-off never terminates on 42% of
+the bed incl. 6/8 floorplan games; Calm fires 3× harder on floorplans than
+core — MORE than wrathful's average, so stage class outweighs the preset
+dial, confirming the staleness path; terrain strips to 8–24% remaining
+across presets; locked pawns 6.4→<1; alarm flip rate 2.6–3.8%/quake vs
+v2's 31–75% of games — the ladder moved the harm out); the full
+`presets.json` grid stays available if tuning needs tighter error bars;
+(b) the **terrain-context
 change** (designer direction 2026-09-01): a running wall/furniture census
 against the AUTHORED proportions (vs playable area) with a conservation
 brake on the BREACH side — today's crateBrake damps weaken only, so nothing
