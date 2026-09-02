@@ -16,7 +16,9 @@ ply ramp, which survives only as a late backstop floor, and never while a king
 is in check. They act on a SEVERITY LADDER: weaken (`*`→`^`, a wall cracks —
 safe by construction, telegraphs the breach) → breach (`^`→floor, the line
 opens) → displace (ONE piece, either side) → crumble (a permanent HOLE,
-demoted to the closer). A quake SPENDS AN ACTION BUDGET (drawn, not computed
+demoted to the closer — and NEVER on a piece: QUAKES CANNOT SWALLOW,
+designer-final 2026-09-01; occupied squares are not crumble candidates,
+which subsumes rule 4a's last-piece guard). A quake SPENDS AN ACTION BUDGET (drawn, not computed
 — each extra action is its own Bernoulli trial at P(quake)), so rungs mix and
 neither the kind nor the COUNT of what happens is a signature. **v2's pairing
 rule is GONE** (designer 2026-08-31): one white piece and one black piece
@@ -44,9 +46,21 @@ a seeded quake sequence replays identically with the overlay exercised);
 ladder above and brief §4.5; the meter-lab data in `phase0/results/` supplied
 the trigger half of the case and live play supplied the rest). The old 1.3
 scope — promote the landing-safety stopgap to "no new winning capture for
-either side" — is DEFERRED, not done: on the ladder most god activity moved
-to rungs that cannot hand out material, and the designer's call is to see
-whether the problem still shows up in play before writing a rule against it. **The test
+either side" — is ✅ **DONE (2026-09-01)**: the deferral's condition fired
+exactly as written — live play produced the gift (a breach opened a line
+and handed over the player's queen, ~ply 30), because "terrain rungs cannot
+hand out material" was true of MOVING material and false of EXPOSING it.
+The promoted rule is `threat.mjs editExposes`: an edit only changes SEE
+relations for the FIRST piece along each of the 8 rays through an edited
+square, so those pieces are priced pre/post and any candidate that turns a
+SEE-safe piece SEE-losing (either side) is vetoed `hangs_piece` — on
+breach (the observed case), displacement (vacated-square discovery), and
+crumble (severed defence lines); weaken stays exempt, safe by
+construction. Measured: calm's flip rate fell 2.8→0.3%/quake; wrathful's
+did NOT (its flips are multi-action composites and strip-race re-timings
+no per-edit ray test can see), and vetoed unlocks feed staleness back
+into the meter, so wrathful ran HOTTER (21.7→26.1 q/100p) — see
+`results/godlab/tuned-ab-findings.md`. **The test
 bed's data half is DONE**: the designer-locked stage bed (58 stages
 since 1.2.4 — `play/stages/`,
 gallery via `phase0/harness/gen-gallery.mjs`) × the army generator
@@ -145,12 +159,16 @@ on-phone, 10-wide confirmed) is ACCEPTED/locked 2026-08-27 — the full
 58-stage bed is designer-locked, and the **exit PASSED 2026-08-27**:
 crate duels live on-device with Earthquakes on (designer verdict —
 "surprisingly really fun").
-**PHASE 1.3 — THE GODS REWORK — IS THE ACTIVE PHASE** (designer
-2026-08-31). The meter-lab evidence pass had already answered its question —
-the ply-ramp trigger was the wrong half — and live play answered the rest:
-the mechanic was game-breaking, so it was GUTTED rather than tuned. v3 (the
-ladder, above) is built and shipped for playtesting; **feel on the phone is
-the test**, not a corpus. The `ladder-smoke.mjs` sanity pass on 14 stages ×
+**PHASE 1.5 — DIRECTOR CALIBRATION — IS THE ACTIVE PHASE** (2026-09-01;
+1.3 is BUILT and live on Pages). The meter-lab evidence pass had already
+answered 1.3's question — the ply-ramp trigger was the wrong half — and live
+play answered the rest: the mechanic was game-breaking, so it was GUTTED
+rather than tuned. v3 (the ladder, above) shipped for playtesting; **feel on
+the phone is the test**, not a corpus — and the first phone verdict is in
+(designer 2026-09-01, a few games): the gods reshape ENTIRE arenas even on
+Calm + intensity 1.0, breach-heavy, rooms stripped of furniture fast — "fun,
+but I wouldn't call this calm". That report is now Phase 1.5's work list
+(below). The `ladder-smoke.mjs` sanity pass on 14 stages ×
 both orientations: 14/14 terminated, median 104 plies vs **268 with the gods
 off (5 of 14 never terminating at all)**, zero quakes fired into check, 1.84
 actions/quake with 33% of quakes mixing rungs, ladder split by ACTION weaken
@@ -180,11 +198,75 @@ byte-exact), and run.mjs's MultiPV human-seat path lacks the
 fresh-engine retry (an engine death mid-corpus crashes the arm instead
 of retrying), and the designer would have to settle which arms run,
 seeds/matchups per stage-orientation, and the favored-seat model before any
-compute is burned. Next up instead: **playtest v3 on the phone** and tune the
-ladder from feel. Then **Phase 1.5 — Director calibration** (port
-`harness/game.mjs` off the retired crumble system, add the §6 promotion
-lint, settle ramp numbers) — gated behind 1.3 so the sweeps are not burned
-twice — and finally **Phase 2 — exploration slice**.
+compute is burned.
+
+**Phase 1.5's rig half is ✅ built (2026-09-01): the GOD LAB**
+(`phase0/harness/godlab/` — run.mjs, analyze.mjs, sweeps/). It REPLACED the
+brief's original "port `harness/game.mjs` to `director.mjs`" plan (designer
+2026-09-01: no ports — the testing rig must not need fixing every time the
+game changes): a port means two implementations of the shipped loop drifting
+apart (the §7 sweep-validity law's failure mode; `play/js/duel.mjs` already
+IS the ported loop), so the rig drives the CANON DuelController + v3
+Director on the locked stage bed via `dealMatchup` — a Director change is
+measured the moment it lands. Corpus lines record `variantName`/`variantIni`
+(the meter-lab replay defect, fixed by design); per-ply trails cover
+staleness, pressure, locked pawns, and wall/crate counts; an offline eval
+referee feeds the §7 alarm metric; analyze.mjs splits per arm × stage class
+(core/rooms/floorplan). The crumble-era harness is RETIRED: sweep.mjs/
+analyze.mjs/sweeps deleted, loop modules frozen in `harness/legacy/` (spikes
+07/08 still import them — never produce Director data with them), old
+`results/sweep-*` corpora flagged historical (`results/sweep-corpora-RETIRED.md`).
+The §6 promotion-reachability lint is DEFERRED pending the lab's locked-pawn
+trajectory data — v3's ladder already targets locks directly (weaken +3 on
+locked files, breach scores pawns freed, staleness prices locks), so measure
+before writing generator law.
+
+Remaining 1.5 work, in order: (a) the **baseline corpus** on current v3 —
+**a preliminary 192-game pass ✅ ran 2026-09-01**
+(`results/godlab/prelim-findings.md`: gods-off never terminates on 42% of
+the bed incl. 6/8 floorplan games; Calm fires 3× harder on floorplans than
+core — MORE than wrathful's average, so stage class outweighs the preset
+dial, confirming the staleness path; terrain strips to 8–24% remaining
+across presets; locked pawns 6.4→<1; alarm flip rate 2.6–3.8%/quake vs
+v2's 31–75% of games — the ladder moved the harm out); the full
+`presets.json` grid stays available if tuning needs tighter error bars;
+(b) the **terrain-context
+change — ✅ BUILT and A/B-measured 2026-09-01**: the CONSERVATION BRAKE
+(brief §4.5 item 4) — `director.anchorTerrain()` freezes the authored
+census at duel start (duel.mjs calls it; no anchor = brake off, which is
+what keeps the selftest fixtures byte-identical), `conserveMult` damps
+BOTH terrain rungs from `conserveAt` 0.6 down to silent at `conserveFloor`
+0.3 of authored standing terrain, and the `director.godCrates` ledger
+biases breach +3 toward god-minted crates so authored furniture outlives
+god rubble. A/B on the frozen prelim seeds
+(`results/godlab/brake-ab-findings.md`): calm floorplan terrain remaining
+18%→32%, wrathful 5%→17%, pacing/alarm/termination flat, displacement
+share up (the fall-through absorbs braked actions — SEE-guarded). Gates
+run: selftest 33/33 headless Chromium, ladder-smoke 12/12. Both knobs are
+live tune() dials for phone feel-tuning; (c) **preset separation — ✅ first pass 2026-09-01**: presets now reach
+into the staleness knobs (the prelim data's verdict — stage class was
+outweighing the preset dial) and `GOD_PRESETS` lives in `director.mjs` as
+the ONE table main.mjs, ladder-smoke and the god lab all import. Calm:
+onset 30, ramp 44, sate 6, debtCap 14, stalenessFloor/Gain 0.35/0.55,
+late floor 160; restless 12/20/4/10 + 0.45/0.85; wrathful untouched (the
+chaos preset anchors the scale). Measured separation 5.9 / 11.7 / 26.1
+quakes/100p (was 12.3/14.3/20.8), calm terrain-remaining 43%, calm flip
+rate 0.3%/quake — `results/godlab/tuned-ab-findings.md`, incl. the honest
+trades (calm's long tail stretched; wrathful runs hotter under the
+exposure guard via staleness feedback); (d) settle ramp numbers
+from rig + feel together — **phone verdict 2026-09-01: calm is "finally
+suitably chill"; its numbers are settled.** Restless is untested on the
+phone; wrathful reads as crazy, which is its brief — its extra heat under
+the exposure guard (26 q/100p) is the one number still on the table, and
+`rampPlies`/`stalenessGain` are the walk-back knobs for any preset. **Wrathful pass 2026-09-01: quakes can no longer
+swallow pieces at all** (designer-final, after a wrathful hole ate a
+knight at ply 13 — the tuned corpus measured wrathful at 1.96
+swallows/game, median ply 51, so the ply-13 knight was typical, not a
+tail). Crumbles now take bare floor only; the debt-forced hole still
+lands (termination untouched), and the closed-endgame `terminal` crumble
+that ends a fully-locked board is unchanged (it immobilizes, it does not
+eat). The favored-seat model/edge for the live-regime
+arm still needs the designer. Then **Phase 2 — exploration slice**.
 
 ## Layout
 
@@ -208,11 +290,16 @@ twice — and finally **Phase 2 — exploration slice**.
 - `phase0/spikes/` — one runnable script per §9 spike (deterministic, exit 0 =
   pass). `crumbleFilter.mjs` is production-bound (validated §4.5 filter).
   `spike08-mobile/` is a static phone benchmark page (vendored WASM).
-- `phase0/harness/` — §7 calibration harness: `sweep.mjs <config.json>` plays
-  engine-vs-engine games, JSONL + summary out. **Still runs the RETIRED
-  crumble system (`harness/crumble.mjs`, repetition + fixed-cadence pacing),
-  not the shipped Director — porting it is Phase 1.5. Sweep numbers about
-  arena regeneration are not trustworthy until that lands.**
+- `phase0/harness/` — the calibration + verification tools. **`godlab/` is
+  the §7 Director-calibration rig (Phase 1.5)**: `run.mjs <sweep.json>`
+  plays the canon DuelController + v3 Director over the stage bed
+  (JSONL out), `analyze.mjs` aggregates per arm × stage class. Needs the
+  play/vendor overlay (see engine/README.md) — it fails loudly on the stock
+  pair. `ladder-smoke.mjs` is the cheap post-change sanity pass;
+  `verify-stages.mjs` the static stage verifier; `meterlab/` the shelved 1.3
+  evidence rig (its Director config is v2-era — do not reuse without
+  updating); `legacy/` the frozen crumble-era loop kept only for spikes
+  07/08 — never produce Director data with it.
 - `phase0/results/` — per-spike results docs + sweep outputs.
 
 ## Running things
@@ -222,8 +309,11 @@ cd phase0                      # npm deps live here (node_modules gitignored)
 npm install                    # ffish + fairy-stockfish-nnue.wasm
 node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
-node harness/sweep.mjs harness/sweeps/tiny.json   # 2-game harness check
+node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
+node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
 ```
+(godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
+pair into node_modules first, per engine/README.md.)
 
 Engine stdout is huge — pipe through `tail`. Engine searches are CPU-bound;
 run one sweep at a time.
@@ -249,9 +339,10 @@ run one sweep at a time.
    and a bared side has zero legal moves — no game-layer check needed. The
    king stays fully royal (spike 4 finding 5); check/checkmate/stalemate
    are untouched; spikes 04+10 and selftest re-validated 25/25 + 32/32
-   under this config. Consequences: (a) crumble candidates that would strip
-   a side's LAST piece must be excluded (a crumble would instantly end the
-   game); (b) test/spike fixtures must never use bare-king "victims" — such
+   under this config. Consequences: (a) crumbles can no longer strip ANY
+   piece — since 2026-09-01 quakes cannot swallow (occupied squares are not
+   crumble candidates, superseding the old last-piece exclusion this rule
+   used to require); (b) test/spike fixtures must never use bare-king "victims" — such
    positions are decided at load (this bit four fixtures already); (c) the
    one state extinction cannot see — a captured king with material left
    (surgery-only) — is adjudicated at the game layer, termination
@@ -322,7 +413,13 @@ run one sweep at a time.
     board, so leg 1 → leg 2 is covered, but leg 2 → leg 1 is not; on the
     same position the pair (r a7→a6, R b5→a5) recreated the identical gift
     through the other ordering. Any new quake mechanic must be judged on the
-    board the player actually receives.
+    board the player actually receives. (2026-09-01: the "separate" piece
+    safety now exists — `threat.mjs editExposes`, the promoted
+    no-new-winning-capture rule — pricing what an edit UNCOVERS or SEVERS
+    on every line-editing rung, not just where a piece lands. The
+    per-composite caveat stands: `landingsStillSafe` still re-checks landed
+    squares across the budget, and compound geometry two edits only create
+    JOINTLY is caught only where they share a ray.)
 14. **`director.quake()` is expensive and synchronous** — measured 300–720 ms
     per quake on 4×6–6×8 arenas (Node, v2; v3's terrain rungs are cheaper
     per action but a budget can spend several). `displacementCandidates`

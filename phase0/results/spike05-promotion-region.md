@@ -26,7 +26,7 @@
 6. **UCI note for 10-rank boards:** squares on rank 10 are 3 characters (`f10`),
    so promotion moves run 6+ chars (`f9f10q`). Any move-string parsing must use a
    proper square regex, not fixed offsets — this bit the harness once already
-   (fixed in `harness/crumble.mjs`).
+   (fixed in `harness/crumble.mjs`, now `harness/legacy/crumble.mjs`).
 
 ## Design implications
 

@@ -4,7 +4,7 @@
 import fs from 'fs';
 import { loadFfish, loadEngine } from '../lib/load.mjs';
 import { makeDuelVariantIni } from '../lib/variant.mjs';
-import { buildArena } from '../harness/arena.mjs';
+import { buildArena } from '../harness/legacy/arena.mjs';
 
 let pass = 0;
 let fail = 0;

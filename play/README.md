@@ -53,7 +53,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 
 - `js/fen.mjs`, `js/prng.mjs`, `js/crumbleFilter.mjs` — verbatim ports of the
   validated Phase 0 modules (import paths only). (`js/crumble.mjs` — the old
-  repetition+pacing controller — is deleted; `phase0/harness/crumble.mjs`
+  repetition+pacing controller — is deleted; `phase0/harness/legacy/crumble.mjs`
   remains the historical record.)
 - `js/director.mjs` — **the Board State Director (v3 — the ladder;
   brief §4.5).** Triggered by two meters — restlessness (`js/meter.mjs`,
@@ -93,9 +93,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Verified: 420 seeded quakes over 7 realistic positions, zero gifts;
   it rejects ~11% of grid-legal steps overall (0% from opening positions,
   25–35% once files open), and 411/420 quakes still paired symmetrically.
-  Known gaps, deliberately left to Phase 1.3: discovered attacks from the
-  vacated square, rescues of already-hanging pieces, pins, and crumbles
-  (which pick uniformly and so may swallow a queen as readily as air).
+  Two of the old Phase 1.3 gaps are closed as of 2026-09-01: discovered
+  attacks (`editExposes` — the promoted no-new-winning-capture rule prices
+  what any line-editing action uncovers or severs, on breach, displacement
+  and crumble) and crumble victims (quakes cannot swallow; occupied squares
+  are not crumble candidates). Still open: rescues of already-hanging
+  pieces, and pins counted as defenders.
 - `js/variant.mjs` — Phase 0 port + the fixed 60-variant catalog (3–12 files ×
   5–10 ranks: `duel_3x5`…`duel_12x10`, loaded ONCE at boot — variant names
   are single-use) and a variants.ini key allowlist (unknown keys are
@@ -143,12 +146,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   class verbatim, incl. the search watchdog. Boot always sets
   `Use NNUE false` (defaults TRUE in this build) and `Threads 1`.
 - `js/duel.mjs` — the live game loop, a structural port of
-  `phase0/harness/game.mjs`: ffish is the source of truth, game end is
+  `phase0/harness/game.mjs` (since frozen in `harness/legacy/`): ffish is the source of truth, game end is
   `numberLegalMoves() === 0` → side to move loses. The bare-army rule (a
   side stripped to a bare king loses — no lone-king chases) is IN-GRAMMAR
   (`extinctionPieceTypes=*`, `extinctionPieceCount=1`), so the engine plays
-  for strips and hint arrows/eval bar are truthful about them; quakes are
-  guarded so they can never strip a last piece. The game layer adjudicates
+  for strips and hint arrows/eval bar are truthful about them; quakes never
+  remove a piece — crumbles take bare floor only (designer-final
+  2026-09-01). The game layer adjudicates
   only kingless states (surgery-only). Engine history resets via bare
   `position fen` after every quake, plus an engine-stall recovery
   ladder (recycle instance, retry at reduced depth).
@@ -320,7 +324,7 @@ What the panel shows:
 - **Candidate census** (`census now`) — a full enumeration of the CURRENT
   position: displacement tiers A/B/C per side with veto reasons
   (`unsafe_landing` per side is the Phase 1.3 starvation-risk metric),
-  neutral/terminal crumble candidates with veto reasons (`last_piece`,
+  neutral/terminal crumble candidates with veto reasons (`hangs_piece`,
   `exposes_king`, …), locked pawns. This is the one expensive act in the
   overlay — a quake-scale enumeration, 300–720 ms synchronous (rule 14) —
   so it only ever runs from the button (player's turn) or the `__DCK` hook,

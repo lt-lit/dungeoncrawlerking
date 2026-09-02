@@ -6,8 +6,8 @@
 import { CrumbleController, applyCrumble } from './crumble.mjs';
 // Spike 12's validated filter (exposure via turn-flip + isCheck; instant-end
 // via numberLegalMoves===0 and result(false)) — see results/spike12-crumble-filter.md
-import { validateCrumbleCandidate } from '../spikes/crumbleFilter.mjs';
-import { findSquares, isTerrain } from '../lib/fen.mjs';
+import { validateCrumbleCandidate } from '../../spikes/crumbleFilter.mjs';
+import { findSquares, isTerrain } from '../../lib/fen.mjs';
 
 /**
  * Game-end check per spike 11: numberLegalMoves()===0 is the primary end

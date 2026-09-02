@@ -1,0 +1,17 @@
+{
+  "_comment": "The v3 baseline: all three shipped presets + the gods-off control on a stratified 14-stage spread, both orientations. Both seats shallow (ladder-smoke's regime — this asks how the DIRECTOR behaves, and a deep search spends the budget on the engine instead of on god rolls). Run per arm (--arms) in separate processes; expect a few hours per arm.",
+  "name": "presets",
+  "go": "depth 8 movetime 250",
+  "maxPlies": 600,
+  "seeds": 4,
+  "seedBase": 12000,
+  "stageSpread": 14,
+  "orientations": "both",
+  "refereeGo": "depth 12 movetime 300",
+  "arms": [
+    { "key": "off", "gods": "off" },
+    { "key": "calm", "preset": "calm" },
+    { "key": "restless", "preset": "restless" },
+    { "key": "wrathful", "preset": "wrathful" }
+  ]
+}
