@@ -254,9 +254,11 @@ quakes/100p (was 12.3/14.3/20.8), calm terrain-remaining 43%, calm flip
 rate 0.3%/quake — `results/godlab/tuned-ab-findings.md`, incl. the honest
 trades (calm's long tail stretched; wrathful runs hotter under the
 exposure guard via staleness feedback); (d) settle ramp numbers
-from rig + feel together — **the phone decides whether new-calm feels
-calm**; `rampPlies`/`stalenessGain` are the walk-back knobs if it now
-feels too passive. **Wrathful pass 2026-09-01: quakes can no longer
+from rig + feel together — **phone verdict 2026-09-01: calm is "finally
+suitably chill"; its numbers are settled.** Restless is untested on the
+phone; wrathful reads as crazy, which is its brief — its extra heat under
+the exposure guard (26 q/100p) is the one number still on the table, and
+`rampPlies`/`stalenessGain` are the walk-back knobs for any preset. **Wrathful pass 2026-09-01: quakes can no longer
 swallow pieces at all** (designer-final, after a wrathful hole ate a
 knight at ply 13 — the tuned corpus measured wrathful at 1.96
 swallows/game, median ply 51, so the ply-13 knight was typical, not a
@@ -308,6 +310,7 @@ npm install                    # ffish + fairy-stockfish-nnue.wasm
 node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
+node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)

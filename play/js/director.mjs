@@ -82,9 +82,11 @@
 //
 // Retained from v2 unchanged: exhaustive candidate enumeration (sampling
 // starves on late walled boards), the SEE landing guard on displacements
-// (threat.mjs) judged on the COMPOSITE board, kings never displaced, pawns
+// plus the editExposes exposure guard on every line-editing rung
+// (threat.mjs), judged on the COMPOSITE board, kings never displaced, pawns
 // never landed on rank 1 or the promotion rank, no quake gives check or
-// leaves the non-mover in check, no crumble strips a side's last piece, and
+// leaves the non-mover in check, no crumble ever lands on a piece (quakes
+// cannot swallow — designer-final 2026-09-01), and
 // full inside-out instrumentation — every quake() call including null returns
 // leaves a roll trace on `lastTrace`, with probabilities for display coming
 // from the RNG-FREE getters, never from re-rolling.
