@@ -418,14 +418,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .arrow-layer .arrow .halo { stroke: #000; fill: #000; opacity: .6; }
 /* A displacement by the gods: dashed ("moved by nobody"). */
 .arrow-layer .arrow-quake line:not(.halo) { stroke-dasharray: 1.4 .9; }
-/* The eval label IN a hint arrow: dark ink on the shaft, stroked in the
-   arrow's own colour (paint-order) so where it overhangs a short shaft it
-   still sits on arrow colour — no floating box. The .label-halo twin
-   underneath carries the same black outline the arrow has. */
-.arrow-layer .arrow text.label,
-.arrow-layer .arrow text.label-halo { font: 700 2.1px ui-monospace, Menlo, monospace; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke-linejoin: round; }
-.arrow-layer .arrow text.label-halo { fill: #000; stroke: #000; stroke-width: 1.9; opacity: .6; }
-.arrow-layer .arrow text.label { fill: #14151a; stroke: var(--arrow); stroke-width: 1.1; }
+/* The eval label INSIDE a hint arrow: dark ink running along the shaft
+   (board-ui.mjs sets the size and rotation per arrow), fully within the
+   coloured shaft — no box, no halo of its own. */
+.arrow-layer .arrow text.label { fill: #14151a; font-family: ui-monospace, Menlo, monospace; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
 
 .board.inactive .cell { cursor: default; }
 .board:not(.inactive) .cell { cursor: pointer; }

@@ -129,8 +129,12 @@ export class BoardUI {
   /**
    * Draw arrows: [{from, to, strength, rank?, kind?, label?}].
    *
-   * `label` (hints) is the line's eval, written INTO the arrow at the move's
-   * midpoint: dark ink stroked in the arrow's colour — "+0.8", "−1.2", "M3".
+   * `label` (hints) is the line's eval, written INSIDE the arrow: the text
+   * runs along the shaft, rotated with it (never upside down), sized to fit
+   * between the tail and the head, in dark ink on the arrow's colour —
+   * "+0.8", "−1.2", "M3". A labelled arrow gets a fixed wide shaft that
+   * starts at the origin square's centre so even a one-square move has
+   * room; strength then only drives its opacity.
    * `kind` is 'hint' (default — the oracle's best lines; COLOUR carries the
    * rank: 1 gold, 2 silver, 3 bronze) or 'quake' (a displacement the gods
    * just made, in the gods' hue, dashed). `strength` ∈ (0,1] still nudges
@@ -156,13 +160,19 @@ export class BoardUI {
       const ux = dx / len;
       const uy = dy / len;
       const s = Math.max(0, Math.min(1, strength));
-      const width = 1.4 + 0.8 * s; // 1.6–2.2 units: 16–22% of a cell (was 18–34%; thick enough to carry its eval)
-      const head = Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
-      // Shaft starts clear of the origin square's glyph and the tip pulls
-      // short of the destination centre so the head never covers a piece.
-      const tail = kind === 'quake' ? 0.22 : 0.32;
-      const tipX = x2 - ux * CELL * 0.2;
-      const tipY = y2 - uy * CELL * 0.2;
+      // A labelled arrow is a fixed 2.5 units wide (25% of a cell) — the
+      // text's cap height is ~1.4, so it sits inside the coloured shaft with
+      // the outline clear on both sides; otherwise 1.6–2.2 by strength.
+      const width = label ? 2.5 : 1.4 + 0.8 * s;
+      const head = label ? 3.2 : Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
+      // Unlabelled: the shaft starts clear of the origin glyph and the tip
+      // pulls short of the destination centre so the head never covers a
+      // piece. Labelled: start at the origin centre and pull back less, so
+      // a one-square move still has ~6 units of shaft for the number.
+      const tail = label ? 0 : kind === 'quake' ? 0.22 : 0.32;
+      const pull = label ? 0.06 : 0.2;
+      const tipX = x2 - ux * CELL * pull;
+      const tipY = y2 - uy * CELL * pull;
       const baseX = tipX - ux * head;
       const baseY = tipY - uy * head;
       const g = document.createElementNS(SVG_NS, 'g');
@@ -186,12 +196,21 @@ export class BoardUI {
       g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
       g.appendChild(svgEl('polygon', { points }));
       if (label) {
-        // Dark ink on the shaft, backed by the arrow's colour and the halo's
-        // black — it reads as part of the arrow, not a box floating over it.
-        const mx = (x1 + x2) / 2;
-        const my = (y1 + y2) / 2;
-        g.appendChild(svgEl('text', { x: mx, y: my, class: 'label-halo' })).textContent = label;
-        g.appendChild(svgEl('text', { x: mx, y: my, class: 'label' })).textContent = label;
+        // Along the shaft: midpoint between the shaft's start and the head's
+        // base, rotated to the arrow's angle (flipped so it never reads
+        // upside down), font sized to the shaft's length (bold monospace
+        // advances ~0.62 em per glyph) with a floor so it stays a number.
+        const sx = x1 + ux * CELL * tail;
+        const sy = y1 + uy * CELL * tail;
+        const mx = (sx + baseX) / 2;
+        const my = (sy + baseY) / 2;
+        const shaftLen = Math.hypot(baseX - sx, baseY - sy);
+        const size = Math.max(1.3, Math.min(2.0, (shaftLen - 0.6) / (0.62 * label.length)));
+        let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
+        if (deg > 90 || deg <= -90) deg += 180;
+        const text = svgEl('text', { x: mx, y: my, class: 'label', 'font-size': size.toFixed(2), transform: `rotate(${deg.toFixed(1)} ${mx} ${my})` });
+        text.textContent = label;
+        g.appendChild(text);
       }
       this.svg.appendChild(g);
     }
