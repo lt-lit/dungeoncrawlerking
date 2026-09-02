@@ -46,7 +46,15 @@ evaluating" option, `?probe=` override, and cancel hardening — an
 unanswered `stop` recycles the instance and `duel.#search` pins MultiPV 1;
 `?fx=0` is stamped as `data-fx` so CSS motion collapses too; the selftest
 gained a renderer check and `__DCK.cheat`/`__DCK.marks`; a live-board smoke
-lives in `phase0/harness/ui-smoke.mjs` — see `play/README.md`); **Phase 1.2 — the Gods debug overlay ✅ done**
+lives in `phase0/harness/ui-smoke.mjs`; **round 2, same day**: floor is olive
+flagstone and walls are pixel-art purple-grey stone blocks, a cracked wall is
+the block with a branching black crack and NO crate sprite, hint arrows are
+outlined on shaft and head and carry their eval in a pill, and `^` has
+SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
+crate/rubble; cosmetics only, never grid state) authored over the whole bed
+by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
+family by the stage notes, a reviewed override table) with sprites
+generated into `style.css` by `gen-sprites.mjs` — see `play/README.md`); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +

@@ -26,6 +26,9 @@
 //               an army captured; the AND is what keeps them from painting).
 //   .furniture stays on a .cracked cell: everything that keys off "this cell
 //   holds a capturable sprite" keeps working, and the cell carries the look.
+//   skin-<name> on a .furniture cell picks the SPRITE (door, barrel, table,
+//   chair, shelf, chest, rubble; the crate is the default) from the stage's
+//   skin grid (stage.mjs stageSkins) — cosmetics only, never grid state.
 //
 // COORDINATES: file letters along the bottom visual row and rank numbers down
 // the left visual column, as .coord children of the edge cells — every
@@ -124,8 +127,10 @@ export class BoardUI {
   }
 
   /**
-   * Draw arrows: [{from, to, strength, rank?, kind?}].
+   * Draw arrows: [{from, to, strength, rank?, kind?, label?}].
    *
+   * `label` (hints) is the line's eval, drawn as a small pill riding the
+   * arrow at its midpoint in the arrow's colour — "+0.8", "−1.2", "M3".
    * `kind` is 'hint' (default — the oracle's best lines; COLOUR carries the
    * rank: 1 gold, 2 silver, 3 bronze) or 'quake' (a displacement the gods
    * just made, in the gods' hue, dashed). `strength` ∈ (0,1] still nudges
@@ -141,7 +146,7 @@ export class BoardUI {
     // hints from worst rank to best, so rank 1 is appended last (on top).
     const key = (a) => (a.kind === 'quake' ? -100 : -(a.rank ?? 2 - (a.strength ?? 1)));
     const sorted = [...arrows].sort((a, b) => key(a) - key(b));
-    for (const { from, to, strength = 1, rank = null, kind = 'hint' } of sorted) {
+    for (const { from, to, strength = 1, rank = null, kind = 'hint', label = null } of sorted) {
       const [x1, y1] = this.#squareCenter(from);
       const [x2, y2] = this.#squareCenter(to);
       const dx = x2 - x1;
@@ -180,6 +185,18 @@ export class BoardUI {
       g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 1.1 }));
       g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
       g.appendChild(svgEl('polygon', { points }));
+      if (label) {
+        // Midpoint of the whole move, so an adjacent-square arrow's label
+        // straddles the shared edge instead of burying its short shaft.
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        const w = 1.45 * label.length + 1.4;
+        const h = 3.2;
+        g.appendChild(svgEl('rect', { class: 'label-bg', x: mx - w / 2, y: my - h / 2, width: w, height: h, rx: 0.9 }));
+        const text = svgEl('text', { class: 'label', x: mx, y: my });
+        text.textContent = label;
+        g.appendChild(text);
+      }
       this.svg.appendChild(g);
     }
   }
@@ -191,9 +208,12 @@ export class BoardUI {
    * names): a '*' in `holes` paints as a hole, not a wall; a '^' in
    * `godCrates` paints as a cracked wall, not a crate. Omit both (the setup
    * preview has no Director) and every '*' is stone, every '^' a crate.
+   * `skins` is the stage's {square: skinName} map (stage.mjs stageSkins):
+   * an authored '^' with a skin gets the `skin-<name>` class and paints
+   * that sprite; a god-cracked wall never takes a skin.
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
-  setPosition(fen, { holes = EMPTY, godCrates = EMPTY } = {}) {
+  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {} } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
     for (const [sq, cell] of this.cells) {
@@ -207,7 +227,11 @@ export class BoardUI {
       cell.classList.toggle('wall', isWall && !holes.has(sq));
       cell.classList.toggle('hole', isWall && holes.has(sq));
       cell.classList.toggle('furniture', isFurniture);
-      cell.classList.toggle('cracked', isFurniture && godCrates.has(sq));
+      const cracked = isFurniture && godCrates.has(sq);
+      cell.classList.toggle('cracked', cracked);
+      const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
+      for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
+      if (skin) cell.classList.add(`skin-${skin}`);
       let glyph = cell.querySelector('.piece');
       if (v && v !== WALL) {
         if (!glyph) {

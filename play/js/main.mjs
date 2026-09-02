@@ -38,7 +38,7 @@
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
-import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
+import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
@@ -456,7 +456,7 @@ function applyHintLines(pvs, n, duel, partial) {
     const m = pv.move.match(UCI_MOVE_RE);
     if (!m) continue;
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
-    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint' });
+    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', label: pv.score ? fmtScore(pv.score) : null });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
@@ -1230,7 +1230,7 @@ function syncPanel() {
 const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
 
 /** (Re)mount the board for the given dims and show a position on it. */
-function mountPreviewBoard(files, ranks, fen) {
+function mountPreviewBoard(files, ranks, fen, skins = {}) {
   if (!app.boardUI || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
     if (app.boardUI) app.boardUI.destroy();
     app.boardUI = new BoardUI($('board'), {
@@ -1240,7 +1240,7 @@ function mountPreviewBoard(files, ranks, fen) {
       onSquareTap: onSquareTap,
     });
   }
-  app.boardUI.setPosition(fen);
+  app.boardUI.setPosition(fen, { skins });
   app.boardUI.setMarks({});
   app.boardUI.setInteractive(false);
 }
@@ -1262,7 +1262,7 @@ function terrainOnly() {
   for (let r = 0; r < t.ranks; r++) {
     for (let f = 0; f < t.files; f++) if (t.grid[r][f] !== null) board[t.ranks - 1 - r][f] = t.grid[r][f];
   }
-  return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1` };
+  return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1`, skins: stageSkins(t) };
 }
 
 /** THE live loop: recompute the deal from the current knobs and paint the
@@ -1284,7 +1284,7 @@ function refreshLiveDeal() {
   if (!deal.ok) {
     app.session = null;
     const t = terrainOnly();
-    mountPreviewBoard(t.files, t.ranks, t.fen);
+    mountPreviewBoard(t.files, t.ranks, t.fen, t.skins);
     $('enemy-bar').textContent = 'enemy · black';
     setPlayerBarText('you · white');
     out.textContent = `✗ ${deal.error}`;
@@ -1294,7 +1294,7 @@ function refreshLiveDeal() {
     return;
   }
   app.session = makeSession(deal);
-  mountPreviewBoard(deal.files, deal.ranks, deal.fen);
+  mountPreviewBoard(deal.files, deal.ranks, deal.fen, stageSkins(deal.stage));
   $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
   setPlayerBarText(`you · white · ${deal.white.army.value} pts`);
   const edge = deal.edge > 0 ? `your edge +${deal.edge}` : deal.edge < 0 ? `enemy edge +${-deal.edge}` : 'even armies';
@@ -1474,7 +1474,8 @@ async function driveTurn() {
  *  has no Director and paints bare (every '*' stone, every '^' a crate). */
 function paintBoard(fen) {
   const dir = app.duel?.director;
-  app.boardUI.setPosition(fen, dir ? { holes: dir.holes, godCrates: dir.godCrates } : {});
+  const skins = stageSkins(app.session?.deal?.stage);
+  app.boardUI.setPosition(fen, dir ? { holes: dir.holes, godCrates: dir.godCrates, skins } : { skins });
 }
 
 /** Compose all in-play board marks (selection, last move, check, the gods'

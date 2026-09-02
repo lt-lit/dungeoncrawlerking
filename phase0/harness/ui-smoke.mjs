@@ -90,11 +90,20 @@ await page.evaluate(() => {
 });
 await page.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
 
-if (SHOTS) fs.mkdirSync(OUT, { recursive: true });
+if (SHOTS) {
+  fs.rmSync(OUT, { recursive: true, force: true }); // ply-numbered names: a stale shot from an earlier run would masquerade as this one
+  fs.mkdirSync(OUT, { recursive: true });
+}
 const shot = async (name) => {
   if (!SHOTS) return;
   await page.locator('#screen-duel').screenshot({ path: path.join(OUT, `${name}.png`) });
 };
+
+// --- skins: the doorway's furniture leaf paints as a door from ply 0 ---------
+if (STAGE === 's07-the-doorway') {
+  const door = await page.evaluate(() => ({ cls: window.__DCK.marks.cell('d6'), sprite: !!document.querySelector('#board [data-square="d6"] .piece.neutral') }));
+  expect(door.cls?.includes('furniture') && door.cls?.includes('skin-door') && door.sprite, `d6 is the door leaf with its sprite (${door.cls})`);
+}
 
 // --- the streaming probe: arrows appear, ranked, with a depth readout --------
 const probe = await page
@@ -106,6 +115,8 @@ if (probe) {
   expect(probe.arrows.every((a) => a.kind === 'hint' && a.rank >= 1), `arrows carry rank + kind: ${JSON.stringify(probe.arrows)}`);
   expect(probe.arrows[0].rank === 1, 'rank 1 is first in the arrow list');
   expect(/^1 /.test(probe.hintLine), `hint line starts with the rank-1 SAN: "${probe.hintLine}"`);
+  const labels = await page.evaluate(() => [...document.querySelectorAll('#board .arrow-layer g.arrow-hint text.label')].map((t) => t.textContent));
+  expect(labels.length === probe.arrows.length && labels.every((l) => /^(\+|−|-)?\d+\.\d$|^−?M\d+$/.test(l)), `every hint arrow carries an eval label: ${labels}`);
   const domRanks = await page.evaluate(() => [...document.querySelectorAll('#board .arrow-layer g.arrow-hint')].map((g) => g.dataset.rank));
   expect(domRanks.length === probe.arrows.length && domRanks[domRanks.length - 1] === '1', `DOM draws hints worst→best, best on top: ${domRanks}`);
   // A streaming probe repaints: wait for the depth to move at least once
@@ -173,7 +184,14 @@ for (let i = 0; i < PLIES; i++) {
       // cracked and then broken open in one window shows as a breach.
       for (const sq of wantCracked) {
         if (m.breached.includes(sq)) expect(cells[sq]?.includes('fresh-breach') && !cells[sq]?.includes('fresh-crack'), `${sq}: cracked then breached → breach mark only (${cells[sq]})`);
-        else expect(cells[sq]?.includes('fresh-crack') && cells[sq]?.includes('cracked') && cells[sq]?.includes('furniture'), `${sq}: cracked-wall tile + fresh-crack ring (${cells[sq]})`);
+        else {
+          expect(cells[sq]?.includes('fresh-crack') && cells[sq]?.includes('cracked') && cells[sq]?.includes('furniture'), `${sq}: cracked-wall tile + fresh-crack ring (${cells[sq]})`);
+          // The sprite on a cracked wall is the CRACK, never a crate (the
+          // crate default and the crack rule share a specificity — order bug
+          // caught 2026-09-02 by a screenshot).
+          const bg = await page.evaluate((s) => getComputedStyle(document.querySelector(`#board [data-square="${s}"] .piece.neutral`)).backgroundImage, sq);
+          expect(bg.includes('0b0a10') && !bg.includes('3a2213'), `${sq}: cracked wall paints the crack, not a crate sprite`);
+        }
       }
       for (const sq of wantBreached) {
         if (wantPits.includes(sq)) expect(cells[sq]?.includes('hole') && !cells[sq]?.includes('fresh-breach'), `${sq}: breached then collapsed → hole only (${cells[sq]})`);
@@ -254,8 +272,11 @@ expect(quakesChecked > 0, `${quakesChecked} quake(s) fired in ${PLIES} plies`);
 expect(hintTurns === turns, `hints painted on every player turn (${hintTurns}/${turns})`);
 await shot('05-final');
 // The options panel: the new "Keep evaluating" toggle and the terrain legend.
-await page.click('#btnOptions');
-expect(await page.evaluate(() => !!document.getElementById('optHintCont') && document.querySelectorAll('.legend .cell').length === 4), 'options panel has the Keep-evaluating toggle and a 4-tile legend');
+// A programmatic click: the end-of-duel overlay may be covering the topbar
+// button when the random game finished early, and a real click would wait
+// on it forever.
+await page.evaluate(() => document.getElementById('btnOptions').click());
+expect(await page.evaluate(() => !!document.getElementById('optHintCont') && document.querySelectorAll('.legend .cell').length === 6), 'options panel has the Keep-evaluating toggle and a 6-tile legend');
 if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT, '06-options.png') });
 await browser.close();
 server.close();

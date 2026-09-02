@@ -15,7 +15,7 @@ import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { captureLoss } from './threat.mjs';
-import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
+import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
 import { BoardUI } from './board-ui.mjs';
 
@@ -162,8 +162,16 @@ async function main() {
       if (JSON.stringify([...back.furniture].sort()) !== JSON.stringify([...s.furniture].sort())) {
         throw new Error(`${s.id}: double flip changed the furniture set`);
       }
+      // Skins ride the transform beside the map (2026-09-02).
+      if (JSON.stringify(back.skin) !== JSON.stringify(s.skin)) throw new Error(`${s.id}: double flip changed the skin grid`);
+      const flipped = flipStageVertical(s);
+      for (const [sq, name] of Object.entries(stageSkins(s))) {
+        const mirror = `${sq[0]}${s.ranks + 1 - parseInt(sq.slice(1), 10)}`;
+        if (stageSkins(flipped)[mirror] !== name) throw new Error(`${s.id}: skin on ${sq} did not mirror to ${mirror}`);
+      }
     }
-    return `${stages.length} stages round-trip (walls + furniture)`;
+    const skinned = stages.reduce((n, s) => n + Object.keys(stageSkins(s)).length, 0);
+    return `${stages.length} stages round-trip (walls + furniture + ${skinned} skins)`;
   });
 
   // Synthetic fixtures from here down — deliberately NOT tied to stage ids,
@@ -771,11 +779,13 @@ async function main() {
     const has = (sq, cls) => ui.cellClasses(sq).includes(cls);
     // Ranks top→bottom: rank 2 holds crates on c2/d2, rank 1 walls on a1/b1.
     const fen = '4/4/4/2^^/**2 w - - 0 1';
-    ui.setPosition(fen, { holes: new Set(['b1']), godCrates: new Set(['d2', 'zz9']) });
+    ui.setPosition(fen, { holes: new Set(['b1']), godCrates: new Set(['d2', 'zz9']), skins: { c2: 'door', d2: 'barrel' } });
     if (!has('a1', 'wall') || has('a1', 'hole')) throw new Error(`a1 should be an authored wall: ${ui.cellClasses('a1')}`);
     if (!has('b1', 'hole') || has('b1', 'wall')) throw new Error(`b1 should be a hole: ${ui.cellClasses('b1')}`);
     if (!has('c2', 'furniture') || has('c2', 'cracked')) throw new Error(`c2 should be a plain crate: ${ui.cellClasses('c2')}`);
     if (!has('d2', 'furniture') || !has('d2', 'cracked')) throw new Error(`d2 should be a cracked wall: ${ui.cellClasses('d2')}`);
+    if (!has('c2', 'skin-door')) throw new Error(`c2 should wear its door skin: ${ui.cellClasses('c2')}`);
+    if (has('d2', 'skin-barrel')) throw new Error('a god-cracked wall never takes a skin');
     if (has('a3', 'wall') || has('a3', 'hole') || has('a3', 'furniture')) throw new Error('a3 should be bare floor');
     for (const sq of ['c2', 'd2']) {
       if (!host.querySelector(`[data-square="${sq}"] .piece.neutral`)) throw new Error(`${sq}: both crate kinds keep the one neutral sprite`);
@@ -783,6 +793,7 @@ async function main() {
     // No ledgers (the setup preview): every '*' is stone, every '^' a crate.
     ui.setPosition(fen);
     if (!has('b1', 'wall') || has('b1', 'hole') || has('d2', 'cracked')) throw new Error('bare setPosition must paint authored terrain only');
+    if (has('c2', 'skin-door')) throw new Error('a repaint without skins must drop the old skin class');
     // A held terrain-fx class is stripped by the commit.
     host.querySelector('[data-square="a1"]').classList.add('cracking');
     ui.setPosition(fen);
@@ -803,7 +814,7 @@ async function main() {
       quakeFrom: ['a3'],
       quakeTo: ['a4'],
       arrows: [
-        { from: 'a3', to: 'a4', strength: 1, rank: 1, kind: 'hint' },
+        { from: 'a3', to: 'a4', strength: 1, rank: 1, kind: 'hint', label: '+0.8' },
         { from: 'b3', to: 'b4', strength: 0.5, rank: 2, kind: 'hint' },
         { from: 'c3', to: 'c4', strength: 0.2, rank: 3, kind: 'hint' },
         { from: 'd3', to: 'd4', strength: 0.7, kind: 'quake' },
@@ -821,9 +832,11 @@ async function main() {
     const bestWidth = parseFloat(gs[3].querySelector('line:not(.halo)').getAttribute('stroke-width'));
     if (!(bestWidth > 1.4 && bestWidth < 1.8)) throw new Error(`best arrow shaft should be ~1.6 viewBox units (16% of a cell), got ${bestWidth}`);
     if (gs[3].querySelectorAll('.halo').length !== 2) throw new Error('every arrow carries a halo line + head');
+    if (gs[3].querySelector('text.label')?.textContent !== '+0.8' || !gs[3].querySelector('rect.label-bg')) throw new Error('the rank-1 arrow carries its eval label');
+    if (gs[2].querySelector('text.label')) throw new Error('an arrow without a label draws none');
     ui.setMarks({});
     if (host.querySelector('.arrow-layer g.arrow') || has('a1', 'fresh-crack') || has('b1', 'fresh-pit')) throw new Error('setMarks({}) must clear marks and arrows');
-    return 'wall/hole/crate/cracked from the ledgers, a–d + 5–1 coordinates, 5 rung marks, arrows ranked 3→2→1 over the quake arrow';
+    return 'wall/hole/crate/cracked (+ a door skin) from the ledgers, a–d + 5–1 coordinates, 5 rung marks, arrows ranked 3→2→1 over the quake arrow, eval label on rank 1';
   });
 
   finish(null);

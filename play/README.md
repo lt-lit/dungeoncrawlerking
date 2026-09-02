@@ -167,19 +167,25 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `data-square` addressing, fits 3×5–12×10 boards on a 390×844 viewport.
   **Terrain tiles (2026-09-02 UI refresh)** — one CELL class per kind, so a
   tileset later replaces only what each class paints: `.wall` (authored
-  stone, a raised slab), `.hole` (a square the gods crumbled — the sunken
-  pit, permanent), `.furniture` (a crate `^`, §4.6) and `.cracked` (a wall
-  the gods weakened into a crate — the slab shot through with a web of
-  cracks, §4.5's telegraph on the board). FSF reads walls and holes alike
-  as `*`, so `setPosition(fen, { holes, godCrates })` takes the Director's
-  two ledgers (main.mjs `paintBoard`; the setup preview paints bare).
-  Furniture deliberately renders like a PIECE — a neutral `▦` glyph
-  (`.piece.neutral`, the `--furniture` wood tone; stone-grey on a cracked
-  wall) over the cell — because it can be captured: the capture-dissolve
-  animation and the ringed target mark then cover crate smashes with zero
-  extra code. ONE sprite for every furniture flavor (crates, doors, weak
-  masonry — per-stage fiction; the crate/cracked split is Director state,
-  not a skin). Edge **coordinates** (`.coord`: files along the bottom row,
+  stone — a cold purple-grey outlined block on the warm olive floor),
+  `.hole` (a square the gods crumbled — the sunken pit, permanent),
+  `.furniture` (a `^`, §4.6) and `.cracked` (a wall the gods weakened — the
+  same stone block with a branching black crack across it, §4.5's
+  telegraph on the board; NOT a crate). FSF reads walls and holes alike
+  as `*`, so `setPosition(fen, { holes, godCrates, skins })` takes the
+  Director's two ledgers plus the stage's skin map (main.mjs `paintBoard`;
+  the setup preview passes skins only). The tiles and the furniture
+  SPRITES are pixel-art SVG data URIs generated into `style.css` by
+  `phase0/harness/gen-sprites.mjs` (crate, door, barrel, table, chair,
+  shelf, chest, rubble, the stone block, the crack) — a real tileset
+  replaces those variables and nothing else. Furniture deliberately
+  renders like a PIECE — one neutral `.piece.neutral` element per cell,
+  painting the sprite its `skin-<name>` class picks (the crate by default;
+  on a cracked wall it carries the crack itself) — because it can be
+  captured: the capture-dissolve animation, the breach burst and the
+  ringed target mark then cover every flavor with zero extra code. Skins
+  are cosmetics, never grid state; the crate/cracked split is Director
+  state. Edge **coordinates** (`.coord`: files along the bottom row,
   ranks down the left column) make every square the log names findable.
   Marks compose on separate channels: terrain = `background`, residue and
   debug rings = `box-shadow`, last move = `filter`, selection/check =
@@ -221,7 +227,18 @@ A stage is GROUND — walls and dimensions drawn as ASCII, nothing else
 (§4.6: the neutral capturable occupant — terrain to molding/crop/the gods,
 an ordinary capture in play; `^`→`.` derives the stone-only corpus control
 arm from the same file); rectangular, top rank first; 3–12 files × 5–10
-ranks (the engine's largeboard caps). The locked stages are a curated
+ranks (the engine's largeboard caps). An optional **`skin`** grid, the same
+shape as the map, says what each `^` LOOKS like — `D` door · `B` barrel ·
+`T` table · `C` chair · `S` shelf · `X` chest · `K` crate · `R` rubble ·
+`.` default (crate). Skins are cosmetics only (the same `^` to the engine,
+molding, crop, the camp line and the gods); a letter on a non-`^` square is
+a load error. They ride flip, crop and the auto-crop beside the map and
+reach the renderer as `stageSkins()` (a square→skin map). The bed's skins
+are authored by `phase0/harness/gen-skins.mjs` — rule-based (a `^` embedded
+in a wall line is a door; the notes pick the furniture family; 2×2 blocks
+are stacked crates) plus a reviewed per-square override table — and kept
+in the stage files so the diff stays the review surface; regenerate the
+manifest after running it. The locked stages are a curated
 sample of plausible dungeon slices — Phase 2's dungeon generator replaces
 authoring wholesale, so there is no editor; the diff and the gallery are
 the review surface.
@@ -289,9 +306,10 @@ verification is the meter-lab rerun on this same bed.
 The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
 on the player's turn — arrows coloured by RANK, gold / silver / bronze, at
-about half their old size, whose width/opacity still scale lichess-style
-with how close each move is to the best one; the ranked SANs plus the
-reached depth go to the hint line in the player's bar under the board;
+about half their old size, outlined, each carrying its eval in a small
+pill ("+0.8", "−M2"), whose width/opacity still scale lichess-style with
+how close each move is to the best one; the ranked SANs plus the reached
+depth go to the hint line in the player's bar under the board;
 MultiPV is restored to 1 when the probe settles and pinned to 1 by the duel
 before every reply, which stays full-strength), **Keep evaluating** (the
 probe drops its time limit and thinks to the depth cap or until you move —
