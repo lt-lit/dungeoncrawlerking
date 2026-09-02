@@ -34,7 +34,19 @@ guarantee — see brief §4.5's amended "Holes are forever"). Sanity harness:
 Next per brief §10, a Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
-`play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay ✅ done**
+`play/js/threat.mjs`); **UI refresh ✅ built 2026-09-02** (designer-settled: terrain
+TILES by kind — wall slab / hole / crate / cracked wall, painted from
+`director.holes` + `godCrates` via `setPosition(fen, ledgers)`; edge
+coordinates; hint arrows gold/silver/bronze by RANK at half size; the gods'
+residue in their own light-blue hue, one mark per rung plus a dashed arrow
+per displacement, merged across quakes and mirrored in a gods line under
+the board; per-rung terrain fx held on their end frame; the hint probe
+STREAMS at the enemy's own `depth 22 movetime 10000` with a "Keep
+evaluating" option, `?probe=` override, and cancel hardening — an
+unanswered `stop` recycles the instance and `duel.#search` pins MultiPV 1;
+`?fx=0` is stamped as `data-fx` so CSS motion collapses too; the selftest
+gained a renderer check and `__DCK.cheat`/`__DCK.marks`; a live-board smoke
+lives in `phase0/harness/ui-smoke.mjs` — see `play/README.md`); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +
@@ -311,6 +323,7 @@ node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
+node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe on a forced-hot duel (+ screenshots)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)

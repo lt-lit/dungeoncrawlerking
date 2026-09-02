@@ -1,7 +1,13 @@
 /* Dungeon Crawler King — duel slice. Dark dungeon theme, mobile-first.
    Sizing invariant: every board from 3×5 to 12×10 fits a 390×844 viewport
    with topbar + controls visible (board width is capped by both the
-   viewport width and the height budget via --files/--ranks aspect math). */
+   viewport width and the height budget via --files/--ranks aspect math).
+
+   Colour roles (2026-09-02 UI refresh): GOLD is the player's — selection,
+   targets, last move, the best hint; METALLIC (gold/silver/bronze) is the
+   oracle's hint ranking; the GODS' hue is light blue — every mark and arrow
+   the Board State Director leaves behind; RUST is a fresh hole; RED is
+   check. Keep the roles apart: a mark's colour should say WHO did it. */
 
 :root {
   color-scheme: dark;
@@ -18,7 +24,29 @@
   --cell-light: #3a3d49;
   --cell-dark: #262933;
   --pit: #0a0a0e;
+  --stone: #5b5e6c; /* authored wall slab — clearly lighter than the floor: mass ABOVE it */
+  --stone-lo: #3d3f4a;
+  --stone-cracked: #6a625e; /* a weakened wall: warmer, lighter, so it pops from intact stone */
+  --crack: #0c0b10;
+  --rust: #b4553a; /* a fresh hole's rim */
   --furniture: #a8845a; /* neutral wood tone — neither side's piece color */
+  --gods: #7cc8ff; /* the Board State Director's hue: light blue, nobody's colour */
+  --hint-1: #f2c14e; /* the oracle's ranks: gold, silver, bronze */
+  --hint-2: #c9ced8;
+  --hint-3: #c8813f;
+  /* The cracked-wall web (one definition, shared by the tile and its fx):
+     seven fissures, dark cores ~4% wide with a light edge, over a lighter,
+     warmer slab — "a lot of cracks" was the designer's ask. */
+  --crack-web:
+    linear-gradient(118deg, transparent 41%, #ffffff40 42.5%, var(--crack) 44%, var(--crack) 49%, #ffffff30 50.5%, transparent 52%),
+    linear-gradient(38deg, transparent 55%, #ffffff36 56.5%, var(--crack) 58%, var(--crack) 62.5%, transparent 64%),
+    linear-gradient(160deg, transparent 16%, var(--crack) 17.5%, var(--crack) 22%, #ffffff30 23.5%, transparent 25%),
+    linear-gradient(72deg, transparent 69%, #ffffff36 70%, var(--crack) 71.5%, var(--crack) 76%, transparent 77.5%),
+    linear-gradient(148deg, transparent 77%, var(--crack) 78.5%, var(--crack) 82.5%, transparent 84%),
+    linear-gradient(12deg, transparent 28%, var(--crack) 29%, var(--crack) 33%, #ffffff2a 34%, transparent 35.5%),
+    linear-gradient(95deg, transparent 8%, var(--crack) 9.5%, var(--crack) 13%, #ffffff2a 14%, transparent 15.5%),
+    linear-gradient(180deg, #ffffff33 0, #ffffff33 2px, transparent 2px, transparent calc(100% - 3px), #00000090 calc(100% - 3px)),
+    linear-gradient(180deg, var(--stone-cracked) 0%, #5a534f 60%, #433d3a 100%);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -101,7 +129,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .log:empty { display: none; }
 .log .ok { color: var(--ok); }
 .log .bad { color: var(--bad); }
-.log .crumble { color: var(--gold); }
+.log .gods { color: var(--gods); } /* the gods acted */
+.log .warn { color: var(--gold); } /* infrastructure: stalls, probe failures, undo */
 
 /* ---------- setup screen (stage picker + army generator) ---------- */
 
@@ -190,6 +219,15 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   padding: .15rem .2rem;
 }
 
+/* The player's bar also carries the hint list and the gods line (folded in
+   rather than a new row: the board's height budget is the scarce thing on
+   a phone). Both sub-lines drop the uppercase treatment — they name squares. */
+#player-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .7rem; }
+#hint-line, #gods-line { text-transform: none; letter-spacing: 0; font-family: ui-monospace, monospace; }
+#hint-line { color: var(--gold); }
+#gods-line { color: var(--gods); }
+#hint-line:empty, #gods-line:empty { display: none; }
+
 /* ---------- board ---------- */
 
 .board {
@@ -224,21 +262,67 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .cell.light { background: var(--cell-light); }
 .cell.dark { background: var(--cell-dark); }
 
+/* Edge coordinates: file letters along the bottom row, rank numbers down the
+   left column (board-ui.mjs). Tiny, muted, out of the glyph's way. */
+.coord {
+  position: absolute;
+  font-family: ui-monospace, monospace;
+  font-size: 22cqmin;
+  line-height: 1;
+  color: #ffffff66;
+  pointer-events: none;
+  text-shadow: 0 0 2px #000;
+}
+.coord-file { right: 6%; bottom: 4%; }
+.coord-rank { left: 6%; top: 4%; }
+
+/* ---------- terrain tiles ----------
+   ONE channel: terrain paints `background` only. Residue and debug rings use
+   `box-shadow`, the last-move tint `filter`, selection/check `outline`, the
+   target dot `::after` — so on a shared square every mark composes instead
+   of the last rule silently winning. A tileset replaces only these rules. */
+
+/* Authored stone: a RAISED slab (was literally the pit — stone read as a
+   hole). Top highlight, bottom shadow, faint mortar courses. */
 .cell.wall {
   background:
-    radial-gradient(ellipse at 50% 45%, #000 0%, var(--pit) 70%),
-    var(--pit);
-  box-shadow: inset 0 3px 8px #000;
+    linear-gradient(180deg, #ffffff33 0, #ffffff33 2px, transparent 2px, transparent calc(100% - 3px), #00000090 calc(100% - 3px)),
+    linear-gradient(90deg, #ffffff14 0, transparent 2px),
+    repeating-linear-gradient(180deg, transparent 0, transparent 30%, #00000038 30%, #00000038 32%),
+    linear-gradient(180deg, var(--stone) 0%, #50535f 60%, var(--stone-lo) 100%);
 }
 
-/* Furniture (§4.6): where the wall is a sunken pit, furniture is a RAISED
-   object standing on the floor — a subtle bevel tint under a neutral glyph
+/* A god-made hole: sunken, black, permanent. Also the END frame of the
+   crumble animation (cell-darken below), so the commit is invisible. */
+.cell.hole {
+  background:
+    linear-gradient(180deg, #000 0, transparent 40%),
+    radial-gradient(ellipse at 50% 45%, #000 0%, var(--pit) 70%),
+    var(--pit);
+}
+
+/* Furniture (§4.6): where the hole is sunken, a crate is a RAISED object
+   standing on the floor — a subtle bevel tint under a neutral glyph
    (.piece.neutral, board-ui.mjs), so it reads as terrain at a glance and as
    a capturable occupant when the eye scans for pieces. */
 .cell.furniture {
-  background-image: linear-gradient(160deg, #ffffff12, #00000030);
-  box-shadow: inset 0 0 0 1px #00000066, inset 0 -2px 3px #00000040;
+  background-image:
+    linear-gradient(180deg, transparent 0, transparent calc(100% - 3px), #00000050 calc(100% - 3px)),
+    linear-gradient(160deg, #ffffff12, #00000030);
 }
+
+/* A wall the gods WEAKENED (§4.5): the slab, lighter and warmer, shot
+   through with a web of cracks — dark cores with a light edge so they read
+   on both cell shades and at 30 px. The sprite stays the one neutral
+   furniture glyph (it is capturable exactly like a crate); the cell carries
+   the difference. `.furniture` stays on the cell — this rule is later, so
+   its background wins. */
+.cell.cracked {
+  background: var(--crack-web);
+}
+/* Stone rubble, not wood — and smaller/translucent so the crack web, not
+   the sprite, is what the eye lands on. */
+.cell.cracked .piece.neutral { color: #cfc9d6; font-size: 56cqmin; opacity: .8; }
 
 .piece {
   font-size: 78cqmin;
@@ -252,17 +336,18 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 
 /* ---------- Gods debug heat marks (Phase 1.2) ----------
    Candidate census painted on the board: displacement landing squares by
-   tier (A gold / B blue / C dim), 't' = terminal crumble. Deliberately
-   BEFORE every game-mark rule below (selection, last-move, check, quake
-   residue): equal specificity, so on a shared square the live-game marks
-   win the cascade tie and the debug layer never masks play state. */
+   tier (A bright yellow #ffd75a / B blue / C dim), 't' = terminal crumble.
+   Deliberately BEFORE every game-mark rule below (selection, last-move,
+   check, quake residue): equal specificity, so on a shared square the
+   live-game marks win the cascade tie and the debug layer never masks play
+   state. */
 
 .cell.heat-a { box-shadow: inset 0 0 0 3px #ffd75ac8; }
 .cell.heat-b { box-shadow: inset 0 0 0 3px #6cc3ff96; }
 .cell.heat-c { box-shadow: inset 0 0 0 2px #9a9daa55; }
 .cell.heat-t { box-shadow: inset 0 0 0 3px #ff5a5ac8; }
 
-/* marks */
+/* ---------- the player's marks (gold) ---------- */
 .cell.sel { outline: 3px solid var(--gold); outline-offset: -3px; z-index: 1; }
 
 .cell.target::after {
@@ -274,18 +359,19 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background: #d7b46a88;
 }
 
-.cell.target:has(.piece)::after,
-.cell.target.wall::after {
+.cell.target:has(.piece)::after {
   width: 88%;
   height: 88%;
   background: none;
   border: 3px solid #d7b46a88;
 }
 
-.cell.last { box-shadow: inset 0 0 0 100vmax #d7b46a22; }
+/* Last move: a filter, not a tint on the box-shadow channel — a reply that
+   lands on a quake square keeps both marks. */
+.cell.last { filter: brightness(1.22); }
 .cell.check { outline: 3px solid var(--bad); outline-offset: -3px; z-index: 1; }
 
-/* cheat-mode hint arrows (blue, lichess-style; width/opacity = strength) */
+/* ---------- arrows: the oracle's hints and the gods' displacements ---------- */
 .arrow-layer {
   position: absolute;
   inset: 0;
@@ -295,26 +381,21 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   z-index: 3;
 }
 
-.arrow-layer .arrow line { stroke: #6cc3ff; stroke-linecap: round; }
-.arrow-layer .arrow polygon { fill: #6cc3ff; }
+.arrow-layer .arrow line { stroke-linecap: round; }
+.arrow-layer .arrow .halo { stroke: #000; fill: #000; opacity: .55; }
+/* Hint ranks: colour IS the rank (board-ui.mjs setArrows). */
+.arrow-layer .arrow-hint line { stroke: var(--hint-1); }
+.arrow-layer .arrow-hint polygon { fill: var(--hint-1); }
+.arrow-layer .arrow-hint.rank-2 line { stroke: var(--hint-2); }
+.arrow-layer .arrow-hint.rank-2 polygon { fill: var(--hint-2); }
+.arrow-layer .arrow-hint.rank-3 line { stroke: var(--hint-3); }
+.arrow-layer .arrow-hint.rank-3 polygon { fill: var(--hint-3); }
+/* A displacement by the gods: their hue, dashed ("moved by nobody"). */
+.arrow-layer .arrow-quake line { stroke: var(--gods); stroke-dasharray: 1.4 .9; }
+.arrow-layer .arrow-quake polygon { fill: var(--gods); }
 
 .board.inactive .cell { cursor: default; }
 .board:not(.inactive) .cell { cursor: pointer; }
-
-@keyframes crumble-fall {
-  0%   { transform: translateY(0) rotate(0);        opacity: 1; }
-  30%  { transform: translateY(2%) rotate(3deg); }
-  55%  { transform: translateY(-3%) rotate(-4deg); }
-  100% { transform: translateY(60%) rotate(8deg) scale(.6); opacity: 0; }
-}
-
-.cell.crumbling { animation: cell-darken var(--fx-ms, .45s) ease-in forwards; }
-.cell.crumbling .piece,
-.cell.crumbling::before { animation: crumble-fall var(--fx-ms, .45s) ease-in forwards; }
-
-@keyframes cell-darken {
-  to { background: var(--pit); box-shadow: inset 0 3px 8px #000; }
-}
 
 /* ---------- piece motion (FLIP clones on the fx layer) ---------- */
 
@@ -356,40 +437,108 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   75% { transform: translate(2px, 1px) rotate(.15deg); }
 }
 
-/* The gods' residue — persists through the enemy's reply, clears when the
-   player moves. from and to read differently so direction is legible at a
-   glance: the vacated square is a hollow outline, the landing square is
-   filled and ringed. */
+/* Terrain fx, one per rung (board-ui.mjs animateTerrain). Each ENDS on the
+   tile it produces and is held there until setPosition commits the edit, so
+   an edited square never snaps back mid-quake. Durations come from --fx-ms
+   (set inline from FX()), so ?fx=0 and reduced motion collapse them. */
+
+/* WEAKEN — a wall cracks: the slab jitters and the crack web appears under
+   a flash of light. The background is the .cracked tile from frame one. */
+.cell.cracking {
+  background: var(--crack-web);
+  animation: crack-jitter var(--fx-ms, .3s) steps(6) forwards;
+}
+
+@keyframes crack-jitter {
+  0%   { transform: translate(0, 0); filter: brightness(2.2); }
+  20%  { transform: translate(-1px, 1px); }
+  40%  { transform: translate(1px, -1px); filter: brightness(1.6); }
+  60%  { transform: translate(-1px, 0); }
+  80%  { transform: translate(1px, 1px); filter: brightness(1.2); }
+  100% { transform: translate(0, 0); filter: brightness(1); }
+}
+
+/* BREACH — a crate bursts: the sprite shatters outward while the cell
+   flashes LIGHT and settles to bare floor. Never the pit vocabulary (it
+   used to play "floor gives way" for an opening, the opposite meaning). */
+.cell.furniture.breaching,
+.cell.cracked.breaching { background-image: none; }
+.cell.breaching { animation: burst-flash var(--fx-ms, .32s) ease-out forwards; }
+.cell.breaching .piece { animation: shard-burst var(--fx-ms, .32s) ease-out forwards; }
+
+@keyframes burst-flash {
+  0%   { box-shadow: inset 0 0 0 100vmax #ffffffa0; }
+  60%  { box-shadow: inset 0 0 0 100vmax #ffffff30; }
+  100% { box-shadow: inset 0 0 0 100vmax transparent; }
+}
+
+@keyframes shard-burst {
+  0%   { transform: scale(1) rotate(0); opacity: 1; }
+  35%  { transform: scale(1.3) rotate(-8deg); opacity: .9; }
+  100% { transform: scale(.2) rotate(14deg); opacity: 0; }
+}
+
+/* CRUMBLE — the floor gives way: the cell sinks to the hole tile. */
+.cell.crumbling { animation: cell-darken var(--fx-ms, .45s) ease-in forwards; }
+
+@keyframes cell-darken {
+  to {
+    background:
+      linear-gradient(180deg, #000 0, transparent 40%),
+      radial-gradient(ellipse at 50% 45%, #000 0%, var(--pit) 70%),
+      var(--pit);
+  }
+}
+
+/* ---------- the gods' residue (light blue) ----------
+   Persists through the enemy's reply, clears when the player moves. One
+   class per RUNG: the vacated square is a hollow outline, the landing
+   square a filled ring (the displacement itself is an arrow on the SVG
+   layer), a cracked wall a thin ring, a breach a bright ring with an open
+   fill, a fresh hole a rust rim. All on the box-shadow channel, so they
+   compose with the terrain tile underneath. */
 .cell.quake-from {
-  box-shadow: inset 0 0 0 2px #d7b46a55;
-  background-image: radial-gradient(circle at 50% 50%, #d7b46a18 0%, transparent 65%);
+  box-shadow: inset 0 0 0 2px #7cc8ff66, inset 0 0 0 100vmax #7cc8ff12;
 }
 
 .cell.quake-to {
-  box-shadow: inset 0 0 0 3px var(--gold);
-  background-image: radial-gradient(circle at 50% 50%, #d7b46a30 0%, transparent 70%);
+  box-shadow: inset 0 0 0 3px var(--gods), inset 0 0 0 100vmax #7cc8ff26;
+}
+
+.cell.fresh-crack {
+  box-shadow: inset 0 0 0 2px #7cc8ffb0, inset 0 0 8px #7cc8ff40;
+}
+
+.cell.fresh-breach {
+  box-shadow: inset 0 0 0 3px var(--gods), inset 0 0 0 100vmax #7cc8ff2e;
 }
 
 .cell.fresh-pit {
-  box-shadow: inset 0 3px 8px #000, inset 0 0 0 3px #b4553aaa;
+  box-shadow: inset 0 0 0 3px var(--rust), inset 0 3px 8px #000;
 }
 
-/* A wall the gods just weakened or breached. Warmer and shallower than a
-   pit: a pit is permanent and swallows, a crack is an opening. */
-.cell.fresh-terrain {
-  box-shadow: inset 0 0 10px #00000066, inset 0 0 0 3px #d9a75899;
-}
-
-/* Respect the OS setting: no motion, marks only. ?fx=0 does the same thing
-   from the driver side (main.mjs), which is also what keeps E2E fast. */
+/* Respect the OS setting: no motion, marks only. The driver stamps
+   data-fx="0" on <html> for ?fx=0 (main.mjs), so CSS-timed motion collapses
+   with the JS-timed kind — a transition that escapes this block would keep
+   running under a headless driver. */
 @media (prefers-reduced-motion: reduce) {
   .fx-piece,
-  .piece.fx-captured { transition: none; }
+  .piece.fx-captured,
+  #eval-fill { transition: none; }
   #board.quaking,
-  .cell.crumbling,
-  .cell.crumbling .piece,
-  .cell.crumbling::before { animation: none; }
+  .cell.cracking,
+  .cell.breaching,
+  .cell.breaching .piece,
+  .cell.crumbling { animation: none; }
 }
+:root[data-fx="0"] .fx-piece,
+:root[data-fx="0"] .piece.fx-captured,
+:root[data-fx="0"] #eval-fill { transition: none; }
+:root[data-fx="0"] #board.quaking,
+:root[data-fx="0"] .cell.cracking,
+:root[data-fx="0"] .cell.breaching,
+:root[data-fx="0"] .cell.breaching .piece,
+:root[data-fx="0"] .cell.crumbling { animation: none; }
 
 /* ---------- preview controls ---------- */
 
@@ -459,6 +608,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   border-radius: .8rem;
   padding: 1.1rem 1.4rem;
   min-width: 260px;
+  max-height: 92dvh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: .7rem;
@@ -475,6 +626,12 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #god-knobs input[type="number"] { width: 4.2rem; margin-left: auto; background: var(--panel, #1c2233); color: inherit; border: 1px solid var(--accent-2); border-radius: 4px; padding: .15rem .3rem; }
 .opt select { margin-left: auto; }
 .opt-hint { font-size: .8rem; color: var(--muted); margin: 0 0 .3rem; }
+
+/* Terrain legend: real board tiles, so it cannot drift from the board. */
+.legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .78rem; color: var(--muted); margin: 0 0 .3rem; }
+.legend span { display: inline-flex; align-items: center; gap: .35rem; }
+.legend .cell { width: 1.1rem; height: 1.1rem; border: 1px solid #000; border-radius: 2px; }
+.legend .cell .piece { font-size: .8rem; }
 
 #overlay, .promo-overlay {
   position: fixed;

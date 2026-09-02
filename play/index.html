@@ -30,7 +30,10 @@
     <div id="enemy-bar" class="side-bar"></div>
     <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
     <div id="board"></div>
-    <div id="player-bar" class="side-bar"></div>
+    <!-- The player's bar also carries the hint list and the gods line (the
+         last quake, held until the player moves) — folded in rather than
+         a new row, to protect the board's height budget on a phone. -->
+    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
     <div id="preview-controls" hidden>
       <button id="btnBegin" class="primary">Begin duel</button>
       <button id="btnRedeal">Re-deal</button>
@@ -110,6 +113,7 @@
       <label class="opt sub"><input type="checkbox" id="optHints"> Show best
         <select id="optHintN"><option>1</option><option>2</option><option selected>3</option></select>
         moves</label>
+      <label class="opt sub"><input type="checkbox" id="optHintCont"> Keep evaluating (no time limit — costs battery)</label>
       <label class="opt sub"><input type="checkbox" id="optUndo"> Allow undo</label>
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
     </div>
@@ -118,6 +122,14 @@
       walls crack, crates shatter, pieces scoot, squares collapse. Temperament
       and intensity are dialled in the debug panel (enable the overlay below);
       custom knob values live here and apply live mid-duel.</p>
+    <!-- Terrain legend built from the board's own tile classes (style.css),
+         so it cannot drift from what the board paints. -->
+    <div class="legend" aria-label="terrain legend">
+      <span><span class="cell wall"></span>wall</span>
+      <span><span class="cell hole"></span>hole (forever)</span>
+      <span><span class="cell furniture"><span class="piece neutral">&#9638;</span></span>crate</span>
+      <span><span class="cell furniture cracked"><span class="piece neutral">&#9638;</span></span>cracked wall</span>
+    </div>
     <!-- Temperament + intensity moved to the debug panel head (designer,
          2026-09-01): they are tuning dials, and the panel is where tuning
          happens. The custom knob VALUES stay here; picking Custom in the

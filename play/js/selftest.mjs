@@ -17,6 +17,7 @@ import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPaw
 import { captureLoss } from './threat.mjs';
 import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
+import { BoardUI } from './board-ui.mjs';
 
 const out = document.getElementById('out');
 const summaryEl = document.getElementById('summary');
@@ -758,6 +759,71 @@ async function main() {
     if (n !== 0) throw new Error(`expected 0 legal moves, got ${n}`);
     if (inCheck) throw new Error('expected stalemate, position is check');
     return 'black to move, 0 legal moves, not in check → black loses, white wins';
+  });
+
+  // --- Board renderer (2026-09-02 UI refresh) --------------------------------
+  // The only automated net the renderer has: a detached board, the tile
+  // classes from the Director ledgers, the edge coordinates, the per-rung
+  // residue marks and the ranked arrow layer. Looks are the phone's job.
+  await check('board renderer: tiles from ledgers, coordinates, rung marks, ranked arrows', async () => {
+    const host = document.createElement('div');
+    const ui = new BoardUI(host, { files: 4, ranks: 5 });
+    const has = (sq, cls) => ui.cellClasses(sq).includes(cls);
+    // Ranks top→bottom: rank 2 holds crates on c2/d2, rank 1 walls on a1/b1.
+    const fen = '4/4/4/2^^/**2 w - - 0 1';
+    ui.setPosition(fen, { holes: new Set(['b1']), godCrates: new Set(['d2', 'zz9']) });
+    if (!has('a1', 'wall') || has('a1', 'hole')) throw new Error(`a1 should be an authored wall: ${ui.cellClasses('a1')}`);
+    if (!has('b1', 'hole') || has('b1', 'wall')) throw new Error(`b1 should be a hole: ${ui.cellClasses('b1')}`);
+    if (!has('c2', 'furniture') || has('c2', 'cracked')) throw new Error(`c2 should be a plain crate: ${ui.cellClasses('c2')}`);
+    if (!has('d2', 'furniture') || !has('d2', 'cracked')) throw new Error(`d2 should be a cracked wall: ${ui.cellClasses('d2')}`);
+    if (has('a3', 'wall') || has('a3', 'hole') || has('a3', 'furniture')) throw new Error('a3 should be bare floor');
+    for (const sq of ['c2', 'd2']) {
+      if (!host.querySelector(`[data-square="${sq}"] .piece.neutral`)) throw new Error(`${sq}: both crate kinds keep the one neutral sprite`);
+    }
+    // No ledgers (the setup preview): every '*' is stone, every '^' a crate.
+    ui.setPosition(fen);
+    if (!has('b1', 'wall') || has('b1', 'hole') || has('d2', 'cracked')) throw new Error('bare setPosition must paint authored terrain only');
+    // A held terrain-fx class is stripped by the commit.
+    host.querySelector('[data-square="a1"]').classList.add('cracking');
+    ui.setPosition(fen);
+    if (has('a1', 'cracking')) throw new Error('setPosition must strip held fx classes');
+    await ui.animateTerrain('a1', 'weaken', 0, { hold: true }); // ms=0: no-op (reduced motion)
+    if (has('a1', 'cracking')) throw new Error('animateTerrain with ms=0 must not touch the cell');
+    // Coordinates: file letters along the bottom row, rank numbers down the left column.
+    const files = [...host.querySelectorAll('.coord-file')].map((el) => el.textContent).join('');
+    const ranks = [...host.querySelectorAll('.coord-rank')].map((el) => el.textContent).join(',');
+    if (files !== 'abcd') throw new Error(`file coordinates: ${files}`);
+    if (ranks !== '5,4,3,2,1') throw new Error(`rank coordinates: ${ranks}`);
+    if (host.querySelectorAll('[data-square="a1"] .coord').length !== 2) throw new Error('a1 carries both coordinates');
+    // Residue marks, one class per rung; arrows ranked, the quake arrow beneath.
+    ui.setMarks({
+      cracked: ['a1'],
+      breached: ['c2'],
+      pit: 'b1',
+      quakeFrom: ['a3'],
+      quakeTo: ['a4'],
+      arrows: [
+        { from: 'a3', to: 'a4', strength: 1, rank: 1, kind: 'hint' },
+        { from: 'b3', to: 'b4', strength: 0.5, rank: 2, kind: 'hint' },
+        { from: 'c3', to: 'c4', strength: 0.2, rank: 3, kind: 'hint' },
+        { from: 'd3', to: 'd4', strength: 0.7, kind: 'quake' },
+      ],
+    });
+    for (const [sq, cls] of [['a1', 'fresh-crack'], ['c2', 'fresh-breach'], ['b1', 'fresh-pit'], ['a3', 'quake-from'], ['a4', 'quake-to']]) {
+      if (!has(sq, cls)) throw new Error(`${sq} should carry ${cls}: ${ui.cellClasses(sq)}`);
+    }
+    const gs = [...host.querySelectorAll('.arrow-layer g.arrow')];
+    if (gs.length !== 4) throw new Error(`expected 4 arrows, got ${gs.length}`);
+    if (!gs[0].classList.contains('arrow-quake')) throw new Error('the quake arrow must draw first (beneath the hints)');
+    const rankOrder = gs.slice(1).map((g) => g.dataset.rank).join('');
+    if (rankOrder !== '321') throw new Error(`hint arrows must draw worst→best (best on top), got ranks ${rankOrder}`);
+    if (!gs[3].classList.contains('rank-1') || !gs[3].classList.contains('arrow-hint')) throw new Error('rank-1 hint arrow class missing');
+    const bestWidth = parseFloat(gs[3].querySelector('line:not(.halo)').getAttribute('stroke-width'));
+    if (!(bestWidth > 1.4 && bestWidth < 1.8)) throw new Error(`best arrow shaft should be ~1.6 viewBox units (16% of a cell), got ${bestWidth}`);
+    if (gs[3].querySelectorAll('.halo').length !== 2) throw new Error('every arrow carries a halo line + head');
+    ui.setMarks({});
+    if (host.querySelector('.arrow-layer g.arrow') || has('a1', 'fresh-crack') || has('b1', 'fresh-pit')) throw new Error('setMarks({}) must clear marks and arrows');
+    return 'wall/hole/crate/cracked from the ledgers, a–d + 5–1 coordinates, 5 rung marks, arrows ranked 3→2→1 over the quake arrow';
   });
 
   finish(null);

@@ -37,7 +37,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 `index.html` — service-worker scope) injects them after one self-reload.
 
 - `index.html` — the game. Debug/E2E query params (see `js/main.mjs` header):
-  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…`
+  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…&probe=…`
   (army spec strings are `width:spec:archetype:anchor`, spec = `b<points>`
   or piece letters — e.g. `w=6:b30`, `b=5:QRNN:scrambled`), plus Director
   overrides `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&dirseed=`
@@ -46,8 +46,15 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `waitIdle()` waits them out). `prefers-reduced-motion` does the same by
   default.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
-  60-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
-  must read PASS.
+  60-variant catalog, crumble filter, stalemate-as-loss protocol, and since
+  2026-09-02 a detached-board renderer check). All lines must read PASS.
+- Headless gates, from `phase0/` (`npm i --no-save playwright` once):
+  `node harness/selftest-headless.mjs` runs the selftest in real Chromium;
+  `node harness/ui-smoke.mjs --shots` plays a forced-hot duel on the LIVE
+  board and asserts the tiles, the per-rung residue marks and arrows, the
+  gods line, the log, and the streaming hint probe, with screenshots in
+  `phase0/results/ui-smoke/` for the eye. `window.__DCK.cheat` and
+  `window.__DCK.marks` are the read-only surfaces it uses.
 
 ## Layout
 
@@ -158,23 +165,42 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   ladder (recycle instance, retry at reduced depth).
 - `js/board-ui.mjs`, `style.css` — board/promotion rendering, absolute
   `data-square` addressing, fits 3×5–12×10 boards on a 390×844 viewport.
-  Terrain: a stone wall is a sunken-pit CELL treatment; furniture (§4.6)
-  deliberately renders like a PIECE — a neutral `▦` glyph
-  (`.piece.neutral`, the `--furniture` wood tone) over a raised cell
-  bevel — because it can be captured: the capture-dissolve animation and
-  the ringed target mark then cover crate smashes with zero extra code.
-  One sprite for every furniture flavor (crates, doors, weak masonry —
-  per-stage fiction); skins are a future cosmetic layer, never grid state.
-  **Phase 1.1 motion:** pieces travel between squares as FLIP clones on an
+  **Terrain tiles (2026-09-02 UI refresh)** — one CELL class per kind, so a
+  tileset later replaces only what each class paints: `.wall` (authored
+  stone, a raised slab), `.hole` (a square the gods crumbled — the sunken
+  pit, permanent), `.furniture` (a crate `^`, §4.6) and `.cracked` (a wall
+  the gods weakened into a crate — the slab shot through with a web of
+  cracks, §4.5's telegraph on the board). FSF reads walls and holes alike
+  as `*`, so `setPosition(fen, { holes, godCrates })` takes the Director's
+  two ledgers (main.mjs `paintBoard`; the setup preview paints bare).
+  Furniture deliberately renders like a PIECE — a neutral `▦` glyph
+  (`.piece.neutral`, the `--furniture` wood tone; stone-grey on a cracked
+  wall) over the cell — because it can be captured: the capture-dissolve
+  animation and the ringed target mark then cover crate smashes with zero
+  extra code. ONE sprite for every furniture flavor (crates, doors, weak
+  masonry — per-stage fiction; the crate/cracked split is Director state,
+  not a skin). Edge **coordinates** (`.coord`: files along the bottom row,
+  ranks down the left column) make every square the log names findable.
+  Marks compose on separate channels: terrain = `background`, residue and
+  debug rings = `box-shadow`, last move = `filter`, selection/check =
+  `outline`, targets = `::after`.
+  **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
   dissolving under the incoming piece. Quakes play as three beats (rumble →
-  motion → settle) rather than one 450 ms window, and leave **directional**
-  marks (`quake-from` hollow, `quake-to` filled, `fresh-pit`) that persist
-  through the enemy's reply and clear when the player moves. The old cue
-  flashed both squares with one class, so it showed *that* something moved
-  but never *which way* — and its 700 ms flash outlived the 450 ms wait, so
-  the piece teleported mid-flash.
+  motion → settle), with terrain fx per RUNG (`animateTerrain`: a weaken
+  cracks, a breach bursts, a crumble sinks — each held on its end frame
+  until the commit), and leave the gods' **residue** in their own light-blue
+  hue: `quake-from` hollow, `quake-to` filled plus a dashed **arrow** on the
+  SVG layer for every displacement, `fresh-crack`, `fresh-breach`, and
+  `fresh-pit` (rust). Residue persists through the enemy's reply, MERGES
+  across quakes in one window, and clears when the player moves; the same
+  actions are written to the **gods line** in the player's bar under the
+  board ("⚡ the gods: wall cracks c4 · your knight e4→e5") and to the log.
+  Colour roles: gold = the player's own marks, gold/silver/bronze = the
+  oracle's ranked hints, light blue = the gods, rust = a fresh hole, red =
+  check. Every CSS-timed motion is also gated by `data-fx="0"` on `<html>`
+  (stamped for `?fx=0`), not only by the OS reduced-motion setting.
 - `js/main.mjs` — boot, the setup screen (stage picker + generator panel),
   duel driving, win/loss.
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
@@ -260,12 +286,16 @@ verification is the meter-lab rerun on this same bed.
 
 ## Options / Cheater Mode
 
-The gear menu has a Cheater Mode toggle with three sub-options, persisted in
+The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
-on the player's turn — lichess-style arrows whose width/opacity scale with
-how close each move is to the best one, + SANs in the status line; MultiPV
-is always reset to 1 before the engine's own replies, which stay
-full-strength), **Allow undo** (snapshot-based rewind to the player's
+on the player's turn — arrows coloured by RANK, gold / silver / bronze, at
+about half their old size, whose width/opacity still scale lichess-style
+with how close each move is to the best one; the ranked SANs plus the
+reached depth go to the hint line in the player's bar under the board;
+MultiPV is restored to 1 when the probe settles and pinned to 1 by the duel
+before every reply, which stays full-strength), **Keep evaluating** (the
+probe drops its time limit and thinks to the depth cap or until you move —
+costs battery), **Allow undo** (snapshot-based rewind to the player's
 previous turn, usable from the loss screen; the Director RNG stream is not
 rewound), and **Show eval bar** (player-POV score from the engine's replies
 and the cheat probes). The old "edit enemy pieces" testing tool retired
@@ -276,6 +306,18 @@ seconds** per move (`depth 22 movetime 10000` — the depth cap is the WASM
 stability rule, not a strength limit). Small boards still reply in
 <200 ms because depth 22 arrives first; big boards get the full think.
 Lab corpora set their own faster limits.
+
+The hint probe (2026-09-02) thinks as long as the enemy does — the same
+`depth 22 movetime 10000`, or the bare depth cap with Keep evaluating —
+and STREAMS: every `info multipv` line repaints the arrows (engine.mjs
+`go()` takes an `onLine` reader), so the first hints land at depth ~8
+within a few hundred ms and sharpen while you think; the hint line shows
+the depth reached (`1 Nf3 · 2 e4 · 3 d4 · d14…`). `?probe=<go args>`
+overrides it (E2E runs pass a short one next to `?go=`). Cancel hardening:
+your move sends `stop` and waits ≤300 ms; a probe that never answers marks
+the instance suspect and it is recycled before the reply search (measured:
+a second `go` sent into an un-stopped search receives the FIRST search's
+bestmove, which would desync the duel).
 
 ## The Gods debug overlay (Phase 1.2)
 
@@ -307,14 +349,14 @@ What the panel shows:
 - **Per-ply roll trace** — one line per completed ply (quiet plies dim),
   from `record.quakeTraces`. Each trace carries every draw (value +
   threshold), the RNG-free probabilities, the census of what the
-  enumerations produced, and an ordered reason-code path: `pre-onset` ·
-  `quake-roll-failed` · `quake` · `crumble-forced` · `crumble-roll-passed` ·
-  `crumble-roll-failed` · `no-first-leg` · `paired` · `unpaired-one-sided` ·
-  `unpaired-held` · `crumble-neutral` · `crumble-terminal` · `starved`.
-  `fellThrough` marks the case the nominal numbers hide — the displacement
-  leg came up empty (`no-first-leg` / `unpaired-held`) and the quake dropped
-  into the crumble leg anyway — which is why crumbles land MORE often than
-  `P(crumble|quake)` implies. A `VETOED` marker means the duel layer's
+  enumerations produced, and an ordered reason-code path (v3 ladder):
+  `pre-onset` · `held-in-check` · `quake-roll-failed` · `quake` ·
+  `crumble-forced` · `weaken` · `breach` · `displace` · `no-displacement` ·
+  `crumble-neutral` · `crumble-terminal` · `starved`, plus `budget`,
+  `rungsSpent` (every action in order, `terminal` included) and
+  `rungFallback` (a rolled rung with nothing to work on walked the ladder).
+  `fellThrough` means the budget ran out of legal actions before it was
+  spent. A `VETOED` marker means the duel layer's
   safety net overrode the Director (also logged to `record.anomalies`).
 - **Next-roll readout + forecast** — the getters at ply+1, debt/cap, favor,
   plus median plies for next quake / first crumble / closure from
@@ -331,7 +373,7 @@ What the panel shows:
   never per-ply. Quake traces get their census for free from the
   enumerations the quake itself ran.
 - **Board heat** (`heat: on`) — the census painted on the board: landing
-  squares by tier (A gold / B blue / C dim), terminal crumbles red. The
+  squares by tier (A yellow / B blue / C dim), terminal crumbles red. The
   census describes one position, so heat switches itself off on any move or
   quake instead of silently re-enumerating.
 - **Eval delta per quake** — the ground truth of "did the arena change who's

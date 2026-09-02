@@ -219,6 +219,12 @@ export class DuelController {
    *  in the recoverable overrun case). Tracked so destroy() can stop it and
    *  the host can fence a reused engine (see whenQuiet). */
   #search(goArgs) {
+    // Pin MultiPV to 1 before EVERY reply search (§2.2: the enemy's own
+    // moves are full-strength single-PV searches). The host's hint probe
+    // runs MultiPV=n on this same instance and restores 1 when it settles —
+    // but a probe that died mid-search never settles, and a reply run under
+    // MultiPV=n hands lastScore the WORST line's score. Idempotent otherwise.
+    this.engine.setoption('MultiPV', '1');
     this.engine.position({ fen: this.baseFen, moves: this.movesSinceBase });
     const mt = goArgs.match(/movetime (\d+)/);
     // A healthy overrun emits bestmove right after the go() watchdog's `stop`
@@ -379,6 +385,10 @@ export class DuelController {
       // total over the record. An undo that dropped either would let the gods
       // re-crack a sealed pit or forget how bored they were.
       holes: [...this.director.holes],
+      // God-minted crates are ledger state too (the breach bias, and the
+      // renderer's cracked-wall tile): an undo that dropped them would paint
+      // a weakened wall as an authored crate and lose the gods' +3 on it.
+      godCrates: [...this.director.godCrates],
       meter: this.director.meter.value,
       lens: {
         moves: this.record.moves.length,
@@ -415,6 +425,7 @@ export class DuelController {
     this.ply = s.ply;
     this.director.debt = s.debt;
     this.director.holes = new Set(s.holes ?? []);
+    this.director.godCrates = new Set(s.godCrates ?? []);
     this.director.meter.value = s.meter ?? 0;
     this.record.moves.length = s.lens.moves;
     this.record.sans.length = s.lens.moves;
