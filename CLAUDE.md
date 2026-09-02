@@ -49,7 +49,8 @@ gained a renderer check and `__DCK.cheat`/`__DCK.marks`; a live-board smoke
 lives in `phase0/harness/ui-smoke.mjs`; **round 2, same day**: floor is olive
 flagstone and walls are pixel-art purple-grey stone blocks, a cracked wall is
 the block with a branching black crack and NO crate sprite, hint arrows are
-outlined on shaft and head and carry their eval in a pill, and `^` has
+outlined on shaft and head and carry their eval written into the arrow (paints
+are depth-consistent across ranks), the floor is warm grey, and `^` has
 SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
 crate/rubble; cosmetics only, never grid state) authored over the whole bed
 by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture

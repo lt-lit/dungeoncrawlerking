@@ -830,9 +830,10 @@ async function main() {
     if (rankOrder !== '321') throw new Error(`hint arrows must draw worst→best (best on top), got ranks ${rankOrder}`);
     if (!gs[3].classList.contains('rank-1') || !gs[3].classList.contains('arrow-hint')) throw new Error('rank-1 hint arrow class missing');
     const bestWidth = parseFloat(gs[3].querySelector('line:not(.halo)').getAttribute('stroke-width'));
-    if (!(bestWidth > 1.4 && bestWidth < 1.8)) throw new Error(`best arrow shaft should be ~1.6 viewBox units (16% of a cell), got ${bestWidth}`);
+    if (!(bestWidth > 2.0 && bestWidth < 2.4)) throw new Error(`best arrow shaft should be ~2.2 viewBox units (22% of a cell), got ${bestWidth}`);
     if (gs[3].querySelectorAll('.halo').length !== 2) throw new Error('every arrow carries a halo line + head');
-    if (gs[3].querySelector('text.label')?.textContent !== '+0.8' || !gs[3].querySelector('rect.label-bg')) throw new Error('the rank-1 arrow carries its eval label');
+    if (gs[3].querySelector('text.label')?.textContent !== '+0.8' || gs[3].querySelector('text.label-halo')?.textContent !== '+0.8') throw new Error('the rank-1 arrow carries its eval label (ink + halo twin)');
+    if (gs[3].querySelector('rect')) throw new Error('no box behind the label — the eval is written into the arrow');
     if (gs[2].querySelector('text.label')) throw new Error('an arrow without a label draws none');
     ui.setMarks({});
     if (host.querySelector('.arrow-layer g.arrow') || has('a1', 'fresh-crack') || has('b1', 'fresh-pit')) throw new Error('setMarks({}) must clear marks and arrows');

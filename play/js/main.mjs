@@ -377,25 +377,29 @@ async function runCheatSearch() {
   // before the player has moved on; an untimed search ends at the depth cap
   // on its own (or on the player's move), so it gets a long leash.
   const timeout = mt ? parseInt(mt[1], 10) + 4000 : 600000;
-  // The streaming reader: keep the deepest line per rank; repaint when the
-  // last rank of a depth reports (Stockfish emits multipv 1..n per completed
-  // depth) or, debounced, whenever lines are still arriving — a position
-  // with fewer legal moves than n never reports rank n at all.
+  // The streaming reader paints only depth-COMPLETE sets. Stockfish emits
+  // multipv 1..n per completed depth, so a rank-1 line at a NEW depth means
+  // every rank that exists has reported the previous depth: paint that set
+  // (one iteration behind the newest, and never a rank-3 label from depth
+  // 11 beside a rank-1 label from depth 12). A short debounce covers the
+  // last depth of a search that ends without a further rank-1 line.
   const live = new Map();
-  const paint = () => {
+  const paint = (set) => {
     cheat.paintTimer = null;
     if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing' || app.busy) return;
-    applyHintLines([...live.values()], n, duel, true);
+    if (!set.size) return;
+    cheat.depth = set.get(1)?.depth ?? cheat.depth;
+    applyHintLines([...set.values()], n, duel, true);
   };
   const onLine = (line) => {
     if (mySeq !== cheat.seq) return;
     const pv = parseInfoLine(line);
     if (!pv) return;
-    live.set(pv.rank, pv);
-    if (pv.rank === 1) cheat.depth = pv.depth;
     clearTimeout(cheat.paintTimer);
-    if (pv.rank === n) paint();
-    else cheat.paintTimer = setTimeout(paint, 120);
+    if (pv.rank === 1 && live.has(1) && pv.depth > live.get(1).depth) paint(new Map(live));
+    live.set(pv.rank, pv);
+    const snapshot = live;
+    cheat.paintTimer = setTimeout(() => paint(new Map(snapshot)), 150);
   };
   let p;
   try {
@@ -467,7 +471,8 @@ function applyHintLines(pvs, n, duel, partial) {
   }
   app.cheatArrows = arrows;
   renderPlayMarks();
-  const depth = cheat.depth ?? sorted[0].depth;
+  const depth = sorted[0].depth ?? cheat.depth;
+  if (depth) cheat.depth = depth;
   setHintLine(`${sans.join(' · ')}${depth ? ` · d${depth}${partial ? '…' : ''}` : ''}`);
 }
 

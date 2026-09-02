@@ -129,8 +129,8 @@ export class BoardUI {
   /**
    * Draw arrows: [{from, to, strength, rank?, kind?, label?}].
    *
-   * `label` (hints) is the line's eval, drawn as a small pill riding the
-   * arrow at its midpoint in the arrow's colour — "+0.8", "−1.2", "M3".
+   * `label` (hints) is the line's eval, written INTO the arrow at the move's
+   * midpoint: dark ink stroked in the arrow's colour — "+0.8", "−1.2", "M3".
    * `kind` is 'hint' (default — the oracle's best lines; COLOUR carries the
    * rank: 1 gold, 2 silver, 3 bronze) or 'quake' (a displacement the gods
    * just made, in the gods' hue, dashed). `strength` ∈ (0,1] still nudges
@@ -156,8 +156,8 @@ export class BoardUI {
       const ux = dx / len;
       const uy = dy / len;
       const s = Math.max(0, Math.min(1, strength));
-      const width = 0.8 + 0.8 * s; // 0.9–1.6 units: 9–16% of a cell (was 18–34%)
-      const head = Math.min(3.0, width * 1.9); // head length ≤ 30% of a cell (was 65%)
+      const width = 1.4 + 0.8 * s; // 1.6–2.2 units: 16–22% of a cell (was 18–34%; thick enough to carry its eval)
+      const head = Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
       // Shaft starts clear of the origin square's glyph and the tip pulls
       // short of the destination centre so the head never covers a piece.
       const tail = kind === 'quake' ? 0.22 : 0.32;
@@ -186,16 +186,12 @@ export class BoardUI {
       g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
       g.appendChild(svgEl('polygon', { points }));
       if (label) {
-        // Midpoint of the whole move, so an adjacent-square arrow's label
-        // straddles the shared edge instead of burying its short shaft.
+        // Dark ink on the shaft, backed by the arrow's colour and the halo's
+        // black — it reads as part of the arrow, not a box floating over it.
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
-        const w = 1.45 * label.length + 1.4;
-        const h = 3.2;
-        g.appendChild(svgEl('rect', { class: 'label-bg', x: mx - w / 2, y: my - h / 2, width: w, height: h, rx: 0.9 }));
-        const text = svgEl('text', { class: 'label', x: mx, y: my });
-        text.textContent = label;
-        g.appendChild(text);
+        g.appendChild(svgEl('text', { x: mx, y: my, class: 'label-halo' })).textContent = label;
+        g.appendChild(svgEl('text', { x: mx, y: my, class: 'label' })).textContent = label;
       }
       this.svg.appendChild(g);
     }

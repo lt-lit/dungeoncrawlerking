@@ -306,8 +306,8 @@ verification is the meter-lab rerun on this same bed.
 The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
 on the player's turn — arrows coloured by RANK, gold / silver / bronze, at
-about half their old size, outlined, each carrying its eval in a small
-pill ("+0.8", "−M2"), whose width/opacity still scale lichess-style with
+about half their old size, outlined, each carrying its eval written INTO
+the arrow ("+0.8", "−M2"), whose width/opacity still scale lichess-style with
 how close each move is to the best one; the ranked SANs plus the reached
 depth go to the hint line in the player's bar under the board;
 MultiPV is restored to 1 when the probe settles and pinned to 1 by the duel

@@ -48,10 +48,15 @@ const SPRITES = {
     const ink = branches.map((d) => PATH(d, P.crack, 2.1)).join('');
     return svg(edge + ink);
   })(),
-  // Wooden crate with an X of battens.
+  // A crate: horizontal plank slats with dark seams, a raised lighter lid
+  // strip, and four iron nails at the corners of the batten frame — a stack
+  // of planks reads as a crate where a box with an X read as a tile.
   crate: svg(
-    R(1, 1, 14, 14, P.ink) + R(2, 2, 12, 12, P.wood) + R(2, 2, 12, 1, P.woodHi) + R(2, 2, 1, 12, P.woodHi) + R(2, 13, 12, 1, P.woodLo) + R(13, 2, 1, 12, P.woodLo) +
-    PATH('M3 3l10 10M13 3L3 13', P.woodLo, 1.5) + R(6, 6, 4, 4, P.wood) + R(7, 7, 2, 2, P.woodHi)
+    R(1, 1, 14, 14, P.ink) + R(2, 2, 12, 12, P.wood) +
+    R(2, 2, 12, 2, P.woodHi) + R(2, 5, 12, 1, P.woodDeep) + R(2, 8, 12, 1, P.woodDeep) + R(2, 11, 12, 1, P.woodDeep) +
+    R(2, 6, 12, 1, P.woodHi) + R(2, 9, 12, 1, P.woodHi) + R(2, 12, 12, 2, P.woodLo) +
+    R(2, 2, 2, 12, P.woodLo) + R(12, 2, 2, 12, P.woodLo) + R(3, 3, 1, 10, P.wood) + R(12, 3, 1, 10, P.woodDeep) +
+    R(3, 3, 1, 1, P.iron) + R(12, 3, 1, 1, P.iron) + R(3, 12, 1, 1, P.iron) + R(12, 12, 1, 1, P.iron)
   ),
   // A door IN a wall: stone jambs and lintel (the wall's own block colours)
   // around an arched door of vertical planks, one iron band, a ring handle.
