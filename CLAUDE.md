@@ -93,10 +93,22 @@ FITTED so its tallest piece stands 0.96 cell — no piece rises into the
 square above (designer: overlap reads badly clustered) — via `data-piece`
 on every piece span + `data-pieces` on the board (`PIECE_SETS`, Options →
 Pieces, `?pieces=`; classic = the glyphs), the promotion picker included;
-the FLIP clone copies the piece's own box; selftest 35/35, ui-smoke asserts
-the themes, the doorway's masks, the crack over its wall, the props and
-the piece sprites on the live board — see `play/README.md` § "Art
-themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+the FLIP clone copies the piece's own box; **round 9**: pieces sit
+CENTRED in their square (not on the bottom edge); props paint at native
+16-px scale, placement baked into the sprite (anchored to the face / a
+corner); the crack is CLIPPED to the wall's pixels (`mask: var(--wall-
+tile)`); a Doors option (`DOOR_SETS` leaf / portcullis / gate, `data-doors`,
+`?doors=`); a per-duel RESIDUE ledger in main.mjs (`opened` / `rubble`,
+diffed from consecutive paints' terrain) leaves the theme's OPEN DOORWAY
+where a door was captured or burst and RUBBLE where a wall or crate broke,
+and a captured door swings instead of dissolving; and the live bug of the
+day: `.cell.dark.furniture`'s explicit `background-size` list outranked
+`.cell.dark.cracked`, so a god-cracked wall on a DARK square painted its
+wall tile at 16 px in the middle of the cell ("shrunk down") — every
+`.dark` cracked/weak rule now sets its own size and the smoke checks it;
+selftest 35/35, ui-smoke asserts the themes, the doorway's masks, the crack
+over its full-size wall, the props, the residue and the piece sprites on
+the live board — see `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +

@@ -216,7 +216,21 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   chain on an east–west wall face, a cobweb, bones, skull or candle on a
   floor square, scattered by a stable hash at low rates; the theme's
   `--decor-<name>` paints it, or nothing — cosmetics only, and a breached
-  wall drops its torch with the repaint). Every wall,
+  wall drops its torch with the repaint; props paint at NATIVE 16-px scale,
+  pixel-aligned with the tiles, their placement baked into the sprite by
+  the repack tool — wall props anchored to the face, litter to a corner).
+  The same span carries the RESIDUE main.mjs keeps per duel (`opened` /
+  `rubble` sets passed to `setPosition`): a floor square where a door was
+  captured or burst open keeps the theme's OPEN DOORWAY (`decor-doorway`:
+  pixel-poem's leaf swung open, Dungeon Gathering's bare arch, the crypt
+  gate with its bars raised), and one where a wall or crate was broken
+  keeps RUBBLE (`decor-rubble`, the theme's rubble sprite) — derived by
+  diffing the terrain squares of consecutive paints, so an undo that brings
+  the `^` back clears it, and a square that became a hole shows the hole. A
+  captured door SWINGS (`scaleX` at the hinge) instead of dissolving. The
+  crack overlay on a cracked wall or weak spot is CLIPPED to the wall's own
+  pixels (`mask: var(--wall-tile)`), so a north–south column's crack never
+  spills onto the floor margins. Every wall,
   furniture and cracked cell keeps its floor layers UNDER the tile, so a
   themed pillar's transparent sides and every sprite sit on the floor tile
   (the first cut painted the flat in-house colour behind sprites).
@@ -236,8 +250,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   (designer: tall pieces overlapping the piece north of them read badly
   clustered). The FLIP clone copies the piece's own box, not the cell's;
   the promotion picker takes the same set and shows sprite buttons.
-  Options → Look → **Pieces** (persisted, default NullTale classic) and
-  `?pieces=` pick it, independently of the theme.
+  Each sprite is centred in its box and the box in the square, so a piece
+  sits mid-square rather than on its bottom edge. Options → Look →
+  **Pieces** (persisted, default NullTale classic) and `?pieces=` pick it,
+  independently of the theme; **Doors** (`DOOR_SETS`: leaf / portcullis /
+  gate, `data-doors` on the board, `?doors=`) picks a door set over any
+  theme's own, with its open doorway.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -438,8 +456,9 @@ and the cheat probes). The old "edit enemy pieces" testing tool retired
 with the placement screen — the generator knobs + seeds cover its job.
 Above the Gods section, **Look → Art set** picks the board's theme (the
 stage's own / hall / castle / crypt / classic — "Art themes" above),
-**Pieces** the sprite set (Pixel Chess stone / wood / classic glyphs), and
-the panel credits the four packs.
+**Pieces** the sprite set (NullTale classic / dread, Pixel Chess stone /
+wood, Deja View, classic glyphs), **Doors** the door set (the theme's own /
+timber leaf / portcullis / barred gate), and the panel credits the packs.
 
 Engine pacing (designer decision, 2026-08): the enemy thinks up to **10
 seconds** per move (`depth 22 movetime 10000` — the depth cap is the WASM

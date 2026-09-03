@@ -30,6 +30,7 @@ const STAGE = arg('stage', 's07-the-doorway');
 const PLIES = parseInt(arg('plies', '60'), 10);
 const SEED = arg('seed', '3');
 const SHOTS = argv.includes('--shots');
+const THEME = arg('theme', null); // ?theme= override for the run (default: the stage's own)
 
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
@@ -73,6 +74,7 @@ const q = new URLSearchParams({
   onset: '1',
   mramp: '2',
   debt: '2',
+  ...(THEME ? { theme: THEME } : {}),
   // No gods overlay: its eval-delta probes run BEFORE the hint probe in the
   // idle window and would delay the hints this smoke times.
 });
@@ -118,7 +120,7 @@ const themeState = () =>
       king: (() => { const el = document.querySelector('#board .piece[data-piece="K"]'); const cs = el && getComputedStyle(el); return cs ? { bg: cs.backgroundImage, font: cs.fontSize } : null; })(),
     };
   });
-const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage.theme);
+const stageTheme = THEME ?? (await page.evaluate(() => window.__DCK.app.session.deal.stage.theme));
 {
   const t = await themeState();
   expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
@@ -136,20 +138,25 @@ const setTheme = (name) =>
     window.__DCK.options.theme = n;
     window.__DCK.applyOptions();
   }, name);
-for (const name of ['hall', 'castle', 'crypt']) {
+for (const name of THEME ? [] : ['hall', 'castle', 'crypt']) {
   await setTheme(name);
   const t = await themeState();
   expect(t.theme === name && t.legend === name && t.wall.includes('data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})`);
   await shot(`00-theme-${name}`);
 }
-await setTheme('classic');
-{
+if (!THEME) await setTheme('classic');
+if (!THEME) {
   const t = await themeState();
   expect(t.theme === null && t.attr === null && t.wall.includes('data:image/svg') && !t.floor.includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${t.wall.slice(0, 30)}…)`);
   await shot('00-theme-classic');
 }
 await setTheme('auto');
 expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
+// Doors: the option overrides the theme's door; auto returns it.
+await page.evaluate(() => { window.__DCK.options.doors = 'portcullis'; window.__DCK.applyOptions(); });
+expect((await page.evaluate(() => window.__DCK.doors)) === 'portcullis', 'Doors option stamps the door set');
+await page.evaluate(() => { window.__DCK.options.doors = 'auto'; window.__DCK.applyOptions(); });
+expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" is the theme\'s own');
 // Piece sprites: the default set paints the king as a PNG sprite; classic is the glyph.
 {
   const t = await themeState();
@@ -261,8 +268,8 @@ for (let i = 0; i < PLIES; i++) {
           // …and the WALL under it: the cell keeps its wall case over the
           // floor (two image layers), not floor alone (the furniture
           // floor-through rule once outranked the cracked rule under a theme).
-          const cellBg = await page.evaluate((s) => getComputedStyle(document.querySelector(`#board [data-square="${s}"]`)).backgroundImage, sq);
-          expect((cellBg.match(/url\(/g) ?? []).length >= 2 && cellBg.includes('data:image/png'), `${sq}: cracked wall keeps its wall tile under the crack (${(cellBg.match(/url\(/g) ?? []).length} layers)`);
+          const cellCs = await page.evaluate((s) => { const cs = getComputedStyle(document.querySelector(`#board [data-square="${s}"]`)); return { bg: cs.backgroundImage, size: cs.backgroundSize }; }, sq);
+          expect((cellCs.bg.match(/url\(/g) ?? []).length >= 2 && cellCs.bg.includes('data:image/png') && !cellCs.size.startsWith('auto'), `${sq}: cracked wall keeps its wall tile under the crack, full size (${(cellCs.bg.match(/url\(/g) ?? []).length} layers, ${cellCs.size})`);
         }
       }
       for (const sq of wantBreached) {
@@ -273,6 +280,15 @@ for (let i = 0; i < PLIES; i++) {
       // EVERY fresh hole keeps its rim — two crumbles in one window used to
       // leave only the latest marked.
       for (const sq of wantPits) expect(cells[sq]?.includes('hole') && cells[sq]?.includes('fresh-pit'), `${sq}: hole tile + fresh-pit ring (${cells[sq]})`);
+      // A breached square keeps rubble — or, for a door, its open doorway
+      // (residue ledger) — unless it is now a hole.
+      const residue = await page.evaluate(() => window.__DCK.residue);
+      for (const sq of m.breached) {
+        if (cells[sq]?.includes('hole')) continue;
+        const dec = await page.evaluate((s) => document.querySelector(`#board [data-square="${s}"] .decor`)?.className ?? null, sq);
+        const ok = (residue.rubble.includes(sq) && dec === 'decor decor-rubble') || (residue.opened.includes(sq) && dec === 'decor decor-doorway');
+        expect(ok, `${sq}: breached square keeps its rubble / doorway (${dec})`);
+      }
       const quakeArrows = await page.evaluate(() => document.querySelectorAll('#board .arrow-layer g.arrow-quake').length);
       expect(quakeArrows >= wantFrom.length, `${quakeArrows} quake arrow(s) on the SVG layer for ${wantFrom.length} displacement(s)`);
       const godLogs = after.logTail.filter((l) => l.startsWith('gods|'));

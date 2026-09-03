@@ -887,6 +887,16 @@ async function main() {
     if (ui.pieces !== 'pixel-chess' || host.dataset.pieces !== 'pixel-chess') throw new Error('setPieces must stamp data-pieces');
     ui.setPieces('no-such-set');
     if (ui.pieces !== null) throw new Error('an unknown piece set clears to the glyphs');
+    ui.setDoors('portcullis');
+    if (ui.doors !== 'portcullis' || host.dataset.doors !== 'portcullis') throw new Error('setDoors must stamp data-doors');
+    ui.setDoors(null);
+    if (ui.doors !== null) throw new Error('setDoors(null) clears to the theme door');
+    // Residue: an opened doorway / rubble decor on floor squares only.
+    ui.setPosition('4/4/4/4/4 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['c3', 'zz9']) });
+    const dec = (sq) => host.querySelector(`[data-square="${sq}"] .decor`)?.className ?? null;
+    if (dec('b2') !== 'decor decor-doorway' || dec('c3') !== 'decor decor-rubble') throw new Error(`residue decor (${dec('b2')}, ${dec('c3')})`);
+    ui.setPosition('4/4/4/1^2/4 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['c3']) });
+    if (dec('b2') !== null) throw new Error('a square that is furniture again carries no doorway decor');
     // Diagonals: a thick 2×2 block fills its inner corners (NE=16 SE=32
     // SW=64 NW=128), and a diagonal alone never counts.
     ui.setPosition('4/4/4/**2/**2 w - - 0 1');

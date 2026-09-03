@@ -372,7 +372,11 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.cracked { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); }
+.cell.dark.cracked { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
+/* (background-size set again on the .dark variants on purpose: .cell.dark
+   .furniture sets an explicit per-layer size list at higher specificity,
+   and without this the wall tile painted at its natural 16 px in the
+   middle of the cell — the "shrunk-down cracked wall" of 2026-09-03.) */
 
 /* Furniture SPRITES (§4.6 skins, stage.mjs SKIN_CHARS): the neutral sprite
    element paints a pixel-art icon instead of a glyph. The crate is the
@@ -406,12 +410,20 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.skin-door.weak { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); }
+.cell.dark.skin-door.weak { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
 .cell.skin-door.weak .piece.neutral {
   width: 100%;
   height: 100%;
   background-image: var(--tile-crack);
   filter: none;
+}
+/* The crack is CLIPPED to the wall's own pixels (the wall case tile as a
+   mask), so on a north–south column it never spills onto the floor
+   margins; the in-house block is opaque, so classic is unchanged. */
+.cell.cracked .piece.neutral,
+.cell.skin-door.weak .piece.neutral {
+  -webkit-mask: var(--wall-tile) center / 100% 100% no-repeat;
+  mask: var(--wall-tile) center / 100% 100% no-repeat;
 }
 /* The cracked wall's sprite IS the crack (no crate — the block underneath is
    the wall). AFTER the sprite rules on purpose: equal specificity, so source
@@ -441,16 +453,27 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: var(--decor-img, none) center / 60% no-repeat;
+  background: var(--decor-img, none) center / 100% 100% no-repeat; /* native 16-px scale, pixel-aligned with the tiles: placement is baked into the sprite */
   image-rendering: pixelated;
 }
-.decor-torch { --decor-img: var(--decor-torch); background-position: 50% 92%; background-size: 58%; }
-.decor-banner { --decor-img: var(--decor-banner); background-position: 50% 94%; background-size: 56%; }
-.decor-chain { --decor-img: var(--decor-chain); background-position: 50% 90%; background-size: 46%; }
-.decor-web { --decor-img: var(--decor-web); background-position: 6% 6%; background-size: 52%; }
-.decor-bones { --decor-img: var(--decor-bones); background-position: 70% 78%; background-size: 50%; }
-.decor-skull { --decor-img: var(--decor-skull); background-position: 30% 74%; background-size: 46%; }
-.decor-candle { --decor-img: var(--decor-candle); background-position: 78% 40%; background-size: 40%; }
+.decor-torch { --decor-img: var(--decor-torch); }
+.decor-banner { --decor-img: var(--decor-banner); }
+.decor-chain { --decor-img: var(--decor-chain); }
+.decor-web { --decor-img: var(--decor-web); }
+.decor-bones { --decor-img: var(--decor-bones); }
+.decor-skull { --decor-img: var(--decor-skull); }
+.decor-candle { --decor-img: var(--decor-candle); }
+/* Earned residue (main.mjs ledger): where a door was opened, where a wall or
+   crate was broken — the doorway stays open, the rubble stays. */
+.decor-doorway { --decor-img: var(--decor-doorway); }
+.decor-rubble { --decor-img: var(--decor-rubble, var(--sprite-rubble)); }
+/* A captured door SWINGS instead of dissolving (the doorway decor takes
+   over on the commit). */
+.cell.skin-door .piece.neutral.fx-captured {
+  transform: scaleX(.12);
+  transform-origin: 10% 50%;
+  opacity: .85;
+}
 
 /* PIECE SPRITES (2026-09-03): under a piece set (data-pieces on the board
    or the promotion card; tiles.css maps data-piece="<FEN letter>" to the
@@ -460,18 +483,16 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 [data-pieces] .piece[data-piece] {
   position: absolute;
   left: calc(50% - 50% * var(--piece-w, 1));
-  bottom: 4%;
+  top: calc(50% - 50% * var(--piece-h, 1));
   width: calc(100% * var(--piece-w, 1));
   height: calc(100% * var(--piece-h, 1));
   font-size: 0;
   text-shadow: none;
-  background: var(--piece-img) center bottom / contain no-repeat;
+  background: var(--piece-img) center / contain no-repeat; /* the sprite is centred in its box by the repack tool, the box in the square: no piece hugs the bottom edge */
   image-rendering: pixelated;
   filter: drop-shadow(0 1px 0 #000a);
 }
-/* A tall set (--piece-h > 1) rises into the square above: later cells
-   (lower ranks, nearer the player) paint over earlier ones in DOM order, so
-   the piece in front stands in front. */
+/* Every set is fitted (tallest piece = 0.96 cell), so no box leaves its square. */
 [data-pieces] .promo-btn[data-piece] {
   font-size: 0;
   width: 2.6rem;
@@ -662,7 +683,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 }
 
 .cell.fresh-crack {
-  box-shadow: inset 0 0 0 2px #7cc8ffb0, inset 0 0 8px #7cc8ff40;
+  box-shadow: inset 0 0 0 2px #7cc8ffb0; /* a ring only — a glow washed the wall tile out */
 }
 
 .cell.fresh-breach {

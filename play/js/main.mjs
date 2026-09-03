@@ -40,7 +40,7 @@ import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { BoardUI, pickPromotion, PIECE_SETS } from './board-ui.mjs';
+import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS } from './director.mjs';
 
@@ -69,6 +69,12 @@ const app = {
   catalog: null, // CUMULATIVE variants ini: the 60-variant catalog + every deal variant this session (spike 14)
   dealVariants: new Set(), // deal-variant names already appended to app.catalog
   cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength, rank, kind:'hint'}
+  // RESIDUE (2026-09-03, cosmetic): floor squares where a door was opened
+  // (captured) or a wall/crate broken (breached, captured) — the doorway
+  // stays open, the rubble stays, under whatever stands there. Derived by
+  // diffing the furniture squares of consecutive paints (so an undo that
+  // brings the '^' back clears it); reset per duel.
+  residue: { opened: new Set(), rubble: new Set(), lastFen: null },
   quakeMarks: null, // {from, to, pits, cracked, breached, arrows, text} — the gods' residue
   // since the player last moved (several quakes MERGE), held on the board and in
   // the gods line through the enemy's reply and cleared when the player moves
@@ -218,7 +224,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale' };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto' };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -239,6 +245,7 @@ function loadOptions() {
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
     if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
+    if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
   } catch {
     /* defaults */
   }
@@ -278,6 +285,14 @@ function syncOptionsUI() {
   $('optGodsDebug').checked = options.godsDebug;
   $('optTheme').value = options.theme;
   $('optPieces').value = options.pieces;
+  $('optDoors').value = options.doors;
+}
+
+/** The door set (board-ui DOOR_SETS): `?doors=` > the Doors option;
+ *  'auto' = the theme's own. */
+function doorsFor() {
+  const pick = params.get('doors') ?? options.doors;
+  return DOOR_SETS.includes(pick) ? pick : null;
 }
 
 /** The piece-sprite set (board-ui PIECE_SETS): `?pieces=` > the Pieces
@@ -303,6 +318,7 @@ function applyTheme() {
   const theme = themeFor(app.session?.deal?.stage ?? currentStage());
   app.boardUI?.setTheme(theme);
   app.boardUI?.setPieces(piecesFor());
+  app.boardUI?.setDoors(doorsFor());
   const legend = document.querySelector('.legend');
   if (legend) {
     if (theme) legend.dataset.theme = theme;
@@ -1449,6 +1465,7 @@ async function beginDuel() {
   };
   clearHints();
   app.quakeMarks = null;
+  app.residue = { opened: new Set(), rubble: new Set(), lastFen: null };
   setGodsLine('');
   $('eval-fill').style.width = '50%';
   $('eval-text').textContent = '';
@@ -1517,7 +1534,21 @@ async function driveTurn() {
 function paintBoard(fen) {
   const dir = app.duel?.director;
   const skins = stageSkins(app.session?.deal?.stage);
-  app.boardUI.setPosition(fen, dir ? { holes: dir.holes, godCrates: dir.godCrates, skins } : { skins });
+  const res = app.residue;
+  if (res.lastFen && res.lastFen !== fen) {
+    // Terrain that stood on the last paint and is gone now — a wall can
+    // crack AND break in one quake budget, so walls count, not only '^'.
+    const before = new Set(findSquares(res.lastFen, (c) => isTerrain(c)).map((s) => s.name));
+    const after = new Set(findSquares(fen, (c) => isTerrain(c)).map((s) => s.name));
+    for (const sq of before) {
+      if (after.has(sq) || dir?.holes.has(sq)) continue;
+      if (skins[sq] === 'door' && !dir?.godCrates.has(sq)) res.opened.add(sq); // captured or burst open: the doorway stays
+      else res.rubble.add(sq);
+    }
+    for (const sq of after) { res.opened.delete(sq); res.rubble.delete(sq); } // undo brought it back
+  }
+  res.lastFen = fen;
+  app.boardUI.setPosition(fen, { holes: dir?.holes ?? new Set(), godCrates: dir?.godCrates ?? new Set(), skins, opened: res.opened, rubble: res.rubble });
 }
 
 /** Compose all in-play board marks (selection, last move, check, the gods'
@@ -1881,6 +1912,10 @@ $('optPieces').addEventListener('change', (e) => {
   options.pieces = e.target.value;
   applyOptions();
 });
+$('optDoors').addEventListener('change', (e) => {
+  options.doors = e.target.value;
+  applyOptions();
+});
 /** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
  *  running, Gods settings changes apply to the LIVE Director too (recorded
  *  on the duel ledger). Without the overlay they keep their shipped meaning:
@@ -2040,6 +2075,14 @@ window.__DCK = {
   /** The piece-sprite set on the live board (null = glyphs). */
   get pieces() {
     return app.boardUI?.pieces ?? null;
+  },
+  /** The door set on the live board (null = the theme's own). */
+  get doors() {
+    return app.boardUI?.doors ?? null;
+  },
+  /** The residue ledger: squares where a door was opened / a wall or crate broken. */
+  get residue() {
+    return { opened: [...app.residue.opened], rubble: [...app.residue.rubble] };
   },
   get cheat() {
     return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };

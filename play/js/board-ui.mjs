@@ -94,6 +94,9 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
 /** Piece-sprite sets the board can wear (tiles.css [data-pieces=…];
  *  repack-tiles.mjs builds them). null / 'classic' = the Unicode glyphs. */
 export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nulltale-dread', 'deja-view'];
+/** Door sets (tiles.css [data-doors=…]): each theme's door, selectable
+ *  over any theme — the leaf, the portcullis, the barred gate. */
+export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
 
@@ -109,7 +112,8 @@ function squareHash(f, rank, salt) {
  *  east–west run with floor below) get wall-mounted props; floor squares
  *  get litter, cobwebs only against a wall. Low rates — a prop must never
  *  read as a piece or as terrain. */
-function decorFor({ wallTile, cracked, floor, mask, nearWall, f, rank }) {
+function decorFor({ wallTile, cracked, floor, mask, nearWall, f, rank, earned }) {
+  if (floor && earned) return earned; // an opened doorway or rubble outranks the scatter
   const r = squareHash(f, rank, 7) % 1000;
   if (wallTile && !cracked && (mask & 10) && !(mask & 4)) return r < 200 ? 'torch' : r < 260 ? 'banner' : r < 320 ? 'chain' : null;
   if (floor) return r < 22 && nearWall ? 'web' : r < 42 ? 'bones' : r < 54 ? 'skull' : r < 74 && nearWall ? 'candle' : null;
@@ -296,10 +300,12 @@ export class BoardUI {
    * preview has no Director) and every '*' is stone, every '^' a crate.
    * `skins` is the stage's {square: skinName} map (stage.mjs stageSkins):
    * an authored '^' with a skin gets the `skin-<name>` class and paints
-   * that sprite; a god-cracked wall never takes a skin.
+   * that sprite; a god-cracked wall never takes a skin. `opened` / `rubble`
+   * are main.mjs's RESIDUE ledger — floor squares where a door was opened
+   * or a wall/crate broken keep a doorway / rubble decor (cosmetic).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
-  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {} } = {}) {
+  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
     // Solid (for the wall autotile) = stone that is not a hole, a cracked
@@ -341,7 +347,8 @@ export class BoardUI {
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
       // Cosmetic props (one span under the piece; removed when the square
       // changes kind — a breached wall drops its torch).
-      const decor = decorFor({ wallTile, cracked, floor: !isWall && !isFurniture, mask, nearWall: N || E || S || W, f, rank });
+      const floor = !isWall && !isFurniture;
+      const decor = decorFor({ wallTile, cracked, floor, mask, nearWall: N || E || S || W, f, rank, earned: opened.has(sq) ? 'doorway' : rubble.has(sq) ? 'rubble' : null });
       let span = cell.querySelector(':scope > .decor');
       if (decor) {
         if (!span) {
@@ -444,6 +451,17 @@ export class BoardUI {
 
   get pieces() {
     return this.container.dataset.pieces ?? null;
+  }
+
+  /** Door set: one of DOOR_SETS overrides the theme's own door (and its
+   *  open doorway); null = the theme's. */
+  setDoors(name) {
+    if (name && DOOR_SETS.includes(name)) this.container.dataset.doors = name;
+    else delete this.container.dataset.doors;
+  }
+
+  get doors() {
+    return this.container.dataset.doors ?? null;
   }
 
   /** The classes on one cell — the test surface for tiles and marks. */

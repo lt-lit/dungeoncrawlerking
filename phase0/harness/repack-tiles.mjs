@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
-import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, FLOOR_VARIANTS } from '../../play/js/board-ui.mjs';
+import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS } from '../../play/js/board-ui.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -161,7 +161,24 @@ const ROLES = {
   skull: '--decor-skull',
   chain: '--decor-chain',
   banner: '--decor-banner',
+  doorway: '--decor-doorway', // the OPEN door left behind where a door was captured (main.mjs residue ledger)
 };
+// Where a prop sits inside its 16×16 tile: props paint at native scale,
+// pixel-aligned with the tiles (designer round 9), so placement is baked
+// in by anchoring the sprite's opaque bounds — wall-mounted props to the
+// bottom (the face), litter to a corner.
+const DECOR_ANCHOR = { torch: 'bottom', banner: 'bottom', chain: 'bottom', web: 'topleft', bones: 'bottomright', skull: 'bottomleft', candle: 'bottomright' };
+function anchorSprite(tile, anchor) {
+  let minx = T, miny = T, maxx = -1, maxy = -1;
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (tile.data[(y * T + x) * 4 + 3]) { minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
+  if (maxx < 0) return tile;
+  const w = maxx - minx + 1, h = maxy - miny + 1;
+  const dx = anchor === 'topleft' || anchor === 'bottomleft' ? 1 - minx : anchor === 'bottomright' ? T - 1 - maxx : Math.floor((T - w) / 2) - minx;
+  const dy = anchor === 'topleft' ? 1 - miny : T - 1 - maxy;
+  const out = blank(T, T);
+  blit(out, crop(tile, minx, miny, w, h), minx + dx, miny + dy);
+  return out;
+}
 for (let i = 1; i <= FLOOR_VARIANTS; i++) ROLES[`floor-${i}`] = `--tile-floor-${i}`;
 for (const code of WALL_MASK_CODES) ROLES[`wall-${code}`] = `--tile-wall-${code}`;
 
@@ -315,13 +332,30 @@ function portcullis(base, bar, shadow, y0 = 6) {
   for (const y of [y0 + 3, y0 + 7]) for (let x = 3; x <= 13; x++) if (x !== 4 && x !== 8 && x !== 12) put(x, y, y === y0 + 3 ? bar : shadow);
   return tile;
 }
-function barredGate(spec) {
+function barredGate(spec, { bars = true } = {}) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const tile = blank(T, T);
   const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
   for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) put(x, y, y < 2 || x < 2 || x > 13 ? (x === 2 - 1 || y === 1 ? lo : x === 14 ? hi : fill) : edge);
   for (let x = 2; x <= 13; x++) put(x, 2, lo);
-  return portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3);
+  return bars ? portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3) : tile;
+}
+/** pixel-poem's leaf swung open: the frame and lintel stay, the planks
+ *  become the dark opening, and two columns of wood at the hinge are the
+ *  leaf seen edge-on. */
+function openLeaf(tile) {
+  const out = blank(T, T);
+  tile.data.copy(out.data);
+  const wood = new Set(['895a45', 'bf704d', '523b40', '724736', 'adc1cf', '90919e']);
+  const opening = [0x1a, 0x10, 0x16];
+  for (let y = 3; y < T; y++) {
+    for (let x = 3; x <= 14; x++) {
+      const o = (y * T + x) * 4;
+      const k = [out.data[o], out.data[o + 1], out.data[o + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+      if (wood.has(k)) { out.data[o] = opening[0]; out.data[o + 1] = opening[1]; out.data[o + 2] = opening[2]; }
+    }
+  }
+  return out;
 }
 
 const THEMES = {
@@ -341,6 +375,7 @@ const THEMES = {
       chain: ['pp', 5, 7],
       banner: ['pp', 4, 7],
     },
+    doorSet: 'leaf',
     // Top band in the pack's cap colours; the face is its own brick rows.
     wall: { fill: '#6e4a48', hi: '#916a62', lo: '#4c2f49', edge: '#25131a', speckle: 0, face: { sheet: 'pp', x: 2, y: 0, row: 4 } },
     // The Catacombs flagstones in pixel-poem's floor purple.
@@ -362,6 +397,7 @@ const THEMES = {
       banner: ['pp', 4, 7],
     },
     gate: { arch: ['dg', 11, 11], bar: '#c7cfdd', shadow: '#5a6787' }, // a portcullis in the pack's arched doorway
+    doorSet: 'portcullis',
     // The pack's wall-top blue with its highlight/shade; brick face rows.
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
     // The Catacombs flagstones in Dungeon Gathering's floor blue-grey.
@@ -382,6 +418,7 @@ const THEMES = {
       skull: ['pp', 7, 7],
     },
     gate: { barred: true }, // a barred gate in the crypt's own stone
+    doorSet: 'gate',
     // Lifted a step above the pack's near-black stone so a wall reads
     // against its own floor; speckled like its column.
     wall: { fill: '#3c3129', hi: '#5a5347', lo: '#231f19', edge: '#0e0a08', speckle: 14, face: { sheet: 'cat', x: 33, y: 8, row: 6 } },
@@ -407,6 +444,7 @@ const atlas = blank(roleNames.length * T, themeNames.length * T);
 const index = { tile: T, roles: roleNames, themes: {}, packs: PACKS };
 const css = ['/* --- generated by phase0/harness/repack-tiles.mjs — do not hand-edit; art credits in play/CREDITS.md --- */'];
 const provenance = [];
+const doorSets = {};
 themeNames.forEach((theme, row) => {
   const decl = [];
   index.themes[theme] = { row, title: THEMES[theme].title, tiles: {} };
@@ -421,16 +459,34 @@ themeNames.forEach((theme, row) => {
   };
   const tiles = {};
   for (const [role, [sheet, x, y, w, h]] of Object.entries(THEMES[theme].tiles)) {
-    tiles[role] = w ? cropFit(sheets, sheet, x, y, w, h) : crop(sheets[sheet], x * T, y * T, T, T);
-    emit(role, tiles[role], { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
+    let tile = w ? cropFit(sheets, sheet, x, y, w, h) : crop(sheets[sheet], x * T, y * T, T, T);
+    if (DECOR_ANCHOR[role]) tile = anchorSprite(tile, DECOR_ANCHOR[role]);
+    tiles[role] = tile;
+    emit(role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
   }
+  // The door and its open version (the doorway left behind); also
+  // collected as a selectable DOOR SET (Options → Doors, board-ui DOOR_SETS).
   const gate = THEMES[theme].gate;
+  let door, doorway;
   if (gate?.arch) {
     const [sheet, x, y] = gate.arch;
-    emit('door', portcullis(crop(sheets[sheet], x * T, y * T, T, T), hex(gate.bar), hex(gate.shadow)), { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, composed: 'portcullis drawn into the pack arch' });
+    const arch = crop(sheets[sheet], x * T, y * T, T, T);
+    door = portcullis(arch, hex(gate.bar), hex(gate.shadow));
+    doorway = arch;
+    emit('door', door, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, composed: 'portcullis drawn into the pack arch' });
+    emit('doorway', doorway, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, composed: 'the pack arch, open' });
   } else if (gate?.barred) {
-    emit('door', barredGate(THEMES[theme].wall), { composed: 'barred gate in the theme stone' });
+    door = barredGate(THEMES[theme].wall);
+    doorway = barredGate(THEMES[theme].wall, { bars: false });
+    emit('door', door, { composed: 'barred gate in the theme stone' });
+    emit('doorway', doorway, { composed: 'the gate, bars raised' });
+  } else {
+    door = tiles.door;
+    doorway = openLeaf(door);
+    emit('doorway', doorway, { composed: 'pixel-poem leaf swung open' });
   }
+  doorSets[THEMES[theme].doorSet] = { door, doorway };
+  decl.push('  --decor-rubble: var(--sprite-rubble);');
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
     const tint = THEMES[theme].floor.tint;
@@ -453,6 +509,12 @@ themeNames.forEach((theme, row) => {
 });
 // Pack tiles fill their 16×16 cell edge to edge; the in-house sprites carry
 // their own margins, so under a theme every furniture sprite is full-size.
+// Door sets (Options → Doors): the same attribute-selector specificity as
+// the theme blocks, emitted AFTER them so a chosen door beats the theme's.
+for (const name of DOOR_SETS) {
+  if (!doorSets[name]) throw new Error(`door set ${name} was not produced by any theme`);
+  css.push(`[data-doors="${name}"] {\n  --sprite-door: url("data:image/png;base64,${encodePng(doorSets[name].door).toString('base64')}");\n  --decor-doorway: url("data:image/png;base64,${encodePng(doorSets[name].doorway).toString('base64')}");\n}`);
+}
 // The autotile classes → the theme's case, the plain wall as the fallback
 // (so the in-house set, with no per-case tiles, paints its one block).
 for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: var(--tile-wall-${code}, var(--tile-wall)); }`);
@@ -476,7 +538,7 @@ pieceNames.forEach((name, row) => {
       let sprite = crop(sheets[sheetKey], x, y, w, h);
       if (set.outline) sprite = recolourOutline(sprite, set.outline.from, set.outline.to);
       const tile = blank(bw, bh);
-      blit(tile, sprite, Math.floor((bw - w) / 2), bh - h); // bottom-centred
+      blit(tile, sprite, Math.floor((bw - w) / 2), Math.floor((bh - h) / 2)); // centred: the piece sits mid-square, not on its bottom edge
       const col = (side === 'white' ? 0 : 6) + i;
       blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
       const fen = side === 'white' ? letter.toUpperCase() : letter;
