@@ -885,6 +885,13 @@ async function main() {
     if (at('a1') !== 'K' || at('d1') !== 'P' || at('a5') !== 'k') throw new Error(`pieces carry data-piece (${at('a1')}, ${at('d1')}, ${at('a5')})`);
     ui.setPieces('pixel-chess');
     if (ui.pieces !== 'pixel-chess' || host.dataset.pieces !== 'pixel-chess') throw new Error('setPieces must stamp data-pieces');
+    // The fit dials are published on the board; pixel-perfect stamps its
+    // attribute (the box itself needs a laid-out board — ui-smoke measures it).
+    ui.setPieceFit({ scale: 1.2, lift: 0.25, shift: -0.1, snap: true });
+    const pf = ui.pieceFit;
+    if (pf.scale !== 1.2 || pf.lift !== 0.25 || pf.shift !== -0.1 || !pf.snap || !('pieceSnap' in host.dataset)) throw new Error(`setPieceFit must publish the dials: ${JSON.stringify(pf)}`);
+    ui.setPieceFit({});
+    if (ui.pieceFit.scale !== null || ui.pieceFit.lift !== null || ui.pieceFit.snap || 'pieceSnap' in host.dataset) throw new Error('setPieceFit({}) clears to the CSS defaults');
     ui.setPieces('no-such-set');
     if (ui.pieces !== null) throw new Error('an unknown piece set clears to the glyphs');
     ui.setDoors('portcullis');

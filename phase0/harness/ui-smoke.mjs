@@ -371,6 +371,20 @@ await shot('05-final');
 // on it forever.
 await page.evaluate(() => document.getElementById('btnOptions').click());
 expect(await page.evaluate(() => !!document.getElementById('optHintCont') && document.querySelectorAll('.legend .cell').length === 6), 'options panel has the Keep-evaluating toggle and a 6-tile legend');
+// Pixel-perfect pieces (round 11): the king's box is a whole device-pixel
+// multiple of the set's native height, then the dial goes back off. Sits
+// here, after the probe checks: every applyOptions re-runs the idle probe.
+const snap = await page.evaluate(() => {
+  window.__DCK.options.pieceSnap = true; window.__DCK.applyOptions();
+  const el = document.querySelector('#board .piece[data-piece="K"]');
+  const fit = parseFloat(getComputedStyle(document.getElementById('board')).getPropertyValue('--piece-fit'));
+  const r = el.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const on = window.__DCK.pieceFit;
+  window.__DCK.options.pieceSnap = false; window.__DCK.applyOptions();
+  return { fit, h: r.height, k: (r.height * dpr) / fit, on, off: window.__DCK.pieceFit };
+});
+expect(snap.fit > 0 && snap.k >= 1 && Math.abs(snap.k - Math.round(snap.k)) < 1e-3 && snap.on.snap && snap.on.box?.h && !snap.off.snap && !snap.off.box, `pixel-perfect pieces: king box ${snap.h}px = ${snap.k}× the set's ${snap.fit}-px height, off again after`);
 if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT, '06-options.png') });
 await browser.close();
 server.close();

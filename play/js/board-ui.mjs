@@ -109,6 +109,12 @@ export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
 
+/** The piece-fit dials' defaults (setPieceFit; style.css carries the same
+ *  as its CSS fallbacks): the designer's phone numbers, round 11 — the box
+ *  at 110% of its fit and lifted 0.3 cell, so a piece stands in the lower
+ *  half of its square and rises into the one above. */
+export const DEFAULT_PIECE_FIT = { scale: 1.1, lift: 0.3, shift: 0 };
+
 /** Stable floor-texture variant for a square: f1 (the common stone) on
  *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the
  *  square, so a repaint never makes the floor crawl. */
@@ -153,6 +159,12 @@ export class BoardUI {
     container.classList.toggle('inactive', true);
     container.style.setProperty('--files', files);
     container.style.setProperty('--ranks', ranks);
+    // Pixel-perfect pieces re-lay out with the board's size (setPieceFit snap).
+    this.pieceSnap = false;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.pieceObserver = new ResizeObserver(() => { if (this.pieceSnap) this.layoutPieceSnap(); });
+      this.pieceObserver.observe(container);
+    }
     container.textContent = '';
     this.cells = new Map();
 
@@ -467,6 +479,7 @@ export class BoardUI {
   setPieces(name) {
     if (name && PIECE_SETS.includes(name)) this.container.dataset.pieces = name;
     else delete this.container.dataset.pieces;
+    this.layoutPieceSnap(); // a set has its own native box
   }
 
   get pieces() {
@@ -480,22 +493,64 @@ export class BoardUI {
     else delete this.container.dataset.doors;
   }
 
-  /** The piece-sprite fit dials (Options → Piece size / lift; style.css
-   *  --piece-scale / --piece-lift): `scale` multiplies every set's fitted
-   *  box (1 = the tallest piece stands 0.96 cell), `lift` raises it by
-   *  that fraction of a cell. Non-finite values clear to the defaults. */
-  setPieceFit({ scale, lift } = {}) {
+  /** The piece-sprite fit dials (Options → Piece size / lift / shift /
+   *  Pixel-perfect; style.css --piece-scale / --piece-lift / --piece-shift
+   *  and data-piece-snap): `scale` multiplies every set's fitted box (1 =
+   *  the tallest piece stands 0.96 cell), `lift` raises it and `shift`
+   *  moves it right by that fraction of a cell, and `snap` sizes the box
+   *  in WHOLE device-pixel multiples of the sprite (--piece-fit /
+   *  --piece-box, the set's native pixels from tiles.css) and lands it on
+   *  whole device pixels — the art scales without uneven pixels, re-laid
+   *  out on every resize. Non-finite values clear to the CSS defaults
+   *  (DEFAULT_PIECE_FIT). */
+  setPieceFit({ scale, lift, shift, snap = false } = {}) {
     const st = this.container.style;
-    if (Number.isFinite(scale)) st.setProperty('--piece-scale', String(scale));
-    else st.removeProperty('--piece-scale');
-    if (Number.isFinite(lift)) st.setProperty('--piece-lift', String(lift));
-    else st.removeProperty('--piece-lift');
+    for (const [k, v] of [['--piece-scale', scale], ['--piece-lift', lift], ['--piece-shift', shift]]) {
+      if (Number.isFinite(v)) st.setProperty(k, String(v));
+      else st.removeProperty(k);
+    }
+    this.pieceSnap = !!snap;
+    if (this.pieceSnap) this.container.dataset.pieceSnap = '';
+    else delete this.container.dataset.pieceSnap;
+    this.layoutPieceSnap();
   }
 
   get pieceFit() {
     const st = this.container.style;
     const num = (v) => (v === '' ? null : Number(v));
-    return { scale: num(st.getPropertyValue('--piece-scale')), lift: num(st.getPropertyValue('--piece-lift')) };
+    const px = (k) => st.getPropertyValue(k) || null;
+    return {
+      scale: num(st.getPropertyValue('--piece-scale')),
+      lift: num(st.getPropertyValue('--piece-lift')),
+      shift: num(st.getPropertyValue('--piece-shift')),
+      snap: this.pieceSnap,
+      box: this.pieceSnap ? { w: px('--piece-box-w'), h: px('--piece-box-h'), left: px('--piece-left'), top: px('--piece-top') } : null,
+    };
+  }
+
+  /** Pixel-perfect layout (setPieceFit snap): measure a cell, take the
+   *  largest whole device-pixel scale k that keeps the set's box within the
+   *  size dial, and publish the box and its offsets in CSS px on the board
+   *  (style.css [data-piece-snap] reads them). Cleared when snap is off or
+   *  nothing can be measured (no set, a detached board). */
+  layoutPieceSnap() {
+    const st = this.container.style;
+    const clear = () => { for (const k of ['--piece-box-w', '--piece-box-h', '--piece-left', '--piece-top']) st.removeProperty(k); };
+    if (!this.pieceSnap) return clear();
+    const cs = getComputedStyle(this.container);
+    const fit = parseFloat(cs.getPropertyValue('--piece-fit')), box = parseFloat(cs.getPropertyValue('--piece-box'));
+    const cw = this.cells.values().next().value?.getBoundingClientRect().width ?? 0;
+    if (!(fit > 0) || !(box > 0) || !(cw > 0)) return clear();
+    const dial = (k, d) => { const v = parseFloat(st.getPropertyValue(k)); return Number.isFinite(v) ? v : d; };
+    const scale = dial('--piece-scale', DEFAULT_PIECE_FIT.scale), lift = dial('--piece-lift', DEFAULT_PIECE_FIT.lift), shift = dial('--piece-shift', DEFAULT_PIECE_FIT.shift);
+    const dpr = window.devicePixelRatio || 1;
+    const k = Math.max(1, Math.floor((cw * dpr * 0.96 * scale) / fit));
+    const w = (box * k) / dpr, h = (fit * k) / dpr;
+    const whole = (v) => Math.round(v * dpr) / dpr;
+    st.setProperty('--piece-box-w', `${w}px`);
+    st.setProperty('--piece-box-h', `${h}px`);
+    st.setProperty('--piece-left', `${whole((cw - w) / 2 + shift * cw)}px`);
+    st.setProperty('--piece-top', `${whole((cw - h) / 2 - lift * cw)}px`);
   }
 
   get doors() {

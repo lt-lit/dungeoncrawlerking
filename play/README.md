@@ -227,23 +227,28 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   so an undo that brings the `^` back clears it, and a square that became
   a hole shows the hole): a floor square where a door in an EAST–WEST line
   was captured or burst open keeps the theme's OPEN DOORWAY (`decor-doorway`
-  on the same span: pixel-poem's frame with the leaf gone, Dungeon
-  Gathering's bare arch, the crypt gate with its bars raised — the hall's
-  and crypt's openings are transparent, so the floor shows through and a
-  doorway reads as a way through, not a pit); a floor square where a WALL,
-  a cracked wall, a weak-spot door (the crack in a north–south line — it
-  never leaves a doorway: "cracked walls turning into open doors doesn't
-  make any sense") or a rubble skin broke becomes a `.ruin` cell: it paints
-  the theme's RUIN AUTOTILE — 16 stub cases (`--tile-ruin-<mask>`, the
-  cell's `wm-<mask>` is the plain 4-bit mask of its solid neighbours) that
-  the repack tool GENERATES like the walls: the wall's own band enters two
-  pixels unbroken from each solid neighbour, then drops to a lower,
-  narrower stub with hashed bites out of every free edge, a shorter brick
-  face and a few chips on the floor around it (a lone break is a low
-  mound) — under whatever stands there; the in-house set falls back to
-  its rubble sprite. Other furniture (a crate, a barrel, a table…) leaves
-  nothing when it goes — it never continued a wall line. Both kinds of
-  residue COUNT AS SOLID to the wall autotile, so the walls either side
+  on the same span, GENERATED per theme by the repack tool — round 11:
+  "avoid having something arc over the space above the doorway" — the
+  wall's band ending two pixels in from each side with its brick face, a
+  two-pixel POST in the door's material at each end (pixel-poem's timber,
+  the castle's pale stone, the crypt's iron) and the floor between, top to
+  bottom, so a piece standing in the doorway stands between the posts and
+  nothing arcs over it; the doorway is the theme's, whatever door set is
+  chosen); a floor square where a WALL, a cracked wall, a weak-spot door
+  (the crack in a north–south line — it never leaves a doorway: "cracked
+  walls turning into open doors doesn't make any sense") or a rubble skin
+  broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
+  cases (`--tile-ruin-<mask>`, the cell's `wm-<mask>` is the plain 4-bit
+  mask of its solid neighbours) that the repack tool GENERATES like the
+  walls, and since round 11 ("wall rubble reads too much like a barrier —
+  needs to blend with the floor") the tile IS floor but for the broken END
+  of each joining wall — the band enters two pixels flush from the
+  neighbour, then a ragged hashed fringe with the brick face under it —
+  and a few flat flecks of the stone on the floor between (a lone break is
+  flecks alone); under whatever stands there; the in-house set falls back
+  to its rubble sprite. Other furniture (a crate, a barrel, a table…)
+  leaves nothing when it goes — it never continued a wall line. Both kinds
+  of residue COUNT AS SOLID to the wall autotile, so the walls either side
   run on into the break instead of capping ("autotiling gives up when a
   door opens, leaving visible gaps"). A captured door SWINGS (`scaleX` at
   the hinge) instead of dissolving. The
@@ -269,20 +274,32 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   set stands on ONE baseline and the box scaled to 0.96 cell never rises
   into the square above (designer: tall pieces overlapping the piece north
   of them read badly clustered; round 10: a taller box centred in the
-  square hung every foot below it — "chopped in half"). Two dials then
-  place the box (Options → Look → **Piece size** / **Piece lift**,
-  `?piecescale=` / `?piecelift=`, `setPieceFit` → `--piece-scale` /
-  `--piece-lift` on the board; defaults 0.9 and +0.05): the box is scaled,
-  centred in the square and raised by the lift, so at the defaults the
-  tallest piece spans ~0.12…0.98 of its square — feet off the bottom
-  edge, nothing over the top — and the designer can settle the feel on
-  the phone and read the numbers off the labels. The FLIP clone copies the
-  piece's own box, not the cell's; the promotion picker takes the same set
-  and shows sprite buttons. Options → Look → **Pieces** (persisted, default
-  NullTale classic) and `?pieces=` pick it, independently of the theme;
-  **Doors** (`DOOR_SETS`: leaf / portcullis / gate, `data-doors` on the
-  board, `?doors=`) picks a door set over any theme's own, with its open
-  doorway.
+  square hung every foot below it — "chopped in half"). Dials then place
+  the box (Options → Look → **Piece size** / **lift** / **shift** and
+  **Pixel-perfect pieces**; `?piecescale=` / `?piecelift=` /
+  `?pieceshift=` / `?piecesnap=1`; `setPieceFit` → `--piece-scale` /
+  `--piece-lift` / `--piece-shift` and `data-piece-snap` on the board;
+  wide ranges — size 50–200%, lift −50…+100%, shift ±50% — because the
+  designer's numbers hit the first caps): the box is scaled, centred in
+  the square, raised by the lift and moved by the shift. The defaults are
+  the designer's phone numbers, `DEFAULT_PIECE_FIT` = 110% / +30% / 0
+  (board-ui, mirrored as style.css's fallbacks): a piece stands in the
+  lower half of its square and rises into the one above — which is
+  earlier in the DOM, so the nearer (lower) piece paints in front, as it
+  should. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
+  ResizeObserver) measures a cell, reads the set's native box from
+  tiles.css (`--piece-fit` / `--piece-box`), takes the largest whole
+  device-pixel scale k that fits the size dial and lands the box on whole
+  device pixels — no sprite pixel wider than its neighbour, at the cost
+  of stepping between sizes as the board resizes (ui-smoke asserts the
+  king's box is a whole multiple of the set's height). The FLIP clone
+  copies the piece's own box, not the cell's; the promotion picker takes
+  the same set and shows sprite buttons. Options → Look → **Pieces**
+  (persisted, default NullTale classic) and `?pieces=` pick it,
+  independently of the theme; **Doors** (`DOOR_SETS`: leaf / portcullis /
+  gate, `data-doors` on the board, `?doors=`) picks a door set over any
+  theme's own (the open doorway stays the theme's — it is drawn in the
+  theme's wall).
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -341,7 +358,8 @@ flagstones' base colour and takes the target hue, so bevels, cracks and
 grain survive). Each theme has its OWN door: the hall keeps pixel-poem's
 timber leaf; neither Dungeon Gathering nor Catacombs draws a wooden door,
 so the castle's is a portcullis drawn into Dungeon Gathering's own arched
-doorway tile and the crypt's a barred gate in its stone. The castle's
+doorway tile and the crypt's a barred gate in its stone (the OPEN doorway
+is generated per theme — see the residue notes above). The castle's
 crate is Dungeon Gathering's stone block. Each theme also carries its
 cosmetic PROPS (torch, candle, cobweb, bones, skull, chain, banner —
 pixel-poem's and Catacombs' own torch, candle and chain; the rest

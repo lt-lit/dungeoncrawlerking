@@ -492,17 +492,19 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    paints the sprite in the set's fitted BOX — as a background, so the fx
    clone (cell-sized, inline) draws exactly what the cell drew. The box
    (--piece-w × --piece-h cells: the set's tallest piece stands 0.96 cell,
-   every piece on one baseline at its bottom) is scaled by --piece-scale
-   and raised by --piece-lift cells — the Options' Piece size / lift dials
-   (board-ui setPieceFit) — and centred in the square; at the defaults the
-   tallest piece spans ~0.12…0.98 of its square, so no piece hugs the
-   bottom edge and none rises into the square above (round 10). */
+   every piece on one baseline at its bottom) is scaled by --piece-scale,
+   raised by --piece-lift and moved right by --piece-shift cells — the
+   Options' Piece size / lift / shift dials (board-ui setPieceFit; the CSS
+   fallbacks here are board-ui DEFAULT_PIECE_FIT, the designer's phone
+   numbers: 110%, +30%) — around the square's centre. A lifted piece rises
+   into the square ABOVE, which is earlier in the DOM, so it paints over
+   that square's contents: nearer (lower) pieces in front, as they should. */
 [data-pieces] .piece[data-piece] {
   position: absolute;
-  --pw: calc(var(--piece-w, 1) * var(--piece-scale, .9));
-  --ph: calc(var(--piece-h, 1) * var(--piece-scale, .9));
-  left: calc(50% - 50% * var(--pw));
-  top: calc(50% - 50% * var(--ph) - 100% * var(--piece-lift, .05));
+  --pw: calc(var(--piece-w, 1) * var(--piece-scale, 1.1));
+  --ph: calc(var(--piece-h, 1) * var(--piece-scale, 1.1));
+  left: calc(50% - 50% * var(--pw) + 100% * var(--piece-shift, 0));
+  top: calc(50% - 50% * var(--ph) - 100% * var(--piece-lift, .3));
   width: calc(100% * var(--pw));
   height: calc(100% * var(--ph));
   font-size: 0;
@@ -510,6 +512,17 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background: var(--piece-img) center bottom / contain no-repeat;
   image-rendering: pixelated;
   filter: drop-shadow(0 1px 0 #000a);
+}
+/* Pixel-perfect pieces (Options → Pixel-perfect; board-ui setPieceFit snap
+   stamps data-piece-snap and publishes the measured box): the box is a
+   whole device-pixel multiple of the sprite's native size and lands on
+   whole device pixels, so no sprite pixel is drawn wider than its
+   neighbour — at the cost of stepping between sizes as the board resizes. */
+[data-pieces][data-piece-snap] .piece[data-piece] {
+  left: var(--piece-left, 0);
+  top: var(--piece-top, 0);
+  width: var(--piece-box-w, 100%);
+  height: var(--piece-box-h, 100%);
 }
 [data-pieces] .promo-btn[data-piece] {
   font-size: 0;

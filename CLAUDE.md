@@ -108,22 +108,33 @@ wall tile at 16 px in the middle of the cell ("shrunk down") — every
 `.dark` cracked/weak rule now sets its own size and the smoke checks it;
 **round 10**: piece boxes are the set's tallest piece high (trimmed
 sprites, one baseline — a 32-px box centred in the square had hung the
-feet below it, "chopped in half") and two dials place them (Options →
-Piece size / lift, `?piecescale=`/`?piecelift=`, `setPieceFit` →
-`--piece-scale`/`--piece-lift`, defaults 0.9 / +0.05); RUIN AUTOTILE — a
+feet below it, "chopped in half") and dials place them; RUIN AUTOTILE — a
 broken wall, cracked wall, weak spot or rubble skin leaves a `.ruin` cell
-wearing one of 16 GENERATED stub cases (`--tile-ruin-<mask>`, the 4-bit
-solid-neighbour mask: the wall's band enters two pixels from each solid
-neighbour, then a lower, narrower, bitten stub with a short face and
-floor chips), a weak-spot door never leaves a doorway, other furniture
-leaves nothing, and ruins AND opened doorways count as SOLID to the wall
-autotile so the line runs on through a break (no more end caps at a
-gap); the hall doorway is lintel + jambs over a TRANSPARENT opening (the
-edge-on leaf is gone), the crypt's open gate likewise shows the floor;
-floor litter (web/bones/skull/candle) is packed away — wall props and
-`^` skins stay; selftest 35/35, ui-smoke 157 ok asserting the ruin stub /
-doorway / nothing per breached square and wall-face-only props — see
-`play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+wearing one of 16 GENERATED cases (`--tile-ruin-<mask>`, the 4-bit
+solid-neighbour mask), a weak-spot door never leaves a doorway, other
+furniture leaves nothing, and ruins AND opened doorways count as SOLID to
+the wall autotile so the line runs on through a break (no more end caps
+at a gap); floor litter (web/bones/skull/candle) is packed away — wall
+props and `^` skins stay; **round 11**: the ruin tile IS FLOOR but for
+the broken END of each joining wall (two flush pixels, then a ragged
+hashed fringe with the brick face under it) and a few flat flecks between
+(round 10's lowered stub "read too much like a barrier"); the open
+doorway is GENERATED per theme — the wall band ending two pixels in from
+each side, a two-pixel post in the door's material at each end, floor
+between top to bottom, NOTHING arching over the space ("pieces sitting in
+open doorways wouldn't look as weird"; the arch/lintel doorways are gone
+and a door set no longer overrides the doorway); piece dials: size /
+lift / SHIFT / PIXEL-PERFECT (Options + `?piecescale=`/`?piecelift=`/
+`?pieceshift=`/`?piecesnap=1`; `setPieceFit`, `DEFAULT_PIECE_FIT` = the
+designer's 110% / +30% / 0 — a piece stands low in its square and rises
+into the one above, which paints behind it by DOM order; ranges widened
+to 50–200% / −50…+100% / ±50% because the first caps were hit;
+pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
+device-pixel multiple of the set's native `--piece-fit`/`--piece-box`
+from tiles.css, landed on whole pixels); selftest 35/35, ui-smoke green
+asserting the ruin / doorway / nothing per breached square, wall-face-only
+props and the pixel-perfect box — see `play/README.md` § "Art themes");
+**Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +

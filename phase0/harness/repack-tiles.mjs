@@ -280,57 +280,42 @@ function wallBlob(spec, sheets) {
 }
 
 // ---- the ruin blob (round 10, 2026-09-03: "make full actual use of
-// autotiling to make rubble and broken walls look good"). Where a wall, a
-// cracked wall or a weak spot BROKE (main.mjs residue ledger → the
-// renderer's .ruin cells) the square is floor to the rules but keeps a
-// broken STUB of the wall: to its neighbours it is still solid (their cases
-// run into it — no end caps either side of a gap, round 10's "autotiling
-// gives up when a door opens") and it paints one of 16 cases by its own
-// solid neighbours (N=1 E=2 S=4 W=8, no diagonals — a stub never fills a
-// corner). From each solid neighbour the wall's full band enters RUIN.tongue
-// pixels unbroken, then drops to a LOWER, narrower stub: its top surface
-// sits RUIN.drop rows lower (a lower wall's top is lower on screen) over a
-// shorter face, bites are eaten out of every free edge by hash, the stone
-// is speckled harder, and a few chips of it lie on the floor around. With
-// nothing to join (mask 0: a lone pillar) it is a low mound alone. Same
-// palette, bevels, outline and brick face as the theme's walls.
-const RUIN = { drop: 4, inset: 2, tongue: 2, chips: 4 };
+// autotiling to make rubble and broken walls look good"; round 11: "wall
+// rubble reads too much like a barrier — can't tell it's passable, needs
+// to blend with the floor"). Where a wall, a cracked wall or a weak spot
+// BROKE (main.mjs residue ledger → the renderer's .ruin cells) the square
+// is floor to the rules, and it LOOKS like floor: the tile is transparent
+// but for the broken END of each joining wall — the band enters RUIN.tongue
+// pixels flush with the neighbour's case (to which the ruin is still solid,
+// so no end cap either side of the gap) and then a ragged fringe, a hashed
+// 0…RUIN.fringe pixels more per pair of rows, with the brick face under an
+// east–west end — and a scatter of stone chips on the floor between. One of
+// 16 cases by its own solid neighbours (N=1 E=2 S=4 W=8, no diagonals);
+// with nothing to join (mask 0: a lone pillar) it is chips alone. Same
+// palette, bevels, outline and face as the theme's walls.
+const RUIN = { tongue: 2, fringe: 3, chips: 5 };
 function ruinBlob(spec, sheets) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
   const facePx = (x, r) => { const o = (r * T + x) * 4; return [face.data[o], face.data[o + 1], face.data[o + 2]]; };
   const inBand = (x) => x >= BAND.x0 && x <= BAND.x1;
-  const speckle = Math.max(22, (spec.speckle || 0) * 2);
   const out = {};
   for (let m = 0; m < 16; m++) {
     const n = m & 1, e = m & 2, s = m & 4, w = m & 8;
-    const sx0 = BAND.x0 + RUIN.inset, sx1 = BAND.x1 - RUIN.inset; // the stub's columns (a north–south run)
-    const sy0 = RUIN.drop, sy1 = BAND.y1 + RUIN.drop; // the stub's rows (an east–west run): the lowered top surface
-    // The unbroken end of each joining wall: only the band, RUIN.tongue deep.
-    const inTongue = (x, y) => (w && x < RUIN.tongue) || (e && x >= T - RUIN.tongue) || (n && y < RUIN.tongue) || (s && y >= T - RUIN.tongue);
-    const tongueBody = (x, y) => (((w && x < RUIN.tongue) || (e && x >= T - RUIN.tongue)) && y <= BAND.y1) || (((n && y < RUIN.tongue) || (s && y >= T - RUIN.tongue)) && inBand(x));
-    // What still stands between the ends: the lowered east–west stub, the
-    // narrowed north–south stub, or a mound when nothing joins.
-    const stub = (x, y) => {
-      if (y >= sy0 && y <= sy1 && ((w && x <= sx1) || (e && x >= sx0))) return true;
-      if (x >= sx0 && x <= sx1 && ((n && y <= (s ? T - 1 : sy1)) || (s && y >= (n ? 0 : sy0)))) return true;
-      return m === 0 && x >= sx0 && x <= sx1 && y >= sy0 && y <= sy1;
-    };
-    const raw = (x, y) => (inTongue(x, y) ? tongueBody(x, y) : stub(x, y));
-    // Bites: a stub pixel on a free edge (a 4-neighbour inside the cell
-    // that is not stone) goes with probability 2/5; the tongues never
-    // erode, so the join to the neighbour's case stays flush.
-    const bitten = (x, y) => {
-      if (inTongue(x, y) || !stub(x, y)) return false;
-      const free = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const xx = x + dx, yy = y + dy; return xx >= 0 && xx < T && yy >= 0 && yy < T && !raw(xx, yy); });
-      return free && hash(x, y, m + 101) % 5 < 2;
-    };
+    // How far past the tongue a wall end reaches on a given band row /
+    // column: 0…fringe, in steps two pixels tall so the break reads as
+    // chunks of stone, not noise.
+    const reach = (k, salt) => RUIN.tongue + (hash(k >> 1, m, salt) % (RUIN.fringe + 1));
     const body = (x, y) => {
       if (y < 0) return !!n && inBand(x);
       if (y >= T) return !!s && inBand(x);
       if (x < 0) return !!w && y <= BAND.y1;
       if (x >= T) return !!e && y <= BAND.y1;
-      return raw(x, y) && !bitten(x, y);
+      if (w && y <= BAND.y1 && x < reach(y, 11)) return true;
+      if (e && y <= BAND.y1 && x >= T - reach(y, 13)) return true;
+      if (n && inBand(x) && y < reach(x, 17)) return true;
+      if (s && inBand(x) && y >= T - reach(x, 19)) return true;
+      return false;
     };
     const tile = blank(T, T);
     const solidPx = Array.from({ length: T }, () => Array(T).fill(false));
@@ -343,16 +328,13 @@ function ruinBlob(spec, sheets) {
       for (let x = 0; x < T; x++) {
         if (!body(x, y)) continue;
         let c = fill;
-        const sp = hash(x, y, m + 7) % 100;
-        if (sp < speckle) c = mix(fill, lo, 0.5);
-        else if (sp > 100 - speckle / 3) c = mix(fill, hi, 0.4);
+        if (spec.speckle && hash(x, y, m + 7) % 100 < spec.speckle) c = mix(fill, lo, 0.5);
         if (!body(x + 1, y) || !body(x, y + 1)) c = lo;
         if (!body(x - 1, y) || !body(x, y - 1)) c = hi;
         put(x, y, c);
       }
     }
-    // The brick face under every south edge — the full FACE_H rows under a
-    // tongue (flush with the neighbour's), what fits under the low stub.
+    // The brick face under every south edge, as under the walls.
     for (let x = 0; x < T; x++) {
       let yb = -1;
       for (let y = 0; y < T; y++) if (body(x, y)) yb = y;
@@ -361,14 +343,6 @@ function ruinBlob(spec, sheets) {
       for (let r = 0; r < rows; r++) put(x, yb + 1 + r, r === rows - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
     }
     const solidAt = (x, y) => x >= 0 && x < T && y >= 0 && y < T && solidPx[y][x];
-    // Chips of the stone on the floor around the stub (2×2, clear of it).
-    for (let k = 0; k < RUIN.chips; k++) {
-      const cx = 1 + (hash(k, m, 5) % (T - 3)), cy = 1 + (hash(k, m, 9) % (T - 3));
-      let clear = true;
-      for (let dy = -1; dy <= 2 && clear; dy++) for (let dx = -1; dx <= 2; dx++) if (solidAt(cx + dx, cy + dy)) { clear = false; break; }
-      if (!clear) continue;
-      put(cx, cy, hi); put(cx + 1, cy, fill); put(cx, cy + 1, lo); put(cx + 1, cy + 1, lo);
-    }
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
         if (solidPx[y][x]) continue;
@@ -377,6 +351,21 @@ function ruinBlob(spec, sheets) {
           tile.data[o] = edge[0]; tile.data[o + 1] = edge[1]; tile.data[o + 2] = edge[2]; tile.data[o + 3] = 255;
         }
       }
+    }
+    // Chips of the stone on the floor between the ends — flat 2×1 and 1×1
+    // flecks, AFTER the outline pass so they carry no ring (a ringed chip
+    // read as a pebble the size of a piece's foot), each a pixel clear of
+    // everything else so they stay flecks.
+    const taken = (x, y) => x < 0 || x >= T || y < 0 || y >= T || tile.data[(y * T + x) * 4 + 3] > 0;
+    for (let k = 0; k < RUIN.chips; k++) {
+      const cx = 1 + (hash(k, m, 5) % (T - 3)), cy = 1 + (hash(k, m, 9) % (T - 3));
+      const cw = k % 2 === 0 ? 2 : 1;
+      let clear = true;
+      for (let dy = -1; dy <= 1 && clear; dy++) for (let dx = -1; dx <= cw; dx++) if (taken(cx + dx, cy + dy)) { clear = false; break; }
+      if (!clear) continue;
+      const o = (cy * T + cx) * 4;
+      tile.data[o] = lo[0]; tile.data[o + 1] = lo[1]; tile.data[o + 2] = lo[2]; tile.data[o + 3] = 255;
+      if (cw === 2) { tile.data[o + 4] = hi[0]; tile.data[o + 5] = hi[1]; tile.data[o + 6] = hi[2]; tile.data[o + 7] = 255; }
     }
     out[`ruin-${m}`] = tile;
   }
@@ -451,40 +440,42 @@ function portcullis(base, bar, shadow, y0 = 6) {
   for (const y of [y0 + 3, y0 + 7]) for (let x = 3; x <= 13; x++) if (x !== 4 && x !== 8 && x !== 12) put(x, y, y === y0 + 3 ? bar : shadow);
   return tile;
 }
-// With the bars raised (the open gate) the opening is TRANSPARENT: the
-// floor shows through the stone frame, so a doorway reads as a way through,
-// not as a pit (round 10).
-function barredGate(spec, { bars = true } = {}) {
+function barredGate(spec) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const tile = blank(T, T);
   const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
-  for (let y = 0; y < T; y++) {
-    for (let x = 0; x < T; x++) {
-      if (y < 2 || x < 2 || x > 13) put(x, y, x === 1 || y === 1 ? lo : x === 14 ? hi : fill);
-      else if (bars) put(x, y, edge);
-    }
-  }
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) put(x, y, y < 2 || x < 2 || x > 13 ? (x === 1 || y === 1 ? lo : x === 14 ? hi : fill) : edge);
   for (let x = 2; x <= 13; x++) put(x, 2, lo);
-  return bars ? portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3) : tile;
+  return portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3);
 }
-/** pixel-poem's door with the leaf gone: the lintel (rows 0–3) and the
- *  outline posts stay, a 2-px jamb of the door's own timber stands each
- *  side, and the opening between is TRANSPARENT — the floor shows through
- *  (round 10: the edge-on leaf and the iron bands' leftover outline pixels
- *  made an unreadable mess). */
-function openLeaf(tile) {
-  const out = blank(T, T);
-  tile.data.copy(out.data);
-  const put = (x, y, c) => { const o = (y * T + x) * 4; out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = 255; };
-  for (let y = 4; y < T; y++) {
-    for (let x = 0; x < T; x++) {
-      if (x === 0 || x === T - 1) put(x, y, [0x25, 0x13, 0x1a]);
-      else if (x === 1) put(x, y, [0x89, 0x5a, 0x45]);
-      else if (x === T - 2) put(x, y, [0x52, 0x3b, 0x40]);
-      else out.data[(y * T + x) * 4 + 3] = 0;
-    }
+// The OPEN DOORWAY an east–west door leaves behind (main.mjs residue →
+// board-ui decor-doorway), GENERATED per theme (round 11: "open doors just
+// don't look great — avoid having something arc over the space above the
+// doorway"): no lintel, no arch. The wall's own band enters two pixels from
+// each side (the doorway is solid to its neighbours, so their cases run
+// flat into it) with the brick face under it, a two-pixel POST in the
+// door's material stands at each end — timber for the hall, pale stone for
+// the castle, iron for the crypt — and everything between is transparent:
+// the floor, top to bottom, so a piece standing in the doorway stands
+// between the posts under open sky.
+function doorwayTile(spec, sheets, post) {
+  const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
+  const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
+  const facePx = (x, r) => { const o = (r * T + x) * 4; return [face.data[o], face.data[o + 1], face.data[o + 2]]; };
+  const lit = hex(post.lit), dark = hex(post.dark);
+  const tile = blank(T, T);
+  const solidPx = Array.from({ length: T }, () => Array(T).fill(false));
+  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; solidPx[y][x] = true; };
+  for (const x of [0, 1, 14, 15]) {
+    for (let y = 0; y <= BAND.y1; y++) put(x, y, y === 0 ? hi : y === BAND.y1 ? lo : fill);
+    for (let r = 0; r < FACE_H; r++) put(x, BAND.y1 + 1 + r, r === FACE_H - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
   }
-  return out;
+  for (let y = 0; y < T; y++) {
+    put(2, y, lit); put(3, y, dark);
+    put(12, y, lit); put(13, y, dark);
+  }
+  for (let y = 0; y < T; y++) for (const x of [4, 11]) { const o = (y * T + x) * 4; tile.data[o] = edge[0]; tile.data[o + 1] = edge[1]; tile.data[o + 2] = edge[2]; tile.data[o + 3] = 255; }
+  return tile;
 }
 
 const THEMES = {
@@ -505,6 +496,7 @@ const THEMES = {
       banner: ['pp', 4, 7],
     },
     doorSet: 'leaf',
+    doorPost: { lit: '#bf704d', dark: '#895a45' }, // the leaf's own timber
     // Top band in the pack's cap colours; the face is its own brick rows.
     wall: { fill: '#6e4a48', hi: '#916a62', lo: '#4c2f49', edge: '#25131a', speckle: 0, face: { sheet: 'pp', x: 2, y: 0, row: 4 } },
     // The Catacombs flagstones in pixel-poem's floor purple.
@@ -527,6 +519,7 @@ const THEMES = {
     },
     gate: { arch: ['dg', 11, 11], bar: '#c7cfdd', shadow: '#5a6787' }, // a portcullis in the pack's arched doorway
     doorSet: 'portcullis',
+    doorPost: { lit: '#c7cfdd', dark: '#5a6787' }, // the pack's pale stone
     // The pack's wall-top blue with its highlight/shade; brick face rows.
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
     // The Catacombs flagstones in Dungeon Gathering's floor blue-grey.
@@ -548,6 +541,7 @@ const THEMES = {
     },
     gate: { barred: true }, // a barred gate in the crypt's own stone
     doorSet: 'gate',
+    doorPost: { lit: '#7a7264', dark: '#3a352d' }, // Catacombs iron
     // Lifted a step above the pack's near-black stone so a wall reads
     // against its own floor; speckled like its column.
     wall: { fill: '#3c3129', hi: '#5a5347', lo: '#231f19', edge: '#0e0a08', speckle: 14, face: { sheet: 'cat', x: 33, y: 8, row: 6 } },
@@ -593,28 +587,22 @@ themeNames.forEach((theme, row) => {
     tiles[role] = tile;
     emit(role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
   }
-  // The door and its open version (the doorway left behind); also
-  // collected as a selectable DOOR SET (Options → Doors, board-ui DOOR_SETS).
+  // The door — also collected as a selectable DOOR SET (Options → Doors,
+  // board-ui DOOR_SETS) — and the theme's generated doorway.
   const gate = THEMES[theme].gate;
-  let door, doorway;
+  let door;
   if (gate?.arch) {
     const [sheet, x, y] = gate.arch;
-    const arch = crop(sheets[sheet], x * T, y * T, T, T);
-    door = portcullis(arch, hex(gate.bar), hex(gate.shadow));
-    doorway = arch;
+    door = portcullis(crop(sheets[sheet], x * T, y * T, T, T), hex(gate.bar), hex(gate.shadow));
     emit('door', door, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, composed: 'portcullis drawn into the pack arch' });
-    emit('doorway', doorway, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, composed: 'the pack arch, open' });
   } else if (gate?.barred) {
     door = barredGate(THEMES[theme].wall);
-    doorway = barredGate(THEMES[theme].wall, { bars: false });
     emit('door', door, { composed: 'barred gate in the theme stone' });
-    emit('doorway', doorway, { composed: 'the gate, bars raised' });
   } else {
     door = tiles.door;
-    doorway = openLeaf(door);
-    emit('doorway', doorway, { composed: 'pixel-poem leaf swung open' });
   }
-  doorSets[THEMES[theme].doorSet] = { door, doorway };
+  doorSets[THEMES[theme].doorSet] = { door };
+  emit('doorway', doorwayTile(THEMES[theme].wall, sheets, THEMES[theme].doorPost), { composed: 'the wall ends, two posts in the door material, floor between' });
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
     const tint = THEMES[theme].floor.tint;
@@ -640,9 +628,10 @@ themeNames.forEach((theme, row) => {
 // their own margins, so under a theme every furniture sprite is full-size.
 // Door sets (Options → Doors): the same attribute-selector specificity as
 // the theme blocks, emitted AFTER them so a chosen door beats the theme's.
+// (The doorway stays the theme's own: it is drawn in the theme's wall.)
 for (const name of DOOR_SETS) {
   if (!doorSets[name]) throw new Error(`door set ${name} was not produced by any theme`);
-  css.push(`[data-doors="${name}"] {\n  --sprite-door: url("data:image/png;base64,${encodePng(doorSets[name].door).toString('base64')}");\n  --decor-doorway: url("data:image/png;base64,${encodePng(doorSets[name].doorway).toString('base64')}");\n}`);
+  css.push(`[data-doors="${name}"] {\n  --sprite-door: url("data:image/png;base64,${encodePng(doorSets[name].door).toString('base64')}");\n}`);
 }
 // The autotile classes → the theme's case, the plain wall as the fallback
 // (so the in-house set, with no per-case tiles, paints its one block).
@@ -662,7 +651,10 @@ pieceNames.forEach((name, row) => {
   const set = PIECE_SHEETS[name];
   const bw = set.box, bh = set.fit;
   const scale = 0.96 / set.fit; // cells per sprite px: the box (the tallest piece) stands 0.96 cell before the Options size dial
-  const decl = [`  --piece-w: ${(bw * scale).toFixed(3)};`, `  --piece-h: ${(bh * scale).toFixed(3)};`];
+  // --piece-fit / --piece-box: the box's native pixels, read back by
+  // board-ui's pixel-perfect layout (setPieceFit snap) to size every
+  // piece in whole device-pixel multiples of the sprite.
+  const decl = [`  --piece-w: ${(bw * scale).toFixed(3)};`, `  --piece-h: ${(bh * scale).toFixed(3)};`, `  --piece-fit: ${bh};`, `  --piece-box: ${bw};`];
   index.pieces.sets[name] = { row, title: set.title, pack: set.pack, box: [bw, bh], sheets: [...new Set([...Object.values(set.white), ...Object.values(set.black)].map((c) => SHEETS[c[0]][1]))] };
   [...PIECE_ORDER].forEach((letter, i) => {
     for (const side of ['white', 'black']) {
@@ -703,7 +695,7 @@ for (const [key, p] of Object.entries(PACKS)) {
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas) and the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are the packs\' doors with the leaf or bars removed (pixel-poem\'s door timber colours are reused for the hall doorway\'s jambs).');
+md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas) and the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — the wall ends and two posts in the door\'s material (pixel-poem\'s door timber colours for the hall, the packs\' stone and iron tones for the others).');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');

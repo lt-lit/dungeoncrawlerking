@@ -169,7 +169,7 @@
     },
     "doorway": {
      "col": 13,
-     "composed": "pixel-poem leaf swung open"
+     "composed": "the wall ends, two posts in the door material, floor between"
     },
     "floor-1": {
      "col": 14,
@@ -632,11 +632,7 @@
     },
     "doorway": {
      "col": 13,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 11,
-     "y": 11,
-     "composed": "the pack arch, open"
+     "composed": "the wall ends, two posts in the door material, floor between"
     },
     "floor-1": {
      "col": 14,
@@ -1088,7 +1084,7 @@
     },
     "doorway": {
      "col": 13,
-     "composed": "the gate, bars raised"
+     "composed": "the wall ends, two posts in the door material, floor between"
     },
     "floor-1": {
      "col": 14,

@@ -40,7 +40,7 @@ import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS } from './board-ui.mjs';
+import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS } from './director.mjs';
 
@@ -224,7 +224,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: 0.9, pieceLift: 0.05 };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: false };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -237,9 +237,11 @@ function godConfig() {
   return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
 }
 
-// The piece-fit dials' ranges (index.html's sliders carry the same).
-const PIECE_SCALE_RANGE = [0.6, 1.1];
-const PIECE_LIFT_RANGE = [-0.1, 0.3];
+// The piece-fit dials' ranges (index.html's sliders carry the same) —
+// wide on purpose (round 11: the designer's numbers hit the old caps).
+const PIECE_SCALE_RANGE = [0.5, 2];
+const PIECE_LIFT_RANGE = [-0.5, 1];
+const PIECE_SHIFT_RANGE = [-0.5, 0.5];
 function clampNum(v, [lo, hi], dflt) {
   const n = typeof v === 'string' ? parseFloat(v) : v;
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n * 100) / 100)) : dflt;
@@ -254,8 +256,10 @@ function loadOptions() {
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
     if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
-    options.pieceScale = clampNum(options.pieceScale, PIECE_SCALE_RANGE, 0.9);
-    options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, 0.05);
+    options.pieceScale = clampNum(options.pieceScale, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale);
+    options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
+    options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
+    options.pieceSnap = !!options.pieceSnap;
   } catch {
     /* defaults */
   }
@@ -297,18 +301,25 @@ function syncOptionsUI() {
   $('optPieces').value = options.pieces;
   $('optDoors').value = options.doors;
   const fit = pieceFitFor();
+  const pct = (v, signed) => `${signed && v >= 0 ? '+' : ''}${Math.round(v * 100)}%`;
   $('optPieceScale').value = String(fit.scale);
-  $('optPieceScaleV').textContent = `${Math.round(fit.scale * 100)}%`;
+  $('optPieceScaleV').textContent = pct(fit.scale);
   $('optPieceLift').value = String(fit.lift);
-  $('optPieceLiftV').textContent = `${fit.lift >= 0 ? '+' : ''}${Math.round(fit.lift * 100)}%`;
+  $('optPieceLiftV').textContent = pct(fit.lift, true);
+  $('optPieceShift').value = String(fit.shift);
+  $('optPieceShiftV').textContent = pct(fit.shift, true);
+  $('optPieceSnap').checked = fit.snap;
 }
 
 /** The piece-fit dials (board-ui setPieceFit): `?piecescale=` /
- *  `?piecelift=` (feel-check overrides, never saved) > the Options. */
+ *  `?piecelift=` / `?pieceshift=` / `?piecesnap=1` (feel-check overrides,
+ *  never saved) > the Options. */
 function pieceFitFor() {
   return {
-    scale: clampNum(params.get('piecescale') ?? options.pieceScale, PIECE_SCALE_RANGE, 0.9),
-    lift: clampNum(params.get('piecelift') ?? options.pieceLift, PIECE_LIFT_RANGE, 0.05),
+    scale: clampNum(params.get('piecescale') ?? options.pieceScale, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale),
+    lift: clampNum(params.get('piecelift') ?? options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift),
+    shift: clampNum(params.get('pieceshift') ?? options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift),
+    snap: params.has('piecesnap') ? params.get('piecesnap') !== '0' : !!options.pieceSnap,
   };
 }
 
@@ -1952,11 +1963,19 @@ $('optDoors').addEventListener('change', (e) => {
 // The piece-fit dials apply live as they drag (input), so the designer can
 // settle the feel on the phone and read the numbers off the labels.
 $('optPieceScale').addEventListener('input', (e) => {
-  options.pieceScale = clampNum(e.target.value, PIECE_SCALE_RANGE, 0.9);
+  options.pieceScale = clampNum(e.target.value, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale);
   applyOptions();
 });
 $('optPieceLift').addEventListener('input', (e) => {
-  options.pieceLift = clampNum(e.target.value, PIECE_LIFT_RANGE, 0.05);
+  options.pieceLift = clampNum(e.target.value, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
+  applyOptions();
+});
+$('optPieceShift').addEventListener('input', (e) => {
+  options.pieceShift = clampNum(e.target.value, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
+  applyOptions();
+});
+$('optPieceSnap').addEventListener('change', (e) => {
+  options.pieceSnap = e.target.checked;
   applyOptions();
 });
 /** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
