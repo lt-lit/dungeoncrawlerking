@@ -5,12 +5,27 @@
   "floor-2",
   "floor-3",
   "wall",
-  "wall-v",
   "door",
   "crate",
   "chest",
   "barrel",
-  "rubble"
+  "rubble",
+  "wall-0",
+  "wall-1",
+  "wall-2",
+  "wall-3",
+  "wall-4",
+  "wall-5",
+  "wall-6",
+  "wall-7",
+  "wall-8",
+  "wall-9",
+  "wall-10",
+  "wall-11",
+  "wall-12",
+  "wall-13",
+  "wall-14",
+  "wall-15"
  ],
  "themes": {
   "hall": {
@@ -46,32 +61,112 @@
      "y": 0
     },
     "door": {
-     "col": 5,
+     "col": 4,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 7,
      "y": 3
     },
     "crate": {
-     "col": 6,
+     "col": 5,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 0,
      "y": 8
     },
     "chest": {
-     "col": 7,
+     "col": 6,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 2,
      "y": 8
     },
     "rubble": {
-     "col": 9,
+     "col": 8,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
      "x": 20,
      "y": 22
+    },
+    "wall-0": {
+     "col": 9,
+     "composed": "pillar: wall (H) + V",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 10,
+     "composed": "pillar: wall (H) + V",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 11,
+     "composed": "pillar: wall (H) + V",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 12,
+     "composed": "pillar: wall (H) + V",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 13,
+     "composed": "pillar: wall (H) + V",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 14,
+     "composed": "pillar: wall (H) + V",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 15,
+     "composed": "pillar: wall (H) + V",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 16,
+     "composed": "pillar: wall (H) + V",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 17,
+     "composed": "pillar: wall (H) + V",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 18,
+     "composed": "pillar: wall (H) + V",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 19,
+     "composed": "pillar: wall (H) + V",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 20,
+     "composed": "pillar: wall (H) + V",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 21,
+     "composed": "pillar: wall (H) + V",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 22,
+     "composed": "pillar: wall (H) + V",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 23,
+     "composed": "pillar: wall (H) + V",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 24,
+     "composed": "pillar: wall (H) + V",
+     "mask": 15
     }
    }
   },
@@ -108,39 +203,119 @@
      "y": 10
     },
     "door": {
-     "col": 5,
+     "col": 4,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 7,
      "y": 3
     },
     "crate": {
-     "col": 6,
+     "col": 5,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 0,
      "y": 8
     },
     "chest": {
-     "col": 7,
+     "col": 6,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 2,
      "y": 8
     },
     "barrel": {
-     "col": 8,
+     "col": 7,
      "pack": "dungeon-gathering",
      "sheet": "Set 1.png",
      "x": 2,
      "y": 12
     },
     "rubble": {
-     "col": 9,
+     "col": 8,
      "pack": "dungeon-gathering",
      "sheet": "Set 1.png",
      "x": 12,
      "y": 12
+    },
+    "wall-0": {
+     "col": 9,
+     "composed": "top: wall (H) + V",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 10,
+     "composed": "top: wall (H) + V",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 11,
+     "composed": "top: wall (H) + V",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 12,
+     "composed": "top: wall (H) + V",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 13,
+     "composed": "top: wall (H) + V",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 14,
+     "composed": "top: wall (H) + V",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 15,
+     "composed": "top: wall (H) + V",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 16,
+     "composed": "top: wall (H) + V",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 17,
+     "composed": "top: wall (H) + V",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 18,
+     "composed": "top: wall (H) + V",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 19,
+     "composed": "top: wall (H) + V",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 20,
+     "composed": "top: wall (H) + V",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 21,
+     "composed": "top: wall (H) + V",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 22,
+     "composed": "top: wall (H) + V",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 23,
+     "composed": "top: wall (H) + V",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 24,
+     "composed": "top: wall (H) + V",
+     "mask": 15
     }
    }
   },
@@ -176,47 +351,120 @@
      "x": 33,
      "y": 8
     },
-    "wall-v": {
-     "col": 4,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 25,
-     "y": 4
-    },
     "door": {
-     "col": 5,
+     "col": 4,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 7,
      "y": 3
     },
     "crate": {
-     "col": 6,
+     "col": 5,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 8,
      "y": 5
     },
     "chest": {
-     "col": 7,
+     "col": 6,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 2,
      "y": 8
     },
     "barrel": {
-     "col": 8,
+     "col": 7,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 12,
      "y": 8
     },
     "rubble": {
-     "col": 9,
+     "col": 8,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
      "x": 20,
      "y": 22
+    },
+    "wall-0": {
+     "col": 9,
+     "composed": "pillar: wall (H) + V",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 10,
+     "composed": "pillar: wall (H) + V",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 11,
+     "composed": "pillar: wall (H) + V",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 12,
+     "composed": "pillar: wall (H) + V",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 13,
+     "composed": "pillar: wall (H) + V",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 14,
+     "composed": "pillar: wall (H) + V",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 15,
+     "composed": "pillar: wall (H) + V",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 16,
+     "composed": "pillar: wall (H) + V",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 17,
+     "composed": "pillar: wall (H) + V",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 18,
+     "composed": "pillar: wall (H) + V",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 19,
+     "composed": "pillar: wall (H) + V",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 20,
+     "composed": "pillar: wall (H) + V",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 21,
+     "composed": "pillar: wall (H) + V",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 22,
+     "composed": "pillar: wall (H) + V",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 23,
+     "composed": "pillar: wall (H) + V",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 24,
+     "composed": "pillar: wall (H) + V",
+     "mask": 15
     }
    }
   }

@@ -849,20 +849,30 @@ async function main() {
   // --- Art themes (2026-09-03): the repacked tilesets ride a data-theme
   // attribute; wall RUNS and floor VARIANTS are classes the themes paint.
   // (selftest.html loads no stylesheet — computed looks are ui-smoke's job.)
-  await check('board renderer: art themes, wall runs, floor variants', async () => {
+  await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
     const host = document.createElement('div');
     const ui = new BoardUI(host, { files: 4, ranks: 5 });
     const has = (sq, cls) => ui.cellClasses(sq).includes(cls);
+    const mask = (sq) => ui.cellClasses(sq).find((c) => c.startsWith('wm-')) ?? null;
     // a1–a3 a stone column, b5–d5 a stone row, c3 a lone block.
     const fen = '1***/4/*1*1/*3/*3 w - - 0 1';
     ui.setPosition(fen);
-    for (const sq of ['a1', 'a2', 'a3']) if (!has(sq, 'wall-v')) throw new Error(`${sq} stands in a vertical run: ${ui.cellClasses(sq)}`);
-    for (const sq of ['b5', 'c5', 'd5', 'c3']) if (has(sq, 'wall-v')) throw new Error(`${sq} is not a vertical run: ${ui.cellClasses(sq)}`);
-    // A hole breaks the run (it is not solid); furniture joins it.
+    // Mask bits N=1 E=2 S=4 W=8.
+    for (const [sq, want] of [['a1', 'wm-1'], ['a2', 'wm-5'], ['a3', 'wm-4'], ['b5', 'wm-2'], ['c5', 'wm-10'], ['d5', 'wm-8'], ['c3', 'wm-0']]) {
+      if (mask(sq) !== want) throw new Error(`${sq} autotile case: want ${want}, got ${mask(sq)} (${ui.cellClasses(sq)})`);
+    }
+    if (mask('b3') !== null) throw new Error('floor carries no autotile class');
+    // A hole is not solid (it breaks the column); a cracked wall and a door are; a crate is not.
     ui.setPosition(fen, { holes: new Set(['a2']) });
-    if (has('a1', 'wall-v') || has('a3', 'wall-v') || has('a2', 'wall-v')) throw new Error('a hole between two walls must break the vertical run');
+    if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0' || mask('a2') !== null) throw new Error(`a hole between two walls must break the column (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
-    if (!has('a1', 'wall-v') || !has('a2', 'wall-v') || !has('a3', 'wall-v')) throw new Error('furniture (here a cracked wall) is solid to the run: ' + ui.cellClasses('a2'));
+    if (mask('a1') !== 'wm-1' || mask('a2') !== 'wm-5' || mask('a3') !== 'wm-4') throw new Error(`a cracked wall continues the column (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
+    ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
+    if (mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== null) throw new Error(`a door continues the column, and is not itself a wall tile (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
+    ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'crate' } });
+    if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0') throw new Error(`a crate does not continue the wall line (${mask('a1')}, ${mask('a3')})`);
+    ui.setPosition(fen);
+    if (mask('a1') !== 'wm-1' || mask('c3') !== 'wm-0') throw new Error('masks must be recomputed on every paint');
     // Floor variants: one per square, stable across repaints, some of each.
     const variants = (sq) => ui.cellClasses(sq).filter((c) => /^f[123]$/.test(c));
     const before = {};

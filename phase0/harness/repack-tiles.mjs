@@ -30,7 +30,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
+import { decodePng, encodePng, blank, crop, blit, over, keepColumns, keepRows, samePixels } from '../lib/png.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -68,21 +68,62 @@ const SHEETS = {
 };
 
 // Role → the custom property it paints. floor-N are the floor's stable
-// variants (board-ui.mjs picks f1/f2/f3 per square), wall-v the tile for a
-// wall standing in a VERTICAL run (falls back to wall), the rest are the
-// furniture sprites (skin-<name>; crate is the '^' default).
+// variants (board-ui.mjs picks f1/f2/f3 per square); wall is the plain
+// horizontal piece (the legend, and the fallback); wall-<mask> are the 16
+// AUTOTILE cases (mask bits N=1 E=2 S=4 W=8 of solid neighbours — board-ui
+// classes each wall `wm-<mask>`), composed below from the pack's horizontal
+// wall (H) and its pillar / wall-top piece (V); the rest are the furniture
+// sprites (skin-<name>; crate is the '^' default).
 const ROLES = {
   'floor-1': '--tile-floor-1',
   'floor-2': '--tile-floor-2',
   'floor-3': '--tile-floor-3',
   wall: '--tile-wall',
-  'wall-v': '--tile-wall-v',
   door: '--sprite-door',
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
   rubble: '--sprite-rubble',
 };
+for (let m = 0; m < 16; m++) ROLES[`wall-${m}`] = `--tile-wall-${m}`;
+const N = 1, E = 2, S = 4, W = 8;
+
+// AUTOTILE composition (2026-09-03, "walls look like ass without
+// autotiling"). These packs draw walls as 2.5-D room borders — a horizontal
+// wall shows its cap and FACE in one tile (H), a vertical one is a pillar
+// or a wall-top strip (V) — and none ships a thin-wall 16-case set, so the
+// cases are composed from H and V per theme:
+//   pillar  (pixel-poem, Catacombs — V is a free-standing column with
+//           transparent sides, lifted out of the pack's void by `keep`):
+//           the face (H) wherever the wall runs east/west, and the column
+//           over it wherever it runs north/south or stands alone — a
+//           corner is a post where the face turns, a T a post on the face.
+//   top     (Dungeon Gathering — V is an opaque wall-TOP strip): a cell
+//           with the wall continuing north or south shows its top; a face
+//           only where the run is purely east/west; the south end of a
+//           column shows top over face.
+// Transparent pixels let the floor tile show through (the cell keeps its
+// floor layers under the wall — style.css).
+function composeWalls(H, V, style) {
+  const out = {};
+  const top = keepRows(V, 0, T / 2 - 1);
+  const bottom = keepRows(V, T / 2, T - 1);
+  for (let m = 0; m < 16; m++) {
+    const n = m & N, e = m & E, s = m & S, w = m & W;
+    const tile = blank(T, T);
+    if (style === 'pillar') {
+      if (e || w) over(tile, H, 0, 0);
+      if (n || s || !(e || w)) over(tile, V, 0, 0);
+    } else {
+      if (n || s) {
+        over(tile, V, 0, 0);
+        if (n && !s) over(tile, keepRows(H, T / 2, T - 1), 0, 0); // column's south end: face below the top
+      } else over(tile, H, 0, 0);
+    }
+    out[`wall-${m}`] = tile;
+  }
+  return out;
+}
 
 const THEMES = {
   hall: {
@@ -97,6 +138,9 @@ const THEMES = {
       chest: ['pp', 2, 8],
       rubble: ['cat', 20, 22],
     },
+    // The room's left pillar: 7 px of post against the void, centred.
+    wallV: { sheet: 'pp', x: 0, y: 2, keep: [9, 15], dx: -5, void: [0x25, 0x13, 0x1a] },
+    wallStyle: 'pillar',
   },
   castle: {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
@@ -111,6 +155,9 @@ const THEMES = {
       barrel: ['dg', 2, 12],
       rubble: ['dg', 12, 12],
     },
+    // The full-width wall-top strip (two edged planks with a seam).
+    wallV: { sheet: 'dg', x: 4, y: 8 },
+    wallStyle: 'top',
   },
   crypt: {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
@@ -119,13 +166,15 @@ const THEMES = {
       'floor-2': ['cat', 46, 13],
       'floor-3': ['cat', 47, 15],
       wall: ['cat', 33, 8],
-      'wall-v': ['cat', 25, 4],
       door: ['pp', 7, 3],
       crate: ['catdeco', 8, 5],
       chest: ['pp', 2, 8],
       barrel: ['catdeco', 12, 8],
       rubble: ['cat', 20, 22],
     },
+    // The stone column, 12 px wide; its 2 px of opaque dark margin dropped.
+    wallV: { sheet: 'cat', x: 25, y: 4, keep: [2, 13] },
+    wallStyle: 'pillar',
   },
 };
 
@@ -150,16 +199,27 @@ const provenance = [];
 themeNames.forEach((theme, row) => {
   const decl = [];
   index.themes[theme] = { row, title: THEMES[theme].title, tiles: {} };
-  for (const [role, [sheet, x, y]] of Object.entries(THEMES[theme].tiles)) {
+  const emit = (role, tile, prov) => {
     if (!(role in ROLES)) throw new Error(`${theme}: unknown role ${role}`);
     const col = roleNames.indexOf(role);
-    const tile = crop(sheets[sheet], x * T, y * T, T, T);
     blit(atlas, tile, col * T, row * T);
     const b64 = encodePng(tile).toString('base64');
     decl.push(`  ${ROLES[role]}: url("data:image/png;base64,${b64}");`);
-    const pack = SHEETS[sheet][0];
-    index.themes[theme].tiles[role] = { col, pack, sheet: SHEETS[sheet][1], x, y };
-    provenance.push({ theme, role, pack, sheet: SHEETS[sheet][1], x, y });
+    index.themes[theme].tiles[role] = { col, ...prov };
+    if (!prov.composed) provenance.push({ theme, role, ...prov });
+  };
+  const tiles = {};
+  for (const [role, [sheet, x, y]] of Object.entries(THEMES[theme].tiles)) {
+    tiles[role] = crop(sheets[sheet], x * T, y * T, T, T);
+    emit(role, tiles[role], { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
+  }
+  const vs = THEMES[theme].wallV;
+  if (vs) {
+    let V = crop(sheets[vs.sheet], vs.x * T, vs.y * T, T, T);
+    if (vs.keep) V = keepColumns(V, vs.keep[0], vs.keep[1], vs.dx ?? 0, vs.void ?? null);
+    provenance.push({ theme, role: 'wall pillar/top (V)', pack: SHEETS[vs.sheet][0], sheet: SHEETS[vs.sheet][1], x: vs.x, y: vs.y });
+    const cases = composeWalls(tiles.wall, V, THEMES[theme].wallStyle);
+    for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: `${THEMES[theme].wallStyle}: wall (H) + V`, mask: +role.slice(5) });
   }
   css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
@@ -186,7 +246,7 @@ for (const [key, p] of Object.entries(PACKS)) {
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`.');
+md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The 16 wall autotile cases per theme (`wall-0`…`wall-15` in the atlas) are composed by the repack tool from two pack tiles — the horizontal wall (H) and the pillar or wall-top piece (V) listed below — so they carry no separate provenance.');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');

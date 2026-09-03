@@ -29,9 +29,12 @@
 //   skin-<name> on a .furniture cell picks the SPRITE (door, barrel, table,
 //   chair, shelf, chest, rubble; the crate is the default) from the stage's
 //   skin grid (stage.mjs stageSkins) — cosmetics only, never grid state.
-//   .wall-v    on a wall/cracked cell standing in a VERTICAL run (solid
-//              above or below, nothing solid beside): a tileset with a
-//              column piece paints it there (--tile-wall-v, else --tile-wall).
+//   .wm-<mask> on a wall/cracked cell: its AUTOTILE case — the mask of
+//              solid neighbours (N=1 E=2 S=4 W=8; stone that is not a hole,
+//              a cracked wall, or a DOOR skin — a door continues the wall
+//              line; crates and the rest do not). A theme paints the 16
+//              composed cases (--tile-wall-<mask>), the in-house set one
+//              block for all.
 //   .f1/.f2/.f3 the floor's stable texture variant per square (a hash of
 //              the square, fixed for the board's life) — a themed floor
 //              gets a little variety, the plain floor ignores them.
@@ -249,12 +252,14 @@ export class BoardUI {
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {} } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
-    // Solid = stone that is not a hole, or furniture (a wall to the eye).
+    // Solid (for the wall autotile) = stone that is not a hole, a cracked
+    // wall, or a door — the things that continue a wall line to the eye.
     const solid = (ff, rr) => {
       if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
       const t = grid[this.ranks - rr]?.[ff] ?? null;
-      if (t === FURNITURE) return true;
-      return t === WALL && !holes.has(String.fromCharCode(97 + ff) + rr);
+      const name = String.fromCharCode(97 + ff) + rr;
+      if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door';
+      return t === WALL && !holes.has(name);
     };
     for (const [sq, cell] of this.cells) {
       const f = sq.charCodeAt(0) - 97;
@@ -270,10 +275,11 @@ export class BoardUI {
       cell.classList.toggle('furniture', isFurniture);
       const cracked = isFurniture && godCrates.has(sq);
       cell.classList.toggle('cracked', cracked);
-      // A wall (or a cracked wall) in a vertical run and not a horizontal
-      // one wears the column piece, if the theme has one.
-      const vRun = (solid(f, rank + 1) || solid(f, rank - 1)) && !(solid(f - 1, rank) || solid(f + 1, rank));
-      cell.classList.toggle('wall-v', (wallTile || cracked) && vRun);
+      // The autotile case of a wall or cracked wall: which neighbours it
+      // joins. One wm-<mask> class, replaced on every paint.
+      const mask = (wallTile || cracked) ? (solid(f, rank + 1) ? 1 : 0) | (solid(f + 1, rank) ? 2 : 0) | (solid(f, rank - 1) ? 4 : 0) | (solid(f - 1, rank) ? 8 : 0) : -1;
+      for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
+      if (mask >= 0) cell.classList.add(`wm-${mask}`);
       const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);

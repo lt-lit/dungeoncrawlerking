@@ -66,9 +66,15 @@ tiles from the packs in gitignored `phase0/assets-src/` into
 `[data-theme]`) + `play/CREDITS.md`; the packs themselves are never
 committed; every stage carries a `theme` (gen-skins.mjs assigns it from the
 stage NAME's vocabulary, balanced 18/21/19), overridden by the Options
-panel's Art set or `?theme=`; the renderer adds `wall-v` (vertical wall
-runs) and `f1/f2/f3` floor variants; selftest 35/35, ui-smoke asserts the
-themes on the live board — see `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+panel's Art set or `?theme=`; the renderer classes every wall by its
+solid-neighbour mask (`wm-<mask>`, N=1 E=2 S=4 W=8; holes are not solid,
+doors are) and the repack tool COMPOSES each theme's 16 autotile cases from
+the pack's wall + pillar/top pieces (the packs draw 2.5-D room borders and
+ship no thin-wall set — designer round 4: "walls look like ass without
+autotiling"), floor tiles show through under every sprite and pillar, and
+`f1/f2/f3` are floor variants; selftest 35/35, ui-smoke asserts the themes
+and the doorway's masks on the live board — see `play/README.md` § "Art
+themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +

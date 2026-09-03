@@ -112,7 +112,8 @@ const themeState = () =>
       wall: bg('#board .cell.wall'),
       floor: bg('#board .cell.light:not(.wall):not(.furniture):not(.hole)'),
       door: document.querySelector('#board .cell.skin-door .piece.neutral') ? bg('#board .cell.skin-door .piece.neutral') : '',
-      wallV: document.querySelectorAll('#board .cell.wall-v').length,
+      doorBg: document.querySelector('#board .cell.skin-door') ? bg('#board .cell.skin-door') : '',
+      masks: [...document.querySelectorAll('#board .cell.wall')].map((c) => `${c.dataset.square}:${[...c.classList].find((k) => k.startsWith('wm-'))}`).join(' '),
     };
   });
 const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage.theme);
@@ -120,7 +121,13 @@ const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage
   const t = await themeState();
   expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
   expect(t.wall.includes('data:image/png') && t.floor.includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${t.wall.slice(0, 30)}…, floor ${t.floor.slice(0, 30)}…)`);
-  if (STAGE === 's07-the-doorway') expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite');
+  if (STAGE === 's07-the-doorway') {
+    expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite');
+    // d6 is a dark square: the checker shade (a flat gradient) is allowed, the in-house bevel (160deg) is not.
+    expect(t.doorBg.includes('data:image/png') && !t.doorBg.includes('160deg'), `the floor tile shows behind the door, no in-house bevel (${t.doorBg.slice(0, 60)}…)`);
+    // ##.^## on rank 6: a6 joins east, b6 west, e6 joins the door west and f6 east, f6 west.
+    expect(t.masks === 'a6:wm-2 b6:wm-8 e6:wm-10 f6:wm-8', `wall autotile masks on the doorway's wall line (${t.masks})`);
+  }
 }
 const setTheme = (name) =>
   page.evaluate((n) => {

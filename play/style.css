@@ -265,21 +265,38 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    variant (board-ui.mjs floorVariant). The dark squares keep the checker by
    a translucent shade over the tile (--floor-shade is transparent without a
    theme, so the plain look is untouched). */
-.cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); }
+.cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); --shade: linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)); }
 .cell.f2 { --tile-floor: var(--tile-floor-2, var(--tile-floor-1)); }
 .cell.f3 { --tile-floor: var(--tile-floor-3, var(--tile-floor-1)); }
-.cell.wall-v { --wall-tile: var(--tile-wall-v, var(--tile-wall)); }
 .cell.light {
   background: var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-light);
   image-rendering: pixelated;
 }
 .cell.dark {
-  background:
-    linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)),
-    var(--tile-floor, none) center / 100% 100% no-repeat,
-    var(--cell-dark);
+  background: var(--shade), var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-dark);
   image-rendering: pixelated;
 }
+/* Wall AUTOTILE (2026-09-03): board-ui classes every wall (and cracked
+   wall) `wm-<mask>` by its solid neighbours (N=1 E=2 S=4 W=8; a hole is
+   not solid, a door is), and a theme's 16 composed cases paint it
+   (--tile-wall-<mask>, repack-tiles.mjs); the in-house set has one block,
+   so every case falls back to --tile-wall. */
+.cell.wm-0 { --wall-tile: var(--tile-wall-0, var(--tile-wall)); }
+.cell.wm-1 { --wall-tile: var(--tile-wall-1, var(--tile-wall)); }
+.cell.wm-2 { --wall-tile: var(--tile-wall-2, var(--tile-wall)); }
+.cell.wm-3 { --wall-tile: var(--tile-wall-3, var(--tile-wall)); }
+.cell.wm-4 { --wall-tile: var(--tile-wall-4, var(--tile-wall)); }
+.cell.wm-5 { --wall-tile: var(--tile-wall-5, var(--tile-wall)); }
+.cell.wm-6 { --wall-tile: var(--tile-wall-6, var(--tile-wall)); }
+.cell.wm-7 { --wall-tile: var(--tile-wall-7, var(--tile-wall)); }
+.cell.wm-8 { --wall-tile: var(--tile-wall-8, var(--tile-wall)); }
+.cell.wm-9 { --wall-tile: var(--tile-wall-9, var(--tile-wall)); }
+.cell.wm-10 { --wall-tile: var(--tile-wall-10, var(--tile-wall)); }
+.cell.wm-11 { --wall-tile: var(--tile-wall-11, var(--tile-wall)); }
+.cell.wm-12 { --wall-tile: var(--tile-wall-12, var(--tile-wall)); }
+.cell.wm-13 { --wall-tile: var(--tile-wall-13, var(--tile-wall)); }
+.cell.wm-14 { --wall-tile: var(--tile-wall-14, var(--tile-wall)); }
+.cell.wm-15 { --wall-tile: var(--tile-wall-15, var(--tile-wall)); }
 
 /* Edge coordinates: file letters along the bottom row, rank numbers down the
    left column (board-ui.mjs). Tiny, muted, out of the glyph's way. */
@@ -304,10 +321,16 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 /* Authored stone: one outlined purple-grey block per tile (pixel-art SVG,
    gen-sprites.mjs) — cold stone on a warm olive floor, a wall line reads
    as a wall line. (It used to be literally the pit look.) */
+/* The wall paints OVER the cell's floor layers (a themed pillar has
+   transparent sides, and the floor shows through them). */
 .cell.wall {
-  background: var(--wall-tile) center / 100% 100% no-repeat;
+  background-image: var(--wall-tile), var(--tile-floor, none);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
   image-rendering: pixelated;
 }
+.cell.dark.wall { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); }
 
 /* A god-made hole: sunken, black, permanent. Also the END frame of the
    crumble animation (cell-darken below), so the commit is invisible. */
@@ -325,8 +348,25 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .cell.furniture {
   background-image:
     linear-gradient(180deg, transparent 0, transparent calc(100% - 3px), #00000050 calc(100% - 3px)),
-    linear-gradient(160deg, #ffffff12, #00000030);
+    linear-gradient(160deg, #ffffff12, #00000030),
+    var(--tile-floor, none);
+  background-size: auto, auto, 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
 }
+.cell.dark.furniture {
+  background-image:
+    linear-gradient(180deg, transparent 0, transparent calc(100% - 3px), #00000050 calc(100% - 3px)),
+    linear-gradient(160deg, #ffffff12, #00000030),
+    var(--shade),
+    var(--tile-floor, none);
+  background-size: auto, auto, auto, 100% 100%;
+}
+/* Under a theme the pack sprites carry their own shadows, so the bevel goes
+   and the FLOOR TILE shows behind every sprite (it used to be the flat
+   in-house colour: the furniture rule replaced the floor image layers). */
+[data-theme] .cell.furniture { background-image: var(--tile-floor, none); background-size: 100% 100%; }
+[data-theme] .cell.dark.furniture { background-image: var(--shade), var(--tile-floor, none); background-size: auto, 100% 100%; }
 
 /* A wall the gods WEAKENED (§4.5): the same stone block with a branching
    black crack across it — NOT a crate. The crack is carried by the cell's
@@ -335,9 +375,13 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    dissolve every other furniture uses. `.furniture` stays on the cell —
    this rule is later, so its background wins. */
 .cell.cracked {
-  background: var(--wall-tile) center / 100% 100% no-repeat;
+  background-image: var(--wall-tile), var(--tile-floor, none);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
   image-rendering: pixelated;
 }
+.cell.dark.cracked { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); }
 
 /* Furniture SPRITES (§4.6 skins, stage.mjs SKIN_CHARS): the neutral sprite
    element paints a pixel-art icon instead of a glyph. The crate is the
@@ -497,7 +541,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    flash of light. Same crack as the committed tile, so the held end frame
    and the commit are one image. */
 .cell.cracking {
-  background: var(--tile-crack) center / 100% 100% no-repeat, var(--wall-tile) center / 100% 100% no-repeat;
+  background-image: var(--tile-crack), var(--wall-tile), var(--tile-floor, none);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
   image-rendering: pixelated;
   animation: crack-jitter var(--fx-ms, .3s) steps(6) forwards;
 }
@@ -515,7 +562,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    flashes LIGHT and settles to bare floor. Never the pit vocabulary (it
    used to play "floor gives way" for an opening, the opposite meaning). */
 .cell.furniture.breaching,
-.cell.cracked.breaching { background-image: none; }
+.cell.cracked.breaching { background-image: var(--tile-floor, none); background-size: 100% 100%; }
 .cell.breaching { animation: burst-flash var(--fx-ms, .32s) ease-out forwards; }
 .cell.breaching .piece { animation: shard-burst var(--fx-ms, .32s) ease-out forwards; }
 

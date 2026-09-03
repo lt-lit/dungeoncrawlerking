@@ -196,12 +196,17 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Marks compose on separate channels: terrain = `background`, residue and
   debug rings = `box-shadow`, last move = `filter`, selection/check =
   `outline`, targets = `::after`. Two more cell classes serve the themes:
-  `wall-v` on a wall (or cracked wall) standing in a VERTICAL run — solid
-  above or below, nothing solid beside; holes are not solid, furniture is —
-  paints `--tile-wall-v` where a theme has a column piece (else the wall),
-  and `f1`/`f2`/`f3`, the square's stable floor-texture variant (a hash of
-  the square, so a repaint never makes the floor crawl; ~28% of squares
-  are variants). `setTheme(name)` stamps `data-theme` on the board.
+  `wm-<mask>` on a wall (or cracked wall) is its AUTOTILE case — the mask
+  of solid neighbours, N=1 E=2 S=4 W=8, where solid means stone that is not
+  a hole, a cracked wall, or a DOOR (a door continues a wall line; crates
+  and the rest do not) — painting the theme's composed case
+  (`--tile-wall-<mask>`, else the plain wall); and `f1`/`f2`/`f3`, the
+  square's stable floor-texture variant (a hash of the square, so a repaint
+  never makes the floor crawl; ~28% of squares are variants). Every wall,
+  furniture and cracked cell keeps its floor layers UNDER the tile, so a
+  themed pillar's transparent sides and every sprite sit on the floor tile
+  (the first cut painted the flat in-house colour behind sprites).
+  `setTheme(name)` stamps `data-theme` on the board.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -252,7 +257,12 @@ human-readable record of what was taken) + `img/tileset.json` (per-tile
 provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
 property under `[data-theme="…"]`, so any cell size stays pixel-exact —
 a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
-A theme provides floor variants, the wall (crypt also a column piece),
+A theme provides floor variants, the wall in all **16 autotile cases**
+(composed by the tool from two pack tiles, since none of the packs ships a
+thin-wall set: the horizontal wall with its cap and face, and the pillar
+or wall-top piece — pixel-poem and Catacombs get a free-standing post over
+the face wherever the wall runs north/south, Dungeon Gathering shows its
+wall-top strip there and the face only on pure east/west runs),
 door, crate, chest, barrel and rubble; where a pack lacks a role the theme
 borrows from another (every door is pixel-poem's leaf; castle's barrel is
 Dungeon Gathering's vase) and where none has it (table, chair, shelf, the

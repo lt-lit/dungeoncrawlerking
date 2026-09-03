@@ -131,3 +131,45 @@ export function blit(dst, src, x, y) {
 export function samePixels(a, b) {
   return a.width === b.width && a.height === b.height && a.data.equals(b.data);
 }
+
+/** Alpha-composite src onto dst at (x, y) — "source over"; a transparent
+ *  source pixel leaves the destination alone. */
+export function over(dst, src, x, y) {
+  for (let yy = 0; yy < src.height; yy++) {
+    for (let xx = 0; xx < src.width; xx++) {
+      const s = (yy * src.width + xx) * 4;
+      const a = src.data[s + 3] / 255;
+      if (a === 0) continue;
+      const d = ((y + yy) * dst.width + (x + xx)) * 4;
+      const da = dst.data[d + 3] / 255;
+      const oa = a + da * (1 - a);
+      for (let c = 0; c < 3; c++) dst.data[d + c] = oa ? Math.round((src.data[s + c] * a + dst.data[d + c] * da * (1 - a)) / oa) : 0;
+      dst.data[d + 3] = Math.round(oa * 255);
+    }
+  }
+}
+
+/** Keep only columns x0..x1 of a tile (inclusive), shifted by dx, the rest
+ *  transparent — lifts a pillar drawn against a pack's void colour out of
+ *  its tile and centres it. Pixels equal to `voidRgb` ([r,g,b]) go
+ *  transparent too. */
+export function keepColumns(tile, x0, x1, dx = 0, voidRgb = null) {
+  const out = blank(tile.width, tile.height);
+  for (let y = 0; y < tile.height; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const nx = x + dx;
+      if (nx < 0 || nx >= tile.width) continue;
+      const s = (y * tile.width + x) * 4;
+      if (voidRgb && tile.data[s] === voidRgb[0] && tile.data[s + 1] === voidRgb[1] && tile.data[s + 2] === voidRgb[2]) continue;
+      tile.data.copy(out.data, (y * tile.width + nx) * 4, s, s + 4);
+    }
+  }
+  return out;
+}
+
+/** Rows y0..y1 of a tile (inclusive), the rest transparent. */
+export function keepRows(tile, y0, y1) {
+  const out = blank(tile.width, tile.height);
+  for (let y = y0; y <= y1; y++) tile.data.copy(out.data, y * tile.width * 4, y * tile.width * 4, (y + 1) * tile.width * 4);
+  return out;
+}
