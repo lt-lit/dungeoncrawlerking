@@ -3,6 +3,7 @@
  "id": "s39-the-vestibule",
  "title": "The Vestibule",
  "notes": "A sealed central chamber with ^^ double doors facing BOTH armies. Take the flanks around it, or smash into the middle and hold the room.",
+ "theme": "hall",
  "map": [
   "........",
   "........",
@@ -11,6 +12,18 @@
   ".#....#.",
   ".#....#.",
   "..#^^#..",
+  "........",
+  "........",
+  "........"
+ ],
+ "skin": [
+  "........",
+  "........",
+  "........",
+  "...DD...",
+  "........",
+  "........",
+  "...DD...",
   "........",
   "........",
   "........"

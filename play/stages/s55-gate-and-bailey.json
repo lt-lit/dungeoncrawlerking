@@ -3,6 +3,7 @@
  "id": "s55-gate-and-bailey",
  "title": "Gate & Bailey",
  "notes": "FLOORPLAN: an outer wall with a double gate and an open postern, a bailey with stabled crates along the west wall, and a stone keep with one weak door — which the defender may mold inside. Three zones deep.",
+ "theme": "castle",
  "map": [
   "..#...#...",
   "..#.^.#...",
@@ -11,6 +12,18 @@
   ".^........",
   ".^........",
   "###^^###.#",
+  "..........",
+  "..........",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "....X.....",
+  "..........",
+  "....D.....",
+  ".K........",
+  ".K........",
+  "...DD.....",
   "..........",
   "..........",
   ".........."

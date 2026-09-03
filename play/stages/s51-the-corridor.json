@@ -3,6 +3,7 @@
  "id": "s51-the-corridor",
  "title": "The Corridor",
  "notes": "FLOORPLAN: a full-width hallway with two rooms off each side — five areas. Each wall has an open door and a weak door; the room pairs also connect to each other through breakable party doors (e8, f1). NW stocks a crate pair, NE one against the wall, SE an L of three, SW stands bare.",
+ "theme": "hall",
  "map": [
   "....#.....",
   ".^^.^.....",
@@ -14,6 +15,18 @@
   ".....#.^^.",
   ".....^..^.",
   ".....#...."
+ ],
+ "skin": [
+  "..........",
+  ".KK.D.....",
+  "........K.",
+  ".......D..",
+  "..........",
+  "..........",
+  "..D.......",
+  ".......KD.",
+  ".....D..K.",
+  ".........."
  ],
  "wave": 5
 }

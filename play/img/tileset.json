@@ -1,0 +1,1560 @@
+{
+ "tile": 16,
+ "roles": [
+  "wall",
+  "door",
+  "crate",
+  "chest",
+  "barrel",
+  "rubble",
+  "torch",
+  "candle",
+  "web",
+  "bones",
+  "skull",
+  "chain",
+  "banner",
+  "doorway",
+  "floor-1",
+  "floor-2",
+  "floor-3",
+  "floor-4",
+  "floor-5",
+  "floor-6",
+  "wall-0",
+  "wall-1",
+  "wall-2",
+  "wall-3",
+  "wall-4",
+  "wall-5",
+  "wall-6",
+  "wall-7",
+  "wall-8",
+  "wall-9",
+  "wall-10",
+  "wall-11",
+  "wall-12",
+  "wall-13",
+  "wall-14",
+  "wall-15",
+  "wall-19",
+  "wall-23",
+  "wall-27",
+  "wall-31",
+  "wall-38",
+  "wall-39",
+  "wall-46",
+  "wall-47",
+  "wall-55",
+  "wall-63",
+  "wall-76",
+  "wall-77",
+  "wall-78",
+  "wall-79",
+  "wall-95",
+  "wall-110",
+  "wall-111",
+  "wall-127",
+  "wall-137",
+  "wall-139",
+  "wall-141",
+  "wall-143",
+  "wall-155",
+  "wall-159",
+  "wall-175",
+  "wall-191",
+  "wall-205",
+  "wall-207",
+  "wall-223",
+  "wall-239",
+  "wall-255",
+  "ruin-0",
+  "ruin-1",
+  "ruin-2",
+  "ruin-3",
+  "ruin-4",
+  "ruin-5",
+  "ruin-6",
+  "ruin-7",
+  "ruin-8",
+  "ruin-9",
+  "ruin-10",
+  "ruin-11",
+  "ruin-12",
+  "ruin-13",
+  "ruin-14",
+  "ruin-15"
+ ],
+ "themes": {
+  "hall": {
+   "row": 0,
+   "title": "The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors",
+   "tiles": {
+    "door": {
+     "col": 1,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 3
+    },
+    "crate": {
+     "col": 2,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 0,
+     "y": 8
+    },
+    "chest": {
+     "col": 3,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "rubble": {
+     "col": 5,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 20,
+     "y": 22
+    },
+    "torch": {
+     "col": 6,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 0,
+     "y": 9
+    },
+    "candle": {
+     "col": 7,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 3,
+     "y": 9
+    },
+    "web": {
+     "col": 8,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 4,
+     "y": 6
+    },
+    "bones": {
+     "col": 9,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 8,
+     "y": 6
+    },
+    "skull": {
+     "col": 10,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 7
+    },
+    "chain": {
+     "col": 11,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 5,
+     "y": 7
+    },
+    "banner": {
+     "col": 12,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 4,
+     "y": 7
+    },
+    "doorway": {
+     "col": 13,
+     "composed": "the wall ends, two posts in the door material, floor between"
+    },
+    "floor-1": {
+     "col": 14,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-2": {
+     "col": 15,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-3": {
+     "col": 16,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-4": {
+     "col": 17,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 14,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-5": {
+     "col": 18,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 13,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-6": {
+     "col": 19,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 15,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "wall": {
+     "col": 0,
+     "composed": "blob case 10 (east–west run)",
+     "mask": 10
+    },
+    "wall-0": {
+     "col": 20,
+     "composed": "blob in the pack palette + its face",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 21,
+     "composed": "blob in the pack palette + its face",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 22,
+     "composed": "blob in the pack palette + its face",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 23,
+     "composed": "blob in the pack palette + its face",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 24,
+     "composed": "blob in the pack palette + its face",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 25,
+     "composed": "blob in the pack palette + its face",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 26,
+     "composed": "blob in the pack palette + its face",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 27,
+     "composed": "blob in the pack palette + its face",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 28,
+     "composed": "blob in the pack palette + its face",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 29,
+     "composed": "blob in the pack palette + its face",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 30,
+     "composed": "blob in the pack palette + its face",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 31,
+     "composed": "blob in the pack palette + its face",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 32,
+     "composed": "blob in the pack palette + its face",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 33,
+     "composed": "blob in the pack palette + its face",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 34,
+     "composed": "blob in the pack palette + its face",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 35,
+     "composed": "blob in the pack palette + its face",
+     "mask": 15
+    },
+    "wall-19": {
+     "col": 36,
+     "composed": "blob in the pack palette + its face",
+     "mask": 19
+    },
+    "wall-23": {
+     "col": 37,
+     "composed": "blob in the pack palette + its face",
+     "mask": 23
+    },
+    "wall-27": {
+     "col": 38,
+     "composed": "blob in the pack palette + its face",
+     "mask": 27
+    },
+    "wall-31": {
+     "col": 39,
+     "composed": "blob in the pack palette + its face",
+     "mask": 31
+    },
+    "wall-38": {
+     "col": 40,
+     "composed": "blob in the pack palette + its face",
+     "mask": 38
+    },
+    "wall-39": {
+     "col": 41,
+     "composed": "blob in the pack palette + its face",
+     "mask": 39
+    },
+    "wall-46": {
+     "col": 42,
+     "composed": "blob in the pack palette + its face",
+     "mask": 46
+    },
+    "wall-47": {
+     "col": 43,
+     "composed": "blob in the pack palette + its face",
+     "mask": 47
+    },
+    "wall-55": {
+     "col": 44,
+     "composed": "blob in the pack palette + its face",
+     "mask": 55
+    },
+    "wall-63": {
+     "col": 45,
+     "composed": "blob in the pack palette + its face",
+     "mask": 63
+    },
+    "wall-76": {
+     "col": 46,
+     "composed": "blob in the pack palette + its face",
+     "mask": 76
+    },
+    "wall-77": {
+     "col": 47,
+     "composed": "blob in the pack palette + its face",
+     "mask": 77
+    },
+    "wall-78": {
+     "col": 48,
+     "composed": "blob in the pack palette + its face",
+     "mask": 78
+    },
+    "wall-79": {
+     "col": 49,
+     "composed": "blob in the pack palette + its face",
+     "mask": 79
+    },
+    "wall-95": {
+     "col": 50,
+     "composed": "blob in the pack palette + its face",
+     "mask": 95
+    },
+    "wall-110": {
+     "col": 51,
+     "composed": "blob in the pack palette + its face",
+     "mask": 110
+    },
+    "wall-111": {
+     "col": 52,
+     "composed": "blob in the pack palette + its face",
+     "mask": 111
+    },
+    "wall-127": {
+     "col": 53,
+     "composed": "blob in the pack palette + its face",
+     "mask": 127
+    },
+    "wall-137": {
+     "col": 54,
+     "composed": "blob in the pack palette + its face",
+     "mask": 137
+    },
+    "wall-139": {
+     "col": 55,
+     "composed": "blob in the pack palette + its face",
+     "mask": 139
+    },
+    "wall-141": {
+     "col": 56,
+     "composed": "blob in the pack palette + its face",
+     "mask": 141
+    },
+    "wall-143": {
+     "col": 57,
+     "composed": "blob in the pack palette + its face",
+     "mask": 143
+    },
+    "wall-155": {
+     "col": 58,
+     "composed": "blob in the pack palette + its face",
+     "mask": 155
+    },
+    "wall-159": {
+     "col": 59,
+     "composed": "blob in the pack palette + its face",
+     "mask": 159
+    },
+    "wall-175": {
+     "col": 60,
+     "composed": "blob in the pack palette + its face",
+     "mask": 175
+    },
+    "wall-191": {
+     "col": 61,
+     "composed": "blob in the pack palette + its face",
+     "mask": 191
+    },
+    "wall-205": {
+     "col": 62,
+     "composed": "blob in the pack palette + its face",
+     "mask": 205
+    },
+    "wall-207": {
+     "col": 63,
+     "composed": "blob in the pack palette + its face",
+     "mask": 207
+    },
+    "wall-223": {
+     "col": 64,
+     "composed": "blob in the pack palette + its face",
+     "mask": 223
+    },
+    "wall-239": {
+     "col": 65,
+     "composed": "blob in the pack palette + its face",
+     "mask": 239
+    },
+    "wall-255": {
+     "col": 66,
+     "composed": "blob in the pack palette + its face",
+     "mask": 255
+    },
+    "ruin-0": {
+     "col": 67,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 68,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 69,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 70,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 71,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 72,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 73,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 74,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 75,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 76,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 77,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 78,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 79,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 80,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 81,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 82,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
+    }
+   }
+  },
+  "castle": {
+   "row": 1,
+   "title": "The castle — Dungeon Gathering’s cold blue-grey stone",
+   "tiles": {
+    "crate": {
+     "col": 2,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 20,
+     "y": 8
+    },
+    "chest": {
+     "col": 3,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "barrel": {
+     "col": 4,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 2,
+     "y": 12
+    },
+    "rubble": {
+     "col": 5,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 12,
+     "y": 12
+    },
+    "torch": {
+     "col": 6,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 1,
+     "y": 9
+    },
+    "candle": {
+     "col": 7,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 5,
+     "y": 9
+    },
+    "web": {
+     "col": 8,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 4,
+     "y": 6
+    },
+    "bones": {
+     "col": 9,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 8,
+     "y": 6
+    },
+    "skull": {
+     "col": 10,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 7
+    },
+    "chain": {
+     "col": 11,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 6,
+     "y": 7
+    },
+    "banner": {
+     "col": 12,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 4,
+     "y": 7
+    },
+    "door": {
+     "col": 1,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 11,
+     "y": 11,
+     "composed": "portcullis drawn into the pack arch"
+    },
+    "doorway": {
+     "col": 13,
+     "composed": "the wall ends, two posts in the door material, floor between"
+    },
+    "floor-1": {
+     "col": 14,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-2": {
+     "col": 15,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-3": {
+     "col": 16,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-4": {
+     "col": 17,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 14,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-5": {
+     "col": 18,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 13,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-6": {
+     "col": 19,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 15,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "wall": {
+     "col": 0,
+     "composed": "blob case 10 (east–west run)",
+     "mask": 10
+    },
+    "wall-0": {
+     "col": 20,
+     "composed": "blob in the pack palette + its face",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 21,
+     "composed": "blob in the pack palette + its face",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 22,
+     "composed": "blob in the pack palette + its face",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 23,
+     "composed": "blob in the pack palette + its face",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 24,
+     "composed": "blob in the pack palette + its face",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 25,
+     "composed": "blob in the pack palette + its face",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 26,
+     "composed": "blob in the pack palette + its face",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 27,
+     "composed": "blob in the pack palette + its face",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 28,
+     "composed": "blob in the pack palette + its face",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 29,
+     "composed": "blob in the pack palette + its face",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 30,
+     "composed": "blob in the pack palette + its face",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 31,
+     "composed": "blob in the pack palette + its face",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 32,
+     "composed": "blob in the pack palette + its face",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 33,
+     "composed": "blob in the pack palette + its face",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 34,
+     "composed": "blob in the pack palette + its face",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 35,
+     "composed": "blob in the pack palette + its face",
+     "mask": 15
+    },
+    "wall-19": {
+     "col": 36,
+     "composed": "blob in the pack palette + its face",
+     "mask": 19
+    },
+    "wall-23": {
+     "col": 37,
+     "composed": "blob in the pack palette + its face",
+     "mask": 23
+    },
+    "wall-27": {
+     "col": 38,
+     "composed": "blob in the pack palette + its face",
+     "mask": 27
+    },
+    "wall-31": {
+     "col": 39,
+     "composed": "blob in the pack palette + its face",
+     "mask": 31
+    },
+    "wall-38": {
+     "col": 40,
+     "composed": "blob in the pack palette + its face",
+     "mask": 38
+    },
+    "wall-39": {
+     "col": 41,
+     "composed": "blob in the pack palette + its face",
+     "mask": 39
+    },
+    "wall-46": {
+     "col": 42,
+     "composed": "blob in the pack palette + its face",
+     "mask": 46
+    },
+    "wall-47": {
+     "col": 43,
+     "composed": "blob in the pack palette + its face",
+     "mask": 47
+    },
+    "wall-55": {
+     "col": 44,
+     "composed": "blob in the pack palette + its face",
+     "mask": 55
+    },
+    "wall-63": {
+     "col": 45,
+     "composed": "blob in the pack palette + its face",
+     "mask": 63
+    },
+    "wall-76": {
+     "col": 46,
+     "composed": "blob in the pack palette + its face",
+     "mask": 76
+    },
+    "wall-77": {
+     "col": 47,
+     "composed": "blob in the pack palette + its face",
+     "mask": 77
+    },
+    "wall-78": {
+     "col": 48,
+     "composed": "blob in the pack palette + its face",
+     "mask": 78
+    },
+    "wall-79": {
+     "col": 49,
+     "composed": "blob in the pack palette + its face",
+     "mask": 79
+    },
+    "wall-95": {
+     "col": 50,
+     "composed": "blob in the pack palette + its face",
+     "mask": 95
+    },
+    "wall-110": {
+     "col": 51,
+     "composed": "blob in the pack palette + its face",
+     "mask": 110
+    },
+    "wall-111": {
+     "col": 52,
+     "composed": "blob in the pack palette + its face",
+     "mask": 111
+    },
+    "wall-127": {
+     "col": 53,
+     "composed": "blob in the pack palette + its face",
+     "mask": 127
+    },
+    "wall-137": {
+     "col": 54,
+     "composed": "blob in the pack palette + its face",
+     "mask": 137
+    },
+    "wall-139": {
+     "col": 55,
+     "composed": "blob in the pack palette + its face",
+     "mask": 139
+    },
+    "wall-141": {
+     "col": 56,
+     "composed": "blob in the pack palette + its face",
+     "mask": 141
+    },
+    "wall-143": {
+     "col": 57,
+     "composed": "blob in the pack palette + its face",
+     "mask": 143
+    },
+    "wall-155": {
+     "col": 58,
+     "composed": "blob in the pack palette + its face",
+     "mask": 155
+    },
+    "wall-159": {
+     "col": 59,
+     "composed": "blob in the pack palette + its face",
+     "mask": 159
+    },
+    "wall-175": {
+     "col": 60,
+     "composed": "blob in the pack palette + its face",
+     "mask": 175
+    },
+    "wall-191": {
+     "col": 61,
+     "composed": "blob in the pack palette + its face",
+     "mask": 191
+    },
+    "wall-205": {
+     "col": 62,
+     "composed": "blob in the pack palette + its face",
+     "mask": 205
+    },
+    "wall-207": {
+     "col": 63,
+     "composed": "blob in the pack palette + its face",
+     "mask": 207
+    },
+    "wall-223": {
+     "col": 64,
+     "composed": "blob in the pack palette + its face",
+     "mask": 223
+    },
+    "wall-239": {
+     "col": 65,
+     "composed": "blob in the pack palette + its face",
+     "mask": 239
+    },
+    "wall-255": {
+     "col": 66,
+     "composed": "blob in the pack palette + its face",
+     "mask": 255
+    },
+    "ruin-0": {
+     "col": 67,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 68,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 69,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 70,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 71,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 72,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 73,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 74,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 75,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 76,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 77,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 78,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 79,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 80,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 81,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 82,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
+    }
+   }
+  },
+  "crypt": {
+   "row": 2,
+   "title": "The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls",
+   "tiles": {
+    "crate": {
+     "col": 2,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 5
+    },
+    "chest": {
+     "col": 3,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "barrel": {
+     "col": 4,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 8
+    },
+    "rubble": {
+     "col": 5,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 20,
+     "y": 22
+    },
+    "torch": {
+     "col": 6,
+     "pack": "catacombs",
+     "sheet": "torch_1.png",
+     "x": 0,
+     "y": 0
+    },
+    "candle": {
+     "col": 7,
+     "pack": "catacombs",
+     "sheet": "candleA_01.png",
+     "x": 0,
+     "y": 0
+    },
+    "chain": {
+     "col": 11,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 1
+    },
+    "web": {
+     "col": 8,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 4,
+     "y": 6
+    },
+    "bones": {
+     "col": 9,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 8,
+     "y": 6
+    },
+    "skull": {
+     "col": 10,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 7
+    },
+    "door": {
+     "col": 1,
+     "composed": "barred gate in the theme stone"
+    },
+    "doorway": {
+     "col": 13,
+     "composed": "the wall ends, two posts in the door material, floor between"
+    },
+    "floor-1": {
+     "col": 14,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14
+    },
+    "floor-2": {
+     "col": 15,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13
+    },
+    "floor-3": {
+     "col": 16,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15
+    },
+    "floor-4": {
+     "col": 17,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 14
+    },
+    "floor-5": {
+     "col": 18,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 13
+    },
+    "floor-6": {
+     "col": 19,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 15
+    },
+    "wall": {
+     "col": 0,
+     "composed": "blob case 10 (east–west run)",
+     "mask": 10
+    },
+    "wall-0": {
+     "col": 20,
+     "composed": "blob in the pack palette + its face",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 21,
+     "composed": "blob in the pack palette + its face",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 22,
+     "composed": "blob in the pack palette + its face",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 23,
+     "composed": "blob in the pack palette + its face",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 24,
+     "composed": "blob in the pack palette + its face",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 25,
+     "composed": "blob in the pack palette + its face",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 26,
+     "composed": "blob in the pack palette + its face",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 27,
+     "composed": "blob in the pack palette + its face",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 28,
+     "composed": "blob in the pack palette + its face",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 29,
+     "composed": "blob in the pack palette + its face",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 30,
+     "composed": "blob in the pack palette + its face",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 31,
+     "composed": "blob in the pack palette + its face",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 32,
+     "composed": "blob in the pack palette + its face",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 33,
+     "composed": "blob in the pack palette + its face",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 34,
+     "composed": "blob in the pack palette + its face",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 35,
+     "composed": "blob in the pack palette + its face",
+     "mask": 15
+    },
+    "wall-19": {
+     "col": 36,
+     "composed": "blob in the pack palette + its face",
+     "mask": 19
+    },
+    "wall-23": {
+     "col": 37,
+     "composed": "blob in the pack palette + its face",
+     "mask": 23
+    },
+    "wall-27": {
+     "col": 38,
+     "composed": "blob in the pack palette + its face",
+     "mask": 27
+    },
+    "wall-31": {
+     "col": 39,
+     "composed": "blob in the pack palette + its face",
+     "mask": 31
+    },
+    "wall-38": {
+     "col": 40,
+     "composed": "blob in the pack palette + its face",
+     "mask": 38
+    },
+    "wall-39": {
+     "col": 41,
+     "composed": "blob in the pack palette + its face",
+     "mask": 39
+    },
+    "wall-46": {
+     "col": 42,
+     "composed": "blob in the pack palette + its face",
+     "mask": 46
+    },
+    "wall-47": {
+     "col": 43,
+     "composed": "blob in the pack palette + its face",
+     "mask": 47
+    },
+    "wall-55": {
+     "col": 44,
+     "composed": "blob in the pack palette + its face",
+     "mask": 55
+    },
+    "wall-63": {
+     "col": 45,
+     "composed": "blob in the pack palette + its face",
+     "mask": 63
+    },
+    "wall-76": {
+     "col": 46,
+     "composed": "blob in the pack palette + its face",
+     "mask": 76
+    },
+    "wall-77": {
+     "col": 47,
+     "composed": "blob in the pack palette + its face",
+     "mask": 77
+    },
+    "wall-78": {
+     "col": 48,
+     "composed": "blob in the pack palette + its face",
+     "mask": 78
+    },
+    "wall-79": {
+     "col": 49,
+     "composed": "blob in the pack palette + its face",
+     "mask": 79
+    },
+    "wall-95": {
+     "col": 50,
+     "composed": "blob in the pack palette + its face",
+     "mask": 95
+    },
+    "wall-110": {
+     "col": 51,
+     "composed": "blob in the pack palette + its face",
+     "mask": 110
+    },
+    "wall-111": {
+     "col": 52,
+     "composed": "blob in the pack palette + its face",
+     "mask": 111
+    },
+    "wall-127": {
+     "col": 53,
+     "composed": "blob in the pack palette + its face",
+     "mask": 127
+    },
+    "wall-137": {
+     "col": 54,
+     "composed": "blob in the pack palette + its face",
+     "mask": 137
+    },
+    "wall-139": {
+     "col": 55,
+     "composed": "blob in the pack palette + its face",
+     "mask": 139
+    },
+    "wall-141": {
+     "col": 56,
+     "composed": "blob in the pack palette + its face",
+     "mask": 141
+    },
+    "wall-143": {
+     "col": 57,
+     "composed": "blob in the pack palette + its face",
+     "mask": 143
+    },
+    "wall-155": {
+     "col": 58,
+     "composed": "blob in the pack palette + its face",
+     "mask": 155
+    },
+    "wall-159": {
+     "col": 59,
+     "composed": "blob in the pack palette + its face",
+     "mask": 159
+    },
+    "wall-175": {
+     "col": 60,
+     "composed": "blob in the pack palette + its face",
+     "mask": 175
+    },
+    "wall-191": {
+     "col": 61,
+     "composed": "blob in the pack palette + its face",
+     "mask": 191
+    },
+    "wall-205": {
+     "col": 62,
+     "composed": "blob in the pack palette + its face",
+     "mask": 205
+    },
+    "wall-207": {
+     "col": 63,
+     "composed": "blob in the pack palette + its face",
+     "mask": 207
+    },
+    "wall-223": {
+     "col": 64,
+     "composed": "blob in the pack palette + its face",
+     "mask": 223
+    },
+    "wall-239": {
+     "col": 65,
+     "composed": "blob in the pack palette + its face",
+     "mask": 239
+    },
+    "wall-255": {
+     "col": 66,
+     "composed": "blob in the pack palette + its face",
+     "mask": 255
+    },
+    "ruin-0": {
+     "col": 67,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 68,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 69,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 70,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 71,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 72,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 73,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 74,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 75,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 76,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 77,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 78,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 79,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 80,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 81,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 82,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
+    }
+   }
+  }
+ },
+ "packs": {
+  "dungeon-gathering": {
+   "title": "Dungeon Gathering (free version)",
+   "author": "SnowHex (Jose Javier)",
+   "url": "https://snowhex.itch.io/dungeon-gathering",
+   "terms": "Free for commercial and non-commercial projects, edits allowed, credit appreciated. The pack itself may not be redistributed or resold as game assets, images or NFTs — only the tiles the game uses are repacked here."
+  },
+  "pixel-poem": {
+   "title": "Dungeon Asset Puck — 2D Pixel Dungeon Asset Pack (free version)",
+   "author": "pixel-poem",
+   "url": "https://pixel-poem.itch.io/dungeon-assetpuck",
+   "terms": "Free and commercial projects, modification allowed, credit appreciated. No redistribution or resale of the pack — only the tiles the game uses are repacked here."
+  },
+  "catacombs": {
+   "title": "Rogue Fantasy Catacombs",
+   "author": "Szadi art",
+   "url": "https://szadiart.itch.io/rogue-fantasy-catacombs",
+   "terms": "Public domain, free for personal or commercial use, edits allowed, credit appreciated. The pack may not be resold, original or changed."
+  },
+  "pixel-chess": {
+   "title": "Pixel Chess",
+   "author": "Dani Maccari",
+   "url": "https://dani-maccari.itch.io/pixel-chess",
+   "terms": "Free for personal or commercial projects as long as it is attributed to DANI MACCARI; edits allowed; the assets may not be repackaged, redistributed or resold — only the twelve piece sprites the game uses are inlined here, with that attribution."
+  },
+  "nulltale": {
+   "title": "Chess (NullTale Chess.png)",
+   "author": "NullTale",
+   "url": "https://nulltale.itch.io/chess",
+   "terms": "Creative Commons Attribution 4.0 International — free for commercial and non-commercial use with attribution; redistribution allowed under the same terms."
+  },
+  "deja-view": {
+   "title": "Chess Assets",
+   "author": "Deja View",
+   "url": "https://deja-view.itch.io/chess-assets",
+   "terms": "\"Use it in whatever you like, just don't resell it as your own assets.\" Credit appreciated, not required."
+  }
+ },
+ "pieces": {
+  "order": "pnrbqk",
+  "cell": 32,
+  "sets": {
+   "pixel-chess": {
+    "row": 0,
+    "title": "Pixel Chess — stone (Dani Maccari)",
+    "pack": "pixel-chess",
+    "box": [
+     16,
+     16
+    ],
+    "sheets": [
+     "WhitePieces.png",
+     "BlackPieces.png"
+    ]
+   },
+   "pixel-chess-wood": {
+    "row": 1,
+    "title": "Pixel Chess — wood (Dani Maccari)",
+    "pack": "pixel-chess",
+    "box": [
+     16,
+     16
+    ],
+    "sheets": [
+     "WhitePieces_Wood.png",
+     "BlackPieces_Wood.png"
+    ]
+   },
+   "nulltale": {
+    "row": 2,
+    "title": "NullTale — classic (blue vs red)",
+    "pack": "nulltale",
+    "box": [
+     16,
+     23
+    ],
+    "sheets": [
+     "NullTale Chess.png"
+    ]
+   },
+   "nulltale-dread": {
+    "row": 3,
+    "title": "NullTale — dread (white vs black)",
+    "pack": "nulltale",
+    "box": [
+     16,
+     26
+    ],
+    "sheets": [
+     "NullTale Chess.png"
+    ]
+   },
+   "deja-view": {
+    "row": 4,
+    "title": "Deja View (cream vs navy)",
+    "pack": "deja-view",
+    "box": [
+     18,
+     23
+    ],
+    "sheets": [
+     "ChessAssets.png"
+    ]
+   }
+  }
+ }
+}

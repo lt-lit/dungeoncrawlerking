@@ -3,12 +3,22 @@
  "id": "s08-storeroom",
  "title": "Storeroom",
  "notes": "One-sided clutter: five crates crowd one deployment approach, the other is clean. Asymmetric by design — the flip convention tests it facing each side.",
+ "theme": "crypt",
  "map": [
   "......",
   "......",
   ".^^...",
   ".^....",
   "..^^..",
+  "......",
+  "......"
+ ],
+ "skin": [
+  "......",
+  "......",
+  ".KK...",
+  ".K....",
+  "..KK..",
   "......",
   "......"
  ],

@@ -9,6 +9,7 @@
      page must be cross-origin isolated. Self-reloads once on first visit. -->
 <script src="coi-serviceworker.min.js"></script>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="tiles.css">
 </head>
 <body>
 <header id="topbar">
@@ -30,7 +31,10 @@
     <div id="enemy-bar" class="side-bar"></div>
     <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
     <div id="board"></div>
-    <div id="player-bar" class="side-bar"></div>
+    <!-- The player's bar also carries the hint list and the gods line (the
+         last quake, held until the player moves) — folded in rather than
+         a new row, to protect the board's height budget on a phone. -->
+    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
     <div id="preview-controls" hidden>
       <button id="btnBegin" class="primary">Begin duel</button>
       <button id="btnRedeal">Re-deal</button>
@@ -110,14 +114,72 @@
       <label class="opt sub"><input type="checkbox" id="optHints"> Show best
         <select id="optHintN"><option>1</option><option>2</option><option selected>3</option></select>
         moves</label>
+      <label class="opt sub"><input type="checkbox" id="optHintCont"> Keep evaluating (no time limit — costs battery)</label>
       <label class="opt sub"><input type="checkbox" id="optUndo"> Allow undo</label>
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
     </div>
+    <h2>Look</h2>
+    <label class="opt">Art set
+      <select id="optTheme">
+        <option value="auto" selected>The stage's own</option>
+        <option value="hall">Hall</option>
+        <option value="castle">Castle</option>
+        <option value="crypt">Crypt</option>
+        <option value="classic">Classic (drawn)</option>
+      </select>
+    </label>
+    <label class="opt">Pieces
+      <select id="optPieces">
+        <option value="nulltale" selected>NullTale — classic</option>
+        <option value="pixel-chess">Pixel Chess — stone</option>
+        <option value="pixel-chess-wood">Pixel Chess — wood</option>
+        <option value="nulltale-dread">NullTale — dread</option>
+        <option value="deja-view">Deja View</option>
+        <option value="classic">Classic glyphs</option>
+      </select>
+    </label>
+    <label class="opt">Doors
+      <select id="optDoors">
+        <option value="auto" selected>The theme's own</option>
+        <option value="leaf">Timber leaf</option>
+        <option value="portcullis">Portcullis</option>
+        <option value="gate">Barred gate</option>
+      </select>
+    </label>
+    <label class="opt">Piece size
+      <input type="range" id="optPieceScale" min="0.5" max="2" step="0.02">
+      <span class="opt-val" id="optPieceScaleV"></span>
+    </label>
+    <label class="opt">Piece lift
+      <input type="range" id="optPieceLift" min="-0.5" max="1" step="0.01">
+      <span class="opt-val" id="optPieceLiftV"></span>
+    </label>
+    <label class="opt">Piece shift
+      <input type="range" id="optPieceShift" min="-0.5" max="0.5" step="0.01">
+      <span class="opt-val" id="optPieceShiftV"></span>
+    </label>
+    <label class="opt"><input type="checkbox" id="optPieceSnap"> Pixel-perfect pieces <span class="opt-val">(whole-pixel scale)</span></label>
+    <p class="opt-hint">Pieces: <a href="https://dani-maccari.itch.io/pixel-chess" target="_blank" rel="noopener">Pixel Chess</a> by Dani Maccari,
+      <a href="https://nulltale.itch.io/chess" target="_blank" rel="noopener">Chess</a> by NullTale (CC BY 4.0),
+      <a href="https://deja-view.itch.io/chess-assets" target="_blank" rel="noopener">Chess Assets</a> by Deja View.
+      Tiles repacked from <a href="https://snowhex.itch.io/dungeon-gathering" target="_blank" rel="noopener">Dungeon Gathering</a> (SnowHex),
+      <a href="https://pixel-poem.itch.io/dungeon-assetpuck" target="_blank" rel="noopener">Dungeon Asset Puck</a> (pixel-poem) and
+      <a href="https://szadiart.itch.io/rogue-fantasy-catacombs" target="_blank" rel="noopener">Rogue Fantasy Catacombs</a> (Szadi art) — see <a href="CREDITS.md" target="_blank" rel="noopener">CREDITS</a>.</p>
     <h2>The Gods</h2>
     <p class="opt-hint">Earthquakes stir the arena when the game goes stale:
       walls crack, crates shatter, pieces scoot, squares collapse. Temperament
       and intensity are dialled in the debug panel (enable the overlay below);
       custom knob values live here and apply live mid-duel.</p>
+    <!-- Terrain legend built from the board's own tile classes (style.css),
+         so it cannot drift from what the board paints. -->
+    <div class="legend" aria-label="terrain legend">
+      <span><span class="cell wall"></span>wall</span>
+      <span><span class="cell hole"></span>hole (forever)</span>
+      <span><span class="cell furniture"><span class="piece neutral"></span></span>crate</span>
+      <span><span class="cell furniture skin-door"><span class="piece neutral"></span></span>door</span>
+      <span><span class="cell furniture skin-rubble"><span class="piece neutral"></span></span>rubble</span>
+      <span><span class="cell furniture cracked"><span class="piece neutral"></span></span>cracked wall</span>
+    </div>
     <!-- Temperament + intensity moved to the debug panel head (designer,
          2026-09-01): they are tuning dials, and the panel is where tuning
          happens. The custom knob VALUES stay here; picking Custom in the

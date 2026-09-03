@@ -3,10 +3,18 @@
  "id": "s33-the-vault",
  "title": "The Vault",
  "notes": "The minimum square: one crate, one pillar, gap 1. The smallest board where stone and furniture coexist.",
+ "theme": "crypt",
  "map": [
   ".....",
   ".....",
   ".^.#.",
+  ".....",
+  "....."
+ ],
+ "skin": [
+  ".....",
+  ".....",
+  ".K...",
   ".....",
   "....."
  ],

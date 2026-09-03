@@ -28,6 +28,8 @@
 //                    trailing parts optional — "6:b30", "5:QRNN:scrambled"
 //   &autobegin=1     deal and begin immediately
 //   &go=<uci go args>  override engine search (e.g. "depth 22 movetime 80")
+//   &probe=<uci go args>  override the hint probe's search (default
+//                    "depth 22 movetime 10000"; "Keep evaluating" drops the movetime)
 //   &onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&dirseed=
 //     override the Director config (see director.mjs DIRECTOR_DEFAULTS)
 //   &godsdebug=1     force the Gods debug overlay on (Phase 1.2 instrument)
@@ -36,9 +38,9 @@
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
-import { loadStageV2, flipStageVertical, cropStage } from './stage.mjs';
+import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { BoardUI, pickPromotion } from './board-ui.mjs';
+import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS } from './director.mjs';
 
@@ -56,6 +58,9 @@ const FX_SCALE = (() => {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : 1;
 })();
 const FX = (ms) => Math.round(ms * FX_SCALE);
+// Stamp the budget on <html> so CSS-timed motion (transitions, keyframes)
+// collapses with the JS-timed kind under ?fx=0 (style.css [data-fx="0"]).
+document.documentElement.dataset.fx = FX_SCALE === 0 ? '0' : '1';
 const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
 
 const app = {
@@ -63,9 +68,16 @@ const app = {
   engine: null,
   catalog: null, // CUMULATIVE variants ini: the 60-variant catalog + every deal variant this session (spike 14)
   dealVariants: new Set(), // deal-variant names already appended to app.catalog
-  cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength}
-  quakeMarks: null, // {from:[], to:[], pit} — the last quake's residue, held
-  // on the board through the enemy's reply and cleared when the player moves
+  cheatArrows: [], // current best-move arrows (cheat mode): {from, to, strength, rank, kind:'hint'}
+  // RESIDUE (2026-09-03, cosmetic): floor squares where a door was opened
+  // (captured) or a wall/crate broken (breached, captured) — the doorway
+  // stays open, the rubble stays, under whatever stands there. Derived by
+  // diffing the furniture squares of consecutive paints (so an undo that
+  // brings the '^' back clears it); reset per duel.
+  residue: { opened: new Set(), rubble: new Set(), lastFen: null },
+  quakeMarks: null, // {from, to, pits, cracked, breached, arrows, text} — the gods' residue
+  // since the player last moved (several quakes MERGE), held on the board and in
+  // the gods line through the enemy's reply and cleared when the player moves
   stages: [], // loadStageV2 outputs from the manifest bundle, picker order
   session: null, // the previewed/live duel: {id, title, files, ranks, variantName, playerColor, enemyColor, deal}
   boardUI: null,
@@ -84,6 +96,21 @@ const app = {
 
 function setStatus(text) {
   $('status').textContent = text;
+}
+
+// The player's bar under the board carries two more lines (index.html):
+// the oracle's ranked hints and the gods' last actions. Both survive the
+// status line, which the turn loop overwrites the moment a turn resumes.
+function setHintLine(text) {
+  $('hint-line').textContent = text;
+}
+
+function setGodsLine(text) {
+  $('gods-line').textContent = text;
+}
+
+function setPlayerBarText(text) {
+  $('player-bar-text').textContent = text;
 }
 
 function log(el, msg, cls) {
@@ -197,7 +224,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -210,12 +237,29 @@ function godConfig() {
   return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
 }
 
+// The piece-fit dials' ranges (index.html's sliders carry the same) —
+// wide on purpose (round 11: the designer's numbers hit the old caps).
+const PIECE_SCALE_RANGE = [0.5, 2];
+const PIECE_LIFT_RANGE = [-0.5, 1];
+const PIECE_SHIFT_RANGE = [-0.5, 0.5];
+function clampNum(v, [lo, hi], dflt) {
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n * 100) / 100)) : dflt;
+}
+
 function loadOptions() {
   try {
     const saved = JSON.parse(localStorage.getItem(OPT_KEY) ?? '{}');
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
+    if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
+    if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
+    if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
+    options.pieceScale = clampNum(options.pieceScale, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale);
+    options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
+    options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
+    options.pieceSnap = !!options.pieceSnap;
   } catch {
     /* defaults */
   }
@@ -240,6 +284,7 @@ function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
   $('optHints').checked = options.hints;
   $('optHintN').value = String(options.hintN);
+  $('optHintCont').checked = !!options.hintCont;
   $('optUndo').checked = options.undo;
   $('optEval').checked = options.evalBar;
   $('cheat-opts').classList.toggle('disabled', !options.cheat);
@@ -252,6 +297,69 @@ function syncOptionsUI() {
   }
   $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
   $('optGodsDebug').checked = options.godsDebug;
+  $('optTheme').value = options.theme;
+  $('optPieces').value = options.pieces;
+  $('optDoors').value = options.doors;
+  const fit = pieceFitFor();
+  const pct = (v, signed) => `${signed && v >= 0 ? '+' : ''}${Math.round(v * 100)}%`;
+  $('optPieceScale').value = String(fit.scale);
+  $('optPieceScaleV').textContent = pct(fit.scale);
+  $('optPieceLift').value = String(fit.lift);
+  $('optPieceLiftV').textContent = pct(fit.lift, true);
+  $('optPieceShift').value = String(fit.shift);
+  $('optPieceShiftV').textContent = pct(fit.shift, true);
+  $('optPieceSnap').checked = fit.snap;
+}
+
+/** The piece-fit dials (board-ui setPieceFit): `?piecescale=` /
+ *  `?piecelift=` / `?pieceshift=` / `?piecesnap=1` (feel-check overrides,
+ *  never saved) > the Options. */
+function pieceFitFor() {
+  return {
+    scale: clampNum(params.get('piecescale') ?? options.pieceScale, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale),
+    lift: clampNum(params.get('piecelift') ?? options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift),
+    shift: clampNum(params.get('pieceshift') ?? options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift),
+    snap: params.has('piecesnap') ? params.get('piecesnap') !== '0' : !!options.pieceSnap,
+  };
+}
+
+/** The door set (board-ui DOOR_SETS): `?doors=` > the Doors option;
+ *  'auto' = the theme's own. */
+function doorsFor() {
+  const pick = params.get('doors') ?? options.doors;
+  return DOOR_SETS.includes(pick) ? pick : null;
+}
+
+/** The piece-sprite set (board-ui PIECE_SETS): `?pieces=` > the Pieces
+ *  option; 'classic' (or anything unknown) is the Unicode glyphs. */
+function piecesFor() {
+  const pick = params.get('pieces') ?? options.pieces;
+  return PIECE_SETS.includes(pick) ? pick : null;
+}
+
+/** The art theme the board wears right now (stage.mjs THEMES; the repacked
+ *  tilesets in tiles.css): `?theme=` (a feel-check override, never saved) >
+ *  the Art-set option > the stage's own `theme`. 'classic' — or a stage
+ *  with no theme — is the in-house drawn set (no data-theme). */
+function themeFor(stage) {
+  const pick = params.get('theme') ?? options.theme;
+  if (pick && pick !== 'auto') return THEMES.includes(pick) ? pick : null;
+  return stage?.theme ?? null;
+}
+
+/** Stamp the current theme on the board and the options legend (the legend
+ *  is built from the board's own tile classes, so it follows the art). */
+function applyTheme() {
+  const theme = themeFor(app.session?.deal?.stage ?? currentStage());
+  app.boardUI?.setTheme(theme);
+  app.boardUI?.setPieces(piecesFor());
+  app.boardUI?.setDoors(doorsFor());
+  app.boardUI?.setPieceFit(pieceFitFor());
+  const legend = document.querySelector('.legend');
+  if (legend) {
+    if (theme) legend.dataset.theme = theme;
+    else delete legend.dataset.theme;
+  }
 }
 
 function refreshCheatUI() {
@@ -267,8 +375,9 @@ function applyOptions() {
   syncOptionsUI();
   refreshCheatUI();
   refreshGodsUI();
+  applyTheme();
   if (!cheatHints()) {
-    app.cheatArrows = [];
+    clearHints();
     if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
   }
   if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.session.playerColor) {
@@ -277,30 +386,62 @@ function applyOptions() {
 }
 
 /** Cheat search: one MultiPV probe of the CURRENT position on the player's
- *  turn, feeding the hint marks and/or the eval bar. Runs on the shared
- *  engine while it is otherwise idle; MultiPV is always restored to 1 so the
- *  engine's own replies stay full-strength single-PV searches (§2.2). */
-const cheat = { seq: 0, active: null, engine: null, failures: 0 };
+ *  turn, feeding the hint arrows, the hint line and/or the eval bar. Runs on
+ *  the shared engine while it is otherwise idle; MultiPV is restored to 1
+ *  when it settles (and pinned to 1 by the duel before every reply, §2.2).
+ *
+ *  Since the 2026-09-02 refresh the probe STREAMS: it thinks as long as the
+ *  enemy does (`depth 22 movetime 10000`, or the bare depth cap with "Keep
+ *  evaluating" — rule 11 is the only limit then), and every `info multipv`
+ *  line repaints the arrows, so the first hints land at depth ~8 within a
+ *  few hundred ms and sharpen while the player thinks. The hint line shows
+ *  the reached depth so a shifting arrow reads as refinement. */
+const cheat = { seq: 0, active: null, engine: null, failures: 0, depth: null, paintTimer: null };
+const PROBE_GO_DEFAULT = 'depth 22 movetime 10000'; // matched to the enemy's reply (beginDuel)
+const PROBE_GO_CONT = 'depth 22'; // "Keep evaluating": ends at the depth cap or on the player's move
 
+function probeGo() {
+  return params.get('probe') ?? (options.hintCont ? PROBE_GO_CONT : PROBE_GO_DEFAULT);
+}
+
+function clearHints() {
+  app.cheatArrows = [];
+  cheat.depth = null;
+  setHintLine('');
+}
+
+/** Stop the running probe. Resolves false when the instance never answered
+ *  the stop: a probe still in flight past this fence would hand its
+ *  bestmove to the duel's reply listener (two `go`s on one engine — measured:
+ *  the second search receives the FIRST search's bestmove), so the instance
+ *  is recycled here before anyone searches on it again (rule 12). */
 async function cancelCheatSearch() {
   cheat.seq++;
-  if (cheat.active) {
-    try {
-      // stop the instance the probe actually RUNS on — after an engine
-      // recycle app.engine is a different object, and stopping that one
-      // leaves the real search running.
-      (cheat.engine ?? app.engine).send('stop');
-    } catch {
-      /* dead engine */
-    }
-    // A dead instance never emits bestmove, so its promise only settles on
-    // the go() timeout. Never block the player's move on that: give the stop
-    // a moment to land, then move on and let the stale probe expire alone
-    // (its seq guard makes it inert).
-    await Promise.race([cheat.active, new Promise((r) => setTimeout(r, 300))]);
-    cheat.active = null;
-    cheat.engine = null;
+  clearTimeout(cheat.paintTimer);
+  cheat.paintTimer = null;
+  if (!cheat.active) return true;
+  const engine = cheat.engine ?? app.engine;
+  try {
+    // stop the instance the probe actually RUNS on — after an engine
+    // recycle app.engine is a different object, and stopping that one
+    // leaves the real search running.
+    engine.send('stop');
+  } catch {
+    /* dead engine */
   }
+  // A healthy instance answers `stop` with bestmove within milliseconds; a
+  // dead one never does and its promise only settles on the go() timeout.
+  // Never block the player's move on that: give the stop a moment to land,
+  // then treat the instance as suspect. The stale probe's seq guard makes
+  // its late result inert either way.
+  const settled = await Promise.race([cheat.active.then(() => true), new Promise((r) => setTimeout(() => r(false), 300))]);
+  cheat.active = null;
+  cheat.engine = null;
+  if (!settled && engine === app.engine) {
+    log($('duel-log'), '⚠ hint probe unresponsive — reforming the engine', 'warn');
+    await recycleIdleEngine(engine);
+  }
+  return settled;
 }
 
 async function runCheatSearch() {
@@ -317,13 +458,41 @@ async function runCheatSearch() {
   const engine = app.engine;
   const mySeq = ++cheat.seq;
   const n = cheatHints() ? options.hintN : 1;
+  const go = probeGo();
+  const mt = go.match(/movetime (\d+)/);
+  // Timeout matched to the search (movetime + 4 s) so a doomed probe fails
+  // before the player has moved on; an untimed search ends at the depth cap
+  // on its own (or on the player's move), so it gets a long leash.
+  const timeout = mt ? parseInt(mt[1], 10) + 4000 : 600000;
+  // The streaming reader paints only depth-COMPLETE sets. Stockfish emits
+  // multipv 1..n per completed depth, so a rank-1 line at a NEW depth means
+  // every rank that exists has reported the previous depth: paint that set
+  // (one iteration behind the newest, and never a rank-3 label from depth
+  // 11 beside a rank-1 label from depth 12). A short debounce covers the
+  // last depth of a search that ends without a further rank-1 line.
+  const live = new Map();
+  const paint = (set) => {
+    cheat.paintTimer = null;
+    if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing' || app.busy) return;
+    if (!set.size) return;
+    cheat.depth = set.get(1)?.depth ?? cheat.depth;
+    applyHintLines([...set.values()], n, duel, true);
+  };
+  const onLine = (line) => {
+    if (mySeq !== cheat.seq) return;
+    const pv = parseInfoLine(line);
+    if (!pv) return;
+    clearTimeout(cheat.paintTimer);
+    if (pv.rank === 1 && live.has(1) && pv.depth > live.get(1).depth) paint(new Map(live));
+    live.set(pv.rank, pv);
+    const snapshot = live;
+    cheat.paintTimer = setTimeout(() => paint(new Map(snapshot)), 150);
+  };
   let p;
   try {
     engine.setoption('MultiPV', String(n));
     engine.position({ fen: duel.baseFen, moves: duel.movesSinceBase });
-    // Timeout matched to the search (movetime + 4 s), not 12 s: a probe that
-    // is going to fail should fail before the player has moved on.
-    p = engine.go('depth 22 movetime 450', { timeout: 4450 }).finally(() => {
+    p = engine.go(go, { timeout, onLine }).finally(() => {
       try {
         engine.setoption('MultiPV', '1');
       } catch {
@@ -347,33 +516,51 @@ async function runCheatSearch() {
     if (mySeq === cheat.seq) await cheatProbeFailed(engine, e);
     return;
   }
+  clearTimeout(cheat.paintTimer);
+  cheat.paintTimer = null;
   cheat.failures = 0;
   if (mySeq !== cheat.seq || app.duel !== duel || duel.state !== 'playing') return; // stale
+  cheat.active = null;
+  cheat.engine = null;
   const pvs = parseMultiPv(res.infoLines, n);
   if (!pvs.length) return;
-  if (cheatEval()) updateEvalBar(pvs[0].score, app.session.playerColor);
-  if (cheatHints()) {
-    // Arrow strength scales with how close each move is to the best one
-    // (lichess-style): equal → full size, 300cp worse → minimum size.
-    const cpOf = (s) => (!s ? 0 : s.type === 'mate' ? (s.value > 0 ? 10000 - s.value : -10000 - s.value) : s.value);
-    const best = cpOf(pvs[0].score);
-    const arrows = [];
-    const sans = [];
-    for (const pv of pvs) {
-      const m = pv.move.match(UCI_MOVE_RE);
-      if (!m) continue;
-      const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
-      arrows.push({ from: m[1], to: m[2], strength });
-      try {
-        sans.push(duel.board.sanMove(pv.move));
-      } catch {
-        sans.push(pv.move);
-      }
+  applyHintLines(pvs, n, duel, false);
+}
+
+/** Paint one set of MultiPV lines: the eval bar (rank 1) and, with hints
+ *  on, rank-coloured arrows + the hint line ("1 Nf3 · 2 e4 · 3 d4 · d14").
+ *  `partial` marks a mid-search paint (the depth readout says so). */
+function applyHintLines(pvs, n, duel, partial) {
+  const sorted = [...pvs].filter((pv) => pv.rank <= n).sort((a, b) => a.rank - b.rank);
+  if (!sorted.length || sorted[0].rank !== 1) return;
+  if (cheatEval()) updateEvalBar(sorted[0].score, app.session.playerColor);
+  if (!cheatHints()) return;
+  // Arrow strength scales with how close each move is to the best one
+  // (lichess-style): equal → full size, 300cp worse → minimum size. COLOUR
+  // carries the rank (board-ui.mjs setArrows), so equal-eval moves still
+  // read apart.
+  const cpOf = (s) => (!s ? 0 : s.type === 'mate' ? (s.value > 0 ? 10000 - s.value : -10000 - s.value) : s.value);
+  const best = cpOf(sorted[0].score);
+  const arrows = [];
+  const sans = [];
+  for (const pv of sorted) {
+    const m = pv.move.match(UCI_MOVE_RE);
+    if (!m) continue;
+    const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
+    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', label: pv.score ? fmtScore(pv.score) : null });
+    let san = pv.move;
+    try {
+      san = duel.board.sanMove(pv.move);
+    } catch {
+      /* keep uci */
     }
-    app.cheatArrows = arrows;
-    renderPlayMarks();
-    setStatus(`your move · ${sans.join(' · ')}`);
+    sans.push(`${pv.rank} ${san}`);
   }
+  app.cheatArrows = arrows;
+  renderPlayMarks();
+  const depth = sorted[0].depth ?? cheat.depth;
+  if (depth) cheat.depth = depth;
+  setHintLine(`${sans.join(' · ')}${depth ? ` · d${depth}${partial ? '…' : ''}` : ''}`);
 }
 
 /** Replace a dead idle-window engine instance and rebind the live duel
@@ -407,15 +594,15 @@ async function cheatProbeFailed(deadEngine, err) {
   cheat.active = null;
   cheat.engine = null;
   cheat.failures++;
-  app.cheatArrows = [];
+  clearHints();
   if (app.duel && app.phase === 'playing') renderPlayMarks();
   if (cheat.failures > 3) {
-    setStatus('your move · hints unavailable');
+    setHintLine('hints unavailable');
     return; // stop thrashing the engine if recycling is not helping
   }
-  log($('duel-log'), `⚠ hint probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
+  log($('duel-log'), `⚠ hint probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'warn');
   if (!(await recycleIdleEngine(deadEngine))) {
-    setStatus('your move · hints unavailable');
+    setHintLine('hints unavailable');
     return;
   }
   if (app.duel && app.duel.state === 'playing' && app.duel.turnColor() === app.session.playerColor && !app.busy) {
@@ -558,27 +745,35 @@ async function runEvalProbes() {
 async function evalProbeFailed(deadEngine, err) {
   evalProbe.failures++;
   if (evalProbe.failures > 3) {
-    log($('duel-log'), '⚠ eval-delta probe unavailable (repeated failures) — deltas stop here', 'crumble');
+    log($('duel-log'), '⚠ eval-delta probe unavailable (repeated failures) — deltas stop here', 'warn');
     evalProbe.queue.length = 0;
     return;
   }
-  log($('duel-log'), `⚠ eval probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'crumble');
+  log($('duel-log'), `⚠ eval probe failed (${String(err?.message ?? err).split('\n')[0]}) — reforming`, 'warn');
   await recycleIdleEngine(deadEngine);
   // No immediate retry: this runs INSIDE the idle-probes flight, so a retry
   // would just re-enter it. The queued jobs resume on the next player turn.
 }
 
-/** Last (deepest) info line per multipv rank → [{rank, move, score}]. */
+/** One `info … multipv R … depth D … score … pv M` line → {rank, move,
+ *  score, depth}, or null for any other engine line. */
+function parseInfoLine(line) {
+  if (!line.startsWith('info')) return null;
+  const pv = line.match(/ pv (\S+)/);
+  if (!pv) return null;
+  const s = line.match(/score (cp|mate) (-?\d+)/);
+  const r = line.match(/multipv (\d+)/);
+  const d = line.match(/ depth (\d+)/);
+  return { rank: r ? parseInt(r[1], 10) : 1, move: pv[1], score: s ? { type: s[1], value: parseInt(s[2], 10) } : null, depth: d ? parseInt(d[1], 10) : null };
+}
+
+/** Last (deepest) info line per multipv rank → [{rank, move, score, depth}]. */
 function parseMultiPv(infoLines, n) {
   const byRank = new Map();
   for (const line of infoLines) {
-    const pv = line.match(/ pv (\S+)/);
-    if (!pv) continue;
-    const s = line.match(/score (cp|mate) (-?\d+)/);
-    const r = line.match(/multipv (\d+)/);
-    const rank = r ? parseInt(r[1], 10) : 1;
-    if (rank > n) continue;
-    byRank.set(rank, { rank, move: pv[1], score: s ? { type: s[1], value: parseInt(s[2], 10) } : null });
+    const pv = parseInfoLine(line);
+    if (!pv || pv.rank > n) continue;
+    byRank.set(pv.rank, pv);
   }
   return [...byRank.values()].sort((a, b) => a.rank - b.rank);
 }
@@ -618,16 +813,17 @@ async function doUndo() {
   $('overlay').hidden = true;
   app.phase = 'playing';
   app.selectedSquare = null;
-  app.cheatArrows = [];
+  clearHints();
   app.quakeMarks = null; // the rewound timeline's quake never happened
+  setGodsLine('');
   app.godsCensus = null;
   godsHeatOff();
   renderGodsCensus();
   rerenderGodsTrace(); // ledger was truncated — re-derive the panel from it
   refreshGodsUI();
-  app.boardUI.setPosition(duel.fen());
+  paintBoard(duel.fen());
   renderPlayMarks();
-  log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'crumble');
+  log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'warn');
   await driveTurn();
 }
 
@@ -700,7 +896,7 @@ function renderGodsSummary() {
 
 function godsTraceCls(t) {
   if (t.outcome === 'quiet') return 'quiet';
-  if (t.outcome === 'crumble' || t.outcome === 'terminal' || t.vetoed) return 'crumble';
+  if (t.outcome === 'crumble' || t.outcome === 'terminal' || t.vetoed) return 'warn';
   if (t.outcome === 'starved') return 'bad';
   return 'ok'; // weaken / breach / displace
 }
@@ -1025,11 +1221,11 @@ function applySetupParams() {
 }
 
 /** Tiny terrain thumbnail: the ASCII map as it is authored (far rank on
- *  top). Stone solid, furniture shaded, floor a dot. */
+ *  top). Stone solid, furniture the board's own crate glyph, floor a dot. */
 function stageMiniMap(stage) {
   const rows = [];
   for (let r = stage.ranks - 1; r >= 0; r--) {
-    rows.push(stage.grid[r].map((c) => (c === WALL ? '█' : c === FURNITURE ? '▒' : '·')).join(''));
+    rows.push(stage.grid[r].map((c) => (c === WALL ? '█' : c === FURNITURE ? '▦' : '·')).join(''));
   }
   return rows.join('\n');
 }
@@ -1126,7 +1322,7 @@ function syncPanel() {
 const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
 
 /** (Re)mount the board for the given dims and show a position on it. */
-function mountPreviewBoard(files, ranks, fen) {
+function mountPreviewBoard(files, ranks, fen, skins = {}) {
   if (!app.boardUI || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
     if (app.boardUI) app.boardUI.destroy();
     app.boardUI = new BoardUI($('board'), {
@@ -1136,9 +1332,10 @@ function mountPreviewBoard(files, ranks, fen) {
       onSquareTap: onSquareTap,
     });
   }
-  app.boardUI.setPosition(fen);
+  app.boardUI.setPosition(fen, { skins });
   app.boardUI.setMarks({});
   app.boardUI.setInteractive(false);
+  applyTheme();
 }
 
 /** Walls-only FEN of the transformed terrain — what the preview shows when
@@ -1158,7 +1355,7 @@ function terrainOnly() {
   for (let r = 0; r < t.ranks; r++) {
     for (let f = 0; f < t.files; f++) if (t.grid[r][f] !== null) board[t.ranks - 1 - r][f] = t.grid[r][f];
   }
-  return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1` };
+  return { files: t.files, ranks: t.ranks, fen: `${serializeBoard(board)} w - - 0 1`, skins: stageSkins(t) };
 }
 
 /** THE live loop: recompute the deal from the current knobs and paint the
@@ -1180,9 +1377,9 @@ function refreshLiveDeal() {
   if (!deal.ok) {
     app.session = null;
     const t = terrainOnly();
-    mountPreviewBoard(t.files, t.ranks, t.fen);
+    mountPreviewBoard(t.files, t.ranks, t.fen, t.skins);
     $('enemy-bar').textContent = 'enemy · black';
-    $('player-bar').textContent = 'you · white';
+    setPlayerBarText('you · white');
     out.textContent = `✗ ${deal.error}`;
     out.className = 'bad';
     $('btnBegin').disabled = true;
@@ -1190,9 +1387,9 @@ function refreshLiveDeal() {
     return;
   }
   app.session = makeSession(deal);
-  mountPreviewBoard(deal.files, deal.ranks, deal.fen);
+  mountPreviewBoard(deal.files, deal.ranks, deal.fen, stageSkins(deal.stage));
   $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
-  $('player-bar').textContent = `you · white · ${deal.white.army.value} pts`;
+  setPlayerBarText(`you · white · ${deal.white.army.value} pts`);
   const edge = deal.edge > 0 ? `your edge +${deal.edge}` : deal.edge < 0 ? `enemy edge +${-deal.edge}` : 'even armies';
   const extras = [];
   if (deal.attempt > 0) extras.push(`re-dealt ×${deal.attempt}`);
@@ -1216,6 +1413,8 @@ function openStagePreview() {
   showScreen('duel');
   $('title').textContent = stage.title;
   $('duel-log').textContent = '';
+  setHintLine('');
+  setGodsLine('');
   $('preview-controls').hidden = false;
   $('setup-panel').hidden = false;
   syncPanel();
@@ -1300,8 +1499,10 @@ async function beginDuel() {
     extraActions: intParam('acts', god.extraActions, 0),
     seed: intParam('dirseed', deal.directorSeed, 1),
   };
-  app.cheatArrows = [];
+  clearHints();
   app.quakeMarks = null;
+  app.residue = { opened: new Set(), rubble: new Set(), lastFen: null };
+  setGodsLine('');
   $('eval-fill').style.width = '50%';
   $('eval-text').textContent = '';
   // Gods debug overlay: fresh duel, fresh ledger.
@@ -1334,7 +1535,8 @@ async function beginDuel() {
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
   await app.duel.start();
-  app.boardUI.setPosition(app.duel.fen());
+  paintBoard(app.duel.fen());
+  applyTheme();
   app.boardUI.setMarks({});
   refreshGodsUI();
   if (app.duel.state === 'playing') await driveTurn();
@@ -1361,17 +1563,51 @@ async function driveTurn() {
   }
 }
 
-/** Compose all in-play board marks (selection, last move, check, arrows). */
+/** Paint a position with the Director's terrain ledgers, so a crumbled '*'
+ *  renders as a hole and a god-weakened '^' as a cracked wall (board-ui.mjs
+ *  setPosition). Every LIVE-duel paint goes through here; the setup preview
+ *  has no Director and paints bare (every '*' stone, every '^' a crate). */
+function paintBoard(fen) {
+  const dir = app.duel?.director;
+  const skins = stageSkins(app.session?.deal?.stage);
+  const res = app.residue;
+  if (res.lastFen && res.lastFen !== fen) {
+    // Terrain that stood on the last paint and is gone now — a wall can
+    // crack AND break in one quake budget, so walls count, not only '^'.
+    const before = new Set(findSquares(res.lastFen, (c) => isTerrain(c)).map((s) => s.name));
+    const after = new Set(findSquares(fen, (c) => isTerrain(c)).map((s) => s.name));
+    for (const sq of before) {
+      if (after.has(sq) || dir?.holes.has(sq)) continue;
+      // What stood there is read off the LAST paint's cell classes. A door
+      // in an east–west line leaves its OPEN DOORWAY; a weak-spot door (the
+      // crack in a north–south line — round 10: "cracked walls turning into
+      // open doors doesn't make any sense"), a wall, a cracked wall or a
+      // rubble skin leaves the RUIN stub; any other furniture (a crate, a
+      // barrel, a table…) leaves nothing — it never continued a wall line.
+      const was = app.boardUI.cellClasses(sq) ?? [];
+      const wasDoor = skins[sq] === 'door' && !dir?.godCrates.has(sq);
+      if (wasDoor && !was.includes('weak')) res.opened.add(sq);
+      else if (wasDoor || was.includes('wall') || was.includes('cracked') || was.includes('skin-rubble')) res.rubble.add(sq);
+    }
+    for (const sq of after) { res.opened.delete(sq); res.rubble.delete(sq); } // undo brought it back
+  }
+  res.lastFen = fen;
+  app.boardUI.setPosition(fen, { holes: dir?.holes ?? new Set(), godCrates: dir?.godCrates ?? new Set(), skins, opened: res.opened, rubble: res.rubble });
+}
+
+/** Compose all in-play board marks (selection, last move, check, the gods'
+ *  residue by rung, hint + quake arrows). */
 function renderPlayMarks() {
   const q = app.quakeMarks;
   const marks = {
     lastMove: lastMoveMarks(),
     check: checkMark(),
-    arrows: app.cheatArrows,
+    arrows: [...(q?.arrows ?? []), ...app.cheatArrows],
     quakeFrom: q?.from ?? [],
     quakeTo: q?.to ?? [],
-    pit: q?.pit ?? null,
-    terrain: q?.terrain ?? [],
+    pits: q?.pits ?? [],
+    cracked: q?.cracked ?? [],
+    breached: q?.breached ?? [],
     heat: app.godsHeat ?? {},
   };
   if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
@@ -1423,7 +1659,7 @@ async function playPlayerMove(from, to, matches) {
     // Promotion (§4.4): several suffixed moves for one from-to pair.
     const letters = [...new Set(matches.map((m) => (m.match(UCI_MOVE_RE) ?? [])[3]).filter(Boolean))];
     if (letters.length) {
-      const choice = await pickPromotion(letters);
+      const choice = await pickPromotion(letters, { pieces: piecesFor() });
       uci = from + to + choice;
     }
   }
@@ -1447,7 +1683,7 @@ let lastEngineInfo = null;
 
 async function onMove({ uci, san, mover, ply }) {
   const duel = app.duel;
-  app.cheatArrows = []; // stale the moment the position changes
+  clearHints(); // stale the moment the position changes
   // duel.#push mutates its own board but renders nothing, so the DOM still
   // holds the PRE-move position here — which is exactly what the FLIP clone
   // needs to slide from. The engine's reply gets the longer slide: the player
@@ -1458,9 +1694,12 @@ async function onMove({ uci, san, mover, ply }) {
     if (app.duel !== duel || !duel.board) return; // abandoned mid-slide
   }
   // The player has answered the gods; their residue has served its purpose.
-  if (mover === 'player') app.quakeMarks = null;
+  if (mover === 'player') {
+    app.quakeMarks = null;
+    setGodsLine('');
+  }
   godsHeatOff(); // the census described the pre-move position
-  app.boardUI.setPosition(app.duel.fen());
+  paintBoard(app.duel.fen());
   renderPlayMarks();
   const n = Math.ceil(ply / 2);
   const isWhiteMove = ply % 2 === 1;
@@ -1477,11 +1716,19 @@ function checkMark() {
 }
 
 /**
- * The quake, in three beats. The old version fired the board shake, the
- * square flashes and the teleport into one 450 ms window — so the piece
- * jumped while its own 700 ms cue was still playing, and nothing on the
- * board said which way it went. Now: rumble, then motion, then a settle
- * before the enemy's reply is allowed to land on top of it.
+ * The quake, in three beats: rumble, then motion, then a settle before the
+ * enemy's reply is allowed to land on top of it. (The old version fired the
+ * board shake, the square flashes and the teleport into one 450 ms window —
+ * so the piece jumped while its own 700 ms cue was still playing, and
+ * nothing on the board said which way it went.)
+ *
+ * Motion is per RUNG (board-ui.mjs animateTerrain): a weaken cracks, a
+ * breach bursts, a crumble sinks, a displacement slides — and each edited
+ * tile HOLDS its end frame until the single commit, so a multi-action quake
+ * never shows a wall snapping back to solid while pieces are still sliding.
+ * Beat order stays terrain → pieces → pit: a valid causal reading of every
+ * budget (a breach edits '^', a weaken '*', a crumble bare floor; a slide
+ * can only ever vacate a square a crumble then takes), heaviest last.
  */
 async function onQuake(ev) {
   const { displacements, crumble, terrain, endedGame, postFen } = ev;
@@ -1498,17 +1745,19 @@ async function onQuake(ev) {
     if (evalProbe.queue.length > 8) evalProbe.queue.shift(); // bound the backlog
   }
   godsHeatOff(); // the census described the pre-quake position
-  // Rung-specific flavor: the ladder differs in KIND, so the line the player
-  // reads differs too — that is the whole telegraph (a cracked wall says a
-  // breach is coming). Audio hangs off the same split when it lands.
-  // A quake spends a BUDGET now, so several things can happen at once. The
-  // line names the heaviest, which is also the one the eye will land on.
   const edits = terrain ?? [];
+  const cracked = edits.filter((e) => e.kind === 'weaken').map((e) => e.square);
+  const breached = edits.filter((e) => e.kind === 'breach').map((e) => e.square);
+  // Rung-specific flavor for the status line. It lives only for the
+  // animation (the turn loop overwrites it as soon as the turn resumes), so
+  // the durable telling is the gods line + the log, below. The line names
+  // the heaviest thing, which is also what the eye will land on. Audio
+  // hangs off the same split when it lands.
   setStatus(
     crumble ? 'the arena shudders — the floor gives!'
-      : edits.some((e) => e.kind === 'breach') ? 'something gives way — the wall breaks open!'
+      : breached.length ? 'something gives way — the wall breaks open!'
       : displacements.length ? 'the arena shudders…'
-      : edits.length ? 'stone groans — a wall is failing…'
+      : cracked.length ? 'stone groans — a wall is failing…'
       : 'the arena shudders…'
   );
 
@@ -1520,49 +1769,57 @@ async function onQuake(ev) {
   board.style.removeProperty('--fx-ms');
   if (app.duel !== duel) return;
 
-  // Beat 2 — the motion. A quake is displacement-only OR crumble-only
-  // (director.quake() returns as soon as it has displacements, and only
-  // reaches the crumble leg with none), so these never contend for frames.
-  // Terrain first (the wall shakes where it is failing), then pieces, then
-  // the pit — heaviest last, so a mixed quake reads as an escalation rather
-  // than as several unrelated things.
-  for (const e of edits) await ui.animateCrumble(e.square, FX(300));
+  // Beat 2 — the motion, each edited tile held on its end frame.
+  for (const e of edits) await ui.animateTerrain(e.square, e.kind, FX(e.kind === 'breach' ? 320 : 300), { hold: true });
   if (app.duel !== duel) return;
   if (displacements.length) await ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) });
   if (app.duel !== duel) return;
-  if (crumble) await ui.animateCrumble(crumble.square, FX(450));
+  if (crumble) await ui.animateTerrain(crumble.square, 'crumble', FX(450), { hold: true });
   if (app.duel !== duel) return; // user backed out mid-animation
 
-  // Beat 3 — commit and mark. These marks outlive the enemy's reply.
-  ui.setPosition(postFen);
+  // Beat 3 — commit and mark. The marks outlive the enemy's reply and MERGE
+  // with an earlier quake's in the same window (a quake after the player's
+  // ply followed by one after the enemy's used to leave only the second).
+  paintBoard(postFen);
+  const prev = app.quakeMarks ?? { from: [], to: [], pits: [], cracked: [], breached: [], arrows: [], text: [] };
+  const bits = quakeBits(ev);
+  const pit = crumble ? crumble.square : null;
   app.quakeMarks = {
-    from: displacements.map((d) => d.from),
-    to: displacements.map((d) => d.to),
-    pit: crumble ? crumble.square : null,
-    // Terrain edits get the same persistent mark as a pit: the player needs
-    // to find the squares that changed without having memorised the board.
-    terrain: edits.map((e) => e.square),
+    from: [...prev.from, ...displacements.map((d) => d.from)],
+    to: [...prev.to, ...displacements.map((d) => d.to)],
+    pits: [...prev.pits, ...(pit ? [pit] : [])],
+    // A later rung supersedes an earlier mark on the same square — across
+    // quakes AND within one budget (weaken then breach the same wall): a
+    // crack that then broke open is a breach, a breach that then collapsed
+    // is a pit.
+    cracked: [...prev.cracked, ...cracked].filter((sq) => !breached.includes(sq)),
+    breached: [...prev.breached, ...breached].filter((sq) => sq !== pit),
+    arrows: [...prev.arrows, ...displacements.map((d) => ({ from: d.from, to: d.to, strength: 0.7, kind: 'quake' }))],
+    text: [...prev.text, ...bits],
   };
   renderPlayMarks();
+  setGodsLine(`⚡ the gods: ${app.quakeMarks.text.join(' · ')}`);
+  log($('duel-log'), `⚡ the gods stir — ${bits.join(' · ')}`, 'gods');
   await wait(FX(240)); // settle: the reply does not land in the same breath
-  if (app.duel !== duel) return;
+}
+
+/** The quake in words, one bit per action in the order the beats played
+ *  (terrain, pieces, pit); the same string feeds the gods line and the log.
+ *  Every rung is named — the old line skipped terrain edits entirely, so a
+ *  crack-only quake logged "the gods stir — " with nothing after the dash. */
+function quakeBits(ev) {
   const bits = [];
-  for (const d of displacements) {
+  for (const e of ev.terrain ?? []) {
+    if (e.kind === 'weaken') bits.push(`wall cracks ${e.square}`);
+    else bits.push(`${e.square} breaks open${e.freed > 0 ? ` (frees ${e.freed} pawn${e.freed === 1 ? '' : 's'})` : ''}`);
+  }
+  for (const d of ev.displacements) {
     const yours = (d.piece === d.piece.toUpperCase() ? 'white' : 'black') === app.session.playerColor;
     bits.push(`${yours ? 'your' : 'enemy'} ${pieceName(d.piece)} ${d.from}→${d.to}`);
   }
-  if (crumble) {
-    let c = `${crumble.square} collapses`;
-    // isTerrain, not just '*': swallowed furniture (rework-era) must never
-    // read as "your ^" — terrain is nobody's piece.
-    if (crumble.pieceLost && !isTerrain(crumble.pieceLost)) {
-      const yours = (crumble.pieceLost === crumble.pieceLost.toUpperCase() ? 'white' : 'black') === app.session.playerColor;
-      c += ` · ${yours ? 'your' : 'enemy'} ${pieceName(crumble.pieceLost)} is swallowed`;
-    }
-    bits.push(c);
-  }
-  if (endedGame) bits.push('nowhere left to stand');
-  log($('duel-log'), `⚠ the gods stir — ${bits.join(' · ')}`, 'crumble');
+  if (ev.crumble) bits.push(`${ev.crumble.square} collapses — a hole`);
+  if (ev.endedGame) bits.push('nowhere left to stand');
+  return bits;
 }
 
 function pieceName(letter) {
@@ -1573,7 +1830,7 @@ function pieceName(letter) {
  *  (never quit() — rule 6), boot a fresh one, reload the catalog. */
 async function onEngineStall() {
   setStatus('the enemy summoner falters — reforming…');
-  log($('duel-log'), '⚠ engine stalled — recycling instance', 'crumble');
+  log($('duel-log'), '⚠ engine stalled — recycling instance', 'warn');
   const fresh = await createEngine();
   await fresh.loadVariantsIni(app.catalog);
   app.engine = fresh;
@@ -1681,7 +1938,7 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
@@ -1689,6 +1946,36 @@ for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optUndo
 }
 $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
+  applyOptions();
+});
+$('optTheme').addEventListener('change', (e) => {
+  options.theme = e.target.value;
+  applyOptions();
+});
+$('optPieces').addEventListener('change', (e) => {
+  options.pieces = e.target.value;
+  applyOptions();
+});
+$('optDoors').addEventListener('change', (e) => {
+  options.doors = e.target.value;
+  applyOptions();
+});
+// The piece-fit dials apply live as they drag (input), so the designer can
+// settle the feel on the phone and read the numbers off the labels.
+$('optPieceScale').addEventListener('input', (e) => {
+  options.pieceScale = clampNum(e.target.value, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale);
+  applyOptions();
+});
+$('optPieceLift').addEventListener('input', (e) => {
+  options.pieceLift = clampNum(e.target.value, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
+  applyOptions();
+});
+$('optPieceShift').addEventListener('input', (e) => {
+  options.pieceShift = clampNum(e.target.value, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
+  applyOptions();
+});
+$('optPieceSnap').addEventListener('change', (e) => {
+  options.pieceSnap = e.target.checked;
   applyOptions();
 });
 /** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
@@ -1840,6 +2127,38 @@ window.__DCK = {
     census: () => computeGodsCensus(),
     tune: (partial) => app.duel?.tuneDirector(partial) ?? null,
     export: () => godsExportData(),
+  },
+  // UI test surface (2026-09-02 refresh). The renderer has no other
+  // regression net: selftest.html never loads the game board.
+  /** The art theme on the live board (null = the in-house drawn set). */
+  get theme() {
+    return app.boardUI?.theme ?? null;
+  },
+  /** The piece-sprite set on the live board (null = glyphs). */
+  get pieces() {
+    return app.boardUI?.pieces ?? null;
+  },
+  /** The door set on the live board (null = the theme's own). */
+  get doors() {
+    return app.boardUI?.doors ?? null;
+  },
+  /** The residue ledger: squares where a door was opened / a wall broken. */
+  get residue() {
+    return { opened: [...app.residue.opened], rubble: [...app.residue.rubble] };
+  },
+  /** The piece-fit dials as applied to the live board. */
+  get pieceFit() {
+    return app.boardUI?.pieceFit ?? null;
+  },
+  /** The current stage's skin grid ({square: skinName}). */
+  get skins() {
+    return stageSkins(app.session?.deal?.stage);
+  },
+  get cheat() {
+    return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };
+  },
+  get marks() {
+    return { quake: app.quakeMarks, godsLine: $('gods-line').textContent, cell: (sq) => app.boardUI?.cellClasses(sq) ?? null };
   },
   ready: null,
   // Setup-screen surface: patch the knobs, deal, preview, begin.

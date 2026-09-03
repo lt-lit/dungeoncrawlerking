@@ -3,6 +3,7 @@
  "id": "s12-rat-nest",
  "title": "Rat Nest",
  "notes": "Density stress: dense mixed pockets of stone and clutter, including one crate in each deployment approach. The generator must still deal every army width here.",
+ "theme": "crypt",
  "map": [
   "..........",
   "....^.....",
@@ -11,6 +12,16 @@
   ".^....##..",
   "..#..^....",
   ".....^....",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "....B.....",
+  ".......KK.",
+  "...X......",
+  ".B........",
+  ".....K....",
+  ".....B....",
   ".........."
  ],
  "wave": 4

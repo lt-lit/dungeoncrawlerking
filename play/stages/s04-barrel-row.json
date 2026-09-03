@@ -3,11 +3,21 @@
  "id": "s04-barrel-row",
  "title": "Barrel Row",
  "notes": "A broken furniture line across midfield, no stone at all. The stone-only control arm of this stage is an open field — the crates ARE the terrain.",
+ "theme": "castle",
  "map": [
   ".....",
   ".....",
   ".....",
   "^^.^^",
+  ".....",
+  ".....",
+  "....."
+ ],
+ "skin": [
+  ".....",
+  ".....",
+  ".....",
+  "KK.KK",
   ".....",
   ".....",
   "....."

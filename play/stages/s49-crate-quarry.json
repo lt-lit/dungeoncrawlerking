@@ -3,12 +3,22 @@
  "id": "s49-crate-quarry",
  "title": "Crate Quarry",
  "notes": "Clusters only, no stone: a 2x2 block, a 1x3 run, a 2x1 pair. The pure-cluster control — its stone-only arm is an empty field.",
+ "theme": "crypt",
  "map": [
   ".........",
   ".....^^^.",
   ".^^......",
   ".^^......",
   "....^^...",
+  ".........",
+  "........."
+ ],
+ "skin": [
+  ".........",
+  ".....KKK.",
+  ".KK......",
+  ".KK......",
+  "....KK...",
   ".........",
   "........."
  ],

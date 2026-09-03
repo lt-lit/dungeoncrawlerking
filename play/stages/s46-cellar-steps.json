@@ -3,6 +3,7 @@
  "id": "s46-cellar-steps",
  "title": "Cellar Steps",
  "notes": "A tiny sealed cellar in the near corner — stone on two sides, a weak ceiling slab, a crate on the stairs. Molding can put your own pieces inside; someone has to dig them out.",
+ "theme": "hall",
  "map": [
   "......",
   "......",
@@ -12,6 +13,16 @@
   "#^....",
   "^.#...",
   "..#..."
+ ],
+ "skin": [
+  "......",
+  "......",
+  "......",
+  "......",
+  "......",
+  ".R....",
+  "K.....",
+  "......"
  ],
  "wave": 5
 }

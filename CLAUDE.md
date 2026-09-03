@@ -34,7 +34,108 @@ guarantee — see brief §4.5's amended "Holes are forever"). Sanity harness:
 Next per brief §10, a Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
-`play/js/threat.mjs`); **Phase 1.2 — the Gods debug overlay ✅ done**
+`play/js/threat.mjs`); **UI refresh ✅ built 2026-09-02** (designer-settled: terrain
+TILES by kind — wall slab / hole / crate / cracked wall, painted from
+`director.holes` + `godCrates` via `setPosition(fen, ledgers)`; edge
+coordinates; hint arrows gold/silver/bronze by RANK at half size; the gods'
+residue in their own light-blue hue, one mark per rung plus a dashed arrow
+per displacement, merged across quakes and mirrored in a gods line under
+the board; per-rung terrain fx held on their end frame; the hint probe
+STREAMS at the enemy's own `depth 22 movetime 10000` with a "Keep
+evaluating" option, `?probe=` override, and cancel hardening — an
+unanswered `stop` recycles the instance and `duel.#search` pins MultiPV 1;
+`?fx=0` is stamped as `data-fx` so CSS motion collapses too; the selftest
+gained a renderer check and `__DCK.cheat`/`__DCK.marks`; a live-board smoke
+lives in `phase0/harness/ui-smoke.mjs`; **round 2, same day**: floor is olive
+flagstone and walls are pixel-art purple-grey stone blocks, a cracked wall is
+the block with a branching black crack and NO crate sprite, hint arrows are
+outlined on shaft and head and carry their eval written into the arrow (paints
+are depth-consistent across ranks), the floor is warm grey, and `^` has
+SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
+crate/rubble; cosmetics only, never grid state) authored over the whole bed
+by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
+family by the stage notes, a reviewed override table) with sprites
+generated into `style.css` by `gen-sprites.mjs`; **round 3, 2026-09-03 —
+ART THEMES**: the designer shopped free tilesets and settled "use them all,
+16×16 is the standard, mix and match, repack and credit" — the board wears
+`hall` (pixel-poem Dungeon Asset Puck), `castle` (SnowHex Dungeon
+Gathering) or `crypt` (Szadi art Rogue Fantasy Catacombs), or `classic`
+(the in-house set); `phase0/harness/repack-tiles.mjs` crops ONLY the used
+tiles from the packs in gitignored `phase0/assets-src/` into
+`play/img/tileset.png` + `play/tiles.css` (PNG data-URI variables under
+`[data-theme]`) + `play/CREDITS.md`; the packs themselves are never
+committed; every stage carries a `theme` (gen-skins.mjs assigns it from the
+stage NAME's vocabulary, balanced 18/21/19), overridden by the Options
+panel's Art set or `?theme=`; the renderer classes every wall by its
+solid-neighbour mask (`wm-<mask>`, N=1 E=2 S=4 W=8 + diagonals, the 47-case
+blob via `canonicalMask`; holes are not solid, doors are) and the repack
+tool GENERATES each theme's 47 cases as a bevelled top band in the pack's
+colours with the pack's own brick face extruded under every south edge
+(the packs draw 2.5-D room borders and ship no thin-wall set; stitching
+their pieces was rounds 4–5's "walls look like ass / still janky"); a door
+in a north–south wall line is a WEAK SPOT (`weak`: the column's own case +
+`--sprite-weak`; the edge-on door was cut, designer round 6); floor tiles
+show through under every sprite, `f1…f6` are floor variants — EVERY theme
+wears the six Catacombs flagstones, palette-swapped into the pack's floor
+tone for hall and castle (designer round 7: the only floor tiles that look
+good); **round 8**: ONE crack (`--tile-crack`, thin black lines on
+transparency) for every weakened wall — god-cracked or authored weak spot
+(the generated "weak spot" sprite is gone); each theme has its OWN door
+(pixel-poem's leaf, a portcullis in Dungeon Gathering's arch, a barred gate
+in Catacombs stone) and cosmetic PROPS (`.decor` spans board-ui scatters
+by hash: torches/banners/chains on wall faces, cobwebs/bones/skulls/
+candles on floor — never on holes or furniture; a theme's `--decor-*`
+paints them); and **PIECE SPRITES** (rounds 6–8): NullTale's *Chess* (CC
+BY 4.0; `nulltale` classic — the DEFAULT — and `nulltale-dread`), Dani
+Maccari's *Pixel Chess* (`pixel-chess` stone / `-wood`) and Deja View's
+*Chess Assets* (`deja-view`, its white outline recoloured dark), every set
+FITTED so its tallest piece stands 0.96 cell — no piece rises into the
+square above (designer: overlap reads badly clustered) — via `data-piece`
+on every piece span + `data-pieces` on the board (`PIECE_SETS`, Options →
+Pieces, `?pieces=`; classic = the glyphs), the promotion picker included;
+the FLIP clone copies the piece's own box; **round 9**: pieces sit
+CENTRED in their square (not on the bottom edge); props paint at native
+16-px scale, placement baked into the sprite (anchored to the face / a
+corner); the crack is CLIPPED to the wall's pixels (`mask: var(--wall-
+tile)`); a Doors option (`DOOR_SETS` leaf / portcullis / gate, `data-doors`,
+`?doors=`); a per-duel RESIDUE ledger in main.mjs (`opened` / `rubble`,
+diffed from consecutive paints' terrain) leaves the theme's OPEN DOORWAY
+where a door was captured or burst and RUBBLE where a wall or crate broke,
+and a captured door swings instead of dissolving; and the live bug of the
+day: `.cell.dark.furniture`'s explicit `background-size` list outranked
+`.cell.dark.cracked`, so a god-cracked wall on a DARK square painted its
+wall tile at 16 px in the middle of the cell ("shrunk down") — every
+`.dark` cracked/weak rule now sets its own size and the smoke checks it;
+**round 10**: piece boxes are the set's tallest piece high (trimmed
+sprites, one baseline — a 32-px box centred in the square had hung the
+feet below it, "chopped in half") and dials place them; RUIN AUTOTILE — a
+broken wall, cracked wall, weak spot or rubble skin leaves a `.ruin` cell
+wearing one of 16 GENERATED cases (`--tile-ruin-<mask>`, the 4-bit
+solid-neighbour mask), a weak-spot door never leaves a doorway, other
+furniture leaves nothing, and ruins AND opened doorways count as SOLID to
+the wall autotile so the line runs on through a break (no more end caps
+at a gap); floor litter (web/bones/skull/candle) is packed away — wall
+props and `^` skins stay; **round 11**: the ruin tile IS FLOOR but for
+the broken END of each joining wall (one flush pixel, then a ragged
+hashed fringe of up to two — the gap is 10–14 of 16 after "visibly very
+narrow") and a few flat flecks between (round 10's lowered stub "read too
+much like a barrier"); the open doorway is GENERATED per theme — a
+two-pixel post in the door's material at each edge of the cell, floor
+between top to bottom (10 of 16 px), NOTHING arching over the space ("pieces sitting in
+open doorways wouldn't look as weird"; the arch/lintel doorways are gone
+and a door set no longer overrides the doorway); piece dials: size /
+lift / SHIFT / PIXEL-PERFECT (Options + `?piecescale=`/`?piecelift=`/
+`?pieceshift=`/`?piecesnap=1`; `setPieceFit`, `DEFAULT_PIECE_FIT` = the
+designer's settled 146% / +22% / +4% with pixel-perfect ON — a piece
+stands on its square's bottom edge and rises well into the one above,
+which paints behind it by DOM order; ranges widened
+to 50–200% / −50…+100% / ±50% because the first caps were hit;
+pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
+device-pixel multiple of the set's native `--piece-fit`/`--piece-box`
+from tiles.css, landed on whole pixels); selftest 35/35, ui-smoke green
+asserting the ruin / doorway / nothing per breached square, wall-face-only
+props and the pixel-perfect box — see `play/README.md` § "Art themes");
+**Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +
@@ -284,7 +385,8 @@ arm still needs the designer. Then **Phase 2 — exploration slice**.
   feel checks passed — thread-stack's on 2026-09-01, on the v3 build). phase0's npm `node_modules` are
   still the STOCK pair — overlay `play/vendor/` artifacts before any
   phase0 run that must play the shipped rules (see `engine/README.md`).
-- `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
+- `phase0/lib/` — shared infra: `png.mjs` (dependency-free PNG codec for the
+  asset tools), `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)
 - `phase0/spikes/` — one runnable script per §9 spike (deterministic, exit 0 =
@@ -311,6 +413,8 @@ node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
+node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots)
+node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)

@@ -3,6 +3,7 @@
  "id": "s20-the-anvil",
  "title": "The Anvil",
  "notes": "Mirrored materials: stone pair on one side's second rank, crate pair on the other's. Same shape, different permanence — the cleanest A/B of wall vs furniture in deployment.",
+ "theme": "castle",
  "map": [
   "....",
   ".^^.",
@@ -12,6 +13,17 @@
   "....",
   "....",
   ".##.",
+  "...."
+ ],
+ "skin": [
+  "....",
+  ".KK.",
+  "....",
+  "....",
+  "....",
+  "....",
+  "....",
+  "....",
   "...."
  ],
  "wave": 4

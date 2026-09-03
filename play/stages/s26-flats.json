@@ -3,11 +3,20 @@
  "id": "s26-flats",
  "title": "Flats",
  "notes": "Wide-shallow ground with only light clutter and no stone. Wide flanks, short files — the cavalry board.",
+ "theme": "castle",
  "map": [
   "..........",
   "..........",
   "...^..^...",
   ".^........",
+  "..........",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "...K..K...",
+  ".K........",
   "..........",
   ".........."
  ],

@@ -3,6 +3,7 @@
  "id": "s25-the-divide",
  "title": "The Divide",
  "notes": "A full central spine with two corridors — except one spine cell is furniture. Route A: the corridor. Route B: make your own door.",
+ "theme": "castle",
  "map": [
   "........",
   "........",
@@ -11,6 +12,17 @@
   "...#^...",
   "...##...",
   "...##...",
+  "........",
+  "........"
+ ],
+ "skin": [
+  "........",
+  "........",
+  "........",
+  "........",
+  "....D...",
+  "........",
+  "........",
   "........",
   "........"
  ],

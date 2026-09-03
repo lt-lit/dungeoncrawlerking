@@ -3,11 +3,22 @@
  "id": "s45-collapsed-arch",
  "title": "Collapsed Arch",
  "notes": "A wall whose arch came down: a 3-wide rubble cluster IN the wall itself, plus one intact slip at the edge. Clear the rubble for the broad front or file through the slip.",
+ "theme": "crypt",
  "map": [
   ".......",
   ".......",
   ".......",
   "#.^^^##",
+  ".......",
+  ".......",
+  ".......",
+  "......."
+ ],
+ "skin": [
+  ".......",
+  ".......",
+  ".......",
+  "..RRR..",
   ".......",
   ".......",
   ".......",

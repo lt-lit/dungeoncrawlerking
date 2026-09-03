@@ -3,6 +3,7 @@
  "id": "s30-the-serpent",
  "title": "The Serpent",
  "notes": "S-weave of stone arms with crates at two bends. The long way is safe; the short way is bought with captures.",
+ "theme": "crypt",
  "map": [
   ".....",
   ".....",
@@ -13,6 +14,18 @@
   ".....",
   "^....",
   "####.",
+  "....."
+ ],
+ "skin": [
+  ".....",
+  ".....",
+  ".....",
+  ".....",
+  "..K..",
+  ".....",
+  ".....",
+  "K....",
+  ".....",
   "....."
  ],
  "wave": 4

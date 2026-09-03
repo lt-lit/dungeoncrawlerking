@@ -3,6 +3,7 @@
  "id": "s52-the-apartments",
  "title": "The Apartments",
  "notes": "FLOORPLAN: three rooms upstairs, two down, six doors — every room reachable two ways, party doors between neighbours (d7, g8, e2). Furnishings differ room to room: a wardrobe pair, a lone chest, a corner stack, a bare parlor.",
+ "theme": "hall",
  "map": [
   "...#..#...",
   "...#.^....",
@@ -14,6 +15,18 @@
   ".^^.^.....",
   "....#.....",
   "....#....."
+ ],
+ "skin": [
+  "..........",
+  ".....X....",
+  "..KK......",
+  "..K....SS.",
+  ".D......D.",
+  "..........",
+  "........X.",
+  ".CT.D.....",
+  "..........",
+  ".........."
  ],
  "wave": 5
 }

@@ -3,6 +3,7 @@
  "id": "s21-collapsed-keep",
  "title": "Collapsed Keep",
  "notes": "Big-board stress: rubble in both deployment zones, room walls midfield, loose crates in the wreckage. The 10x10 everything-at-once case.",
+ "theme": "crypt",
  "map": [
   "..........",
   ".#...^...#",
@@ -13,6 +14,18 @@
   ".^......#.",
   "..........",
   "#...^...#.",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  ".....K....",
+  "........K.",
+  "..........",
+  "..........",
+  "..........",
+  ".K........",
+  "..........",
+  "....K.....",
   ".........."
  ],
  "wave": 4

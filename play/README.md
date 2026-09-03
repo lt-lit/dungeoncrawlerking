@@ -37,7 +37,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 `index.html` — service-worker scope) injects them after one self-reload.
 
 - `index.html` — the game. Debug/E2E query params (see `js/main.mjs` header):
-  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…`
+  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…&probe=…&theme=hall|castle|crypt|classic`
   (army spec strings are `width:spec:archetype:anchor`, spec = `b<points>`
   or piece letters — e.g. `w=6:b30`, `b=5:QRNN:scrambled`), plus Director
   overrides `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&dirseed=`
@@ -46,8 +46,18 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `waitIdle()` waits them out). `prefers-reduced-motion` does the same by
   default.
 - `selftest.html` — in-browser infra cross-check (ffish ↔ engine perft parity,
-  60-variant catalog, crumble filter, stalemate-as-loss protocol). All lines
-  must read PASS.
+  60-variant catalog, crumble filter, stalemate-as-loss protocol, and since
+  2026-09-02 a detached-board renderer check). All lines must read PASS.
+- Headless gates, from `phase0/` (`npm i --no-save playwright` once):
+  `node harness/selftest-headless.mjs` runs the selftest in real Chromium;
+  `node harness/ui-smoke.mjs --shots` plays a forced-hot duel on the LIVE
+  board and asserts the tiles, the per-rung residue marks and arrows, the
+  gods line, the log, the streaming hint probe, and the art themes (the
+  stage's own on the live board and legend, the Art-set override, classic
+  stripping back to the in-house SVG), with screenshots in
+  `phase0/results/ui-smoke/` for the eye (`00-theme-*.png` is the same
+  opening board in every theme). `window.__DCK.cheat`, `window.__DCK.marks`
+  and `window.__DCK.theme` are the read-only surfaces it uses.
 
 ## Layout
 
@@ -158,27 +168,232 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   ladder (recycle instance, retry at reduced depth).
 - `js/board-ui.mjs`, `style.css` — board/promotion rendering, absolute
   `data-square` addressing, fits 3×5–12×10 boards on a 390×844 viewport.
-  Terrain: a stone wall is a sunken-pit CELL treatment; furniture (§4.6)
-  deliberately renders like a PIECE — a neutral `▦` glyph
-  (`.piece.neutral`, the `--furniture` wood tone) over a raised cell
-  bevel — because it can be captured: the capture-dissolve animation and
-  the ringed target mark then cover crate smashes with zero extra code.
-  One sprite for every furniture flavor (crates, doors, weak masonry —
-  per-stage fiction); skins are a future cosmetic layer, never grid state.
-  **Phase 1.1 motion:** pieces travel between squares as FLIP clones on an
+  **Terrain tiles (2026-09-02 UI refresh)** — one CELL class per kind, so a
+  tileset later replaces only what each class paints: `.wall` (authored
+  stone — a cold purple-grey outlined block on the warm olive floor),
+  `.hole` (a square the gods crumbled — the sunken pit, permanent),
+  `.furniture` (a `^`, §4.6) and `.cracked` (a wall the gods weakened — the
+  same stone block with a branching black crack across it, §4.5's
+  telegraph on the board; NOT a crate). FSF reads walls and holes alike
+  as `*`, so `setPosition(fen, { holes, godCrates, skins })` takes the
+  Director's two ledgers plus the stage's skin map (main.mjs `paintBoard`;
+  the setup preview passes skins only). The in-house tiles and furniture
+  SPRITES are pixel-art SVG data URIs generated into `style.css` by
+  `phase0/harness/gen-sprites.mjs` (crate, door, barrel, table, chair,
+  shelf, chest, rubble, the stone block, the crack) — and since
+  **2026-09-03 the board wears one of three ART THEMES** repacked from free
+  16×16 packs (`tiles.css`, `img/tileset.png`, `CREDITS.md`; see "Art
+  themes" below): a theme only overrides those same variables under
+  `[data-theme=…]`, nothing else changes. Furniture deliberately
+  renders like a PIECE — one neutral `.piece.neutral` element per cell,
+  painting the sprite its `skin-<name>` class picks (the crate by default;
+  on a cracked wall it carries the crack itself) — because it can be
+  captured: the capture-dissolve animation, the breach burst and the
+  ringed target mark then cover every flavor with zero extra code. Skins
+  are cosmetics, never grid state; the crate/cracked split is Director
+  state. Edge **coordinates** (`.coord`: files along the bottom row,
+  ranks down the left column) make every square the log names findable.
+  Marks compose on separate channels: terrain = `background`, residue and
+  debug rings = `box-shadow`, last move = `filter`, selection/check =
+  `outline`, targets = `::after`. Three more cell classes serve the themes:
+  `wm-<mask>` on a wall (or cracked wall) is its AUTOTILE case — the mask
+  of solid neighbours, N=1 E=2 S=4 W=8 plus the diagonals NE=16 SE=32 SW=64
+  NW=128 (a diagonal counts only when both its orthogonals are solid —
+  `canonicalMask`, the standard 47-case blob), where solid means stone that
+  is not a hole, a cracked wall, or a DOOR (a door continues a wall line;
+  crates and the rest do not) — painting the theme's case
+  (`--tile-wall-<mask>`, else the plain wall); `weak` on a door skin
+  sitting in a north–south wall line — there is no edge-on door (the
+  designer cut the first attempt), so the cell paints the column's own
+  autotile case like a cracked wall does and its sprite is THE crack: one
+  overlay for every weakened wall, whoever weakened it (`--tile-crack`,
+  gen-sprites.mjs — thin black branching lines on transparency, nothing
+  else, so it reads on any wall colour) — functionally the same
+  capturable `^`; and `f1`…`f6`, the square's stable floor-texture variant
+  (a hash of the square, so a repaint never makes the floor crawl; f1 on
+  ~70% of squares, the rest scattered — `FLOOR_VARIANTS`); and `.decor`,
+  a cosmetic prop span under the piece (`decorFor`: a torch, banner or
+  chain on an east–west wall face, scattered by a stable hash at low
+  rates; the theme's `--decor-<name>` paints it, or nothing — cosmetics
+  only, and a breached wall drops its torch with the repaint; props paint
+  at NATIVE 16-px scale, pixel-aligned with the tiles, their placement
+  baked into the sprite by the repack tool, anchored to the face). The
+  floor litter (cobweb, bones, skull, candle) is PACKED AWAY since round
+  10 — the designer found it made the pieces harder to read; the sprites
+  are still repacked, the renderer just never scatters them.
+  The RESIDUE main.mjs keeps per duel (`opened` / `rubble` sets passed to
+  `setPosition`, derived by diffing the terrain squares of consecutive
+  paints — what stood there is read off the last paint's cell classes —
+  so an undo that brings the `^` back clears it, and a square that became
+  a hole shows the hole): a floor square where a door in an EAST–WEST line
+  was captured or burst open keeps the theme's OPEN DOORWAY (`decor-doorway`
+  on the same span, GENERATED per theme by the repack tool — round 11:
+  "avoid having something arc over the space above the doorway" — a
+  two-pixel POST in the door's material (pixel-poem's timber, the castle's
+  pale stone, the crypt's iron) at each edge of the cell, where the
+  neighbour's wall runs flat into it, and the floor between, top to
+  bottom — ten of the sixteen pixels, after "visibly very narrow" — so a
+  piece standing in the doorway stands between the posts and nothing arcs
+  over it; the doorway is the theme's, whatever door set is chosen); a
+  floor square where a WALL, a cracked wall, a weak-spot door
+  (the crack in a north–south line — it never leaves a doorway: "cracked
+  walls turning into open doors doesn't make any sense") or a rubble skin
+  broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
+  cases (`--tile-ruin-<mask>`, the cell's `wm-<mask>` is the plain 4-bit
+  mask of its solid neighbours) that the repack tool GENERATES like the
+  walls, and since round 11 ("wall rubble reads too much like a barrier —
+  needs to blend with the floor") the tile IS floor but for the broken END
+  of each joining wall — the band enters one pixel flush from the
+  neighbour, then a ragged hashed fringe of up to two more with the brick
+  face under it, so the gap is 10–14 of the 16 — and a few flat flecks of
+  the stone on the floor between (a lone break is flecks alone); under
+  whatever stands there; the in-house set falls back
+  to its rubble sprite. Other furniture (a crate, a barrel, a table…)
+  leaves nothing when it goes — it never continued a wall line. Both kinds
+  of residue COUNT AS SOLID to the wall autotile, so the walls either side
+  run on into the break instead of capping ("autotiling gives up when a
+  door opens, leaving visible gaps"). A captured door SWINGS (`scaleX` at
+  the hinge) instead of dissolving. The
+  crack overlay on a cracked wall or weak spot is CLIPPED to the wall's own
+  pixels (`mask: var(--wall-tile)`), so a north–south column's crack never
+  spills onto the floor margins. Every wall,
+  furniture and cracked cell keeps its floor layers UNDER the tile, so a
+  themed pillar's transparent sides and every sprite sit on the floor tile
+  (the first cut painted the flat in-house colour behind sprites).
+  `setTheme(name)` stamps `data-theme` on the board.
+  **Piece sprites (2026-09-03):** every piece span carries
+  `data-piece="<FEN letter>"` and `setPieces(name)` stamps `data-pieces`
+  on the board (`PIECE_SETS`: `nulltale` / `nulltale-dread` — NullTale's
+  *Chess*, CC BY 4.0, the classic blue-vs-red silhouettes and the
+  white-vs-black "dread" set, the DEFAULT; `pixel-chess` / `pixel-chess-wood`
+  — Dani Maccari's *Pixel Chess*, 16×16; `deja-view` — Deja View's *Chess
+  Assets*, cream vs navy with its white outline recoloured dark by the
+  repack tool; null = the Unicode glyphs). Under a set the glyph goes to
+  size 0 and the span becomes an absolutely positioned box `--piece-w` ×
+  `--piece-h` cells painting the sprite with `contain`. Every set is
+  FITTED: the repack tool trims each sprite to its opaque bounds and pastes
+  it bottom-centred into a box exactly the set's tallest piece high, so a
+  set stands on ONE baseline and the box scaled to 0.96 cell never rises
+  into the square above (designer: tall pieces overlapping the piece north
+  of them read badly clustered; round 10: a taller box centred in the
+  square hung every foot below it — "chopped in half"). Dials then place
+  the box (Options → Look → **Piece size** / **lift** / **shift** and
+  **Pixel-perfect pieces**; `?piecescale=` / `?piecelift=` /
+  `?pieceshift=` / `?piecesnap=1`; `setPieceFit` → `--piece-scale` /
+  `--piece-lift` / `--piece-shift` and `data-piece-snap` on the board;
+  wide ranges — size 50–200%, lift −50…+100%, shift ±50% — because the
+  designer's numbers hit the first caps): the box is scaled, centred in
+  the square, raised by the lift and moved by the shift. The defaults are
+  the designer's settled phone numbers, `DEFAULT_PIECE_FIT` = 146% / +22%
+  / +4% with pixel-perfect ON (board-ui, mirrored as style.css's
+  fallbacks): a piece stands on its square's bottom edge and rises well
+  into the one above — which is earlier in the DOM, so the nearer (lower)
+  piece paints in front, as it should. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
+  ResizeObserver) measures a cell, reads the set's native box from
+  tiles.css (`--piece-fit` / `--piece-box`), takes the largest whole
+  device-pixel scale k that fits the size dial and lands the box on whole
+  device pixels — no sprite pixel wider than its neighbour, at the cost
+  of stepping between sizes as the board resizes (ui-smoke asserts the
+  king's box is a whole multiple of the set's height). The FLIP clone
+  copies the piece's own box, not the cell's; the promotion picker takes
+  the same set and shows sprite buttons. Options → Look → **Pieces**
+  (persisted, default NullTale classic) and `?pieces=` pick it,
+  independently of the theme; **Doors** (`DOOR_SETS`: leaf / portcullis /
+  gate, `data-doors` on the board, `?doors=`) picks a door set over any
+  theme's own (the open doorway stays the theme's — it is drawn in the
+  theme's wall).
+  **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
   dissolving under the incoming piece. Quakes play as three beats (rumble →
-  motion → settle) rather than one 450 ms window, and leave **directional**
-  marks (`quake-from` hollow, `quake-to` filled, `fresh-pit`) that persist
-  through the enemy's reply and clear when the player moves. The old cue
-  flashed both squares with one class, so it showed *that* something moved
-  but never *which way* — and its 700 ms flash outlived the 450 ms wait, so
-  the piece teleported mid-flash.
+  motion → settle), with terrain fx per RUNG (`animateTerrain`: a weaken
+  cracks, a breach bursts, a crumble sinks — each held on its end frame
+  until the commit), and leave the gods' **residue** in their own light-blue
+  hue: `quake-from` hollow, `quake-to` filled plus a dashed **arrow** on the
+  SVG layer for every displacement, `fresh-crack`, `fresh-breach`, and
+  `fresh-pit` (rust). Residue persists through the enemy's reply, MERGES
+  across quakes in one window, and clears when the player moves; the same
+  actions are written to the **gods line** in the player's bar under the
+  board ("⚡ the gods: wall cracks c4 · your knight e4→e5") and to the log.
+  Colour roles: gold = the player's own marks, gold/silver/bronze = the
+  oracle's ranked hints, light blue = the gods, rust = a fresh hole, red =
+  check. Every CSS-timed motion is also gated by `data-fx="0"` on `<html>`
+  (stamped for `?fx=0`), not only by the OS reduced-motion setting.
 - `js/main.mjs` — boot, the setup screen (stage picker + generator panel),
   duel driving, win/loss.
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
+
+## Art themes (2026-09-03)
+
+Designer decision after shopping free tilesets: use all three, make 16×16
+the standard, mix and match, repack and credit. The board wears one of
+three themes — **hall** (pixel-poem's *Dungeon Asset Puck*: purple-grey
+flagstones, salmon stone, timber doors), **castle** (SnowHex's *Dungeon
+Gathering*: cold blue-grey stone) and **crypt** (Szadi art's *Rogue Fantasy
+Catacombs*: dark brown flagstones, low brick walls) — or **classic**, the
+in-house drawn set. Which one: `?theme=<name>` (a feel-check override,
+never saved) > the Options panel's **Art set** (persisted; "The stage's
+own" by default) > the stage's `theme`. Every stage in the bed carries one,
+assigned by `gen-skins.mjs` from the stage NAME's vocabulary (tombs, rubble
+and warrens are crypt; gates, parapets and redoubts are castle; pantries,
+banquets and doorways are hall), the rest balanced across the three so
+neighbouring floors differ, plus a reviewed override table — 18 / 21 / 19
+over the 58. Cosmetics only: a theme changes what the renderer paints,
+never the grid, the deal or the gods.
+
+The packs are NOT in the repo (their terms allow use in projects but not
+redistribution of the packs; Catacombs is public domain). Only the tiles
+the game uses are repacked by `phase0/harness/repack-tiles.mjs` from
+`phase0/assets-src/<pack>/` (gitignored — download each pack from the
+author's page named in `CREDITS.md` and drop the sheets there) into
+`img/tileset.png` (one row per theme, one column per role — the
+human-readable record of what was taken) + `img/tileset.json` (per-tile
+provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
+property under `[data-theme="…"]`, so any cell size stays pixel-exact —
+a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
+Every theme's floor is the same six bevelled flagstones from the Catacombs
+brown set (the designer's verdict: the only floor tiles that look good) —
+crypt wears them as drawn, hall and castle wear them RECOLOURED into their
+own pack's floor tone (each pixel keeps its shading relative to the
+flagstones' base colour and takes the target hue, so bevels, cracks and
+grain survive). Each theme has its OWN door: the hall keeps pixel-poem's
+timber leaf; neither Dungeon Gathering nor Catacombs draws a wooden door,
+so the castle's is a portcullis drawn into Dungeon Gathering's own arched
+doorway tile and the crypt's a barred gate in its stone (the OPEN doorway
+is generated per theme — see the residue notes above). The castle's
+crate is Dungeon Gathering's stone block. Each theme also carries its
+cosmetic PROPS (torch, candle, cobweb, bones, skull, chain, banner —
+pixel-poem's and Catacombs' own torch, candle and chain; the rest
+borrowed from pixel-poem; the floor litter is repacked but no longer
+scattered). A theme also provides the wall in all **47 autotile cases**,
+the broken wall in **16 ruin cases** (`ruin-<mask>`, generated the same
+way — see the renderer notes above), and the door, crate, chest, barrel
+and rubble sprites. The repack tool also builds `img/pieces.png` (32-px
+atlas cells, one row per set) and the `[data-pieces=…]` sprite variables
+from the sheets in `assets-src/pixel-chess/`, `assets-src/nulltale/` and
+`assets-src/deja-view/` — each set names the exact crop per piece,
+trimmed and pasted bottom-centred into the set's box (its width × the
+tallest piece).
+The wall cases are GENERATED, not cropped: the packs draw walls as 2.5-D
+room borders two tiles tall (a top surface over a brick face) and ship no
+thin-wall set, and stitching their pieces into one-cell walls made fence
+posts and mismatched junctions (rounds 4–5). So the tool draws every case
+as a top BAND in the pack's own colours — an east–west run fills the top 9
+rows edge to edge, a north–south run a 10-px column, junctions their
+union, a thick block's inner corner only when the diagonal neighbour is
+solid — bevelled where the surface does not continue into a neighbour,
+outlined on the floor, and EXTRUDED: the pack's own brick face (7 rows
+cropped from its wall tile) hangs under every south edge that ends inside
+the cell, so runs read cap-and-face like the pack's, a column's south end
+shows its face and a block faces south along its bottom.
+Where a pack lacks a role the theme
+borrows from another (every door is pixel-poem's leaf; castle's barrel is
+Dungeon Gathering's vase) and where none has it (table, chair, shelf, the
+hole, the crack) the in-house sprite paints, unchanged. `phase0/lib/png.mjs`
+is the dependency-free codec the tool uses. The Options panel names the
+three packs with links, and `CREDITS.md` carries the terms and a per-tile
+provenance table.
 
 ## Stages (schema 2) + the army generator
 
@@ -195,7 +410,21 @@ A stage is GROUND — walls and dimensions drawn as ASCII, nothing else
 (§4.6: the neutral capturable occupant — terrain to molding/crop/the gods,
 an ordinary capture in play; `^`→`.` derives the stone-only corpus control
 arm from the same file); rectangular, top rank first; 3–12 files × 5–10
-ranks (the engine's largeboard caps). The locked stages are a curated
+ranks (the engine's largeboard caps). An optional **`skin`** grid, the same
+shape as the map, says what each `^` LOOKS like — `D` door · `B` barrel ·
+`T` table · `C` chair · `S` shelf · `X` chest · `K` crate · `R` rubble ·
+`.` default (crate). Skins are cosmetics only (the same `^` to the engine,
+molding, crop, the camp line and the gods); a letter on a non-`^` square is
+a load error. They ride flip, crop and the auto-crop beside the map and
+reach the renderer as `stageSkins()` (a square→skin map). An optional
+**`theme`** (`hall` / `castle` / `crypt`, stage.mjs `THEMES`) names the
+stage's art set ("Art themes" above) — cosmetic, validated on load,
+carried through flip and crop. The bed's skins
+are authored by `phase0/harness/gen-skins.mjs` — rule-based (a `^` embedded
+in a wall line is a door; the notes pick the furniture family; 2×2 blocks
+are stacked crates) plus a reviewed per-square override table — and kept
+in the stage files so the diff stays the review surface; regenerate the
+manifest after running it. The locked stages are a curated
 sample of plausible dungeon slices — Phase 2's dungeon generator replaces
 authoring wholesale, so there is no editor; the diff and the gallery are
 the review surface.
@@ -260,22 +489,44 @@ verification is the meter-lab rerun on this same bed.
 
 ## Options / Cheater Mode
 
-The gear menu has a Cheater Mode toggle with three sub-options, persisted in
+The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
-on the player's turn — lichess-style arrows whose width/opacity scale with
-how close each move is to the best one, + SANs in the status line; MultiPV
-is always reset to 1 before the engine's own replies, which stay
-full-strength), **Allow undo** (snapshot-based rewind to the player's
+on the player's turn — arrows coloured by RANK, gold / silver / bronze, at
+about half their old size, outlined, each carrying its eval written INTO
+the arrow ("+0.8", "−M2"), whose width/opacity still scale lichess-style with
+how close each move is to the best one; the ranked SANs plus the reached
+depth go to the hint line in the player's bar under the board;
+MultiPV is restored to 1 when the probe settles and pinned to 1 by the duel
+before every reply, which stays full-strength), **Keep evaluating** (the
+probe drops its time limit and thinks to the depth cap or until you move —
+costs battery), **Allow undo** (snapshot-based rewind to the player's
 previous turn, usable from the loss screen; the Director RNG stream is not
 rewound), and **Show eval bar** (player-POV score from the engine's replies
 and the cheat probes). The old "edit enemy pieces" testing tool retired
 with the placement screen — the generator knobs + seeds cover its job.
+Above the Gods section, **Look → Art set** picks the board's theme (the
+stage's own / hall / castle / crypt / classic — "Art themes" above),
+**Pieces** the sprite set (NullTale classic / dread, Pixel Chess stone /
+wood, Deja View, classic glyphs), **Doors** the door set (the theme's own /
+timber leaf / portcullis / barred gate), and the panel credits the packs.
 
 Engine pacing (designer decision, 2026-08): the enemy thinks up to **10
 seconds** per move (`depth 22 movetime 10000` — the depth cap is the WASM
 stability rule, not a strength limit). Small boards still reply in
 <200 ms because depth 22 arrives first; big boards get the full think.
 Lab corpora set their own faster limits.
+
+The hint probe (2026-09-02) thinks as long as the enemy does — the same
+`depth 22 movetime 10000`, or the bare depth cap with Keep evaluating —
+and STREAMS: every `info multipv` line repaints the arrows (engine.mjs
+`go()` takes an `onLine` reader), so the first hints land at depth ~8
+within a few hundred ms and sharpen while you think; the hint line shows
+the depth reached (`1 Nf3 · 2 e4 · 3 d4 · d14…`). `?probe=<go args>`
+overrides it (E2E runs pass a short one next to `?go=`). Cancel hardening:
+your move sends `stop` and waits ≤300 ms; a probe that never answers marks
+the instance suspect and it is recycled before the reply search (measured:
+a second `go` sent into an un-stopped search receives the FIRST search's
+bestmove, which would desync the duel).
 
 ## The Gods debug overlay (Phase 1.2)
 
@@ -307,14 +558,14 @@ What the panel shows:
 - **Per-ply roll trace** — one line per completed ply (quiet plies dim),
   from `record.quakeTraces`. Each trace carries every draw (value +
   threshold), the RNG-free probabilities, the census of what the
-  enumerations produced, and an ordered reason-code path: `pre-onset` ·
-  `quake-roll-failed` · `quake` · `crumble-forced` · `crumble-roll-passed` ·
-  `crumble-roll-failed` · `no-first-leg` · `paired` · `unpaired-one-sided` ·
-  `unpaired-held` · `crumble-neutral` · `crumble-terminal` · `starved`.
-  `fellThrough` marks the case the nominal numbers hide — the displacement
-  leg came up empty (`no-first-leg` / `unpaired-held`) and the quake dropped
-  into the crumble leg anyway — which is why crumbles land MORE often than
-  `P(crumble|quake)` implies. A `VETOED` marker means the duel layer's
+  enumerations produced, and an ordered reason-code path (v3 ladder):
+  `pre-onset` · `held-in-check` · `quake-roll-failed` · `quake` ·
+  `crumble-forced` · `weaken` · `breach` · `displace` · `no-displacement` ·
+  `crumble-neutral` · `crumble-terminal` · `starved`, plus `budget`,
+  `rungsSpent` (every action in order, `terminal` included) and
+  `rungFallback` (a rolled rung with nothing to work on walked the ladder).
+  `fellThrough` means the budget ran out of legal actions before it was
+  spent. A `VETOED` marker means the duel layer's
   safety net overrode the Director (also logged to `record.anomalies`).
 - **Next-roll readout + forecast** — the getters at ply+1, debt/cap, favor,
   plus median plies for next quake / first crumble / closure from
@@ -331,7 +582,7 @@ What the panel shows:
   never per-ply. Quake traces get their census for free from the
   enumerations the quake itself ran.
 - **Board heat** (`heat: on`) — the census painted on the board: landing
-  squares by tier (A gold / B blue / C dim), terminal crumbles red. The
+  squares by tier (A yellow / B blue / C dim), terminal crumbles red. The
   census describes one position, so heat switches itself off on any move or
   quake instead of silently re-enumerating.
 - **Eval delta per quake** — the ground truth of "did the arena change who's
