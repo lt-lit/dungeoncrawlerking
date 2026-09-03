@@ -30,11 +30,15 @@
 //   chair, shelf, chest, rubble; the crate is the default) from the stage's
 //   skin grid (stage.mjs stageSkins) — cosmetics only, never grid state.
 //   .wm-<mask> on a wall/cracked cell: its AUTOTILE case — the mask of
-//              solid neighbours (N=1 E=2 S=4 W=8; stone that is not a hole,
-//              a cracked wall, or a DOOR skin — a door continues the wall
-//              line; crates and the rest do not). A theme paints the 16
-//              composed cases (--tile-wall-<mask>), the in-house set one
-//              block for all.
+//              solid neighbours (N=1 E=2 S=4 W=8, diagonals NE=16 SE=32
+//              SW=64 NW=128, canonicalMask below; solid = stone that is
+//              not a hole, a cracked wall, or a DOOR skin — a door continues
+//              the wall line; crates and the rest do not). A theme paints
+//              the 47 blob cases (--tile-wall-<mask>, tiles.css), the
+//              in-house set one block for all.
+//   .door-v    on a door skin sitting in a north–south wall line: the
+//              sprite is the theme's edge-on door (--sprite-door-v), not
+//              the forward-facing leaf.
 //   .f1/.f2/.f3 the floor's stable texture variant per square (a hash of
 //              the square, fixed for the board's life) — a themed floor
 //              gets a little variety, the plain floor ignores them.
@@ -63,6 +67,23 @@ const FX_CLASSES = ['cracking', 'breaching', 'crumbling'];
 const FX_BY_KIND = { weaken: 'cracking', breach: 'breaching', crumble: 'crumbling', terminal: 'crumbling' };
 
 const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
+/** Wall autotile mask bits: N=1 E=2 S=4 W=8, diagonals NE=16 SE=32 SW=64
+ *  NW=128. A diagonal only matters when BOTH its orthogonal neighbours are
+ *  solid (it decides whether that corner of a thick block is filled — the
+ *  standard 47-case blob), so canonicalMask() zeroes the rest and
+ *  WALL_MASK_CODES are the only classes the renderer emits (and the only
+ *  tiles repack-tiles.mjs composes). */
+export function canonicalMask(m) {
+  const n = m & 1, e = m & 2, s = m & 4, w = m & 8;
+  let c = m & 15;
+  if (n && e && m & 16) c |= 16;
+  if (s && e && m & 32) c |= 32;
+  if (s && w && m & 64) c |= 64;
+  if (n && w && m & 128) c |= 128;
+  return c;
+}
+export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) => canonicalMask(m)))].sort((a, b) => a - b);
 
 /** Stable floor-texture variant for a square: f1 (plain) most of the time,
  *  f2/f3 scattered — a fixed function of the square, so a repaint never
@@ -277,12 +298,17 @@ export class BoardUI {
       cell.classList.toggle('cracked', cracked);
       // The autotile case of a wall or cracked wall: which neighbours it
       // joins. One wm-<mask> class, replaced on every paint.
-      const mask = (wallTile || cracked) ? (solid(f, rank + 1) ? 1 : 0) | (solid(f + 1, rank) ? 2 : 0) | (solid(f, rank - 1) ? 4 : 0) | (solid(f - 1, rank) ? 8 : 0) : -1;
+      const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
+      const mask = wallTile || cracked
+        ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
+        : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
       const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);
+      // A door in a north–south wall line is seen edge-on.
+      cell.classList.toggle('door-v', skin === 'door' && (N || S) && !(E || W));
       let glyph = cell.querySelector('.piece');
       if (v && v !== WALL) {
         if (!glyph) {

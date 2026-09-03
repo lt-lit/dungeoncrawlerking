@@ -873,6 +873,19 @@ async function main() {
     if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0') throw new Error(`a crate does not continue the wall line (${mask('a1')}, ${mask('a3')})`);
     ui.setPosition(fen);
     if (mask('a1') !== 'wm-1' || mask('c3') !== 'wm-0') throw new Error('masks must be recomputed on every paint');
+    // A door in a north–south line is edge-on; in an east–west line it is not.
+    ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
+    if (!has('a2', 'door-v')) throw new Error(`a door between a1 and a3 is edge-on: ${ui.cellClasses('a2')}`);
+    ui.setPosition('1*^*/4/4/4/4 w - - 0 1', { skins: { c5: 'door' } });
+    if (has('c5', 'door-v') || !has('c5', 'skin-door')) throw new Error(`a door between b5 and d5 faces forward: ${ui.cellClasses('c5')}`);
+    // Diagonals: a thick 2×2 block fills its inner corners (NE=16 SE=32
+    // SW=64 NW=128), and a diagonal alone never counts.
+    ui.setPosition('4/4/4/**2/**2 w - - 0 1');
+    for (const [sq, want] of [['a2', 'wm-38'], ['b2', 'wm-76'], ['a1', 'wm-19'], ['b1', 'wm-137']]) {
+      if (mask(sq) !== want) throw new Error(`2×2 block ${sq}: want ${want}, got ${mask(sq)}`);
+    }
+    ui.setPosition('4/4/4/1*2/*3 w - - 0 1');
+    if (mask('a1') !== 'wm-0' || mask('b2') !== 'wm-0') throw new Error(`diagonal-only neighbours do not join (${mask('a1')}, ${mask('b2')})`);
     // Floor variants: one per square, stable across repaints, some of each.
     const variants = (sq) => ui.cellClasses(sq).filter((c) => /^f[123]$/.test(c));
     const before = {};

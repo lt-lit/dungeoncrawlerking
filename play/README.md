@@ -195,12 +195,16 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   ranks down the left column) make every square the log names findable.
   Marks compose on separate channels: terrain = `background`, residue and
   debug rings = `box-shadow`, last move = `filter`, selection/check =
-  `outline`, targets = `::after`. Two more cell classes serve the themes:
+  `outline`, targets = `::after`. Three more cell classes serve the themes:
   `wm-<mask>` on a wall (or cracked wall) is its AUTOTILE case — the mask
-  of solid neighbours, N=1 E=2 S=4 W=8, where solid means stone that is not
-  a hole, a cracked wall, or a DOOR (a door continues a wall line; crates
-  and the rest do not) — painting the theme's composed case
-  (`--tile-wall-<mask>`, else the plain wall); and `f1`/`f2`/`f3`, the
+  of solid neighbours, N=1 E=2 S=4 W=8 plus the diagonals NE=16 SE=32 SW=64
+  NW=128 (a diagonal counts only when both its orthogonals are solid —
+  `canonicalMask`, the standard 47-case blob), where solid means stone that
+  is not a hole, a cracked wall, or a DOOR (a door continues a wall line;
+  crates and the rest do not) — painting the theme's case
+  (`--tile-wall-<mask>`, else the plain wall); `door-v` on a door skin
+  sitting in a north–south wall line, which paints the theme's edge-on door
+  (`--sprite-door-v`) instead of the forward-facing leaf; and `f1`/`f2`/`f3`, the
   square's stable floor-texture variant (a hash of the square, so a repaint
   never makes the floor crawl; ~28% of squares are variants). Every wall,
   furniture and cracked cell keeps its floor layers UNDER the tile, so a
@@ -257,13 +261,22 @@ human-readable record of what was taken) + `img/tileset.json` (per-tile
 provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
 property under `[data-theme="…"]`, so any cell size stays pixel-exact —
 a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
-A theme provides floor variants, the wall in all **16 autotile cases**
-(composed by the tool from two pack tiles, since none of the packs ships a
-thin-wall set: the horizontal wall with its cap and face, and the pillar
-or wall-top piece — pixel-poem and Catacombs get a free-standing post over
-the face wherever the wall runs north/south, Dungeon Gathering shows its
-wall-top strip there and the face only on pure east/west runs),
-door, crate, chest, barrel and rubble; where a pack lacks a role the theme
+A theme provides floor variants, the wall in all **47 autotile cases**,
+an edge-on door, and the door, crate, chest, barrel and rubble sprites.
+The wall cases are GENERATED, not cropped: the packs draw walls as 2.5-D
+room borders two tiles tall (a top surface over a brick face) and ship no
+thin-wall set, and stitching their pieces into one-cell walls made fence
+posts and mismatched junctions (rounds 4–5). So the tool draws every case
+as a top BAND in the pack's own colours — an east–west run fills the top 9
+rows edge to edge, a north–south run a 10-px column, junctions their
+union, a thick block's inner corner only when the diagonal neighbour is
+solid — bevelled where the surface does not continue into a neighbour,
+outlined on the floor, and EXTRUDED: the pack's own brick face (7 rows
+cropped from its wall tile) hangs under every south edge that ends inside
+the cell, so runs read cap-and-face like the pack's, a column's south end
+shows its face and a block faces south along its bottom. The edge-on door
+is the same band with a plank door in pixel-poem's door wood set into it.
+Where a pack lacks a role the theme
 borrows from another (every door is pixel-poem's leaf; castle's barrel is
 Dungeon Gathering's vase) and where none has it (table, chair, shelf, the
 hole, the crack) the in-house sprite paints, unchanged. `phase0/lib/png.mjs`

@@ -67,14 +67,16 @@ tiles from the packs in gitignored `phase0/assets-src/` into
 committed; every stage carries a `theme` (gen-skins.mjs assigns it from the
 stage NAME's vocabulary, balanced 18/21/19), overridden by the Options
 panel's Art set or `?theme=`; the renderer classes every wall by its
-solid-neighbour mask (`wm-<mask>`, N=1 E=2 S=4 W=8; holes are not solid,
-doors are) and the repack tool COMPOSES each theme's 16 autotile cases from
-the pack's wall + pillar/top pieces (the packs draw 2.5-D room borders and
-ship no thin-wall set — designer round 4: "walls look like ass without
-autotiling"), floor tiles show through under every sprite and pillar, and
-`f1/f2/f3` are floor variants; selftest 35/35, ui-smoke asserts the themes
-and the doorway's masks on the live board — see `play/README.md` § "Art
-themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+solid-neighbour mask (`wm-<mask>`, N=1 E=2 S=4 W=8 + diagonals, the 47-case
+blob via `canonicalMask`; holes are not solid, doors are) and the repack
+tool GENERATES each theme's 47 cases as a bevelled top band in the pack's
+colours with the pack's own brick face extruded under every south edge
+(the packs draw 2.5-D room borders and ship no thin-wall set; stitching
+their pieces was rounds 4–5's "walls look like ass / still janky"), plus an
+edge-on door (`door-v`) for doors in north–south wall lines; floor tiles
+show through under every sprite and pillar, and `f1/f2/f3` are floor
+variants; selftest 35/35, ui-smoke asserts the themes and the doorway's
+masks on the live board — see `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +

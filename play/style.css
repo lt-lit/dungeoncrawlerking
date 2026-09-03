@@ -277,26 +277,11 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   image-rendering: pixelated;
 }
 /* Wall AUTOTILE (2026-09-03): board-ui classes every wall (and cracked
-   wall) `wm-<mask>` by its solid neighbours (N=1 E=2 S=4 W=8; a hole is
-   not solid, a door is), and a theme's 16 composed cases paint it
-   (--tile-wall-<mask>, repack-tiles.mjs); the in-house set has one block,
-   so every case falls back to --tile-wall. */
-.cell.wm-0 { --wall-tile: var(--tile-wall-0, var(--tile-wall)); }
-.cell.wm-1 { --wall-tile: var(--tile-wall-1, var(--tile-wall)); }
-.cell.wm-2 { --wall-tile: var(--tile-wall-2, var(--tile-wall)); }
-.cell.wm-3 { --wall-tile: var(--tile-wall-3, var(--tile-wall)); }
-.cell.wm-4 { --wall-tile: var(--tile-wall-4, var(--tile-wall)); }
-.cell.wm-5 { --wall-tile: var(--tile-wall-5, var(--tile-wall)); }
-.cell.wm-6 { --wall-tile: var(--tile-wall-6, var(--tile-wall)); }
-.cell.wm-7 { --wall-tile: var(--tile-wall-7, var(--tile-wall)); }
-.cell.wm-8 { --wall-tile: var(--tile-wall-8, var(--tile-wall)); }
-.cell.wm-9 { --wall-tile: var(--tile-wall-9, var(--tile-wall)); }
-.cell.wm-10 { --wall-tile: var(--tile-wall-10, var(--tile-wall)); }
-.cell.wm-11 { --wall-tile: var(--tile-wall-11, var(--tile-wall)); }
-.cell.wm-12 { --wall-tile: var(--tile-wall-12, var(--tile-wall)); }
-.cell.wm-13 { --wall-tile: var(--tile-wall-13, var(--tile-wall)); }
-.cell.wm-14 { --wall-tile: var(--tile-wall-14, var(--tile-wall)); }
-.cell.wm-15 { --wall-tile: var(--tile-wall-15, var(--tile-wall)); }
+   wall) `wm-<mask>` by its solid neighbours (N=1 E=2 S=4 W=8 + diagonals,
+   the 47-case blob; a hole is not solid, a door is), and tiles.css maps
+   each case to the theme's composed tile (--tile-wall-<mask>) with the
+   plain wall as the fallback, so the in-house set's one block paints
+   every case. */
 
 /* Edge coordinates: file letters along the bottom row, rank numbers down the
    left column (board-ui.mjs). Tiny, muted, out of the glyph's way. */
@@ -404,6 +389,9 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .cell.skin-chest .piece.neutral { background-image: var(--sprite-chest); }
 .cell.skin-shelf .piece.neutral { background-image: var(--sprite-shelf); width: 90%; height: 90%; }
 .cell.skin-rubble .piece.neutral { background-image: var(--sprite-rubble); width: 96%; height: 96%; }
+/* A door in a north–south wall line (board-ui `door-v`): the theme's
+   edge-on door, else the same forward-facing leaf. */
+.cell.skin-door.door-v .piece.neutral { background-image: var(--sprite-door-v, var(--sprite-door)); }
 /* The cracked wall's sprite IS the crack (no crate — the block underneath is
    the wall). AFTER the sprite rules on purpose: equal specificity, so source
    order decides, and this must win over the crate default. */
