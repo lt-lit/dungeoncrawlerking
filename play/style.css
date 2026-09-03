@@ -463,7 +463,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    10: board-ui no longer scatters it; the sprites stay in tiles.css.) */
 /* Earned residue (main.mjs ledger): where an east–west door was opened the
    doorway stays open — a decor; where a wall broke the RUIN stub stays —
-   .cell.ruin below. */
+   .cell.ruin below. The doorway's posts stand only beside STANDING walls:
+   the cell wears the east/west standing mask (board-ui wm-<mask>), and
+   tiles.css maps wm-8 / wm-2 to the one-post tiles and wm-0 to nothing
+   (round 12: "awkward vertical door frames between empty spaces"). */
 .decor-doorway { --decor-img: var(--decor-doorway); }
 /* A broken wall's stub (board-ui .ruin + wm-<mask>, the mask of its
    STANDING wall neighbours — never another ruin or an opened doorway):

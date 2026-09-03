@@ -899,17 +899,18 @@ async function main() {
     ui.setDoors(null);
     if (ui.doors !== null) throw new Error('setDoors(null) clears to the theme door');
     const at1 = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;
-    // Residue: an opened doorway is a decor on a floor square; a broken
-    // wall is a RUIN cell wearing the 4-bit case of its solid neighbours;
-    // and both count as solid to the walls beside them — no end caps at a
-    // break. Rank 1 here is wall, ruin, wall: one east–west line.
+    // Residue: an opened doorway is a decor on a floor square wearing the
+    // east/west mask of its STANDING walls (its posts); a broken wall is a
+    // RUIN cell wearing the 4-bit case of its standing neighbours; and both
+    // count as solid to the walls beside them — no end caps at a break.
+    // Rank 1 here is wall, ruin, wall: one east–west line.
     ui.setPosition('4/4/4/4/*1*1 w - - 0 1', { opened: new Set(['d3']), rubble: new Set(['b1', 'zz9']) });
     const dec = (sq) => host.querySelector(`[data-square="${sq}"] .decor`)?.className ?? null;
     if (dec('d3') !== 'decor decor-doorway') throw new Error(`doorway decor (${dec('d3')})`);
     if (!has('b1', 'ruin') || mask('b1') !== 'wm-10' || dec('b1') !== null) throw new Error(`a broken wall between two walls is a ruin wearing the east–west stub case: ${ui.cellClasses('b1')}`);
     if (mask('a1') !== 'wm-2' || mask('c1') !== 'wm-8') throw new Error(`the walls run on into the ruin (${mask('a1')}, ${mask('c1')})`);
     ui.setPosition('4/4/4/4/*1*1 w - - 0 1', { opened: new Set(['b1']) });
-    if (has('b1', 'ruin') || mask('b1') !== null || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2') throw new Error(`an opened doorway keeps the wall line too: ${ui.cellClasses('b1')} / ${mask('a1')}`);
+    if (has('b1', 'ruin') || mask('b1') !== 'wm-10' || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2') throw new Error(`an opened doorway keeps the wall line too, and wears the full frame between two walls: ${ui.cellClasses('b1')} / ${mask('a1')}`);
     ui.setPosition('4/4/4/1^2/*1*1 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['b1']) });
     if (dec('b2') !== null) throw new Error('a square that is furniture again carries no doorway decor');
     ui.setPosition('4/4/4/4/*K*1 w - - 0 1', { rubble: new Set(['b1']) });
@@ -940,6 +941,19 @@ async function main() {
     if (mask('c1') !== 'wm-2') throw new Error(`a crate beside a ruin is no wall end (${mask('c1')})`);
     ui.setPosition('4/4/4/4/**1* w - - 0 1', { holes: new Set(['b1']), rubble: new Set(['c1']) });
     if (mask('c1') !== 'wm-2') throw new Error(`a hole beside a ruin is no wall end (${mask('c1')})`);
+    // …and a DOORWAY's posts stand only beside standing walls: one post
+    // beside a break (the west post = wm-8, the east = wm-2), none between
+    // two breaks (wm-0) — the frame's post fell with the wall it framed.
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { opened: new Set(['b1']), rubble: new Set(['c1']) });
+    if (mask('b1') !== 'wm-8' || dec('b1') !== 'decor decor-doorway') throw new Error(`a doorway with its east wall broken keeps the west post only (${mask('b1')}, ${dec('b1')})`);
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { opened: new Set(['c1']), rubble: new Set(['b1']) });
+    if (mask('c1') !== 'wm-2' || dec('c1') !== 'decor decor-doorway') throw new Error(`a doorway with its west wall broken keeps the east post only (${mask('c1')}, ${dec('c1')})`);
+    ui.setPosition('4/4/4/4/4 w - - 0 1', { opened: new Set(['b1']), rubble: new Set(['a1', 'c1']) });
+    if (mask('b1') !== 'wm-0' || dec('b1') !== 'decor decor-doorway' || !has('b1', 'wm-0')) throw new Error(`a doorway between two breaks has no posts (${mask('b1')}, ${dec('b1')})`);
+    ui.setPosition('4/4/4/4/1*2 w - - 0 1', { opened: new Set(['c1']) });
+    if (mask('c1') !== 'wm-8') throw new Error(`a doorway's post stands beside its wall, none beside plain floor (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/4 w - - 0 1');
+    if (mask('b1') !== null || dec('b1') !== null) throw new Error('a forgotten doorway leaves neither decor nor case');
     // Props: wall props only — the floor litter is packed away (round 10).
     ui.setPosition('****/4/4/4/4 w - - 0 1');
     for (const d of host.querySelectorAll('.decor')) {

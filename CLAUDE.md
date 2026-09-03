@@ -111,7 +111,8 @@ sprites, one baseline — a 32-px box centred in the square had hung the
 feet below it, "chopped in half") and dials place them; RUIN AUTOTILE — a
 broken wall, cracked wall, weak spot or rubble skin leaves a `.ruin` cell
 wearing one of 16 GENERATED cases (`--tile-ruin-<mask>`, the 4-bit
-solid-neighbour mask), a weak-spot door never leaves a doorway, other
+neighbour mask — solid neighbours then, STANDING walls only since round
+12), a weak-spot door never leaves a doorway, other
 furniture leaves nothing, and ruins AND opened doorways count as SOLID to
 the wall autotile so the line runs on through a break (no more end caps
 at a gap); floor litter (web/bones/skull/candle) is packed away — wall
@@ -141,8 +142,14 @@ each other, "clumps of wall between squares", and a stub grew against a
 doorway post; the walls still see every residue as solid), and a broken
 NORTH end wears a two-row stump face instead of the wall's seven ("cover
 a ton of the square when pointed south"; a north–south case had drawn
-none at all) — `RUIN.face` in the repack tool; the smoke checks every
-live ruin's case against its neighbours — see `play/README.md` § "Art
+none at all) — `RUIN.face` in the repack tool, west/east ends untouched
+(their fringe columns keep the face under their own bottom — a first cut
+keyed the face on the run from the top and shrank them, caught in
+review); and an opened DOORWAY's posts stand only beside standing walls
+too (the cell wears the east/west mask, `doorway-8` / `doorway-2` are
+the one-post tiles, wm-0 paints nothing — "awkward looking vertical door
+frames between empty spaces"); the smoke checks every live ruin's and
+doorway's case against its neighbours — see `play/README.md` § "Art
 themes");
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll

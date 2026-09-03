@@ -45,8 +45,10 @@
 //              chain / banner on an east–west wall face, scattered by a
 //              stable hash of the square — floor litter is packed away
 //              since round 10 — and decor-doorway, the OPEN DOORWAY an
-//              east–west door left behind); the theme's --decor-<name>
-//              paints it, or nothing.
+//              east–west door left behind, whose cell also wears wm-<mask>
+//              = the east (2) / west (8) walls still STANDING beside it,
+//              so a post stands only where its wall does — round 12); the
+//              theme's --decor-<name> paints it, or nothing.
 //   .ruin      a floor square where a wall, a cracked wall or a weak spot
 //              BROKE (main.mjs residue ledger `rubble`): it paints the
 //              theme's ruin stub case (--tile-ruin-<mask>, 16 cases by its
@@ -328,7 +330,8 @@ export class BoardUI {
    * was opened keep its doorway decor, floor squares where a wall broke
    * become `.ruin` cells wearing the broken stub (cosmetic, but both count
    * as solid to the wall autotile so the line runs on through them; a
-   * ruin's own stub case counts only STANDING walls, never residue).
+   * ruin's own stub case and a doorway's posts count only STANDING walls,
+   * never residue).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
@@ -389,15 +392,22 @@ export class BoardUI {
       // 4-bit mask of its STANDING neighbours (the 16 stub cases — a
       // neighbouring ruin or doorway is no wall end). One wm-<mask> class,
       // replaced on every paint.
+      // An opened doorway's posts stand only beside STANDING walls too
+      // (round 12: "awkward looking vertical door frames between empty
+      // spaces" — a frame's post falls with the wall it framed): the cell
+      // wears the east/west standing mask, and tiles.css picks the frame,
+      // one post, or nothing.
+      const doorway = floor && !ruin && opened.has(sq);
       const mask = wallTile || cracked || weak
         ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
         : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
+        : doorway ? (standing(f + 1, rank) ? 2 : 0) | (standing(f - 1, rank) ? 8 : 0)
         : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
       // Cosmetic props (one span under the piece; removed when the square
       // changes kind — a breached wall drops its torch).
-      const decor = decorFor({ wallTile, cracked, mask, f, rank, earned: floor && !ruin && opened.has(sq) ? 'doorway' : null });
+      const decor = decorFor({ wallTile, cracked, mask, f, rank, earned: doorway ? 'doorway' : null });
       let span = cell.querySelector(':scope > .decor');
       if (decor) {
         if (!span) {

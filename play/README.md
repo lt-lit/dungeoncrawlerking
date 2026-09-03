@@ -230,11 +230,16 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   on the same span, GENERATED per theme by the repack tool — round 11:
   "avoid having something arc over the space above the doorway" — a
   two-pixel POST in the door's material (pixel-poem's timber, the castle's
-  pale stone, the crypt's iron) at each edge of the cell, where the
-  neighbour's wall runs flat into it, and the floor between, top to
-  bottom — ten of the sixteen pixels, after "visibly very narrow" — so a
-  piece standing in the doorway stands between the posts and nothing arcs
-  over it; the doorway is the theme's, whatever door set is chosen); a
+  pale stone, the crypt's iron) at each edge of the cell WHERE A WALL
+  STILL STANDS — the cell wears the east/west standing mask as
+  `wm-<mask>` and tiles.css picks the frame (wm-10), one post (wm-8 the
+  west, wm-2 the east) or nothing (wm-0): round 12, "awkward looking
+  vertical door frames between empty spaces" — a frame's post falls with
+  the wall it framed — where the neighbour's wall runs flat into it, and
+  the floor between, top to bottom — ten of the sixteen pixels, after
+  "visibly very narrow" — so a piece standing in the doorway stands
+  between the posts and nothing arcs over it; the doorway is the theme's,
+  whatever door set is chosen); a
   floor square where a WALL, a cracked wall, a weak-spot door
   (the crack in a north–south line — it never leaves a doorway: "cracked
   walls turning into open doors doesn't make any sense") or a rubble skin
@@ -249,8 +254,9 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   needs to blend with the floor") the tile IS floor but for the broken END
   of each joining wall — the band enters one pixel flush from the
   neighbour, then a ragged hashed fringe of up to two more, with the brick
-  face under it: a west or east end's face runs flush with the
-  neighbour's (the wall's seven rows), a NORTH end's is the stump's own
+  face under it: a west or east end's columns hang the wall's seven rows
+  under their own bottom (the flush column's face runs on into the
+  neighbour's), a NORTH end's is the stump's own
   two rows (round 12: "these rubble wall edges cover a ton of the square
   when pointed south" — under the wall's full face the stub took 8–10 of
   the 16 rows, and a north–south case had drawn no face at all) — so the
