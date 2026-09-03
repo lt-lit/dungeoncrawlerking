@@ -459,14 +459,25 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .decor-torch { --decor-img: var(--decor-torch); }
 .decor-banner { --decor-img: var(--decor-banner); }
 .decor-chain { --decor-img: var(--decor-chain); }
-.decor-web { --decor-img: var(--decor-web); }
-.decor-bones { --decor-img: var(--decor-bones); }
-.decor-skull { --decor-img: var(--decor-skull); }
-.decor-candle { --decor-img: var(--decor-candle); }
-/* Earned residue (main.mjs ledger): where a door was opened, where a wall or
-   crate was broken — the doorway stays open, the rubble stays. */
+/* (Floor litter — web / bones / skull / candle — is packed away since round
+   10: board-ui no longer scatters it; the sprites stay in tiles.css.) */
+/* Earned residue (main.mjs ledger): where an east–west door was opened the
+   doorway stays open — a decor; where a wall broke the RUIN stub stays —
+   .cell.ruin below. */
 .decor-doorway { --decor-img: var(--decor-doorway); }
-.decor-rubble { --decor-img: var(--decor-rubble, var(--sprite-rubble)); }
+/* A broken wall's stub (board-ui .ruin + wm-<mask>): the theme's ruin
+   autotile case (tiles.css maps .ruin.wm-<mask> to --ruin-tile; the
+   in-house set falls back to its rubble sprite) over the floor, under
+   whatever stands there — layered like a wall tile, and the .dark rule
+   sets its own size (round 9's specificity bug). */
+.cell.ruin {
+  background-image: var(--ruin-tile, var(--sprite-rubble)), var(--tile-floor, none);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.cell.dark.ruin { background-image: var(--ruin-tile, var(--sprite-rubble)), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
 /* A captured door SWINGS instead of dissolving (the doorway decor takes
    over on the commit). */
 .cell.skin-door .piece.neutral.fx-captured {
@@ -478,21 +489,28 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 /* PIECE SPRITES (2026-09-03): under a piece set (data-pieces on the board
    or the promotion card; tiles.css maps data-piece="<FEN letter>" to the
    set's sprite as --piece-img) the glyph goes to size 0 and the element
-   paints the sprite at 92% of the cell — as a background, so the fx clone
-   (cell-sized, inline) draws exactly what the cell drew. */
+   paints the sprite in the set's fitted BOX — as a background, so the fx
+   clone (cell-sized, inline) draws exactly what the cell drew. The box
+   (--piece-w × --piece-h cells: the set's tallest piece stands 0.96 cell,
+   every piece on one baseline at its bottom) is scaled by --piece-scale
+   and raised by --piece-lift cells — the Options' Piece size / lift dials
+   (board-ui setPieceFit) — and centred in the square; at the defaults the
+   tallest piece spans ~0.12…0.98 of its square, so no piece hugs the
+   bottom edge and none rises into the square above (round 10). */
 [data-pieces] .piece[data-piece] {
   position: absolute;
-  left: calc(50% - 50% * var(--piece-w, 1));
-  top: calc(50% - 50% * var(--piece-h, 1));
-  width: calc(100% * var(--piece-w, 1));
-  height: calc(100% * var(--piece-h, 1));
+  --pw: calc(var(--piece-w, 1) * var(--piece-scale, .9));
+  --ph: calc(var(--piece-h, 1) * var(--piece-scale, .9));
+  left: calc(50% - 50% * var(--pw));
+  top: calc(50% - 50% * var(--ph) - 100% * var(--piece-lift, .05));
+  width: calc(100% * var(--pw));
+  height: calc(100% * var(--ph));
   font-size: 0;
   text-shadow: none;
-  background: var(--piece-img) center / contain no-repeat; /* the sprite is centred in its box by the repack tool, the box in the square: no piece hugs the bottom edge */
+  background: var(--piece-img) center bottom / contain no-repeat;
   image-rendering: pixelated;
   filter: drop-shadow(0 1px 0 #000a);
 }
-/* Every set is fitted (tallest piece = 0.96 cell), so no box leaves its square. */
 [data-pieces] .promo-btn[data-piece] {
   font-size: 0;
   width: 2.6rem;
@@ -802,6 +820,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #god-knobs.disabled { opacity: .35; }
 #god-knobs input[type="number"] { width: 4.2rem; margin-left: auto; background: var(--panel, #1c2233); color: inherit; border: 1px solid var(--accent-2); border-radius: 4px; padding: .15rem .3rem; }
 .opt select { margin-left: auto; }
+.opt input[type="range"] { margin-left: auto; width: 7.5rem; accent-color: var(--gold); }
+.opt .opt-val { font-size: .8rem; color: var(--muted); min-width: 2.6rem; text-align: right; }
 .opt-hint { font-size: .8rem; color: var(--muted); margin: 0 0 .3rem; }
 
 /* Terrain legend: real board tiles, so it cannot drift from the board. */

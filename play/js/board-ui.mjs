@@ -42,9 +42,18 @@
 //              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
 //   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
-//              chain / banner on an east–west wall face, web / bones /
-//              skull / candle on floor), scattered by a stable hash of the
-//              square; the theme's --decor-<name> paints it, or nothing.
+//              chain / banner on an east–west wall face, scattered by a
+//              stable hash of the square — floor litter is packed away
+//              since round 10 — and decor-doorway, the OPEN DOORWAY an
+//              east–west door left behind); the theme's --decor-<name>
+//              paints it, or nothing.
+//   .ruin      a floor square where a wall, a cracked wall or a weak spot
+//              BROKE (main.mjs residue ledger `rubble`): it paints the
+//              theme's ruin stub case (--tile-ruin-<mask>, 16 cases by its
+//              solid neighbours as wm-<mask>) under whatever stands there,
+//              and it COUNTS AS SOLID to its neighbours' wall cases — as
+//              does an opened doorway — so the wall line runs on through
+//              the break instead of capping either side of a gap.
 // PIECES (2026-09-03): every piece span carries data-piece="<FEN letter>";
 // setPieces(name) stamps data-pieces on the board and tiles.css paints the
 // set's sprite (PIECE_SETS) instead of the glyph; null = the glyphs.
@@ -109,15 +118,15 @@ function squareHash(f, rank, salt) {
 }
 
 /** Which cosmetic prop a square carries, or null. Walls facing south (an
- *  east–west run with floor below) get wall-mounted props; floor squares
- *  get litter, cobwebs only against a wall. Low rates — a prop must never
- *  read as a piece or as terrain. */
-function decorFor({ wallTile, cracked, floor, mask, nearWall, f, rank, earned }) {
-  if (floor && earned) return earned; // an opened doorway or rubble outranks the scatter
+ *  east–west run with floor below) get wall-mounted props at a low rate —
+ *  a prop must never read as a piece or as terrain. Floor litter (web /
+ *  bones / skull / candle) is PACKED AWAY (designer round 10: it made the
+ *  pieces harder to read); the sprites stay in tiles.css. */
+function decorFor({ wallTile, cracked, mask, f, rank, earned }) {
+  if (earned) return earned; // the open doorway a door left behind
+  if (!wallTile || cracked || !(mask & 10) || mask & 4) return null;
   const r = squareHash(f, rank, 7) % 1000;
-  if (wallTile && !cracked && (mask & 10) && !(mask & 4)) return r < 200 ? 'torch' : r < 260 ? 'banner' : r < 320 ? 'chain' : null;
-  if (floor) return r < 22 && nearWall ? 'web' : r < 42 ? 'bones' : r < 54 ? 'skull' : r < 74 && nearWall ? 'candle' : null;
-  return null;
+  return r < 200 ? 'torch' : r < 260 ? 'banner' : r < 320 ? 'chain' : null;
 }
 
 function floorVariant(f, rank) {
@@ -301,21 +310,26 @@ export class BoardUI {
    * `skins` is the stage's {square: skinName} map (stage.mjs stageSkins):
    * an authored '^' with a skin gets the `skin-<name>` class and paints
    * that sprite; a god-cracked wall never takes a skin. `opened` / `rubble`
-   * are main.mjs's RESIDUE ledger — floor squares where a door was opened
-   * or a wall/crate broken keep a doorway / rubble decor (cosmetic).
+   * are main.mjs's RESIDUE ledger — floor squares where an east–west door
+   * was opened keep its doorway decor, floor squares where a wall broke
+   * become `.ruin` cells wearing the broken stub (cosmetic, but both count
+   * as solid to the wall autotile so the line runs on through them).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
     // Solid (for the wall autotile) = stone that is not a hole, a cracked
-    // wall, or a door — the things that continue a wall line to the eye.
+    // wall, or a door — the things that continue a wall line to the eye —
+    // and the RESIDUE of one: a broken wall's ruin stub and an opened
+    // doorway keep the line running through the break (round 10).
     const solid = (ff, rr) => {
       if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
       const t = grid[this.ranks - rr]?.[ff] ?? null;
       const name = String.fromCharCode(97 + ff) + rr;
       if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door';
-      return t === WALL && !holes.has(name);
+      if (t === WALL) return !holes.has(name);
+      return rubble.has(name) || opened.has(name);
     };
     for (const [sq, cell] of this.cells) {
       const f = sq.charCodeAt(0) - 97;
@@ -338,17 +352,23 @@ export class BoardUI {
       const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
       const weak = skin === 'door' && (N || S) && !(E || W);
       cell.classList.toggle('weak', weak);
+      // A floor square where a wall broke keeps the broken stub.
+      const floor = !isWall && !isFurniture;
+      const ruin = floor && rubble.has(sq);
+      cell.classList.toggle('ruin', ruin);
       // The autotile case of a wall, cracked wall or weak spot: which
-      // neighbours it joins. One wm-<mask> class, replaced on every paint.
+      // neighbours it joins (the 47-case blob); a ruin's is the plain
+      // 4-bit mask of its solid neighbours (the 16 stub cases). One
+      // wm-<mask> class, replaced on every paint.
       const mask = wallTile || cracked || weak
         ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
+        : ruin ? (N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0)
         : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
       // Cosmetic props (one span under the piece; removed when the square
       // changes kind — a breached wall drops its torch).
-      const floor = !isWall && !isFurniture;
-      const decor = decorFor({ wallTile, cracked, floor, mask, nearWall: N || E || S || W, f, rank, earned: opened.has(sq) ? 'doorway' : rubble.has(sq) ? 'rubble' : null });
+      const decor = decorFor({ wallTile, cracked, mask, f, rank, earned: floor && !ruin && opened.has(sq) ? 'doorway' : null });
       let span = cell.querySelector(':scope > .decor');
       if (decor) {
         if (!span) {
@@ -458,6 +478,24 @@ export class BoardUI {
   setDoors(name) {
     if (name && DOOR_SETS.includes(name)) this.container.dataset.doors = name;
     else delete this.container.dataset.doors;
+  }
+
+  /** The piece-sprite fit dials (Options → Piece size / lift; style.css
+   *  --piece-scale / --piece-lift): `scale` multiplies every set's fitted
+   *  box (1 = the tallest piece stands 0.96 cell), `lift` raises it by
+   *  that fraction of a cell. Non-finite values clear to the defaults. */
+  setPieceFit({ scale, lift } = {}) {
+    const st = this.container.style;
+    if (Number.isFinite(scale)) st.setProperty('--piece-scale', String(scale));
+    else st.removeProperty('--piece-scale');
+    if (Number.isFinite(lift)) st.setProperty('--piece-lift', String(lift));
+    else st.removeProperty('--piece-lift');
+  }
+
+  get pieceFit() {
+    const st = this.container.style;
+    const num = (v) => (v === '' ? null : Number(v));
+    return { scale: num(st.getPropertyValue('--piece-scale')), lift: num(st.getPropertyValue('--piece-lift')) };
   }
 
   get doors() {

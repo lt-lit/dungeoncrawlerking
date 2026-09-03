@@ -67,7 +67,23 @@
   "wall-207",
   "wall-223",
   "wall-239",
-  "wall-255"
+  "wall-255",
+  "ruin-0",
+  "ruin-1",
+  "ruin-2",
+  "ruin-3",
+  "ruin-4",
+  "ruin-5",
+  "ruin-6",
+  "ruin-7",
+  "ruin-8",
+  "ruin-9",
+  "ruin-10",
+  "ruin-11",
+  "ruin-12",
+  "ruin-13",
+  "ruin-14",
+  "ruin-15"
  ],
  "themes": {
   "hall": {
@@ -442,6 +458,86 @@
      "col": 66,
      "composed": "blob in the pack palette + its face",
      "mask": 255
+    },
+    "ruin-0": {
+     "col": 67,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 68,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 69,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 70,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 71,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 72,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 73,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 74,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 75,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 76,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 77,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 78,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 79,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 80,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 81,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 82,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
     }
    }
   },
@@ -829,6 +925,86 @@
      "col": 66,
      "composed": "blob in the pack palette + its face",
      "mask": 255
+    },
+    "ruin-0": {
+     "col": 67,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 68,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 69,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 70,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 71,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 72,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 73,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 74,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 75,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 76,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 77,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 78,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 79,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 80,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 81,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 82,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
     }
    }
   },
@@ -1195,6 +1371,86 @@
      "col": 66,
      "composed": "blob in the pack palette + its face",
      "mask": 255
+    },
+    "ruin-0": {
+     "col": 67,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 68,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 69,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 70,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 71,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 72,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 73,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 74,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 75,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 76,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 77,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 78,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 79,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 80,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 81,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 82,
+     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
     }
    }
   }
@@ -1273,7 +1529,7 @@
     "pack": "nulltale",
     "box": [
      16,
-     32
+     23
     ],
     "sheets": [
      "NullTale Chess.png"
@@ -1285,7 +1541,7 @@
     "pack": "nulltale",
     "box": [
      16,
-     32
+     26
     ],
     "sheets": [
      "NullTale Chess.png"
@@ -1297,7 +1553,7 @@
     "pack": "deja-view",
     "box": [
      18,
-     24
+     23
     ],
     "sheets": [
      "ChessAssets.png"

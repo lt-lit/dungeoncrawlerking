@@ -891,12 +891,30 @@ async function main() {
     if (ui.doors !== 'portcullis' || host.dataset.doors !== 'portcullis') throw new Error('setDoors must stamp data-doors');
     ui.setDoors(null);
     if (ui.doors !== null) throw new Error('setDoors(null) clears to the theme door');
-    // Residue: an opened doorway / rubble decor on floor squares only.
-    ui.setPosition('4/4/4/4/4 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['c3', 'zz9']) });
+    const at1 = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;
+    // Residue: an opened doorway is a decor on a floor square; a broken
+    // wall is a RUIN cell wearing the 4-bit case of its solid neighbours;
+    // and both count as solid to the walls beside them — no end caps at a
+    // break. Rank 1 here is wall, ruin, wall: one east–west line.
+    ui.setPosition('4/4/4/4/*1*1 w - - 0 1', { opened: new Set(['d3']), rubble: new Set(['b1', 'zz9']) });
     const dec = (sq) => host.querySelector(`[data-square="${sq}"] .decor`)?.className ?? null;
-    if (dec('b2') !== 'decor decor-doorway' || dec('c3') !== 'decor decor-rubble') throw new Error(`residue decor (${dec('b2')}, ${dec('c3')})`);
-    ui.setPosition('4/4/4/1^2/4 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['c3']) });
+    if (dec('d3') !== 'decor decor-doorway') throw new Error(`doorway decor (${dec('d3')})`);
+    if (!has('b1', 'ruin') || mask('b1') !== 'wm-10' || dec('b1') !== null) throw new Error(`a broken wall between two walls is a ruin wearing the east–west stub case: ${ui.cellClasses('b1')}`);
+    if (mask('a1') !== 'wm-2' || mask('c1') !== 'wm-8') throw new Error(`the walls run on into the ruin (${mask('a1')}, ${mask('c1')})`);
+    ui.setPosition('4/4/4/4/*1*1 w - - 0 1', { opened: new Set(['b1']) });
+    if (has('b1', 'ruin') || mask('b1') !== null || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2') throw new Error(`an opened doorway keeps the wall line too: ${ui.cellClasses('b1')} / ${mask('a1')}`);
+    ui.setPosition('4/4/4/1^2/*1*1 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['b1']) });
     if (dec('b2') !== null) throw new Error('a square that is furniture again carries no doorway decor');
+    ui.setPosition('4/4/4/4/*K*1 w - - 0 1', { rubble: new Set(['b1']) });
+    if (!has('b1', 'ruin') || mask('b1') !== 'wm-10' || at1('b1') !== 'K') throw new Error(`a piece standing on a ruin leaves the stub under it: ${ui.cellClasses('b1')}`);
+    ui.setPosition('4/4/4/4/*1*1 w - - 0 1');
+    if (has('b1', 'ruin') || mask('b1') !== null || mask('a1') !== 'wm-0') throw new Error(`the ruin and its case go when the ledger forgets the square: ${ui.cellClasses('b1')} / ${mask('a1')}`);
+    // Props: wall props only — the floor litter is packed away (round 10).
+    ui.setPosition('****/4/4/4/4 w - - 0 1');
+    for (const d of host.querySelectorAll('.decor')) {
+      if (!['decor decor-torch', 'decor decor-banner', 'decor decor-chain'].includes(d.className)) throw new Error(`floor litter is packed away; found ${d.className}`);
+      if (!d.parentElement.classList.contains('wall')) throw new Error(`a prop off a wall face: ${d.className} on ${d.parentElement.dataset.square}`);
+    }
     // Diagonals: a thick 2×2 block fills its inner corners (NE=16 SE=32
     // SW=64 NW=128), and a diagonal alone never counts.
     ui.setPosition('4/4/4/**2/**2 w - - 0 1');

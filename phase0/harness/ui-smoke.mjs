@@ -168,9 +168,10 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   expect((await themeState()).pieces === 'pixel-chess-wood', 'the wood set applies');
   await shot('00-pieces-wood');
   await page.evaluate(() => { window.__DCK.options.pieces = 'nulltale'; window.__DCK.applyOptions(); });
-  // Decor: props only on walls and floor, never on holes or furniture, one kind each.
+  // Decor: wall props (torch / banner / chain) on wall faces only — the
+  // floor litter is packed away (round 10) — never on holes or furniture.
   const decor = await page.evaluate(() => [...document.querySelectorAll('#board .decor')].map((d) => ({ cls: [...d.classList].filter((c) => c.startsWith('decor-')), cell: [...d.parentElement.classList] })));
-  expect(decor.every((d) => d.cls.length === 1 && !d.cell.includes('hole') && !d.cell.includes('furniture')), `${decor.length} cosmetic props, each one kind, on walls/floor only`);
+  expect(decor.every((d) => d.cls.length === 1 && (d.cls[0] === 'decor-doorway' ? !d.cell.includes('wall') && !d.cell.includes('furniture') : d.cell.includes('wall') && ['decor-torch', 'decor-banner', 'decor-chain'].includes(d.cls[0]))), `${decor.length} cosmetic props: wall props on wall faces only, no floor litter`);
 }
 
 // --- skins: the doorway's furniture leaf paints as a door from ply 0 ---------
@@ -280,14 +281,19 @@ for (let i = 0; i < PLIES; i++) {
       // EVERY fresh hole keeps its rim — two crumbles in one window used to
       // leave only the latest marked.
       for (const sq of wantPits) expect(cells[sq]?.includes('hole') && cells[sq]?.includes('fresh-pit'), `${sq}: hole tile + fresh-pit ring (${cells[sq]})`);
-      // A breached square keeps rubble — or, for a door, its open doorway
-      // (residue ledger) — unless it is now a hole.
+      // A breached square keeps its RUIN stub (a .ruin cell wearing a stub
+      // case, solid to the walls beside it) — or, for a door in an east–
+      // west line, its open doorway (residue ledger) — unless it is now a
+      // hole; a burst crate (never part of the wall line) leaves nothing.
       const residue = await page.evaluate(() => window.__DCK.residue);
+      const skinsNow = await page.evaluate(() => window.__DCK.skins);
       for (const sq of m.breached) {
         if (cells[sq]?.includes('hole')) continue;
         const dec = await page.evaluate((s) => document.querySelector(`#board [data-square="${s}"] .decor`)?.className ?? null, sq);
-        const ok = (residue.rubble.includes(sq) && dec === 'decor decor-rubble') || (residue.opened.includes(sq) && dec === 'decor decor-doorway');
-        expect(ok, `${sq}: breached square keeps its rubble / doorway (${dec})`);
+        const stub = cells[sq]?.find((c) => c.startsWith('wm-')) ?? null;
+        if (residue.rubble.includes(sq)) expect(cells[sq]?.includes('ruin') && stub !== null && dec === null, `${sq}: breached wall keeps its ruin stub (${stub}, ${dec})`);
+        else if (residue.opened.includes(sq)) expect(dec === 'decor decor-doorway' && !cells[sq]?.includes('ruin'), `${sq}: breached door keeps its open doorway (${dec})`);
+        else expect(!cells[sq]?.includes('ruin') && dec === null && !['door', 'rubble'].includes(skinsNow[sq] ?? null), `${sq}: a burst crate leaves nothing (${skinsNow[sq]}, ${stub}, ${dec})`);
       }
       const quakeArrows = await page.evaluate(() => document.querySelectorAll('#board .arrow-layer g.arrow-quake').length);
       expect(quakeArrows >= wantFrom.length, `${quakeArrows} quake arrow(s) on the SVG layer for ${wantFrom.length} displacement(s)`);

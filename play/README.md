@@ -213,21 +213,40 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   (a hash of the square, so a repaint never makes the floor crawl; f1 on
   ~70% of squares, the rest scattered — `FLOOR_VARIANTS`); and `.decor`,
   a cosmetic prop span under the piece (`decorFor`: a torch, banner or
-  chain on an east–west wall face, a cobweb, bones, skull or candle on a
-  floor square, scattered by a stable hash at low rates; the theme's
-  `--decor-<name>` paints it, or nothing — cosmetics only, and a breached
-  wall drops its torch with the repaint; props paint at NATIVE 16-px scale,
-  pixel-aligned with the tiles, their placement baked into the sprite by
-  the repack tool — wall props anchored to the face, litter to a corner).
-  The same span carries the RESIDUE main.mjs keeps per duel (`opened` /
-  `rubble` sets passed to `setPosition`): a floor square where a door was
-  captured or burst open keeps the theme's OPEN DOORWAY (`decor-doorway`:
-  pixel-poem's leaf swung open, Dungeon Gathering's bare arch, the crypt
-  gate with its bars raised), and one where a wall or crate was broken
-  keeps RUBBLE (`decor-rubble`, the theme's rubble sprite) — derived by
-  diffing the terrain squares of consecutive paints, so an undo that brings
-  the `^` back clears it, and a square that became a hole shows the hole. A
-  captured door SWINGS (`scaleX` at the hinge) instead of dissolving. The
+  chain on an east–west wall face, scattered by a stable hash at low
+  rates; the theme's `--decor-<name>` paints it, or nothing — cosmetics
+  only, and a breached wall drops its torch with the repaint; props paint
+  at NATIVE 16-px scale, pixel-aligned with the tiles, their placement
+  baked into the sprite by the repack tool, anchored to the face). The
+  floor litter (cobweb, bones, skull, candle) is PACKED AWAY since round
+  10 — the designer found it made the pieces harder to read; the sprites
+  are still repacked, the renderer just never scatters them.
+  The RESIDUE main.mjs keeps per duel (`opened` / `rubble` sets passed to
+  `setPosition`, derived by diffing the terrain squares of consecutive
+  paints — what stood there is read off the last paint's cell classes —
+  so an undo that brings the `^` back clears it, and a square that became
+  a hole shows the hole): a floor square where a door in an EAST–WEST line
+  was captured or burst open keeps the theme's OPEN DOORWAY (`decor-doorway`
+  on the same span: pixel-poem's frame with the leaf gone, Dungeon
+  Gathering's bare arch, the crypt gate with its bars raised — the hall's
+  and crypt's openings are transparent, so the floor shows through and a
+  doorway reads as a way through, not a pit); a floor square where a WALL,
+  a cracked wall, a weak-spot door (the crack in a north–south line — it
+  never leaves a doorway: "cracked walls turning into open doors doesn't
+  make any sense") or a rubble skin broke becomes a `.ruin` cell: it paints
+  the theme's RUIN AUTOTILE — 16 stub cases (`--tile-ruin-<mask>`, the
+  cell's `wm-<mask>` is the plain 4-bit mask of its solid neighbours) that
+  the repack tool GENERATES like the walls: the wall's own band enters two
+  pixels unbroken from each solid neighbour, then drops to a lower,
+  narrower stub with hashed bites out of every free edge, a shorter brick
+  face and a few chips on the floor around it (a lone break is a low
+  mound) — under whatever stands there; the in-house set falls back to
+  its rubble sprite. Other furniture (a crate, a barrel, a table…) leaves
+  nothing when it goes — it never continued a wall line. Both kinds of
+  residue COUNT AS SOLID to the wall autotile, so the walls either side
+  run on into the break instead of capping ("autotiling gives up when a
+  door opens, leaving visible gaps"). A captured door SWINGS (`scaleX` at
+  the hinge) instead of dissolving. The
   crack overlay on a cracked wall or weak spot is CLIPPED to the wall's own
   pixels (`mask: var(--wall-tile)`), so a north–south column's crack never
   spills onto the floor margins. Every wall,
@@ -244,18 +263,26 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Assets*, cream vs navy with its white outline recoloured dark by the
   repack tool; null = the Unicode glyphs). Under a set the glyph goes to
   size 0 and the span becomes an absolutely positioned box `--piece-w` ×
-  `--piece-h` cells, bottom-anchored, painting the sprite bottom-centred
-  with `contain`. Every set is FITTED: the box is scaled so the set's
-  tallest piece stands 0.96 cell, so no piece rises into the square above
-  (designer: tall pieces overlapping the piece north of them read badly
-  clustered). The FLIP clone copies the piece's own box, not the cell's;
-  the promotion picker takes the same set and shows sprite buttons.
-  Each sprite is centred in its box and the box in the square, so a piece
-  sits mid-square rather than on its bottom edge. Options → Look →
-  **Pieces** (persisted, default NullTale classic) and `?pieces=` pick it,
-  independently of the theme; **Doors** (`DOOR_SETS`: leaf / portcullis /
-  gate, `data-doors` on the board, `?doors=`) picks a door set over any
-  theme's own, with its open doorway.
+  `--piece-h` cells painting the sprite with `contain`. Every set is
+  FITTED: the repack tool trims each sprite to its opaque bounds and pastes
+  it bottom-centred into a box exactly the set's tallest piece high, so a
+  set stands on ONE baseline and the box scaled to 0.96 cell never rises
+  into the square above (designer: tall pieces overlapping the piece north
+  of them read badly clustered; round 10: a taller box centred in the
+  square hung every foot below it — "chopped in half"). Two dials then
+  place the box (Options → Look → **Piece size** / **Piece lift**,
+  `?piecescale=` / `?piecelift=`, `setPieceFit` → `--piece-scale` /
+  `--piece-lift` on the board; defaults 0.9 and +0.05): the box is scaled,
+  centred in the square and raised by the lift, so at the defaults the
+  tallest piece spans ~0.12…0.98 of its square — feet off the bottom
+  edge, nothing over the top — and the designer can settle the feel on
+  the phone and read the numbers off the labels. The FLIP clone copies the
+  piece's own box, not the cell's; the promotion picker takes the same set
+  and shows sprite buttons. Options → Look → **Pieces** (persisted, default
+  NullTale classic) and `?pieces=` pick it, independently of the theme;
+  **Doors** (`DOOR_SETS`: leaf / portcullis / gate, `data-doors` on the
+  board, `?doors=`) picks a door set over any theme's own, with its open
+  doorway.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -318,13 +345,16 @@ doorway tile and the crypt's a barred gate in its stone. The castle's
 crate is Dungeon Gathering's stone block. Each theme also carries its
 cosmetic PROPS (torch, candle, cobweb, bones, skull, chain, banner —
 pixel-poem's and Catacombs' own torch, candle and chain; the rest
-borrowed from pixel-poem). A theme also provides the wall in all
-**47 autotile cases**, a weak-spot overlay, and the door, crate, chest,
-barrel and rubble sprites. The repack tool also builds `img/pieces.png`
-(32-px atlas cells, one row per set) and the `[data-pieces=…]` sprite
-variables from the sheets in `assets-src/pixel-chess/`, `assets-src/
-nulltale/` and `assets-src/deja-view/` — each set names the exact crop
-per piece, pasted bottom-centred into the set's box.
+borrowed from pixel-poem; the floor litter is repacked but no longer
+scattered). A theme also provides the wall in all **47 autotile cases**,
+the broken wall in **16 ruin cases** (`ruin-<mask>`, generated the same
+way — see the renderer notes above), and the door, crate, chest, barrel
+and rubble sprites. The repack tool also builds `img/pieces.png` (32-px
+atlas cells, one row per set) and the `[data-pieces=…]` sprite variables
+from the sheets in `assets-src/pixel-chess/`, `assets-src/nulltale/` and
+`assets-src/deja-view/` — each set names the exact crop per piece,
+trimmed and pasted bottom-centred into the set's box (its width × the
+tallest piece).
 The wall cases are GENERATED, not cropped: the packs draw walls as 2.5-D
 room borders two tiles tall (a top surface over a brick face) and ship no
 thin-wall set, and stitching their pieces into one-cell walls made fence

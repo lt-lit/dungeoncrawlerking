@@ -224,7 +224,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto' };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: 0.9, pieceLift: 0.05 };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -237,6 +237,14 @@ function godConfig() {
   return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
 }
 
+// The piece-fit dials' ranges (index.html's sliders carry the same).
+const PIECE_SCALE_RANGE = [0.6, 1.1];
+const PIECE_LIFT_RANGE = [-0.1, 0.3];
+function clampNum(v, [lo, hi], dflt) {
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n * 100) / 100)) : dflt;
+}
+
 function loadOptions() {
   try {
     const saved = JSON.parse(localStorage.getItem(OPT_KEY) ?? '{}');
@@ -246,6 +254,8 @@ function loadOptions() {
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
     if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
+    options.pieceScale = clampNum(options.pieceScale, PIECE_SCALE_RANGE, 0.9);
+    options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, 0.05);
   } catch {
     /* defaults */
   }
@@ -286,6 +296,20 @@ function syncOptionsUI() {
   $('optTheme').value = options.theme;
   $('optPieces').value = options.pieces;
   $('optDoors').value = options.doors;
+  const fit = pieceFitFor();
+  $('optPieceScale').value = String(fit.scale);
+  $('optPieceScaleV').textContent = `${Math.round(fit.scale * 100)}%`;
+  $('optPieceLift').value = String(fit.lift);
+  $('optPieceLiftV').textContent = `${fit.lift >= 0 ? '+' : ''}${Math.round(fit.lift * 100)}%`;
+}
+
+/** The piece-fit dials (board-ui setPieceFit): `?piecescale=` /
+ *  `?piecelift=` (feel-check overrides, never saved) > the Options. */
+function pieceFitFor() {
+  return {
+    scale: clampNum(params.get('piecescale') ?? options.pieceScale, PIECE_SCALE_RANGE, 0.9),
+    lift: clampNum(params.get('piecelift') ?? options.pieceLift, PIECE_LIFT_RANGE, 0.05),
+  };
 }
 
 /** The door set (board-ui DOOR_SETS): `?doors=` > the Doors option;
@@ -319,6 +343,7 @@ function applyTheme() {
   app.boardUI?.setTheme(theme);
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
+  app.boardUI?.setPieceFit(pieceFitFor());
   const legend = document.querySelector('.legend');
   if (legend) {
     if (theme) legend.dataset.theme = theme;
@@ -1542,8 +1567,16 @@ function paintBoard(fen) {
     const after = new Set(findSquares(fen, (c) => isTerrain(c)).map((s) => s.name));
     for (const sq of before) {
       if (after.has(sq) || dir?.holes.has(sq)) continue;
-      if (skins[sq] === 'door' && !dir?.godCrates.has(sq)) res.opened.add(sq); // captured or burst open: the doorway stays
-      else res.rubble.add(sq);
+      // What stood there is read off the LAST paint's cell classes. A door
+      // in an east–west line leaves its OPEN DOORWAY; a weak-spot door (the
+      // crack in a north–south line — round 10: "cracked walls turning into
+      // open doors doesn't make any sense"), a wall, a cracked wall or a
+      // rubble skin leaves the RUIN stub; any other furniture (a crate, a
+      // barrel, a table…) leaves nothing — it never continued a wall line.
+      const was = app.boardUI.cellClasses(sq) ?? [];
+      const wasDoor = skins[sq] === 'door' && !dir?.godCrates.has(sq);
+      if (wasDoor && !was.includes('weak')) res.opened.add(sq);
+      else if (wasDoor || was.includes('wall') || was.includes('cracked') || was.includes('skin-rubble')) res.rubble.add(sq);
     }
     for (const sq of after) { res.opened.delete(sq); res.rubble.delete(sq); } // undo brought it back
   }
@@ -1916,6 +1949,16 @@ $('optDoors').addEventListener('change', (e) => {
   options.doors = e.target.value;
   applyOptions();
 });
+// The piece-fit dials apply live as they drag (input), so the designer can
+// settle the feel on the phone and read the numbers off the labels.
+$('optPieceScale').addEventListener('input', (e) => {
+  options.pieceScale = clampNum(e.target.value, PIECE_SCALE_RANGE, 0.9);
+  applyOptions();
+});
+$('optPieceLift').addEventListener('input', (e) => {
+  options.pieceLift = clampNum(e.target.value, PIECE_LIFT_RANGE, 0.05);
+  applyOptions();
+});
 /** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
  *  running, Gods settings changes apply to the LIVE Director too (recorded
  *  on the duel ledger). Without the overlay they keep their shipped meaning:
@@ -2080,9 +2123,17 @@ window.__DCK = {
   get doors() {
     return app.boardUI?.doors ?? null;
   },
-  /** The residue ledger: squares where a door was opened / a wall or crate broken. */
+  /** The residue ledger: squares where a door was opened / a wall broken. */
   get residue() {
     return { opened: [...app.residue.opened], rubble: [...app.residue.rubble] };
+  },
+  /** The piece-fit dials as applied to the live board. */
+  get pieceFit() {
+    return app.boardUI?.pieceFit ?? null;
+  },
+  /** The current stage's skin grid ({square: skinName}). */
+  get skins() {
+    return stageSkins(app.session?.deal?.stage);
   },
   get cheat() {
     return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };

@@ -97,30 +97,33 @@ const SHEETS = {
 // Piece sets (2026-09-03). Names are board-ui.mjs PIECE_SETS (the option
 // list); the renderer stamps data-pieces on the board and
 // data-piece="<FEN letter>" on every piece. Each set names, per piece, the
-// exact crop on its sheet [sheet, x, y, w, h]; the tool pastes it
-// bottom-centred into the set's BOX (w×h px), and the box's size in cells
-// (× 0.92) becomes --piece-w/--piece-h, so tall sets (NullTale's are up to
-// 26 px, Deja View's 23) stand on their square and rise into the one above.
+// exact crop on its sheet [sheet, x, y, w, h]; the tool TRIMS it to its
+// opaque bounds and pastes it bottom-centred into the set's box — `box` px
+// wide, `fit` px tall — so every piece of a set stands on ONE baseline and
+// the tallest fills the box exactly (round 10: a 32-px NullTale box centred
+// in the square hung every foot below the square, "chopped in half").
 const PIECE_ORDER = 'pnrbqk';
 const row6 = (sheet, y, w = 16, h = 16, x0 = 0, step = 16) => Object.fromEntries([...PIECE_ORDER].map((l, i) => [l, [sheet, x0 + i * step, y, w, h]]));
-// `fit` is the set's tallest piece in px: the box is scaled so that piece
-// stands 0.96 cell tall — no set rises into the square above (designer
-// round 8: tall pieces overlapping the piece north of them read badly when
-// clustered). `outline` recolours a set's outline pixels (that colour, next
-// to transparency) — Deja View's white outline becomes a dark one.
+// `fit` is the set's tallest piece in px, and the box's height: the box is
+// scaled so that piece stands 0.96 cell tall — no set rises into the square
+// above (designer round 8: tall pieces overlapping the piece north of them
+// read badly when clustered); the Options' piece SIZE and LIFT dials
+// (style.css --piece-scale / --piece-lift) then scale and raise the box.
+// `outline` recolours a set's outline pixels (that colour, next to
+// transparency) — Deja View's white outline becomes a dark one.
 const PIECE_SHEETS = {
-  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], fit: 16, white: row6('pcW', 0), black: row6('pcB', 0) },
-  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], fit: 16, white: row6('pcWw', 0), black: row6('pcBw', 0) },
+  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', pack: 'pixel-chess', box: 16, fit: 16, white: row6('pcW', 0), black: row6('pcB', 0) },
+  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', pack: 'pixel-chess', box: 16, fit: 16, white: row6('pcWw', 0), black: row6('pcBw', 0) },
   // NullTale: 16-px columns 1–6 = pawn rook knight bishop queen king, each
   // colour a 32-px band bottom-aligned; the classic silhouettes are the
   // blue (white side) and dark-red (black side) rows, the "dread" ones the
   // white-and-red and near-black rows. Kings are 23 / 26 px.
-  nulltale: { title: 'NullTale — classic (blue vs red)', pack: 'nulltale', box: [16, 32], fit: 23, white: ntRow(208), black: ntRow(176) },
-  'nulltale-dread': { title: 'NullTale — dread (white vs black)', pack: 'nulltale', box: [16, 32], fit: 26, white: ntRow(96), black: ntRow(64) },
+  nulltale: { title: 'NullTale — classic (blue vs red)', pack: 'nulltale', box: 16, fit: 23, white: ntRow(208), black: ntRow(176) },
+  'nulltale-dread': { title: 'NullTale — dread (white vs black)', pack: 'nulltale', box: 16, fit: 26, white: ntRow(96), black: ntRow(64) },
   // Deja View: exact sprite bounds on the 108×104 sheet (connected
   // components), cream vs navy; its white outline is recoloured dark.
   'deja-view': {
-    title: 'Deja View (cream vs navy)', pack: 'deja-view', box: [18, 24], fit: 23, outline: { from: [0xfa, 0xf5, 0xf0], to: [0x1c, 0x1a, 0x24] },
+    title: 'Deja View (cream vs navy)', pack: 'deja-view', box: 18, fit: 23, outline: { from: [0xfa, 0xf5, 0xf0], to: [0x1c, 0x1a, 0x24] },
     white: { p: ['dv', 48, 40, 13, 16], r: ['dv', 77, 39, 13, 17], n: ['dv', 45, 63, 17, 17], b: ['dv', 95, 61, 13, 19], q: ['dv', 48, 83, 13, 21], k: ['dv', 78, 81, 13, 23] },
     black: { p: ['dv', 62, 40, 13, 16], r: ['dv', 91, 39, 13, 17], n: ['dv', 63, 63, 17, 17], b: ['dv', 81, 61, 13, 19], q: ['dv', 62, 83, 13, 21], k: ['dv', 92, 81, 13, 23] },
   },
@@ -151,9 +154,10 @@ const ROLES = {
   rubble: '--sprite-rubble',
   // DECOR (round 8: "cosmetic props like torches on the wall"): purely
   // cosmetic sprites board-ui scatters by a stable hash — torch / chain /
-  // banner on east–west wall faces, web / bones / skull / candle on floor
-  // squares — painted by a .decor span under the piece; a theme without a
-  // role paints nothing there.
+  // banner on east–west wall faces — painted by a .decor span under the
+  // piece; a theme without a role paints nothing there. The floor litter
+  // (web / bones / skull / candle) is PACKED AWAY since round 10 ("they
+  // make it harder to read the pieces"): still repacked, never scattered.
   torch: '--decor-torch',
   candle: '--decor-candle',
   web: '--decor-web',
@@ -179,8 +183,19 @@ function anchorSprite(tile, anchor) {
   blit(out, crop(tile, minx, miny, w, h), minx + dx, miny + dy);
   return out;
 }
+/** A sprite cropped to its opaque bounds (unchanged when it is empty). */
+function trim(tile) {
+  const W = tile.width, H = tile.height;
+  let minx = W, miny = H, maxx = -1, maxy = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (tile.data[(y * W + x) * 4 + 3]) { minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
+  if (maxx < 0) return tile;
+  return crop(tile, minx, miny, maxx - minx + 1, maxy - miny + 1);
+}
 for (let i = 1; i <= FLOOR_VARIANTS; i++) ROLES[`floor-${i}`] = `--tile-floor-${i}`;
 for (const code of WALL_MASK_CODES) ROLES[`wall-${code}`] = `--tile-wall-${code}`;
+// ruin-<mask>: the 16 BROKEN-WALL stub cases (ruinBlob below) a floor
+// square wears where a wall broke (board-ui .ruin, main.mjs residue).
+for (let m = 0; m < 16; m++) ROLES[`ruin-${m}`] = `--tile-ruin-${m}`;
 
 // ---- the wall blob (round 5, 2026-09-03: "walls still look janky")
 // The packs draw walls as 2.5-D ROOM BORDERS two tiles tall (a top surface
@@ -264,6 +279,110 @@ function wallBlob(spec, sheets) {
   return out;
 }
 
+// ---- the ruin blob (round 10, 2026-09-03: "make full actual use of
+// autotiling to make rubble and broken walls look good"). Where a wall, a
+// cracked wall or a weak spot BROKE (main.mjs residue ledger → the
+// renderer's .ruin cells) the square is floor to the rules but keeps a
+// broken STUB of the wall: to its neighbours it is still solid (their cases
+// run into it — no end caps either side of a gap, round 10's "autotiling
+// gives up when a door opens") and it paints one of 16 cases by its own
+// solid neighbours (N=1 E=2 S=4 W=8, no diagonals — a stub never fills a
+// corner). From each solid neighbour the wall's full band enters RUIN.tongue
+// pixels unbroken, then drops to a LOWER, narrower stub: its top surface
+// sits RUIN.drop rows lower (a lower wall's top is lower on screen) over a
+// shorter face, bites are eaten out of every free edge by hash, the stone
+// is speckled harder, and a few chips of it lie on the floor around. With
+// nothing to join (mask 0: a lone pillar) it is a low mound alone. Same
+// palette, bevels, outline and brick face as the theme's walls.
+const RUIN = { drop: 4, inset: 2, tongue: 2, chips: 4 };
+function ruinBlob(spec, sheets) {
+  const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
+  const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
+  const facePx = (x, r) => { const o = (r * T + x) * 4; return [face.data[o], face.data[o + 1], face.data[o + 2]]; };
+  const inBand = (x) => x >= BAND.x0 && x <= BAND.x1;
+  const speckle = Math.max(22, (spec.speckle || 0) * 2);
+  const out = {};
+  for (let m = 0; m < 16; m++) {
+    const n = m & 1, e = m & 2, s = m & 4, w = m & 8;
+    const sx0 = BAND.x0 + RUIN.inset, sx1 = BAND.x1 - RUIN.inset; // the stub's columns (a north–south run)
+    const sy0 = RUIN.drop, sy1 = BAND.y1 + RUIN.drop; // the stub's rows (an east–west run): the lowered top surface
+    // The unbroken end of each joining wall: only the band, RUIN.tongue deep.
+    const inTongue = (x, y) => (w && x < RUIN.tongue) || (e && x >= T - RUIN.tongue) || (n && y < RUIN.tongue) || (s && y >= T - RUIN.tongue);
+    const tongueBody = (x, y) => (((w && x < RUIN.tongue) || (e && x >= T - RUIN.tongue)) && y <= BAND.y1) || (((n && y < RUIN.tongue) || (s && y >= T - RUIN.tongue)) && inBand(x));
+    // What still stands between the ends: the lowered east–west stub, the
+    // narrowed north–south stub, or a mound when nothing joins.
+    const stub = (x, y) => {
+      if (y >= sy0 && y <= sy1 && ((w && x <= sx1) || (e && x >= sx0))) return true;
+      if (x >= sx0 && x <= sx1 && ((n && y <= (s ? T - 1 : sy1)) || (s && y >= (n ? 0 : sy0)))) return true;
+      return m === 0 && x >= sx0 && x <= sx1 && y >= sy0 && y <= sy1;
+    };
+    const raw = (x, y) => (inTongue(x, y) ? tongueBody(x, y) : stub(x, y));
+    // Bites: a stub pixel on a free edge (a 4-neighbour inside the cell
+    // that is not stone) goes with probability 2/5; the tongues never
+    // erode, so the join to the neighbour's case stays flush.
+    const bitten = (x, y) => {
+      if (inTongue(x, y) || !stub(x, y)) return false;
+      const free = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const xx = x + dx, yy = y + dy; return xx >= 0 && xx < T && yy >= 0 && yy < T && !raw(xx, yy); });
+      return free && hash(x, y, m + 101) % 5 < 2;
+    };
+    const body = (x, y) => {
+      if (y < 0) return !!n && inBand(x);
+      if (y >= T) return !!s && inBand(x);
+      if (x < 0) return !!w && y <= BAND.y1;
+      if (x >= T) return !!e && y <= BAND.y1;
+      return raw(x, y) && !bitten(x, y);
+    };
+    const tile = blank(T, T);
+    const solidPx = Array.from({ length: T }, () => Array(T).fill(false));
+    const put = (x, y, c) => {
+      const o = (y * T + x) * 4;
+      tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255;
+      solidPx[y][x] = true;
+    };
+    for (let y = 0; y < T; y++) {
+      for (let x = 0; x < T; x++) {
+        if (!body(x, y)) continue;
+        let c = fill;
+        const sp = hash(x, y, m + 7) % 100;
+        if (sp < speckle) c = mix(fill, lo, 0.5);
+        else if (sp > 100 - speckle / 3) c = mix(fill, hi, 0.4);
+        if (!body(x + 1, y) || !body(x, y + 1)) c = lo;
+        if (!body(x - 1, y) || !body(x, y - 1)) c = hi;
+        put(x, y, c);
+      }
+    }
+    // The brick face under every south edge — the full FACE_H rows under a
+    // tongue (flush with the neighbour's), what fits under the low stub.
+    for (let x = 0; x < T; x++) {
+      let yb = -1;
+      for (let y = 0; y < T; y++) if (body(x, y)) yb = y;
+      if (yb < 0 || yb >= T - 1) continue;
+      const rows = Math.min(FACE_H, T - 1 - yb);
+      for (let r = 0; r < rows; r++) put(x, yb + 1 + r, r === rows - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
+    }
+    const solidAt = (x, y) => x >= 0 && x < T && y >= 0 && y < T && solidPx[y][x];
+    // Chips of the stone on the floor around the stub (2×2, clear of it).
+    for (let k = 0; k < RUIN.chips; k++) {
+      const cx = 1 + (hash(k, m, 5) % (T - 3)), cy = 1 + (hash(k, m, 9) % (T - 3));
+      let clear = true;
+      for (let dy = -1; dy <= 2 && clear; dy++) for (let dx = -1; dx <= 2; dx++) if (solidAt(cx + dx, cy + dy)) { clear = false; break; }
+      if (!clear) continue;
+      put(cx, cy, hi); put(cx + 1, cy, fill); put(cx, cy + 1, lo); put(cx + 1, cy + 1, lo);
+    }
+    for (let y = 0; y < T; y++) {
+      for (let x = 0; x < T; x++) {
+        if (solidPx[y][x]) continue;
+        if (solidAt(x - 1, y) || solidAt(x + 1, y) || solidAt(x, y - 1) || solidAt(x, y + 1)) {
+          const o = (y * T + x) * 4;
+          tile.data[o] = edge[0]; tile.data[o + 1] = edge[1]; tile.data[o + 2] = edge[2]; tile.data[o + 3] = 255;
+        }
+      }
+    }
+    out[`ruin-${m}`] = tile;
+  }
+  return out;
+}
+
 // ---- floors (round 7, 2026-09-03: "the crypt floor tiles put both the
 // other themes to shame — palette-swap them for the other themes"). Every
 // theme's floor is the six bevelled flagstones of the Catacombs brown set;
@@ -332,27 +451,37 @@ function portcullis(base, bar, shadow, y0 = 6) {
   for (const y of [y0 + 3, y0 + 7]) for (let x = 3; x <= 13; x++) if (x !== 4 && x !== 8 && x !== 12) put(x, y, y === y0 + 3 ? bar : shadow);
   return tile;
 }
+// With the bars raised (the open gate) the opening is TRANSPARENT: the
+// floor shows through the stone frame, so a doorway reads as a way through,
+// not as a pit (round 10).
 function barredGate(spec, { bars = true } = {}) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const tile = blank(T, T);
   const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
-  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) put(x, y, y < 2 || x < 2 || x > 13 ? (x === 2 - 1 || y === 1 ? lo : x === 14 ? hi : fill) : edge);
+  for (let y = 0; y < T; y++) {
+    for (let x = 0; x < T; x++) {
+      if (y < 2 || x < 2 || x > 13) put(x, y, x === 1 || y === 1 ? lo : x === 14 ? hi : fill);
+      else if (bars) put(x, y, edge);
+    }
+  }
   for (let x = 2; x <= 13; x++) put(x, 2, lo);
   return bars ? portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3) : tile;
 }
-/** pixel-poem's leaf swung open: the frame and lintel stay, the planks
- *  become the dark opening, and two columns of wood at the hinge are the
- *  leaf seen edge-on. */
+/** pixel-poem's door with the leaf gone: the lintel (rows 0–3) and the
+ *  outline posts stay, a 2-px jamb of the door's own timber stands each
+ *  side, and the opening between is TRANSPARENT — the floor shows through
+ *  (round 10: the edge-on leaf and the iron bands' leftover outline pixels
+ *  made an unreadable mess). */
 function openLeaf(tile) {
   const out = blank(T, T);
   tile.data.copy(out.data);
-  const wood = new Set(['895a45', 'bf704d', '523b40', '724736', 'adc1cf', '90919e']);
-  const opening = [0x1a, 0x10, 0x16];
-  for (let y = 3; y < T; y++) {
-    for (let x = 3; x <= 14; x++) {
-      const o = (y * T + x) * 4;
-      const k = [out.data[o], out.data[o + 1], out.data[o + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
-      if (wood.has(k)) { out.data[o] = opening[0]; out.data[o + 1] = opening[1]; out.data[o + 2] = opening[2]; }
+  const put = (x, y, c) => { const o = (y * T + x) * 4; out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = 255; };
+  for (let y = 4; y < T; y++) {
+    for (let x = 0; x < T; x++) {
+      if (x === 0 || x === T - 1) put(x, y, [0x25, 0x13, 0x1a]);
+      else if (x === 1) put(x, y, [0x89, 0x5a, 0x45]);
+      else if (x === T - 2) put(x, y, [0x52, 0x3b, 0x40]);
+      else out.data[(y * T + x) * 4 + 3] = 0;
     }
   }
   return out;
@@ -486,7 +615,6 @@ themeNames.forEach((theme, row) => {
     emit('doorway', doorway, { composed: 'pixel-poem leaf swung open' });
   }
   doorSets[THEMES[theme].doorSet] = { door, doorway };
-  decl.push('  --decor-rubble: var(--sprite-rubble);');
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
     const tint = THEMES[theme].floor.tint;
@@ -504,6 +632,7 @@ themeNames.forEach((theme, row) => {
   provenance.push({ theme, role: 'wall face (brick rows under every south edge)', pack: SHEETS[fs.sheet][0], sheet: SHEETS[fs.sheet][1], x: fs.x, y: fs.y });
   emit('wall', cases['wall-10'], { composed: 'blob case 10 (east–west run)', mask: 10 });
   for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: 'blob in the pack palette + its face', mask: +role.slice(5) });
+  for (const [role, tile] of Object.entries(ruinBlob(ws, sheets))) emit(role, tile, { composed: 'ruin blob: the broken wall stub in the pack palette + its face', mask: +role.slice(5) });
 
   css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
@@ -518,6 +647,9 @@ for (const name of DOOR_SETS) {
 // The autotile classes → the theme's case, the plain wall as the fallback
 // (so the in-house set, with no per-case tiles, paints its one block).
 for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: var(--tile-wall-${code}, var(--tile-wall)); }`);
+// A ruin cell (board-ui .ruin, wm-<mask> = its 4-bit solid-neighbour
+// mask) → the theme's stub case; the in-house set paints its rubble sprite.
+for (let m = 0; m < 16; m++) css.push(`.cell.ruin.wm-${m} { --ruin-tile: var(--tile-ruin-${m}, var(--sprite-rubble)); }`);
 css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
 css.push('[data-theme] { --floor-shade: #00000038; }');
 
@@ -528,17 +660,19 @@ const piecesAtlas = blank(12 * PA, pieceNames.length * PA);
 index.pieces = { order: PIECE_ORDER, cell: PA, sets: {} };
 pieceNames.forEach((name, row) => {
   const set = PIECE_SHEETS[name];
-  const [bw, bh] = set.box;
-  const scale = 0.96 / set.fit; // cells per sprite px: the tallest piece stands 0.96 cell
+  const bw = set.box, bh = set.fit;
+  const scale = 0.96 / set.fit; // cells per sprite px: the box (the tallest piece) stands 0.96 cell before the Options size dial
   const decl = [`  --piece-w: ${(bw * scale).toFixed(3)};`, `  --piece-h: ${(bh * scale).toFixed(3)};`];
-  index.pieces.sets[name] = { row, title: set.title, pack: set.pack, box: set.box, sheets: [...new Set([...Object.values(set.white), ...Object.values(set.black)].map((c) => SHEETS[c[0]][1]))] };
+  index.pieces.sets[name] = { row, title: set.title, pack: set.pack, box: [bw, bh], sheets: [...new Set([...Object.values(set.white), ...Object.values(set.black)].map((c) => SHEETS[c[0]][1]))] };
   [...PIECE_ORDER].forEach((letter, i) => {
     for (const side of ['white', 'black']) {
       const [sheetKey, x, y, w, h] = set[side][letter];
       let sprite = crop(sheets[sheetKey], x, y, w, h);
       if (set.outline) sprite = recolourOutline(sprite, set.outline.from, set.outline.to);
+      sprite = trim(sprite);
+      if (sprite.width > bw || sprite.height > bh) throw new Error(`${name} ${side} ${letter}: ${sprite.width}×${sprite.height} exceeds its ${bw}×${bh} box`);
       const tile = blank(bw, bh);
-      blit(tile, sprite, Math.floor((bw - w) / 2), Math.floor((bh - h) / 2)); // centred: the piece sits mid-square, not on its bottom edge
+      blit(tile, sprite, Math.floor((bw - sprite.width) / 2), bh - sprite.height); // one baseline per set: every foot on the box's bottom row
       const col = (side === 'white' ? 0 : 6) + i;
       blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
       const fen = side === 'white' ? letter.toUpperCase() : letter;
@@ -569,7 +703,7 @@ for (const [key, p] of Object.entries(PACKS)) {
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas) and the edge-on door are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below (pixel-poem\'s door wood colours are reused for the edge-on door).');
+md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas) and the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are the packs\' doors with the leaf or bars removed (pixel-poem\'s door timber colours are reused for the hall doorway\'s jambs).');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');

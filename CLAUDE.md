@@ -106,9 +106,24 @@ day: `.cell.dark.furniture`'s explicit `background-size` list outranked
 `.cell.dark.cracked`, so a god-cracked wall on a DARK square painted its
 wall tile at 16 px in the middle of the cell ("shrunk down") — every
 `.dark` cracked/weak rule now sets its own size and the smoke checks it;
-selftest 35/35, ui-smoke asserts the themes, the doorway's masks, the crack
-over its full-size wall, the props, the residue and the piece sprites on
-the live board — see `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+**round 10**: piece boxes are the set's tallest piece high (trimmed
+sprites, one baseline — a 32-px box centred in the square had hung the
+feet below it, "chopped in half") and two dials place them (Options →
+Piece size / lift, `?piecescale=`/`?piecelift=`, `setPieceFit` →
+`--piece-scale`/`--piece-lift`, defaults 0.9 / +0.05); RUIN AUTOTILE — a
+broken wall, cracked wall, weak spot or rubble skin leaves a `.ruin` cell
+wearing one of 16 GENERATED stub cases (`--tile-ruin-<mask>`, the 4-bit
+solid-neighbour mask: the wall's band enters two pixels from each solid
+neighbour, then a lower, narrower, bitten stub with a short face and
+floor chips), a weak-spot door never leaves a doorway, other furniture
+leaves nothing, and ruins AND opened doorways count as SOLID to the wall
+autotile so the line runs on through a break (no more end caps at a
+gap); the hall doorway is lintel + jambs over a TRANSPARENT opening (the
+edge-on leaf is gone), the crypt's open gate likewise shows the floor;
+floor litter (web/bones/skull/candle) is packed away — wall props and
+`^` skins stay; selftest 35/35, ui-smoke 157 ok asserting the ruin stub /
+doorway / nothing per breached square and wall-face-only props — see
+`play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +
