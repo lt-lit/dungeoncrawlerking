@@ -110,7 +110,11 @@ const shot = async (name) => {
 const themeState = () =>
   page.evaluate(() => {
     const board = document.getElementById('board');
-    const bg = (sel) => getComputedStyle(document.querySelector(sel)).backgroundImage;
+    // null when nothing matches — a stage with no stone wall (s49 Crate
+    // Quarry is crates only) has no wall cell to probe; never hand a null
+    // to getComputedStyle, which throws out of page.evaluate and kills the
+    // run instead of failing a check.
+    const bg = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).backgroundImage : null; };
     return {
       theme: window.__DCK.theme,
       attr: board.dataset.theme ?? null,
@@ -125,10 +129,15 @@ const themeState = () =>
     };
   });
 const stageTheme = THEME ?? (await page.evaluate(() => window.__DCK.app.session.deal.stage.theme));
+// The wall half of a theme check passes vacuously on a stage with no stone
+// wall (themeState's wall is null there); the note says so.
+const wallOk = (wall, want) => wall === null || wall.includes(want);
+const wallNote = (t) => (t.wall === null ? ' — no stone wall on this stage, wall check skipped' : '');
+const short = (v) => (v ?? 'none').slice(0, 30);
 {
   const t = await themeState();
   expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
-  expect(t.wall.includes('data:image/png') && t.floor.includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${t.wall.slice(0, 30)}…, floor ${t.floor.slice(0, 30)}…)`);
+  expect(wallOk(t.wall, 'data:image/png') && (t.floor ?? '').includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${short(t.wall)}…, floor ${short(t.floor)}…)${wallNote(t)}`);
   if (STAGE === 's07-the-doorway') {
     expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite');
     // d6 is a dark square: the checker shade (a flat gradient) is allowed, the in-house bevel (160deg) is not.
@@ -145,13 +154,13 @@ const setTheme = (name) =>
 for (const name of THEME ? [] : ['hall', 'castle', 'crypt']) {
   await setTheme(name);
   const t = await themeState();
-  expect(t.theme === name && t.legend === name && t.wall.includes('data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})`);
+  expect(t.theme === name && t.legend === name && wallOk(t.wall, 'data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})${wallNote(t)}`);
   await shot(`00-theme-${name}`);
 }
 if (!THEME) await setTheme('classic');
 if (!THEME) {
   const t = await themeState();
-  expect(t.theme === null && t.attr === null && t.wall.includes('data:image/svg') && !t.floor.includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${t.wall.slice(0, 30)}…)`);
+  expect(t.theme === null && t.attr === null && wallOk(t.wall, 'data:image/svg') && !(t.floor ?? '').includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${short(t.wall)}…)${wallNote(t)}`);
   await shot('00-theme-classic');
 }
 await setTheme('auto');
