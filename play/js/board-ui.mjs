@@ -89,7 +89,7 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
 
 /** Piece-sprite sets the board can wear (tiles.css [data-pieces=…];
  *  repack-tiles.mjs builds them). null / 'classic' = the Unicode glyphs. */
-export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood'];
+export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nulltale-dread', 'deja-view'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
 
@@ -472,12 +472,15 @@ export class BoardUI {
     // .piece sizes itself with 78cqmin against its CELL's container context.
     // The clone lives on the fx layer, which establishes no such context, so
     // the query unit would resolve against the viewport and render the glyph
-    // enormous. Pin the resolved size instead.
+    // enormous. Pin the resolved size instead — and pin the PIECE's own box,
+    // not the cell's: a tall sprite set stands on its square and rises into
+    // the one above, and the clone must keep that box while it travels.
+    const g = glyph.getBoundingClientRect();
     clone.style.fontSize = getComputedStyle(glyph).fontSize;
-    clone.style.left = `${a.left - base.left}px`;
-    clone.style.top = `${a.top - base.top}px`;
-    clone.style.width = `${a.width}px`;
-    clone.style.height = `${a.height}px`;
+    clone.style.left = `${g.left - base.left}px`;
+    clone.style.top = `${g.top - base.top}px`;
+    clone.style.width = `${g.width}px`;
+    clone.style.height = `${g.height}px`;
     clone.style.transitionDuration = `${ms}ms`;
     this.fx.appendChild(clone);
     glyph.style.visibility = 'hidden';

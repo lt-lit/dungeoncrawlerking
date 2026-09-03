@@ -1074,22 +1074,85 @@
    "author": "Dani Maccari",
    "url": "https://dani-maccari.itch.io/pixel-chess",
    "terms": "Free for personal or commercial projects as long as it is attributed to DANI MACCARI; edits allowed; the assets may not be repackaged, redistributed or resold — only the twelve piece sprites the game uses are inlined here, with that attribution."
+  },
+  "nulltale": {
+   "title": "Chess (NullTale Chess.png)",
+   "author": "NullTale",
+   "url": "https://nulltale.itch.io/chess",
+   "terms": "Creative Commons Attribution 4.0 International — free for commercial and non-commercial use with attribution; redistribution allowed under the same terms."
+  },
+  "deja-view": {
+   "title": "Chess Assets",
+   "author": "Deja View",
+   "url": "https://deja-view.itch.io/chess-assets",
+   "terms": "\"Use it in whatever you like, just don't resell it as your own assets.\" Credit appreciated, not required."
   }
  },
  "pieces": {
   "order": "pnrbqk",
+  "cell": 32,
   "sets": {
    "pixel-chess": {
     "row": 0,
     "title": "Pixel Chess — stone (Dani Maccari)",
-    "white": "WhitePieces.png",
-    "black": "BlackPieces.png"
+    "pack": "pixel-chess",
+    "box": [
+     16,
+     16
+    ],
+    "sheets": [
+     "WhitePieces.png",
+     "BlackPieces.png"
+    ]
    },
    "pixel-chess-wood": {
     "row": 1,
     "title": "Pixel Chess — wood (Dani Maccari)",
-    "white": "WhitePieces_Wood.png",
-    "black": "BlackPieces_Wood.png"
+    "pack": "pixel-chess",
+    "box": [
+     16,
+     16
+    ],
+    "sheets": [
+     "WhitePieces_Wood.png",
+     "BlackPieces_Wood.png"
+    ]
+   },
+   "nulltale": {
+    "row": 2,
+    "title": "NullTale — classic (blue vs red)",
+    "pack": "nulltale",
+    "box": [
+     16,
+     32
+    ],
+    "sheets": [
+     "NullTale Chess.png"
+    ]
+   },
+   "nulltale-dread": {
+    "row": 3,
+    "title": "NullTale — dread (white vs black)",
+    "pack": "nulltale",
+    "box": [
+     16,
+     32
+    ],
+    "sheets": [
+     "NullTale Chess.png"
+    ]
+   },
+   "deja-view": {
+    "row": 4,
+    "title": "Deja View (cream vs navy)",
+    "pack": "deja-view",
+    "box": [
+     18,
+     24
+    ],
+    "sheets": [
+     "ChessAssets.png"
+    ]
    }
   }
  }

@@ -79,10 +79,14 @@ show through under every sprite, `f1…f6` are floor variants — EVERY theme
 wears the six Catacombs flagstones, palette-swapped into the pack's floor
 tone for hall and castle (designer round 7: the only floor tiles that look
 good); and **PIECE SPRITES** (round 6): Dani
-Maccari's *Pixel Chess* 16×16 sets (`pixel-chess` stone / `-wood`) via
-`data-piece` on every piece span + `data-pieces` on the board
-(`PIECE_SETS`, Options → Pieces, `?pieces=`; classic = the glyphs), the
-promotion picker included; selftest 35/35, ui-smoke asserts the themes,
+Maccari's *Pixel Chess* 16×16 sets (`pixel-chess` stone / `-wood`),
+NullTale's *Chess* (CC BY 4.0; `nulltale` classic, `nulltale-dread`; 16×32
+TALL sprites that stand on their square and rise into the one above — the
+piece box is `--piece-w`×`--piece-h` cells, bottom-anchored, and the FLIP
+clone copies the piece's own box) and Deja View's *Chess Assets*
+(`deja-view`, 18×24) via `data-piece` on every piece span + `data-pieces`
+on the board (`PIECE_SETS`, Options → Pieces, `?pieces=`; classic = the
+glyphs), the promotion picker included; selftest 35/35, ui-smoke asserts the themes,
 the doorway's masks and the piece sprites on the live board — see
 `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll

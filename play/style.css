@@ -436,19 +436,25 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    paints the sprite at 92% of the cell — as a background, so the fx clone
    (cell-sized, inline) draws exactly what the cell drew. */
 [data-pieces] .piece[data-piece] {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  left: calc(50% - 50% * var(--piece-w, 1));
+  bottom: 4%;
+  width: calc(100% * var(--piece-w, 1));
+  height: calc(100% * var(--piece-h, 1));
   font-size: 0;
   text-shadow: none;
-  background: var(--piece-img) center / 92% no-repeat;
+  background: var(--piece-img) center bottom / contain no-repeat;
   image-rendering: pixelated;
   filter: drop-shadow(0 1px 0 #000a);
 }
+/* A tall set (--piece-h > 1) rises into the square above: later cells
+   (lower ranks, nearer the player) paint over earlier ones in DOM order, so
+   the piece in front stands in front. */
 [data-pieces] .promo-btn[data-piece] {
   font-size: 0;
-  width: 2.8rem;
-  height: 2.8rem;
-  background: var(--piece-img) center / 80% no-repeat;
+  width: 2.6rem;
+  height: 3.4rem;
+  background: var(--piece-img) center / contain no-repeat;
   image-rendering: pixelated;
 }
 

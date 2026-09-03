@@ -217,13 +217,20 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `setTheme(name)` stamps `data-theme` on the board.
   **Piece sprites (2026-09-03):** every piece span carries
   `data-piece="<FEN letter>"` and `setPieces(name)` stamps `data-pieces`
-  on the board (`PIECE_SETS`: `pixel-chess`, `pixel-chess-wood` — Dani
-  Maccari's *Pixel Chess*, 16×16, stone and wood palettes; null = the
-  Unicode glyphs). Under a set the glyph goes to size 0 and the span paints
-  the sprite as a 92% background, so the FLIP clone (cell-sized, inline)
-  draws exactly what the cell drew; the promotion picker takes the same
-  set and shows sprite buttons. Options → Look → **Pieces** (persisted,
-  default stone) and `?pieces=` pick it, independently of the theme.
+  on the board (`PIECE_SETS`: `pixel-chess` / `pixel-chess-wood` — Dani
+  Maccari's *Pixel Chess*, 16×16; `nulltale` / `nulltale-dread` —
+  NullTale's *Chess*, CC BY 4.0, 16×32 tall sprites, classic blue-vs-red
+  and the white-vs-black "dread" set; `deja-view` — Deja View's *Chess
+  Assets*, white-outlined cream vs navy, 18×24; null = the Unicode
+  glyphs). Under a set the glyph goes to size 0 and the span becomes an
+  absolutely positioned box `--piece-w` × `--piece-h` cells (the set's
+  sprite box × 0.92, from tiles.css), bottom-anchored, painting the sprite
+  bottom-centred with `contain` — so a TALL set stands on its square and
+  rises into the one above, and lower ranks (later in DOM order) paint in
+  front. The FLIP clone copies the piece's own box, not the cell's, so it
+  travels unchanged; the promotion picker takes the same set and shows
+  sprite buttons. Options → Look → **Pieces** (persisted, default Pixel
+  Chess stone) and `?pieces=` pick it, independently of the theme.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -282,8 +289,10 @@ flagstones' base colour and takes the target hue, so bevels, cracks and
 grain survive). A theme also provides the wall in all
 **47 autotile cases**, a weak-spot overlay, and the door, crate, chest,
 barrel and rubble sprites. The repack tool also builds `img/pieces.png`
-and the `[data-pieces=…]` sprite variables from the Pixel Chess sheets in
-`assets-src/pixel-chess/`.
+(32-px atlas cells, one row per set) and the `[data-pieces=…]` sprite
+variables from the sheets in `assets-src/pixel-chess/`, `assets-src/
+nulltale/` and `assets-src/deja-view/` — each set names the exact crop
+per piece, pasted bottom-centred into the set's box.
 The wall cases are GENERATED, not cropped: the packs draw walls as 2.5-D
 room borders two tiles tall (a top surface over a brick face) and ship no
 thin-wall set, and stitching their pieces into one-cell walls made fence

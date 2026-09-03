@@ -63,6 +63,18 @@ const PACKS = {
     url: 'https://dani-maccari.itch.io/pixel-chess',
     terms: 'Free for personal or commercial projects as long as it is attributed to DANI MACCARI; edits allowed; the assets may not be repackaged, redistributed or resold — only the twelve piece sprites the game uses are inlined here, with that attribution.',
   },
+  nulltale: {
+    title: 'Chess (NullTale Chess.png)',
+    author: 'NullTale',
+    url: 'https://nulltale.itch.io/chess',
+    terms: 'Creative Commons Attribution 4.0 International — free for commercial and non-commercial use with attribution; redistribution allowed under the same terms.',
+  },
+  'deja-view': {
+    title: 'Chess Assets',
+    author: 'Deja View',
+    url: 'https://deja-view.itch.io/chess-assets',
+    terms: '"Use it in whatever you like, just don\'t resell it as your own assets." Credit appreciated, not required.',
+  },
 };
 
 // Sheet key → [pack, file under assets-src/<pack>/]. Tile coords below are
@@ -76,16 +88,40 @@ const SHEETS = {
   pcB: ['pixel-chess', 'BlackPieces.png'],
   pcWw: ['pixel-chess', 'WhitePieces_Wood.png'],
   pcBw: ['pixel-chess', 'BlackPieces_Wood.png'],
+  nt: ['nulltale', 'NullTale Chess.png'],
+  dv: ['deja-view', 'ChessAssets.png'],
 };
 
-// Piece sets (2026-09-03): 96×16 sheets, six pieces in the pack's order.
-// Names are board-ui.mjs PIECE_SETS (the option list); the renderer stamps
-// data-pieces on the board and data-piece="<FEN letter>" on every piece.
+// Piece sets (2026-09-03). Names are board-ui.mjs PIECE_SETS (the option
+// list); the renderer stamps data-pieces on the board and
+// data-piece="<FEN letter>" on every piece. Each set names, per piece, the
+// exact crop on its sheet [sheet, x, y, w, h]; the tool pastes it
+// bottom-centred into the set's BOX (w×h px), and the box's size in cells
+// (× 0.92) becomes --piece-w/--piece-h, so tall sets (NullTale's are up to
+// 26 px, Deja View's 23) stand on their square and rise into the one above.
 const PIECE_ORDER = 'pnrbqk';
+const row6 = (sheet, y, w = 16, h = 16, x0 = 0, step = 16) => Object.fromEntries([...PIECE_ORDER].map((l, i) => [l, [sheet, x0 + i * step, y, w, h]]));
 const PIECE_SHEETS = {
-  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', white: 'pcW', black: 'pcB' },
-  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', white: 'pcWw', black: 'pcBw' },
+  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], white: row6('pcW', 0), black: row6('pcB', 0) },
+  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], white: row6('pcWw', 0), black: row6('pcBw', 0) },
+  // NullTale: 16-px columns 1–6 = pawn rook knight bishop queen king, each
+  // colour a 32-px band bottom-aligned; the classic silhouettes are the
+  // blue (white side) and dark-red (black side) rows, the "dread" ones the
+  // white-and-red and near-black rows.
+  nulltale: { title: 'NullTale — classic (blue vs red)', pack: 'nulltale', box: [16, 32], white: ntRow(208), black: ntRow(176) },
+  'nulltale-dread': { title: 'NullTale — dread (white vs black)', pack: 'nulltale', box: [16, 32], white: ntRow(96), black: ntRow(64) },
+  // Deja View: exact sprite bounds on the 108×104 sheet (connected
+  // components), white-outlined cream vs navy.
+  'deja-view': {
+    title: 'Deja View (cream vs navy)', pack: 'deja-view', box: [18, 24],
+    white: { p: ['dv', 48, 40, 13, 16], r: ['dv', 77, 39, 13, 17], n: ['dv', 45, 63, 17, 17], b: ['dv', 95, 61, 13, 19], q: ['dv', 48, 83, 13, 21], k: ['dv', 78, 81, 13, 23] },
+    black: { p: ['dv', 62, 40, 13, 16], r: ['dv', 91, 39, 13, 17], n: ['dv', 63, 63, 17, 17], b: ['dv', 81, 61, 13, 19], q: ['dv', 62, 83, 13, 21], k: ['dv', 92, 81, 13, 23] },
+  },
 };
+function ntRow(y) {
+  const order = 'prnbqk'; // NullTale's column order differs from PIECE_ORDER
+  return Object.fromEntries([...order].map((l, i) => [l, ['nt', 16 * (i + 1), y, 16, 32]]));
+}
 for (const name of PIECE_SETS) if (!PIECE_SHEETS[name]) throw new Error(`piece set ${name} has no sheets`);
 
 // Role → the custom property it paints. floor-N are the floor's stable
@@ -356,25 +392,30 @@ for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: va
 css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
 css.push('[data-theme] { --floor-shade: #00000038; }');
 
-// ---- pieces: one row per set, white p n r b q k then black.
+// ---- pieces: one row per set (32-px atlas cells), white p n r b q k then black.
+const PA = 32;
 const pieceNames = Object.keys(PIECE_SHEETS);
-const piecesAtlas = blank(12 * T, pieceNames.length * T);
-index.pieces = { order: PIECE_ORDER, sets: {} };
+const piecesAtlas = blank(12 * PA, pieceNames.length * PA);
+index.pieces = { order: PIECE_ORDER, cell: PA, sets: {} };
 pieceNames.forEach((name, row) => {
   const set = PIECE_SHEETS[name];
-  const decl = [];
-  index.pieces.sets[name] = { row, title: set.title, white: SHEETS[set.white][1], black: SHEETS[set.black][1] };
+  const [bw, bh] = set.box;
+  const decl = [`  --piece-w: ${((bw / T) * 0.92).toFixed(3)};`, `  --piece-h: ${((bh / T) * 0.92).toFixed(3)};`];
+  index.pieces.sets[name] = { row, title: set.title, pack: set.pack, box: set.box, sheets: [...new Set([...Object.values(set.white), ...Object.values(set.black)].map((c) => SHEETS[c[0]][1]))] };
   [...PIECE_ORDER].forEach((letter, i) => {
-    for (const [side, sheetKey] of [['white', set.white], ['black', set.black]]) {
-      const tile = crop(sheets[sheetKey], i * T, 0, T, T);
+    for (const side of ['white', 'black']) {
+      const [sheetKey, x, y, w, h] = set[side][letter];
+      const sprite = crop(sheets[sheetKey], x, y, w, h);
+      const tile = blank(bw, bh);
+      blit(tile, sprite, Math.floor((bw - w) / 2), bh - h); // bottom-centred
       const col = (side === 'white' ? 0 : 6) + i;
-      blit(piecesAtlas, tile, col * T, row * T);
+      blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
       const fen = side === 'white' ? letter.toUpperCase() : letter;
       decl.push(`  --piece-${fen}: url("data:image/png;base64,${encodePng(tile).toString('base64')}");`);
     }
   });
   css.push(`[data-pieces="${name}"] {\n${decl.join('\n')}\n}`);
-  provenance.push({ theme: 'pieces', role: name, pack: 'pixel-chess', sheet: `${SHEETS[set.white][1]} + ${SHEETS[set.black][1]}`, x: 0, y: 0 });
+  provenance.push({ theme: 'pieces', role: name, pack: set.pack, sheet: index.pieces.sets[name].sheets.join(' + '), x: '—', y: '—' });
 });
 for (const letter of [...PIECE_ORDER]) for (const fen of [letter.toUpperCase(), letter]) css.push(`[data-pieces] [data-piece="${fen}"] { --piece-img: var(--piece-${fen}); }`);
 
@@ -390,7 +431,7 @@ writeFileSync(join(PLAY, 'tiles.css'), css.join('\n') + '\n');
 const md = [];
 md.push('# Art credits');
 md.push('');
-md.push('The board tiles in `play/img/tileset.png` and the piece sprites in `play/img/pieces.png` (the same pixels inlined in `play/tiles.css`) are repacked from four free 16×16 pixel-art packs. Only the tiles and sprites the game uses are included; the packs themselves are not redistributed here — get them from their authors:');
+md.push('The board tiles in `play/img/tileset.png` and the piece sprites in `play/img/pieces.png` (the same pixels inlined in `play/tiles.css`) are repacked from six free pixel-art packs. Only the tiles and sprites the game uses are included; the packs themselves are not redistributed here — get them from their authors:');
 md.push('');
 for (const [key, p] of Object.entries(PACKS)) {
   md.push(`- **${p.title}** by ${p.author} — <${p.url}>  `);
