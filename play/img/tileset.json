@@ -1,0 +1,244 @@
+{
+ "tile": 16,
+ "roles": [
+  "floor-1",
+  "floor-2",
+  "floor-3",
+  "wall",
+  "wall-v",
+  "door",
+  "crate",
+  "chest",
+  "barrel",
+  "rubble"
+ ],
+ "themes": {
+  "hall": {
+   "row": 0,
+   "title": "The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors",
+   "tiles": {
+    "floor-1": {
+     "col": 0,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 8,
+     "y": 1
+    },
+    "floor-2": {
+     "col": 1,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 6,
+     "y": 0
+    },
+    "floor-3": {
+     "col": 2,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 2
+    },
+    "wall": {
+     "col": 3,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 0
+    },
+    "door": {
+     "col": 5,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 3
+    },
+    "crate": {
+     "col": 6,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 0,
+     "y": 8
+    },
+    "chest": {
+     "col": 7,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "rubble": {
+     "col": 9,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 20,
+     "y": 22
+    }
+   }
+  },
+  "castle": {
+   "row": 1,
+   "title": "The castle — Dungeon Gathering’s cold blue-grey stone",
+   "tiles": {
+    "floor-1": {
+     "col": 0,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 10,
+     "y": 3
+    },
+    "floor-2": {
+     "col": 1,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 11,
+     "y": 2
+    },
+    "floor-3": {
+     "col": 2,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 13,
+     "y": 2
+    },
+    "wall": {
+     "col": 3,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 6,
+     "y": 10
+    },
+    "door": {
+     "col": 5,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 3
+    },
+    "crate": {
+     "col": 6,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 0,
+     "y": 8
+    },
+    "chest": {
+     "col": 7,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "barrel": {
+     "col": 8,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 2,
+     "y": 12
+    },
+    "rubble": {
+     "col": 9,
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 12,
+     "y": 12
+    }
+   }
+  },
+  "crypt": {
+   "row": 2,
+   "title": "The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls",
+   "tiles": {
+    "floor-1": {
+     "col": 0,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14
+    },
+    "floor-2": {
+     "col": 1,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13
+    },
+    "floor-3": {
+     "col": 2,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15
+    },
+    "wall": {
+     "col": 3,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 33,
+     "y": 8
+    },
+    "wall-v": {
+     "col": 4,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 25,
+     "y": 4
+    },
+    "door": {
+     "col": 5,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 3
+    },
+    "crate": {
+     "col": 6,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 5
+    },
+    "chest": {
+     "col": 7,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "barrel": {
+     "col": 8,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 8
+    },
+    "rubble": {
+     "col": 9,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 20,
+     "y": 22
+    }
+   }
+  }
+ },
+ "packs": {
+  "dungeon-gathering": {
+   "title": "Dungeon Gathering (free version)",
+   "author": "SnowHex (Jose Javier)",
+   "url": "https://snowhex.itch.io/dungeon-gathering",
+   "terms": "Free for commercial and non-commercial projects, edits allowed, credit appreciated. The pack itself may not be redistributed or resold as game assets, images or NFTs — only the tiles the game uses are repacked here."
+  },
+  "pixel-poem": {
+   "title": "Dungeon Asset Puck — 2D Pixel Dungeon Asset Pack (free version)",
+   "author": "pixel-poem",
+   "url": "https://pixel-poem.itch.io/dungeon-assetpuck",
+   "terms": "Free and commercial projects, modification allowed, credit appreciated. No redistribution or resale of the pack — only the tiles the game uses are repacked here."
+  },
+  "catacombs": {
+   "title": "Rogue Fantasy Catacombs",
+   "author": "Szadi art",
+   "url": "https://szadiart.itch.io/rogue-fantasy-catacombs",
+   "terms": "Public domain, free for personal or commercial use, edits allowed, credit appreciated. The pack may not be resold, original or changed."
+  }
+ }
+}

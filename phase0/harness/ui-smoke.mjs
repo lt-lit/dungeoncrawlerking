@@ -99,6 +99,49 @@ const shot = async (name) => {
   await page.locator('#screen-duel').screenshot({ path: path.join(OUT, `${name}.png`) });
 };
 
+// --- art themes (2026-09-03): the stage's own theme dresses the live board;
+// the Art-set option and ?theme= override it; the legend follows. ---------
+const themeState = () =>
+  page.evaluate(() => {
+    const board = document.getElementById('board');
+    const bg = (sel) => getComputedStyle(document.querySelector(sel)).backgroundImage;
+    return {
+      theme: window.__DCK.theme,
+      attr: board.dataset.theme ?? null,
+      legend: document.querySelector('.legend').dataset.theme ?? null,
+      wall: bg('#board .cell.wall'),
+      floor: bg('#board .cell.light:not(.wall):not(.furniture):not(.hole)'),
+      door: document.querySelector('#board .cell.skin-door .piece.neutral') ? bg('#board .cell.skin-door .piece.neutral') : '',
+      wallV: document.querySelectorAll('#board .cell.wall-v').length,
+    };
+  });
+const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage.theme);
+{
+  const t = await themeState();
+  expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
+  expect(t.wall.includes('data:image/png') && t.floor.includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${t.wall.slice(0, 30)}…, floor ${t.floor.slice(0, 30)}…)`);
+  if (STAGE === 's07-the-doorway') expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite');
+}
+const setTheme = (name) =>
+  page.evaluate((n) => {
+    window.__DCK.options.theme = n;
+    window.__DCK.applyOptions();
+  }, name);
+for (const name of ['hall', 'castle', 'crypt']) {
+  await setTheme(name);
+  const t = await themeState();
+  expect(t.theme === name && t.legend === name && t.wall.includes('data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})`);
+  await shot(`00-theme-${name}`);
+}
+await setTheme('classic');
+{
+  const t = await themeState();
+  expect(t.theme === null && t.attr === null && t.wall.includes('data:image/svg') && !t.floor.includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${t.wall.slice(0, 30)}…)`);
+  await shot('00-theme-classic');
+}
+await setTheme('auto');
+expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
+
 // --- skins: the doorway's furniture leaf paints as a door from ply 0 ---------
 if (STAGE === 's07-the-doorway') {
   const door = await page.evaluate(() => ({ cls: window.__DCK.marks.cell('d6'), sprite: !!document.querySelector('#board [data-square="d6"] .piece.neutral') }));

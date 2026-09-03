@@ -3,6 +3,7 @@
  "id": "s27-posterngate",
  "title": "Posterngate",
  "notes": "Both back ranks walled except opposite-corner gates — one leaf open, one furniture. Kings mold into the gates; the auto-crop and camp lines earn their keep here.",
+ "theme": "castle",
  "map": [
   "####^.",
   "......",

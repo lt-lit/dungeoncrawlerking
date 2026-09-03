@@ -3,6 +3,7 @@
  "id": "s01-bare-cell",
  "title": "Bare Cell",
  "notes": "The minimum board, zero terrain — the pure-duel control and the smallest arena the trigger can draw. Deliberately untouched by furniture.",
+ "theme": "hall",
  "map": [
   "...",
   "...",

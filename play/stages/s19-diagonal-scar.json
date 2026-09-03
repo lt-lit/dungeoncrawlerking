@@ -3,6 +3,7 @@
  "id": "s19-diagonal-scar",
  "title": "Diagonal Scar",
  "notes": "A broken diagonal alternating stone and furniture. The scar can be partially reopened — every second segment is smashable.",
+ "theme": "crypt",
  "map": [
   "........",
   "......#.",

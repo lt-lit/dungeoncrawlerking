@@ -29,6 +29,16 @@
 //   skin-<name> on a .furniture cell picks the SPRITE (door, barrel, table,
 //   chair, shelf, chest, rubble; the crate is the default) from the stage's
 //   skin grid (stage.mjs stageSkins) — cosmetics only, never grid state.
+//   .wall-v    on a wall/cracked cell standing in a VERTICAL run (solid
+//              above or below, nothing solid beside): a tileset with a
+//              column piece paints it there (--tile-wall-v, else --tile-wall).
+//   .f1/.f2/.f3 the floor's stable texture variant per square (a hash of
+//              the square, fixed for the board's life) — a themed floor
+//              gets a little variety, the plain floor ignores them.
+// THEME (2026-09-03): setTheme(name) stamps data-theme on the board; the
+// repacked tilesets (play/tiles.css) scope their tile variables to it, so
+// the same classes paint hall / castle / crypt art, or the in-house set when
+// no theme is set.
 //
 // COORDINATES: file letters along the bottom visual row and rank numbers down
 // the left visual column, as .coord children of the edge cells — every
@@ -50,6 +60,14 @@ const FX_CLASSES = ['cracking', 'breaching', 'crumbling'];
 const FX_BY_KIND = { weaken: 'cracking', breach: 'breaching', crumble: 'crumbling', terminal: 'crumbling' };
 
 const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
+/** Stable floor-texture variant for a square: f1 (plain) most of the time,
+ *  f2/f3 scattered — a fixed function of the square, so a repaint never
+ *  makes the floor crawl. */
+function floorVariant(f, rank) {
+  const h = (f * 7 + rank * 11 + ((f * rank) % 5)) % 9;
+  return h === 0 ? 'f2' : h === 4 ? 'f3' : 'f1';
+}
 
 function svgEl(tag, attrs) {
   const el = document.createElementNS(SVG_NS, tag);
@@ -86,7 +104,7 @@ export class BoardUI {
         const sq = String.fromCharCode(97 + f) + rank;
         const cell = document.createElement('div');
         // a1 dark: (file + rankFromBottom) even = dark.
-        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light');
+        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank);
         cell.dataset.square = sq;
         cell.addEventListener('click', () => {
           if (this.interactive && this.onSquareTap) this.onSquareTap(sq);
@@ -231,6 +249,13 @@ export class BoardUI {
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {} } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
+    // Solid = stone that is not a hole, or furniture (a wall to the eye).
+    const solid = (ff, rr) => {
+      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
+      const t = grid[this.ranks - rr]?.[ff] ?? null;
+      if (t === FURNITURE) return true;
+      return t === WALL && !holes.has(String.fromCharCode(97 + ff) + rr);
+    };
     for (const [sq, cell] of this.cells) {
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
@@ -239,11 +264,16 @@ export class BoardUI {
       const isFurniture = v === FURNITURE;
       cell.classList.remove(...FX_CLASSES);
       cell.style.removeProperty('--fx-ms');
-      cell.classList.toggle('wall', isWall && !holes.has(sq));
+      const wallTile = isWall && !holes.has(sq);
+      cell.classList.toggle('wall', wallTile);
       cell.classList.toggle('hole', isWall && holes.has(sq));
       cell.classList.toggle('furniture', isFurniture);
       const cracked = isFurniture && godCrates.has(sq);
       cell.classList.toggle('cracked', cracked);
+      // A wall (or a cracked wall) in a vertical run and not a horizontal
+      // one wears the column piece, if the theme has one.
+      const vRun = (solid(f, rank + 1) || solid(f, rank - 1)) && !(solid(f - 1, rank) || solid(f + 1, rank));
+      cell.classList.toggle('wall-v', (wallTile || cracked) && vRun);
       const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);
@@ -316,6 +346,18 @@ export class BoardUI {
       cell.classList.toggle('heat-t', h === 't');
     }
     this.setArrows(arrows);
+  }
+
+  /** Art theme: 'hall' | 'castle' | 'crypt' stamps data-theme on the board
+   *  (play/tiles.css scopes the repacked tiles to it); null/'' clears it,
+   *  which is the in-house drawn set. Cosmetic — no repaint needed. */
+  setTheme(name) {
+    if (name) this.container.dataset.theme = name;
+    else delete this.container.dataset.theme;
+  }
+
+  get theme() {
+    return this.container.dataset.theme ?? null;
   }
 
   /** The classes on one cell — the test surface for tiles and marks. */

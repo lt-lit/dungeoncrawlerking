@@ -3,6 +3,7 @@
  "id": "s57-crossroads-market",
  "title": "Crossroads Market",
  "notes": "FLOORPLAN: two hallways cross at an open square, with an L-walled stall in each quadrant — five areas, every stall door different (two weak, two placements), every stall stocked differently: one chest, a pair, a spill of three, one empty.",
+ "theme": "hall",
  "map": [
   "...#..#...",
   ".^.#..^.^^",

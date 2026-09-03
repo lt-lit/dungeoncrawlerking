@@ -846,6 +846,45 @@ async function main() {
     return 'wall/hole/crate/cracked (+ a door skin) from the ledgers, a–d + 5–1 coordinates, 5 rung marks, arrows ranked 3→2→1 over the quake arrow, eval label on rank 1';
   });
 
+  // --- Art themes (2026-09-03): the repacked tilesets ride a data-theme
+  // attribute; wall RUNS and floor VARIANTS are classes the themes paint.
+  // (selftest.html loads no stylesheet — computed looks are ui-smoke's job.)
+  await check('board renderer: art themes, wall runs, floor variants', async () => {
+    const host = document.createElement('div');
+    const ui = new BoardUI(host, { files: 4, ranks: 5 });
+    const has = (sq, cls) => ui.cellClasses(sq).includes(cls);
+    // a1–a3 a stone column, b5–d5 a stone row, c3 a lone block.
+    const fen = '1***/4/*1*1/*3/*3 w - - 0 1';
+    ui.setPosition(fen);
+    for (const sq of ['a1', 'a2', 'a3']) if (!has(sq, 'wall-v')) throw new Error(`${sq} stands in a vertical run: ${ui.cellClasses(sq)}`);
+    for (const sq of ['b5', 'c5', 'd5', 'c3']) if (has(sq, 'wall-v')) throw new Error(`${sq} is not a vertical run: ${ui.cellClasses(sq)}`);
+    // A hole breaks the run (it is not solid); furniture joins it.
+    ui.setPosition(fen, { holes: new Set(['a2']) });
+    if (has('a1', 'wall-v') || has('a3', 'wall-v') || has('a2', 'wall-v')) throw new Error('a hole between two walls must break the vertical run');
+    ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
+    if (!has('a1', 'wall-v') || !has('a2', 'wall-v') || !has('a3', 'wall-v')) throw new Error('furniture (here a cracked wall) is solid to the run: ' + ui.cellClasses('a2'));
+    // Floor variants: one per square, stable across repaints, some of each.
+    const variants = (sq) => ui.cellClasses(sq).filter((c) => /^f[123]$/.test(c));
+    const before = {};
+    let f2 = 0, f3 = 0;
+    for (const [sq] of ui.cells) {
+      const v = variants(sq);
+      if (v.length !== 1) throw new Error(`${sq} must carry exactly one floor variant: ${v}`);
+      before[sq] = v[0];
+      if (v[0] === 'f2') f2++;
+      if (v[0] === 'f3') f3++;
+    }
+    if (!f2 || !f3) throw new Error(`a 4×5 board should scatter both variants (f2 ${f2}, f3 ${f3})`);
+    ui.setPosition(fen);
+    for (const [sq] of ui.cells) if (variants(sq)[0] !== before[sq]) throw new Error(`${sq}: the floor variant must not change on repaint`);
+    // The theme attribute.
+    if (ui.theme !== null || host.dataset.theme !== undefined) throw new Error('a fresh board wears no theme');
+    ui.setTheme('crypt');
+    if (ui.theme !== 'crypt' || host.dataset.theme !== 'crypt') throw new Error(`setTheme must stamp data-theme (${host.dataset.theme})`);
+    ui.setTheme(null);
+    if (ui.theme !== null || 'theme' in host.dataset) throw new Error('setTheme(null) must clear data-theme');
+  });
+
   finish(null);
 }
 

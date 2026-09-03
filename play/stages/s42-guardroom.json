@@ -3,6 +3,7 @@
  "id": "s42-guardroom",
  "title": "Guardroom",
  "notes": "Three rooms in a row. One door is open, one is weak — and the weak one has a crate shoved behind it as a barricade. Wide-shallow room-graph with clean deployment rows.",
+ "theme": "castle",
  "map": [
   "..........",
   "..........",

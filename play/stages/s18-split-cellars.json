@@ -3,6 +3,7 @@
  "id": "s18-split-cellars",
  "title": "Split Cellars",
  "notes": "Stone spurs split both deployment areas into cellar pockets; crates sit where a door would be. Molding pours armies around the spurs.",
+ "theme": "crypt",
  "map": [
   "..........",
   "...#......",

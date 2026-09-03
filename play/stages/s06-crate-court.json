@@ -3,6 +3,7 @@
  "id": "s06-crate-court",
  "title": "Crate Court",
  "notes": "Pillared court with loose clutter: two stone pillars, four crates. Baseline mixed-density middle-size arena.",
+ "theme": "hall",
  "map": [
   "......",
   "......",

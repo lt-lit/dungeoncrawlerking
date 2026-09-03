@@ -3,6 +3,7 @@
  "id": "s28-parapet",
  "title": "Parapet",
  "notes": "The near second rank is a parapet with one open slot and one weak slot — pawns deploy DEEP, and the camp line sits forward of the king row.",
+ "theme": "castle",
  "map": [
   ".......",
   ".......",

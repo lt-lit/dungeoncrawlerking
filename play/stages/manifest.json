@@ -7,6 +7,7 @@
    "id": "s01-bare-cell",
    "title": "Bare Cell",
    "notes": "The minimum board, zero terrain — the pure-duel control and the smallest arena the trigger can draw. Deliberately untouched by furniture.",
+   "theme": "hall",
    "map": [
     "...",
     "...",
@@ -28,6 +29,7 @@
    "id": "s02-cluttered-closet",
    "title": "Cluttered Closet",
    "notes": "Smallest crate fight: two pieces of furniture on otherwise open minimum-width ground. Every capture-the-clutter line is worth a tempo question even at 3 files.",
+   "theme": "hall",
    "map": [
     "...",
     "...",
@@ -51,6 +53,7 @@
    "id": "s03-the-pantry",
    "title": "The Pantry",
    "notes": "Small mixed ground: one stone pillar among shelves of clutter, packed toward midfield so both armies still deploy. First taste of stone-vs-furniture reading at a glance.",
+   "theme": "hall",
    "map": [
     "....",
     "....",
@@ -74,6 +77,7 @@
    "id": "s04-barrel-row",
    "title": "Barrel Row",
    "notes": "A broken furniture line across midfield, no stone at all. The stone-only control arm of this stage is an open field — the crates ARE the terrain.",
+   "theme": "castle",
    "map": [
     ".....",
     ".....",
@@ -99,6 +103,7 @@
    "id": "s05-the-squeeze",
    "title": "The Squeeze",
    "notes": "Stone waist leaving a 2-wide pass, with one crate narrowing it further — pay a capture to widen the pass, or file through under fire.",
+   "theme": "crypt",
    "map": [
     ".....",
     ".....",
@@ -126,6 +131,7 @@
    "id": "s06-crate-court",
    "title": "Crate Court",
    "notes": "Pillared court with loose clutter: two stone pillars, four crates. Baseline mixed-density middle-size arena.",
+   "theme": "hall",
    "map": [
     "......",
     "......",
@@ -153,6 +159,7 @@
    "id": "s07-the-doorway",
    "title": "The Doorway",
    "notes": "A full wall with a 2-wide door — one leaf open, one leaf furniture. Smash the door for the wide file or funnel through the open half.",
+   "theme": "hall",
    "map": [
     "......",
     "......",
@@ -182,6 +189,7 @@
    "id": "s08-storeroom",
    "title": "Storeroom",
    "notes": "One-sided clutter: five crates crowd one deployment approach, the other is clean. Asymmetric by design — the flip convention tests it facing each side.",
+   "theme": "crypt",
    "map": [
     "......",
     "......",
@@ -207,6 +215,7 @@
    "id": "s09-long-gallery",
    "title": "Long Gallery",
    "notes": "Narrow-tall pure-stone gallery, staggered pillars. The stone-only reference point among the tall boards — no furniture on purpose.",
+   "theme": "castle",
    "map": [
     "....",
     "..#.",
@@ -238,6 +247,7 @@
    "id": "s10-broken-barricade",
    "title": "Broken Barricade",
    "notes": "A furniture barricade spanning the field between stone end-stubs, one open gap. Fight for the gap or smash a second one — the engine prices both.",
+   "theme": "castle",
    "map": [
     "........",
     "........",
@@ -269,6 +279,7 @@
    "id": "s11-grand-hall",
    "title": "Grand Hall",
    "notes": "The big open hall: three stone pillars, five scattered furnishings. Light terrain at maximum size — long diagonals still live here.",
+   "theme": "hall",
    "map": [
     "..........",
     "..........",
@@ -300,6 +311,7 @@
    "id": "s12-rat-nest",
    "title": "Rat Nest",
    "notes": "Density stress: dense mixed pockets of stone and clutter, including one crate in each deployment approach. The generator must still deal every army width here.",
+   "theme": "crypt",
    "map": [
     "..........",
     "....^.....",
@@ -327,6 +339,7 @@
    "id": "s13-gatehouse",
    "title": "Gatehouse",
    "notes": "Stone stubs in BOTH back ranks with a furniture gate-leaf beside each. Crates on the king rows are capture-promotion squares (§4.6) — march a pawn and smash in.",
+   "theme": "castle",
    "map": [
     "##^...",
     "......",
@@ -354,6 +367,7 @@
    "id": "s14-weak-wall",
    "title": "Weak Wall",
    "notes": "A full-width stone wall whose only ways through are two furniture breaches. Furniture alone separates the armies — legal (§4.6), the verifier flags it: you MUST smash in.",
+   "theme": "crypt",
    "map": [
     "........",
     "........",
@@ -381,6 +395,7 @@
    "id": "s15-colonnade",
    "title": "Colonnade",
    "notes": "Pillar pairs with furniture stacked between them — the colonnade reads solid until somebody starts clearing the shelving.",
+   "theme": "castle",
    "map": [
     ".......",
     ".......",
@@ -410,6 +425,7 @@
    "id": "s16-cave-mouth",
    "title": "Cave Mouth",
    "notes": "The near back rank is rock except a 1-square mouth and a weak-masonry plug. The king molds into the mouth; the enemy can capture-promote onto the plug.",
+   "theme": "crypt",
    "map": [
     ".....",
     ".....",
@@ -435,6 +451,7 @@
    "id": "s17-rubble-yard",
    "title": "Rubble Yard",
    "notes": "Mixed stone-and-crate rubble strictly in midfield, deployment rows clean. The workhorse mixed-density case for the corpus.",
+   "theme": "crypt",
    "map": [
     ".........",
     ".........",
@@ -462,6 +479,7 @@
    "id": "s18-split-cellars",
    "title": "Split Cellars",
    "notes": "Stone spurs split both deployment areas into cellar pockets; crates sit where a door would be. Molding pours armies around the spurs.",
+   "theme": "crypt",
    "map": [
     "..........",
     "...#......",
@@ -489,6 +507,7 @@
    "id": "s19-diagonal-scar",
    "title": "Diagonal Scar",
    "notes": "A broken diagonal alternating stone and furniture. The scar can be partially reopened — every second segment is smashable.",
+   "theme": "crypt",
    "map": [
     "........",
     "......#.",
@@ -518,6 +537,7 @@
    "id": "s20-the-anvil",
    "title": "The Anvil",
    "notes": "Mirrored materials: stone pair on one side's second rank, crate pair on the other's. Same shape, different permanence — the cleanest A/B of wall vs furniture in deployment.",
+   "theme": "castle",
    "map": [
     "....",
     ".^^.",
@@ -547,6 +567,7 @@
    "id": "s21-collapsed-keep",
    "title": "Collapsed Keep",
    "notes": "Big-board stress: rubble in both deployment zones, room walls midfield, loose crates in the wreckage. The 10x10 everything-at-once case.",
+   "theme": "crypt",
    "map": [
     "..........",
     ".#...^...#",
@@ -578,6 +599,7 @@
    "id": "s22-sinkhole",
    "title": "Sinkhole",
    "notes": "A 2x2 stone sink with furniture heaped on its flanks — the hole is forever, the heap is not.",
+   "theme": "crypt",
    "map": [
     "......",
     "......",
@@ -603,6 +625,7 @@
    "id": "s23-the-neck",
    "title": "The Neck",
    "notes": "Room-corridor-room with offset throats sharing one furniture column. The only stone-open cells are NOT adjacent — clearing the crate column is the fast route. Verifier-flagged smash-in (§4.6).",
+   "theme": "castle",
    "map": [
     ".......",
     ".......",
@@ -632,6 +655,7 @@
    "id": "s24-hypostyle",
    "title": "Hypostyle",
    "notes": "Alternating pillar lattice — half the pillars are stone, half furniture. The lattice thins as the duel burns through it.",
+   "theme": "castle",
    "map": [
     ".........",
     ".........",
@@ -659,6 +683,7 @@
    "id": "s25-the-divide",
    "title": "The Divide",
    "notes": "A full central spine with two corridors — except one spine cell is furniture. Route A: the corridor. Route B: make your own door.",
+   "theme": "castle",
    "map": [
     "........",
     "........",
@@ -688,6 +713,7 @@
    "id": "s26-flats",
    "title": "Flats",
    "notes": "Wide-shallow ground with only light clutter and no stone. Wide flanks, short files — the cavalry board.",
+   "theme": "castle",
    "map": [
     "..........",
     "..........",
@@ -711,6 +737,7 @@
    "id": "s27-posterngate",
    "title": "Posterngate",
    "notes": "Both back ranks walled except opposite-corner gates — one leaf open, one furniture. Kings mold into the gates; the auto-crop and camp lines earn their keep here.",
+   "theme": "castle",
    "map": [
     "####^.",
     "......",
@@ -738,6 +765,7 @@
    "id": "s28-parapet",
    "title": "Parapet",
    "notes": "The near second rank is a parapet with one open slot and one weak slot — pawns deploy DEEP, and the camp line sits forward of the king row.",
+   "theme": "castle",
    "map": [
     ".......",
     ".......",
@@ -765,6 +793,7 @@
    "id": "s29-the-redoubt",
    "title": "The Redoubt",
    "notes": "A sealed corner chamber in the far side's territory whose only door is furniture. Sometimes the defender molds INTO it — a fortress with a capturable door is the §4.6 thesis stage.",
+   "theme": "castle",
    "map": [
     ".....#..",
     ".....^..",
@@ -792,6 +821,7 @@
    "id": "s30-the-serpent",
    "title": "The Serpent",
    "notes": "S-weave of stone arms with crates at two bends. The long way is safe; the short way is bought with captures.",
+   "theme": "crypt",
    "map": [
     ".....",
     ".....",
@@ -823,6 +853,7 @@
    "id": "s31-ruined-l",
    "title": "Ruined L",
    "notes": "A solid collapsed quadrant makes an L-shaped playfield; two weak-masonry cells on the ruin's edge can be dug out for nooks.",
+   "theme": "crypt",
    "map": [
     ".....####",
     ".....####",
@@ -852,6 +883,7 @@
    "id": "s32-smugglers-hold",
    "title": "Smugglers' Hold",
    "notes": "Three-wide staggered passes, one plugged with contraband. Knife-fight geometry at minimum width.",
+   "theme": "hall",
    "map": [
     "...",
     ".##",
@@ -877,6 +909,7 @@
    "id": "s33-the-vault",
    "title": "The Vault",
    "notes": "The minimum square: one crate, one pillar, gap 1. The smallest board where stone and furniture coexist.",
+   "theme": "crypt",
    "map": [
     ".....",
     ".....",
@@ -898,6 +931,7 @@
    "id": "s34-double-doors",
    "title": "Double Doors",
    "notes": "The requested archetype, plain: one full wall, one ^^ double door, no other way through. Furniture alone joins the halves — the verifier flags it; you smash in.",
+   "theme": "hall",
    "map": [
     "........",
     "........",
@@ -927,6 +961,7 @@
    "id": "s35-the-antechamber",
    "title": "The Antechamber",
    "notes": "Two partitions in sequence: an open door into the antechamber, then a ^^ double door into the far hall. Room-corridor-room the way a generator would draw it.",
+   "theme": "castle",
    "map": [
     ".......",
     ".......",
@@ -958,6 +993,7 @@
    "id": "s36-crate-hoard",
    "title": "Crate Hoard",
    "notes": "A holed corner room with the hoard inside — and now a breakable floor-edge (c5, d5) so the room can be cracked open from below as well as entered through the gap. Designer tweak 2026-08-27.",
+   "theme": "hall",
    "map": [
     ".^^.#...",
     "..^.....",
@@ -985,6 +1021,7 @@
    "id": "s37-twin-vaults",
    "title": "Twin Vaults",
    "notes": "A full-height spine splits the field into two vaults — one open hole, one weak point — with a crate cluster stored in each half. Two sub-battles, three ways to merge them.",
+   "theme": "castle",
    "map": [
     "..........",
     ".....#....",
@@ -1012,6 +1049,7 @@
    "id": "s38-quartered",
    "title": "Quartered",
    "notes": "A cross of walls cuts the board into four rooms. Two passages are open holes, two are weak points — the generator's room-graph made literal.",
+   "theme": "hall",
    "map": [
     ".........",
     "....#....",
@@ -1041,6 +1079,7 @@
    "id": "s39-the-vestibule",
    "title": "The Vestibule",
    "notes": "A sealed central chamber with ^^ double doors facing BOTH armies. Take the flanks around it, or smash into the middle and hold the room.",
+   "theme": "hall",
    "map": [
     "........",
     "........",
@@ -1072,6 +1111,7 @@
    "id": "s40-broken-cloister",
    "title": "Broken Cloister",
    "notes": "A solid garden block with clutter heaped at its four bends — the ring corridor narrows to single files exactly where the crates sit.",
+   "theme": "crypt",
    "map": [
     ".........",
     ".........",
@@ -1101,6 +1141,7 @@
    "id": "s41-supply-line",
    "title": "Supply Line",
    "notes": "A full wall with one ^^ double door, and supply crates stacked AGAINST the wall on both sides. Furniture integrated into the wall structure; the door is the only way through.",
+   "theme": "castle",
    "map": [
     "..........",
     "..........",
@@ -1126,6 +1167,7 @@
    "id": "s42-guardroom",
    "title": "Guardroom",
    "notes": "Three rooms in a row. One door is open, one is weak — and the weak one has a crate shoved behind it as a barricade. Wide-shallow room-graph with clean deployment rows.",
+   "theme": "castle",
    "map": [
     "..........",
     "..........",
@@ -1151,6 +1193,7 @@
    "id": "s43-the-breach",
    "title": "The Breach",
    "notes": "A castle wall two ranks thick. The breach column is rubble-choked — and the collapse spilled forward: d5 joins the breach and d6 lies in the approach. Smash a path, or smash a wider one. Designer tweak 2026-08-27.",
+   "theme": "crypt",
    "map": [
     "........",
     "........",
@@ -1180,6 +1223,7 @@
    "id": "s44-double-gatehouse",
    "title": "Double Gatehouse",
    "notes": "One wall, TWO ^^ double doors at the thirds, nothing open. Pick a gate — or price both and let the engine tell you which.",
+   "theme": "castle",
    "map": [
     "..........",
     "..........",
@@ -1209,6 +1253,7 @@
    "id": "s45-collapsed-arch",
    "title": "Collapsed Arch",
    "notes": "A wall whose arch came down: a 3-wide rubble cluster IN the wall itself, plus one intact slip at the edge. Clear the rubble for the broad front or file through the slip.",
+   "theme": "crypt",
    "map": [
     ".......",
     ".......",
@@ -1236,6 +1281,7 @@
    "id": "s46-cellar-steps",
    "title": "Cellar Steps",
    "notes": "A tiny sealed cellar in the near corner — stone on two sides, a weak ceiling slab, a crate on the stairs. Molding can put your own pieces inside; someone has to dig them out.",
+   "theme": "hall",
    "map": [
     "......",
     "......",
@@ -1263,6 +1309,7 @@
    "id": "s47-the-warrens",
    "title": "The Warrens",
    "notes": "Two full walls and an offset divider, now multiply breached: two weak points per wall and a breakable stub on the divider — every route is a smash, and there are many routes. Verifier-flagged. Designer tweak 2026-08-27.",
+   "theme": "crypt",
    "map": [
     ".........",
     ".........",
@@ -1294,6 +1341,7 @@
    "id": "s48-barricaded-bridge",
    "title": "Barricaded Bridge",
    "notes": "Stone flanks force everything over a center bridge, and the bridge is half-blocked by a two-crate barricade. One open file under fire, or clear the barricade.",
+   "theme": "castle",
    "map": [
     ".......",
     ".......",
@@ -1319,6 +1367,7 @@
    "id": "s49-crate-quarry",
    "title": "Crate Quarry",
    "notes": "Clusters only, no stone: a 2x2 block, a 1x3 run, a 2x1 pair. The pure-cluster control — its stone-only arm is an empty field.",
+   "theme": "crypt",
    "map": [
     ".........",
     ".....^^^.",
@@ -1344,6 +1393,7 @@
    "id": "s50-last-stand",
    "title": "Last Stand",
    "notes": "The redoubt evolved: a far-side pocket with a ^^ double door AND a crate shoring it from inside — three smashes through the center, or come around the flank files.",
+   "theme": "hall",
    "map": [
     ".#....#.",
     ".#.^..#.",
@@ -1373,6 +1423,7 @@
    "id": "s51-the-corridor",
    "title": "The Corridor",
    "notes": "FLOORPLAN: a full-width hallway with two rooms off each side — five areas. Each wall has an open door and a weak door; the room pairs also connect to each other through breakable party doors (e8, f1). NW stocks a crate pair, NE one against the wall, SE an L of three, SW stands bare.",
+   "theme": "hall",
    "map": [
     "....#.....",
     ".^^.^.....",
@@ -1404,6 +1455,7 @@
    "id": "s52-the-apartments",
    "title": "The Apartments",
    "notes": "FLOORPLAN: three rooms upstairs, two down, six doors — every room reachable two ways, party doors between neighbours (d7, g8, e2). Furnishings differ room to room: a wardrobe pair, a lone chest, a corner stack, a bare parlor.",
+   "theme": "hall",
    "map": [
     "...#..#...",
     "...#.^....",
@@ -1435,6 +1487,7 @@
    "id": "s53-the-cellblock",
    "title": "The Cellblock",
    "notes": "FLOORPLAN: a central hallway with three cells off each side — seven areas. Left doors are all breakable; right doors alternate open and weak. Some cells hold contraband, some are swept bare.",
+   "theme": "castle",
    "map": [
     "...#..#...",
     ".^.^..^...",
@@ -1464,6 +1517,7 @@
    "id": "s54-banquet-and-kitchens",
    "title": "Banquet & Kitchens",
    "notes": "FLOORPLAN: a great hall dominated by a four-crate banquet table, and three kitchens behind a wall with a double door and a weak service hatch. The kitchens connect to each other (d7 breakable, g7 open), each stocked differently.",
+   "theme": "hall",
    "map": [
     "...#..#...",
     ".^.#^.#.^.",
@@ -1495,6 +1549,7 @@
    "id": "s55-gate-and-bailey",
    "title": "Gate & Bailey",
    "notes": "FLOORPLAN: an outer wall with a double gate and an open postern, a bailey with stabled crates along the west wall, and a stone keep with one weak door — which the defender may mold inside. Three zones deep.",
+   "theme": "castle",
    "map": [
     "..#...#...",
     "..#.^.#...",
@@ -1526,6 +1581,7 @@
    "id": "s56-the-archive",
    "title": "The Archive",
    "notes": "FLOORPLAN: two long shelf-rows make three aisles in the stacks; the reading room behind the double door is the only way to the far side (verifier-flagged smash-in), and an inner cage with its own weak door guards the rarest holdings.",
+   "theme": "hall",
    "map": [
     "......#..",
     "......^..",
@@ -1557,6 +1613,7 @@
    "id": "s57-crossroads-market",
    "title": "Crossroads Market",
    "notes": "FLOORPLAN: two hallways cross at an open square, with an L-walled stall in each quadrant — five areas, every stall door different (two weak, two placements), every stall stocked differently: one chest, a pair, a spill of three, one empty.",
+   "theme": "hall",
    "map": [
     "...#..#...",
     ".^.#..^.^^",
@@ -1586,6 +1643,7 @@
    "id": "s58-drowned-halls",
    "title": "Drowned Halls",
    "notes": "FLOORPLAN: the dense one — six areas. Two full walls with mixed doors bracket a mid band split into three chambers by dividers with party doors (d4, g5); the north territory splits again behind a weak door. Flooded chambers hold flotsam; the center hall is scoured bare.",
+   "theme": "crypt",
    "map": [
     ".....#....",
     ".....^....",

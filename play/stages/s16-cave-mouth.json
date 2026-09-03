@@ -3,6 +3,7 @@
  "id": "s16-cave-mouth",
  "title": "Cave Mouth",
  "notes": "The near back rank is rock except a 1-square mouth and a weak-masonry plug. The king molds into the mouth; the enemy can capture-promote onto the plug.",
+ "theme": "crypt",
  "map": [
   ".....",
   ".....",

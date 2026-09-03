@@ -3,6 +3,7 @@
  "id": "s10-broken-barricade",
  "title": "Broken Barricade",
  "notes": "A furniture barricade spanning the field between stone end-stubs, one open gap. Fight for the gap or smash a second one — the engine prices both.",
+ "theme": "castle",
  "map": [
   "........",
   "........",

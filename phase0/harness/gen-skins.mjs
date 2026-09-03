@@ -17,6 +17,14 @@
 //      doors; weak masonry is rubble, not a door) — one line per square, so
 //      the review is the diff.
 //
+// THEMES (2026-09-03): the same tool assigns each stage its art theme
+// (stage.mjs THEMES — hall / castle / crypt, the repacked tilesets in
+// play/tiles.css): the notes' vocabulary picks one (a crypt has tombs and
+// rubble, a castle has gates and parapets, a hall has pantries and
+// banquets); stages that say nothing go round-robin by number so
+// neighbouring floors differ; THEME_OVERRIDES settle the rest. Cosmetic —
+// a theme changes what the renderer paints, never the grid.
+//
 // Usage (from phase0/):
 //   node harness/gen-skins.mjs            # report: every stage's map with skins
 //   node harness/gen-skins.mjs --write    # write "skin" into play/stages/*.json
@@ -71,6 +79,39 @@ const OVERRIDES = {
   's57-crossroads-market': { b8: 'X', i8: 'B', j8: 'B', a2: 'K', b2: 'K', b1: 'K' }, // one chest, a pair, a spill of three; stall doors by rule
   's58-drowned-halls': { g6: 'D', b6: 'B', i6: 'B', i5: 'B' }, // the g-divider's party door (one stone neighbour only); flotsam elsewhere
 };
+
+// Stage NAME vocabulary → theme, first match wins (names are deliberate;
+// notes ramble — "castle wall two ranks thick, breach rubble-choked" names
+// every theme at once). Unnamed stages take the least-used theme so far, so
+// the bed stays balanced and neighbouring floors tend to differ.
+const THEME_RULES = [
+  [/\b(crypt|tomb|catacomb|grave|drowned|sinkhole|cave|warrens?|ruins?|ruined|collapsed|rubble|breach|rats?|wreck|scar|serpent)\b/i, 'crypt'],
+  [/\b(gates?|gatehouse|bailey|rampart|keep|tower|guardroom|cellblock|barricaded?|bridge|postern|posterngate|parapet|redoubt|castle|vaults?|anvil|colonnade|hypostyle|divide|neck)\b/i, 'castle'],
+  [/\b(pantry|closet|kitchens?|banquet|apartments?|market|parlor|cellars?|storeroom|hoard|shelf|shelves|wardrobe|study|doorway|halls?|gallery|archive|smugglers?|quarry|flats|court|antechamber|vestibule|cloister|supply|doors?)\b/i, 'hall'],
+];
+const THEME_ORDER = ['hall', 'castle', 'crypt'];
+const THEME_OVERRIDES = {
+  's01-bare-cell': 'hall', // the control: the plainest look
+  's08-storeroom': 'crypt', // a storeroom of urns — and breaks a run of halls
+  's09-long-gallery': 'castle', // a stone gallery
+  's18-split-cellars': 'crypt', // cellars are underground
+  's26-flats': 'castle', // open ground under the sky-grey stone
+  's33-the-vault': 'crypt',
+  's35-the-antechamber': 'castle',
+  's40-broken-cloister': 'crypt', // broken
+  's41-supply-line': 'castle', // a garrison's wall
+  's49-crate-quarry': 'crypt',
+};
+
+/** Which art theme a stage wears, and why. */
+function themeFor(json, used) {
+  if (THEME_OVERRIDES[json.id]) return { theme: THEME_OVERRIDES[json.id], why: 'override' };
+  const text = `${json.id.replace(/-/g, ' ')} ${json.title ?? ''}`;
+  const hit = THEME_RULES.find(([re]) => re.test(text));
+  if (hit) return { theme: hit[1], why: `"${text.match(hit[0])[0]}"` };
+  const theme = [...THEME_ORDER].sort((a, b) => (used[a] ?? 0) - (used[b] ?? 0))[0];
+  return { theme, why: 'least used' };
+}
 
 const wallish = (ch) => ch === '#' || ch === '^';
 
@@ -158,22 +199,29 @@ function skinGrid(json) {
 
 let written = 0;
 const tally = {};
+const themeTally = {};
+const themeReport = [];
 for (const file of readdirSync(STAGE_DIR).sort()) {
   if (!file.endsWith('.json') || file === 'manifest.json') continue;
   const path = join(STAGE_DIR, file);
   const json = JSON.parse(readFileSync(path, 'utf8'));
+  const { theme, why } = themeFor(json, themeTally);
   if (ONLY && json.id !== ONLY) continue;
   const { rows, reasons } = skinGrid(json);
   for (const ch of rows.join('')) if (ch !== '.') tally[ch] = (tally[ch] ?? 0) + 1;
+  themeTally[theme] = (themeTally[theme] ?? 0) + 1;
+  themeReport.push(`${json.id.padEnd(26)} ${theme.padEnd(7)} ${why}`);
   // Validate through the loader exactly as the game will see it.
-  loadStageV2({ ...json, skin: rows });
+  loadStageV2({ ...json, skin: rows, theme });
   if (WRITE) {
     const out = {};
     for (const k of Object.keys(json)) {
-      if (k === 'skin') continue;
+      if (k === 'skin' || k === 'theme') continue;
       out[k] = json[k];
+      if (k === 'notes') out.theme = theme;
       if (k === 'map') out.skin = rows;
     }
+    if (!('theme' in out)) out.theme = theme;
     if (!('skin' in out)) out.skin = rows;
     writeFileSync(path, JSON.stringify(out, null, 1) + '\n');
     written++;
@@ -183,4 +231,5 @@ for (const file of readdirSync(STAGE_DIR).sort()) {
     console.log(`   ${reasons.join(' · ')}`);
   }
 }
-console.log(`\nskins: ${Object.entries(tally).map(([k, v]) => `${k}=${v}`).join(' ')}${WRITE ? ` — wrote ${written} stage files (now regenerate the manifest)` : ''}`);
+console.log(`\nthemes:\n  ${themeReport.join('\n  ')}`);
+console.log(`\nskins: ${Object.entries(tally).map(([k, v]) => `${k}=${v}`).join(' ')} · themes: ${Object.entries(themeTally).map(([k, v]) => `${k}=${v}`).join(' ')}${WRITE ? ` — wrote ${written} stage files (now regenerate the manifest)` : ''}`);

@@ -3,6 +3,7 @@
  "id": "s58-drowned-halls",
  "title": "Drowned Halls",
  "notes": "FLOORPLAN: the dense one — six areas. Two full walls with mixed doors bracket a mid band split into three chambers by dividers with party doors (d4, g5); the north territory splits again behind a weak door. Flooded chambers hold flotsam; the center hall is scoured bare.",
+ "theme": "crypt",
  "map": [
   ".....#....",
   ".....^....",

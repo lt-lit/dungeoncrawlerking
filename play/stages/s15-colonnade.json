@@ -3,6 +3,7 @@
  "id": "s15-colonnade",
  "title": "Colonnade",
  "notes": "Pillar pairs with furniture stacked between them — the colonnade reads solid until somebody starts clearing the shelving.",
+ "theme": "castle",
  "map": [
   ".......",
   ".......",

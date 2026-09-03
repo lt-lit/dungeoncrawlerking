@@ -3,6 +3,7 @@
  "id": "s54-banquet-and-kitchens",
  "title": "Banquet & Kitchens",
  "notes": "FLOORPLAN: a great hall dominated by a four-crate banquet table, and three kitchens behind a wall with a double door and a weak service hatch. The kitchens connect to each other (d7 breakable, g7 open), each stocked differently.",
+ "theme": "hall",
  "map": [
   "...#..#...",
   ".^.#^.#.^.",

@@ -55,7 +55,20 @@ SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
 crate/rubble; cosmetics only, never grid state) authored over the whole bed
 by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
 family by the stage notes, a reviewed override table) with sprites
-generated into `style.css` by `gen-sprites.mjs` — see `play/README.md`); **Phase 1.2 — the Gods debug overlay ✅ done**
+generated into `style.css` by `gen-sprites.mjs`; **round 3, 2026-09-03 —
+ART THEMES**: the designer shopped free tilesets and settled "use them all,
+16×16 is the standard, mix and match, repack and credit" — the board wears
+`hall` (pixel-poem Dungeon Asset Puck), `castle` (SnowHex Dungeon
+Gathering) or `crypt` (Szadi art Rogue Fantasy Catacombs), or `classic`
+(the in-house set); `phase0/harness/repack-tiles.mjs` crops ONLY the used
+tiles from the packs in gitignored `phase0/assets-src/` into
+`play/img/tileset.png` + `play/tiles.css` (PNG data-URI variables under
+`[data-theme]`) + `play/CREDITS.md`; the packs themselves are never
+committed; every stage carries a `theme` (gen-skins.mjs assigns it from the
+stage NAME's vocabulary, balanced 18/21/19), overridden by the Options
+panel's Art set or `?theme=`; the renderer adds `wall-v` (vertical wall
+runs) and `f1/f2/f3` floor variants; selftest 35/35, ui-smoke asserts the
+themes on the live board — see `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +
@@ -305,7 +318,8 @@ arm still needs the designer. Then **Phase 2 — exploration slice**.
   feel checks passed — thread-stack's on 2026-09-01, on the v3 build). phase0's npm `node_modules` are
   still the STOCK pair — overlay `play/vendor/` artifacts before any
   phase0 run that must play the shipped rules (see `engine/README.md`).
-- `phase0/lib/` — shared infra: `load.mjs` (Node loaders + UCI wrapper),
+- `phase0/lib/` — shared infra: `png.mjs` (dependency-free PNG codec for the
+  asset tools), `load.mjs` (Node loaders + UCI wrapper),
   `fen.mjs` (largeboard FEN editing: walls `*`, multi-digit runs, pockets),
   `variant.mjs` (duel variants.ini generator — the canonical rule baseline)
 - `phase0/spikes/` — one runnable script per §9 spike (deterministic, exit 0 =
@@ -332,7 +346,8 @@ node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
-node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe on a forced-hot duel (+ screenshots)
+node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots)
+node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)

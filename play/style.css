@@ -5,6 +5,10 @@
 
    Tiles (2026-09-02): floor is warm olive flagstone, walls are cold
    purple-grey stone blocks, furniture is pixel-art wood (gen-sprites.mjs).
+   THEMES (2026-09-03): play/tiles.css overrides the tile variables under
+   [data-theme="hall|castle|crypt"] with tiles repacked from three free
+   16×16 packs (repack-tiles.mjs, CREDITS.md); the rules below never change
+   per theme — only what the variables hold.
    Colour roles (2026-09-02 UI refresh): GOLD is the player's — selection,
    targets, last move, the best hint; METALLIC (gold/silver/bronze) is the
    oracle's hint ranking; the GODS' hue is light blue — every mark and arrow
@@ -256,8 +260,26 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   container-type: size;
 }
 
-.cell.light { background: var(--cell-light); }
-.cell.dark { background: var(--cell-dark); }
+/* The floor: a flat colour, or under a theme (play/tiles.css [data-theme])
+   the pack's floor tile — .f1/.f2/.f3 pick the square's stable texture
+   variant (board-ui.mjs floorVariant). The dark squares keep the checker by
+   a translucent shade over the tile (--floor-shade is transparent without a
+   theme, so the plain look is untouched). */
+.cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); }
+.cell.f2 { --tile-floor: var(--tile-floor-2, var(--tile-floor-1)); }
+.cell.f3 { --tile-floor: var(--tile-floor-3, var(--tile-floor-1)); }
+.cell.wall-v { --wall-tile: var(--tile-wall-v, var(--tile-wall)); }
+.cell.light {
+  background: var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-light);
+  image-rendering: pixelated;
+}
+.cell.dark {
+  background:
+    linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)),
+    var(--tile-floor, none) center / 100% 100% no-repeat,
+    var(--cell-dark);
+  image-rendering: pixelated;
+}
 
 /* Edge coordinates: file letters along the bottom row, rank numbers down the
    left column (board-ui.mjs). Tiny, muted, out of the glyph's way. */
@@ -283,7 +305,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    gen-sprites.mjs) — cold stone on a warm olive floor, a wall line reads
    as a wall line. (It used to be literally the pit look.) */
 .cell.wall {
-  background: var(--tile-wall) center / 100% 100% no-repeat;
+  background: var(--wall-tile) center / 100% 100% no-repeat;
   image-rendering: pixelated;
 }
 
@@ -313,7 +335,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    dissolve every other furniture uses. `.furniture` stays on the cell —
    this rule is later, so its background wins. */
 .cell.cracked {
-  background: var(--tile-wall) center / 100% 100% no-repeat;
+  background: var(--wall-tile) center / 100% 100% no-repeat;
   image-rendering: pixelated;
 }
 
@@ -475,7 +497,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    flash of light. Same crack as the committed tile, so the held end frame
    and the commit are one image. */
 .cell.cracking {
-  background: var(--tile-crack) center / 100% 100% no-repeat, var(--tile-wall) center / 100% 100% no-repeat;
+  background: var(--tile-crack) center / 100% 100% no-repeat, var(--wall-tile) center / 100% 100% no-repeat;
   image-rendering: pixelated;
   animation: crack-jitter var(--fx-ms, .3s) steps(6) forwards;
 }

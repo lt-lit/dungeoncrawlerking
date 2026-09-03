@@ -37,7 +37,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 `index.html` — service-worker scope) injects them after one self-reload.
 
 - `index.html` — the game. Debug/E2E query params (see `js/main.mjs` header):
-  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…&probe=…`
+  `?stage=<id>&flip=1&ct=&cb=&turn=w|b&seed=<n>&w=<spec>&b=<spec>&autobegin=1&go=…&probe=…&theme=hall|castle|crypt|classic`
   (army spec strings are `width:spec:archetype:anchor`, spec = `b<points>`
   or piece letters — e.g. `w=6:b30`, `b=5:QRNN:scrambled`), plus Director
   overrides `&onset=&qramp=&cramp=&debt=&asymonset=&asymramp=&dirseed=`
@@ -52,9 +52,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `node harness/selftest-headless.mjs` runs the selftest in real Chromium;
   `node harness/ui-smoke.mjs --shots` plays a forced-hot duel on the LIVE
   board and asserts the tiles, the per-rung residue marks and arrows, the
-  gods line, the log, and the streaming hint probe, with screenshots in
-  `phase0/results/ui-smoke/` for the eye. `window.__DCK.cheat` and
-  `window.__DCK.marks` are the read-only surfaces it uses.
+  gods line, the log, the streaming hint probe, and the art themes (the
+  stage's own on the live board and legend, the Art-set override, classic
+  stripping back to the in-house SVG), with screenshots in
+  `phase0/results/ui-smoke/` for the eye (`00-theme-*.png` is the same
+  opening board in every theme). `window.__DCK.cheat`, `window.__DCK.marks`
+  and `window.__DCK.theme` are the read-only surfaces it uses.
 
 ## Layout
 
@@ -174,11 +177,14 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   telegraph on the board; NOT a crate). FSF reads walls and holes alike
   as `*`, so `setPosition(fen, { holes, godCrates, skins })` takes the
   Director's two ledgers plus the stage's skin map (main.mjs `paintBoard`;
-  the setup preview passes skins only). The tiles and the furniture
+  the setup preview passes skins only). The in-house tiles and furniture
   SPRITES are pixel-art SVG data URIs generated into `style.css` by
   `phase0/harness/gen-sprites.mjs` (crate, door, barrel, table, chair,
-  shelf, chest, rubble, the stone block, the crack) — a real tileset
-  replaces those variables and nothing else. Furniture deliberately
+  shelf, chest, rubble, the stone block, the crack) — and since
+  **2026-09-03 the board wears one of three ART THEMES** repacked from free
+  16×16 packs (`tiles.css`, `img/tileset.png`, `CREDITS.md`; see "Art
+  themes" below): a theme only overrides those same variables under
+  `[data-theme=…]`, nothing else changes. Furniture deliberately
   renders like a PIECE — one neutral `.piece.neutral` element per cell,
   painting the sprite its `skin-<name>` class picks (the crate by default;
   on a cracked wall it carries the crack itself) — because it can be
@@ -189,7 +195,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   ranks down the left column) make every square the log names findable.
   Marks compose on separate channels: terrain = `background`, residue and
   debug rings = `box-shadow`, last move = `filter`, selection/check =
-  `outline`, targets = `::after`.
+  `outline`, targets = `::after`. Two more cell classes serve the themes:
+  `wall-v` on a wall (or cracked wall) standing in a VERTICAL run — solid
+  above or below, nothing solid beside; holes are not solid, furniture is —
+  paints `--tile-wall-v` where a theme has a column piece (else the wall),
+  and `f1`/`f2`/`f3`, the square's stable floor-texture variant (a hash of
+  the square, so a repaint never makes the floor crawl; ~28% of squares
+  are variants). `setTheme(name)` stamps `data-theme` on the board.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -212,6 +224,43 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
+## Art themes (2026-09-03)
+
+Designer decision after shopping free tilesets: use all three, make 16×16
+the standard, mix and match, repack and credit. The board wears one of
+three themes — **hall** (pixel-poem's *Dungeon Asset Puck*: purple-grey
+flagstones, salmon stone, timber doors), **castle** (SnowHex's *Dungeon
+Gathering*: cold blue-grey stone) and **crypt** (Szadi art's *Rogue Fantasy
+Catacombs*: dark brown flagstones, low brick walls) — or **classic**, the
+in-house drawn set. Which one: `?theme=<name>` (a feel-check override,
+never saved) > the Options panel's **Art set** (persisted; "The stage's
+own" by default) > the stage's `theme`. Every stage in the bed carries one,
+assigned by `gen-skins.mjs` from the stage NAME's vocabulary (tombs, rubble
+and warrens are crypt; gates, parapets and redoubts are castle; pantries,
+banquets and doorways are hall), the rest balanced across the three so
+neighbouring floors differ, plus a reviewed override table — 18 / 21 / 19
+over the 58. Cosmetics only: a theme changes what the renderer paints,
+never the grid, the deal or the gods.
+
+The packs are NOT in the repo (their terms allow use in projects but not
+redistribution of the packs; Catacombs is public domain). Only the tiles
+the game uses are repacked by `phase0/harness/repack-tiles.mjs` from
+`phase0/assets-src/<pack>/` (gitignored — download each pack from the
+author's page named in `CREDITS.md` and drop the sheets there) into
+`img/tileset.png` (one row per theme, one column per role — the
+human-readable record of what was taken) + `img/tileset.json` (per-tile
+provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
+property under `[data-theme="…"]`, so any cell size stays pixel-exact —
+a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
+A theme provides floor variants, the wall (crypt also a column piece),
+door, crate, chest, barrel and rubble; where a pack lacks a role the theme
+borrows from another (every door is pixel-poem's leaf; castle's barrel is
+Dungeon Gathering's vase) and where none has it (table, chair, shelf, the
+hole, the crack) the in-house sprite paints, unchanged. `phase0/lib/png.mjs`
+is the dependency-free codec the tool uses. The Options panel names the
+three packs with links, and `CREDITS.md` carries the terms and a per-tile
+provenance table.
+
 ## Stages (schema 2) + the army generator
 
 A stage is GROUND — walls and dimensions drawn as ASCII, nothing else
@@ -233,7 +282,10 @@ shape as the map, says what each `^` LOOKS like — `D` door · `B` barrel ·
 `.` default (crate). Skins are cosmetics only (the same `^` to the engine,
 molding, crop, the camp line and the gods); a letter on a non-`^` square is
 a load error. They ride flip, crop and the auto-crop beside the map and
-reach the renderer as `stageSkins()` (a square→skin map). The bed's skins
+reach the renderer as `stageSkins()` (a square→skin map). An optional
+**`theme`** (`hall` / `castle` / `crypt`, stage.mjs `THEMES`) names the
+stage's art set ("Art themes" above) — cosmetic, validated on load,
+carried through flip and crop. The bed's skins
 are authored by `phase0/harness/gen-skins.mjs` — rule-based (a `^` embedded
 in a wall line is a door; the notes pick the furniture family; 2×2 blocks
 are stacked crates) plus a reviewed per-square override table — and kept
@@ -318,6 +370,9 @@ previous turn, usable from the loss screen; the Director RNG stream is not
 rewound), and **Show eval bar** (player-POV score from the engine's replies
 and the cheat probes). The old "edit enemy pieces" testing tool retired
 with the placement screen — the generator knobs + seeds cover its job.
+Above the Gods section, **Look → Art set** picks the board's theme (the
+stage's own / hall / castle / crypt / classic — "Art themes" above) and
+credits the three packs.
 
 Engine pacing (designer decision, 2026-08): the enemy thinks up to **10
 seconds** per move (`depth 22 movetime 10000` — the depth cap is the WASM

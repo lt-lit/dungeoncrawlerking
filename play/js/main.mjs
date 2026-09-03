@@ -38,7 +38,7 @@
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
-import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
+import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
@@ -218,7 +218,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto' };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -237,6 +237,7 @@ function loadOptions() {
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
+    if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
   } catch {
     /* defaults */
   }
@@ -274,6 +275,29 @@ function syncOptionsUI() {
   }
   $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
   $('optGodsDebug').checked = options.godsDebug;
+  $('optTheme').value = options.theme;
+}
+
+/** The art theme the board wears right now (stage.mjs THEMES; the repacked
+ *  tilesets in tiles.css): `?theme=` (a feel-check override, never saved) >
+ *  the Art-set option > the stage's own `theme`. 'classic' — or a stage
+ *  with no theme — is the in-house drawn set (no data-theme). */
+function themeFor(stage) {
+  const pick = params.get('theme') ?? options.theme;
+  if (pick && pick !== 'auto') return THEMES.includes(pick) ? pick : null;
+  return stage?.theme ?? null;
+}
+
+/** Stamp the current theme on the board and the options legend (the legend
+ *  is built from the board's own tile classes, so it follows the art). */
+function applyTheme() {
+  const theme = themeFor(app.session?.deal?.stage ?? currentStage());
+  app.boardUI?.setTheme(theme);
+  const legend = document.querySelector('.legend');
+  if (legend) {
+    if (theme) legend.dataset.theme = theme;
+    else delete legend.dataset.theme;
+  }
 }
 
 function refreshCheatUI() {
@@ -289,6 +313,7 @@ function applyOptions() {
   syncOptionsUI();
   refreshCheatUI();
   refreshGodsUI();
+  applyTheme();
   if (!cheatHints()) {
     clearHints();
     if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
@@ -1248,6 +1273,7 @@ function mountPreviewBoard(files, ranks, fen, skins = {}) {
   app.boardUI.setPosition(fen, { skins });
   app.boardUI.setMarks({});
   app.boardUI.setInteractive(false);
+  applyTheme();
 }
 
 /** Walls-only FEN of the transformed terrain — what the preview shows when
@@ -1447,6 +1473,7 @@ async function beginDuel() {
   });
   await app.duel.start();
   paintBoard(app.duel.fen());
+  applyTheme();
   app.boardUI.setMarks({});
   refreshGodsUI();
   if (app.duel.state === 'playing') await driveTurn();
@@ -1836,6 +1863,10 @@ $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
 });
+$('optTheme').addEventListener('change', (e) => {
+  options.theme = e.target.value;
+  applyOptions();
+});
 /** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
  *  running, Gods settings changes apply to the LIVE Director too (recorded
  *  on the duel ledger). Without the overlay they keep their shipped meaning:
@@ -1988,6 +2019,10 @@ window.__DCK = {
   },
   // UI test surface (2026-09-02 refresh). The renderer has no other
   // regression net: selftest.html never loads the game board.
+  /** The art theme on the live board (null = the in-house drawn set). */
+  get theme() {
+    return app.boardUI?.theme ?? null;
+  },
   get cheat() {
     return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };
   },

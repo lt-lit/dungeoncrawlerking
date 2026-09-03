@@ -3,6 +3,7 @@
  "id": "s31-ruined-l",
  "title": "Ruined L",
  "notes": "A solid collapsed quadrant makes an L-shaped playfield; two weak-masonry cells on the ruin's edge can be dug out for nooks.",
+ "theme": "crypt",
  "map": [
   ".....####",
   ".....####",

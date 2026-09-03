@@ -3,6 +3,7 @@
  "id": "s22-sinkhole",
  "title": "Sinkhole",
  "notes": "A 2x2 stone sink with furniture heaped on its flanks — the hole is forever, the heap is not.",
+ "theme": "crypt",
  "map": [
   "......",
   "......",

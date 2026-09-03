@@ -41,6 +41,13 @@ import { WALL, FURNITURE } from './fen.mjs';
 /** Skin letter → skin name (the renderer's `skin-<name>` cell class). */
 export const SKIN_CHARS = { D: 'door', B: 'barrel', T: 'table', C: 'chair', S: 'shelf', X: 'chest', K: 'crate', R: 'rubble' };
 export const SKIN_NAMES = Object.values(SKIN_CHARS);
+/** Art themes (2026-09-03): which repacked tileset a stage's board wears —
+ *  `hall` (pixel-poem), `castle` (Dungeon Gathering), `crypt` (Catacombs);
+ *  play/tiles.css, phase0/harness/repack-tiles.mjs. Optional `theme` key on
+ *  a stage; cosmetics only (a theme changes what the renderer paints, never
+ *  the grid). Assigned over the bed by gen-skins.mjs; the Options panel and
+ *  `?theme=` override it per device. */
+export const THEMES = ['hall', 'castle', 'crypt'];
 
 /** Square-name lists of each terrain kind in a grid. */
 function terrainLists(grid, files, ranks) {
@@ -99,10 +106,12 @@ export function loadStageV2(json) {
       }
     });
   }
+  if (json.theme !== undefined && !THEMES.includes(json.theme)) throw new Error(`stage ${json.id}: unknown theme "${json.theme}" (want one of ${THEMES.join('/')})`);
   return {
     id: json.id,
     title: json.title ?? json.id,
     notes: json.notes ?? '',
+    theme: json.theme ?? null,
     files,
     ranks,
     grid,

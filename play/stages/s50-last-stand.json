@@ -3,6 +3,7 @@
  "id": "s50-last-stand",
  "title": "Last Stand",
  "notes": "The redoubt evolved: a far-side pocket with a ^^ double door AND a crate shoring it from inside — three smashes through the center, or come around the flank files.",
+ "theme": "hall",
  "map": [
   ".#....#.",
   ".#.^..#.",

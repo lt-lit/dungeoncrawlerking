@@ -3,6 +3,7 @@
  "id": "s11-grand-hall",
  "title": "Grand Hall",
  "notes": "The big open hall: three stone pillars, five scattered furnishings. Light terrain at maximum size — long diagonals still live here.",
+ "theme": "hall",
  "map": [
   "..........",
   "..........",

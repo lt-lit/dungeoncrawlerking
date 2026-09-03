@@ -9,6 +9,7 @@
      page must be cross-origin isolated. Self-reloads once on first visit. -->
 <script src="coi-serviceworker.min.js"></script>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="tiles.css">
 </head>
 <body>
 <header id="topbar">
@@ -117,6 +118,19 @@
       <label class="opt sub"><input type="checkbox" id="optUndo"> Allow undo</label>
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
     </div>
+    <h2>Look</h2>
+    <label class="opt">Art set
+      <select id="optTheme">
+        <option value="auto" selected>The stage's own</option>
+        <option value="hall">Hall</option>
+        <option value="castle">Castle</option>
+        <option value="crypt">Crypt</option>
+        <option value="classic">Classic (drawn)</option>
+      </select>
+    </label>
+    <p class="opt-hint">Tiles repacked from <a href="https://snowhex.itch.io/dungeon-gathering" target="_blank" rel="noopener">Dungeon Gathering</a> (SnowHex),
+      <a href="https://pixel-poem.itch.io/dungeon-assetpuck" target="_blank" rel="noopener">Dungeon Asset Puck</a> (pixel-poem) and
+      <a href="https://szadiart.itch.io/rogue-fantasy-catacombs" target="_blank" rel="noopener">Rogue Fantasy Catacombs</a> (Szadi art) — see <a href="CREDITS.md" target="_blank" rel="noopener">CREDITS</a>.</p>
     <h2>The Gods</h2>
     <p class="opt-hint">Earthquakes stir the arena when the game goes stale:
       walls crack, crates shatter, pieces scoot, squares collapse. Temperament
