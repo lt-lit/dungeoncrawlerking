@@ -126,8 +126,9 @@ open doorways wouldn't look as weird"; the arch/lintel doorways are gone
 and a door set no longer overrides the doorway); piece dials: size /
 lift / SHIFT / PIXEL-PERFECT (Options + `?piecescale=`/`?piecelift=`/
 `?pieceshift=`/`?piecesnap=1`; `setPieceFit`, `DEFAULT_PIECE_FIT` = the
-designer's 110% / +30% / 0 — a piece stands low in its square and rises
-into the one above, which paints behind it by DOM order; ranges widened
+designer's settled 146% / +22% / +4% with pixel-perfect ON — a piece
+stands on its square's bottom edge and rises well into the one above,
+which paints behind it by DOM order; ranges widened
 to 50–200% / −50…+100% / ±50% because the first caps were hit;
 pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
 device-pixel multiple of the set's native `--piece-fit`/`--piece-box`

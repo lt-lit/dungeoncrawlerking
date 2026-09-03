@@ -110,10 +110,11 @@ export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
 export const FLOOR_VARIANTS = 6;
 
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
- *  as its CSS fallbacks): the designer's phone numbers, round 11 — the box
- *  at 110% of its fit and lifted 0.3 cell, so a piece stands in the lower
- *  half of its square and rises into the one above. */
-export const DEFAULT_PIECE_FIT = { scale: 1.1, lift: 0.3, shift: 0 };
+ *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
+ *  the box at 146% of its fit, lifted 0.22 cell, nudged 0.04 right, and
+ *  PIXEL-PERFECT on, so a piece stands on its square's bottom edge and
+ *  rises well into the one above at a whole-pixel scale. */
+export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, snap: true };
 
 /** Stable floor-texture variant for a square: f1 (the common stone) on
  *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the
@@ -504,6 +505,8 @@ export class BoardUI {
    *  out on every resize. Non-finite values clear to the CSS defaults
    *  (DEFAULT_PIECE_FIT). */
   setPieceFit({ scale, lift, shift, snap = false } = {}) {
+    // (snap defaults to OFF here on purpose: a bare setPieceFit({}) — the
+    // selftest's "clear" — clears everything; main.mjs passes the dials.)
     const st = this.container.style;
     for (const [k, v] of [['--piece-scale', scale], ['--piece-lift', lift], ['--piece-shift', shift]]) {
       if (Number.isFinite(v)) st.setProperty(k, String(v));

@@ -284,11 +284,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   wide ranges — size 50–200%, lift −50…+100%, shift ±50% — because the
   designer's numbers hit the first caps): the box is scaled, centred in
   the square, raised by the lift and moved by the shift. The defaults are
-  the designer's phone numbers, `DEFAULT_PIECE_FIT` = 110% / +30% / 0
-  (board-ui, mirrored as style.css's fallbacks): a piece stands in the
-  lower half of its square and rises into the one above — which is
-  earlier in the DOM, so the nearer (lower) piece paints in front, as it
-  should. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
+  the designer's settled phone numbers, `DEFAULT_PIECE_FIT` = 146% / +22%
+  / +4% with pixel-perfect ON (board-ui, mirrored as style.css's
+  fallbacks): a piece stands on its square's bottom edge and rises well
+  into the one above — which is earlier in the DOM, so the nearer (lower)
+  piece paints in front, as it should. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
   ResizeObserver) measures a cell, reads the set's native box from
   tiles.css (`--piece-fit` / `--piece-box`), takes the largest whole
   device-pixel scale k that fits the size dial and lands the box on whole

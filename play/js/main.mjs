@@ -224,7 +224,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: false };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
