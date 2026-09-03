@@ -219,16 +219,40 @@ function weakSpot(spec) {
   return tile;
 }
 
+// ---- floors (round 7, 2026-09-03: "the crypt floor tiles put both the
+// other themes to shame — palette-swap them for the other themes"). Every
+// theme's floor is the six bevelled flagstones of the Catacombs brown set;
+// hall and castle wear them RECOLOURED into their own pack's floor tone:
+// each pixel keeps its shading relative to the flagstones' base colour
+// (the set's most common pixel) and takes the target's hue — channel-wise
+// out = target × (pixel / base), clamped — so bevels, cracks and grain
+// survive and only the stone changes colour.
+const FLAGSTONES = [['cat', 47, 14], ['cat', 46, 13], ['cat', 47, 15], ['cat', 46, 14], ['cat', 47, 13], ['cat', 46, 15]];
+function mostCommon(tile) {
+  const hist = new Map();
+  for (let i = 0; i < tile.width * tile.height; i++) {
+    const o = i * 4;
+    if (!tile.data[o + 3]) continue;
+    const k = (tile.data[o] << 16) | (tile.data[o + 1] << 8) | tile.data[o + 2];
+    hist.set(k, (hist.get(k) ?? 0) + 1);
+  }
+  const k = [...hist.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return [k >> 16, (k >> 8) & 255, k & 255];
+}
+function recolour(tile, base, target) {
+  const out = blank(tile.width, tile.height);
+  for (let i = 0; i < tile.width * tile.height; i++) {
+    const o = i * 4;
+    for (let c = 0; c < 3; c++) out.data[o + c] = Math.max(0, Math.min(255, Math.round((target[c] * tile.data[o + c]) / Math.max(1, base[c]))));
+    out.data[o + 3] = tile.data[o + 3];
+  }
+  return out;
+}
+
 const THEMES = {
   hall: {
     title: 'The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors',
     tiles: {
-      'floor-1': ['pp', 8, 1],
-      'floor-2': ['pp', 6, 0],
-      'floor-3': ['pp', 7, 2],
-      'floor-4': ['pp', 9, 1],
-      'floor-5': ['pp', 7, 0],
-      'floor-6': ['pp', 0, 6],
       door: ['pp', 7, 3],
       crate: ['pp', 0, 8],
       chest: ['pp', 2, 8],
@@ -236,16 +260,12 @@ const THEMES = {
     },
     // Top band in the pack's cap colours; the face is its own brick rows.
     wall: { fill: '#6e4a48', hi: '#916a62', lo: '#4c2f49', edge: '#25131a', speckle: 0, face: { sheet: 'pp', x: 2, y: 0, row: 4 } },
+    // The Catacombs flagstones in pixel-poem's floor purple.
+    floor: { tint: ['pp', 8, 1] },
   },
   castle: {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
     tiles: {
-      'floor-1': ['dg', 10, 3],
-      'floor-2': ['dg', 11, 2],
-      'floor-3': ['dg', 13, 2],
-      'floor-4': ['dg', 9, 2],
-      'floor-5': ['dg', 9, 12],
-      'floor-6': ['dg', 9, 13],
       door: ['pp', 7, 3],
       crate: ['pp', 0, 8],
       chest: ['pp', 2, 8],
@@ -254,18 +274,12 @@ const THEMES = {
     },
     // The pack's wall-top blue with its highlight/shade; brick face rows.
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
+    // The Catacombs flagstones in Dungeon Gathering's floor blue-grey.
+    floor: { tint: ['dg', 10, 3] },
   },
   crypt: {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
     tiles: {
-      // The six bevelled flagstones of the brown set (designer: "put both
-      // the other themes to shame") — every one of them.
-      'floor-1': ['cat', 47, 14],
-      'floor-2': ['cat', 46, 13],
-      'floor-3': ['cat', 47, 15],
-      'floor-4': ['cat', 46, 14],
-      'floor-5': ['cat', 47, 13],
-      'floor-6': ['cat', 46, 15],
       door: ['pp', 7, 3],
       crate: ['catdeco', 8, 5],
       chest: ['pp', 2, 8],
@@ -275,6 +289,7 @@ const THEMES = {
     // Lifted a step above the pack's near-black stone so a wall reads
     // against its own floor; speckled like its column.
     wall: { fill: '#3c3129', hi: '#5a5347', lo: '#231f19', edge: '#0e0a08', speckle: 14, face: { sheet: 'cat', x: 33, y: 8, row: 6 } },
+    floor: {}, // the flagstones as drawn
   },
 };
 
@@ -312,6 +327,17 @@ themeNames.forEach((theme, row) => {
   for (const [role, [sheet, x, y]] of Object.entries(THEMES[theme].tiles)) {
     tiles[role] = crop(sheets[sheet], x * T, y * T, T, T);
     emit(role, tiles[role], { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
+  }
+  {
+    const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
+    const tint = THEMES[theme].floor.tint;
+    const base = tint ? mostCommon(stones[0]) : null;
+    const target = tint ? mostCommon(crop(sheets[tint[0]], tint[1] * T, tint[2] * T, T, T)) : null;
+    stones.forEach((stone, i) => {
+      const [sheet, x, y] = FLAGSTONES[i];
+      const tile = tint ? recolour(stone, base, target) : stone;
+      emit(`floor-${i + 1}`, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: tint ? `to ${SHEETS[tint[0]][0]} floor (${tint[1]},${tint[2]})` : undefined });
+    });
   }
   const ws = THEMES[theme].wall;
   const cases = wallBlob(ws, sheets);

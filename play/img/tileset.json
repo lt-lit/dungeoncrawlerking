@@ -67,48 +67,6 @@
    "row": 0,
    "title": "The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors",
    "tiles": {
-    "floor-1": {
-     "col": 7,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 8,
-     "y": 1
-    },
-    "floor-2": {
-     "col": 8,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 6,
-     "y": 0
-    },
-    "floor-3": {
-     "col": 9,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 7,
-     "y": 2
-    },
-    "floor-4": {
-     "col": 10,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 9,
-     "y": 1
-    },
-    "floor-5": {
-     "col": 11,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 7,
-     "y": 0
-    },
-    "floor-6": {
-     "col": 12,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 0,
-     "y": 6
-    },
     "door": {
      "col": 1,
      "pack": "pixel-poem",
@@ -136,6 +94,54 @@
      "sheet": "mainlevbuild.png",
      "x": 20,
      "y": 22
+    },
+    "floor-1": {
+     "col": 7,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-2": {
+     "col": 8,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-3": {
+     "col": 9,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-4": {
+     "col": 10,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 14,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-5": {
+     "col": 11,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 13,
+     "recoloured": "to pixel-poem floor (8,1)"
+    },
+    "floor-6": {
+     "col": 12,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 15,
+     "recoloured": "to pixel-poem floor (8,1)"
     },
     "wall": {
      "col": 0,
@@ -387,48 +393,6 @@
    "row": 1,
    "title": "The castle — Dungeon Gathering’s cold blue-grey stone",
    "tiles": {
-    "floor-1": {
-     "col": 7,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 10,
-     "y": 3
-    },
-    "floor-2": {
-     "col": 8,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 11,
-     "y": 2
-    },
-    "floor-3": {
-     "col": 9,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 13,
-     "y": 2
-    },
-    "floor-4": {
-     "col": 10,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 9,
-     "y": 2
-    },
-    "floor-5": {
-     "col": 11,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 9,
-     "y": 12
-    },
-    "floor-6": {
-     "col": 12,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 9,
-     "y": 13
-    },
     "door": {
      "col": 1,
      "pack": "pixel-poem",
@@ -463,6 +427,54 @@
      "sheet": "Set 1.png",
      "x": 12,
      "y": 12
+    },
+    "floor-1": {
+     "col": 7,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-2": {
+     "col": 8,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-3": {
+     "col": 9,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-4": {
+     "col": 10,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 14,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-5": {
+     "col": 11,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 13,
+     "recoloured": "to dungeon-gathering floor (10,3)"
+    },
+    "floor-6": {
+     "col": 12,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 15,
+     "recoloured": "to dungeon-gathering floor (10,3)"
     },
     "wall": {
      "col": 0,
@@ -714,6 +726,41 @@
    "row": 2,
    "title": "The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls",
    "tiles": {
+    "door": {
+     "col": 1,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 7,
+     "y": 3
+    },
+    "crate": {
+     "col": 3,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 5
+    },
+    "chest": {
+     "col": 4,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8
+    },
+    "barrel": {
+     "col": 5,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 8
+    },
+    "rubble": {
+     "col": 6,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 20,
+     "y": 22
+    },
     "floor-1": {
      "col": 7,
      "pack": "catacombs",
@@ -755,41 +802,6 @@
      "sheet": "mainlevbuild.png",
      "x": 46,
      "y": 15
-    },
-    "door": {
-     "col": 1,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 7,
-     "y": 3
-    },
-    "crate": {
-     "col": 3,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 8,
-     "y": 5
-    },
-    "chest": {
-     "col": 4,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 2,
-     "y": 8
-    },
-    "barrel": {
-     "col": 5,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 12,
-     "y": 8
-    },
-    "rubble": {
-     "col": 6,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 20,
-     "y": 22
     },
     "wall": {
      "col": 0,

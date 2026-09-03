@@ -274,8 +274,12 @@ human-readable record of what was taken) + `img/tileset.json` (per-tile
 provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
 property under `[data-theme="…"]`, so any cell size stays pixel-exact —
 a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
-A theme provides six floor variants (crypt's are the whole brown flagstone
-set of the Catacombs sheet, the designer's favourite), the wall in all
+Every theme's floor is the same six bevelled flagstones from the Catacombs
+brown set (the designer's verdict: the only floor tiles that look good) —
+crypt wears them as drawn, hall and castle wear them RECOLOURED into their
+own pack's floor tone (each pixel keeps its shading relative to the
+flagstones' base colour and takes the target hue, so bevels, cracks and
+grain survive). A theme also provides the wall in all
 **47 autotile cases**, a weak-spot overlay, and the door, crate, chest,
 barrel and rubble sprites. The repack tool also builds `img/pieces.png`
 and the `[data-pieces=…]` sprite variables from the Pixel Chess sheets in

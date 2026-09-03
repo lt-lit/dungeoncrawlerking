@@ -75,8 +75,10 @@ colours with the pack's own brick face extruded under every south edge
 their pieces was rounds 4–5's "walls look like ass / still janky"); a door
 in a north–south wall line is a WEAK SPOT (`weak`: the column's own case +
 `--sprite-weak`; the edge-on door was cut, designer round 6); floor tiles
-show through under every sprite, `f1…f6` are floor variants (crypt wears
-all six Catacombs flagstones); and **PIECE SPRITES** (round 6): Dani
+show through under every sprite, `f1…f6` are floor variants — EVERY theme
+wears the six Catacombs flagstones, palette-swapped into the pack's floor
+tone for hall and castle (designer round 7: the only floor tiles that look
+good); and **PIECE SPRITES** (round 6): Dani
 Maccari's *Pixel Chess* 16×16 sets (`pixel-chess` stone / `-wood`) via
 `data-piece` on every piece span + `data-pieces` on the board
 (`PIECE_SETS`, Options → Pieces, `?pieces=`; classic = the glyphs), the

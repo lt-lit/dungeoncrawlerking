@@ -19,40 +19,40 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 
 | theme | role | pack | sheet | col | row |
 |---|---|---|---|---|---|
-| hall | floor-1 | Dungeon Asset Puck | Dungeon_Tileset.png | 8 | 1 |
-| hall | floor-2 | Dungeon Asset Puck | Dungeon_Tileset.png | 6 | 0 |
-| hall | floor-3 | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 2 |
-| hall | floor-4 | Dungeon Asset Puck | Dungeon_Tileset.png | 9 | 1 |
-| hall | floor-5 | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 0 |
-| hall | floor-6 | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 6 |
 | hall | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
 | hall | crate | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 8 |
 | hall | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | hall | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
+| hall | floor-1 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 14 |
+| hall | floor-2 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 13 |
+| hall | floor-3 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 15 |
+| hall | floor-4 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 14 |
+| hall | floor-5 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 13 |
+| hall | floor-6 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 15 |
 | hall | wall face (brick rows under every south edge) | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 0 |
-| castle | floor-1 | Dungeon Gathering | Set 1.png | 10 | 3 |
-| castle | floor-2 | Dungeon Gathering | Set 1.png | 11 | 2 |
-| castle | floor-3 | Dungeon Gathering | Set 1.png | 13 | 2 |
-| castle | floor-4 | Dungeon Gathering | Set 1.png | 9 | 2 |
-| castle | floor-5 | Dungeon Gathering | Set 1.png | 9 | 12 |
-| castle | floor-6 | Dungeon Gathering | Set 1.png | 9 | 13 |
 | castle | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
 | castle | crate | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 8 |
 | castle | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | castle | barrel | Dungeon Gathering | Set 1.png | 2 | 12 |
 | castle | rubble | Dungeon Gathering | Set 1.png | 12 | 12 |
+| castle | floor-1 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 14 |
+| castle | floor-2 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 13 |
+| castle | floor-3 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 15 |
+| castle | floor-4 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 14 |
+| castle | floor-5 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 13 |
+| castle | floor-6 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 15 |
 | castle | wall face (brick rows under every south edge) | Dungeon Gathering | Set 1.png | 6 | 10 |
+| crypt | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
+| crypt | crate | Rogue Fantasy Catacombs | decorative.png | 8 | 5 |
+| crypt | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
+| crypt | barrel | Rogue Fantasy Catacombs | decorative.png | 12 | 8 |
+| crypt | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
 | crypt | floor-1 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 14 |
 | crypt | floor-2 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 13 |
 | crypt | floor-3 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 15 |
 | crypt | floor-4 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 14 |
 | crypt | floor-5 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 13 |
 | crypt | floor-6 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 15 |
-| crypt | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
-| crypt | crate | Rogue Fantasy Catacombs | decorative.png | 8 | 5 |
-| crypt | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
-| crypt | barrel | Rogue Fantasy Catacombs | decorative.png | 12 | 8 |
-| crypt | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
 | crypt | wall face (brick rows under every south edge) | Rogue Fantasy Catacombs | mainlevbuild.png | 33 | 8 |
 | pieces | pixel-chess | Pixel Chess | WhitePieces.png + BlackPieces.png | 0 | 0 |
 | pieces | pixel-chess-wood | Pixel Chess | WhitePieces_Wood.png + BlackPieces_Wood.png | 0 | 0 |
