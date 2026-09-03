@@ -289,11 +289,13 @@ function wallBlob(spec, sheets) {
 // pixels flush with the neighbour's case (to which the ruin is still solid,
 // so no end cap either side of the gap) and then a ragged fringe, a hashed
 // 0…RUIN.fringe pixels more per pair of rows, with the brick face under an
-// east–west end — and a scatter of stone chips on the floor between. One of
+// east–west end — and a scatter of stone chips on the floor between (round
+// 11b: "the gaps are visibly very narrow" — the ends are one flush pixel
+// and up to two of fringe, so the gap is 10–14 of the 16). One of
 // 16 cases by its own solid neighbours (N=1 E=2 S=4 W=8, no diagonals);
 // with nothing to join (mask 0: a lone pillar) it is chips alone. Same
 // palette, bevels, outline and face as the theme's walls.
-const RUIN = { tongue: 2, fringe: 3, chips: 5 };
+const RUIN = { tongue: 1, fringe: 2, chips: 5 };
 function ruinBlob(spec, sheets) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
@@ -451,30 +453,26 @@ function barredGate(spec) {
 // The OPEN DOORWAY an east–west door leaves behind (main.mjs residue →
 // board-ui decor-doorway), GENERATED per theme (round 11: "open doors just
 // don't look great — avoid having something arc over the space above the
-// doorway"): no lintel, no arch. The wall's own band enters two pixels from
-// each side (the doorway is solid to its neighbours, so their cases run
-// flat into it) with the brick face under it, a two-pixel POST in the
-// door's material stands at each end — timber for the hall, pale stone for
-// the castle, iron for the crypt — and everything between is transparent:
-// the floor, top to bottom, so a piece standing in the doorway stands
-// between the posts under open sky.
+// doorway"): no lintel, no arch. A two-pixel POST in the door's material —
+// timber for the hall, pale stone for the castle, iron for the crypt —
+// stands at each edge of the cell, full height, where the neighbour's wall
+// case runs flat into it (the doorway is solid to its neighbours), and
+// everything between is transparent: the floor, top to bottom, so a piece
+// standing in the doorway stands between the posts under open sky. The
+// opening is ten of the sixteen pixels (round 11b: "visibly very narrow"
+// with the wall band carried two pixels in on each side).
 function doorwayTile(spec, sheets, post) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
   const facePx = (x, r) => { const o = (r * T + x) * 4; return [face.data[o], face.data[o + 1], face.data[o + 2]]; };
   const lit = hex(post.lit), dark = hex(post.dark);
   const tile = blank(T, T);
-  const solidPx = Array.from({ length: T }, () => Array(T).fill(false));
-  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; solidPx[y][x] = true; };
-  for (const x of [0, 1, 14, 15]) {
-    for (let y = 0; y <= BAND.y1; y++) put(x, y, y === 0 ? hi : y === BAND.y1 ? lo : fill);
-    for (let r = 0; r < FACE_H; r++) put(x, BAND.y1 + 1 + r, r === FACE_H - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
-  }
+  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
   for (let y = 0; y < T; y++) {
-    put(2, y, lit); put(3, y, dark);
-    put(12, y, lit); put(13, y, dark);
+    put(0, y, lit); put(1, y, dark);
+    put(14, y, lit); put(15, y, dark);
+    put(2, y, edge); put(13, y, edge);
   }
-  for (let y = 0; y < T; y++) for (const x of [4, 11]) { const o = (y * T + x) * 4; tile.data[o] = edge[0]; tile.data[o + 1] = edge[1]; tile.data[o + 2] = edge[2]; tile.data[o + 3] = 255; }
   return tile;
 }
 

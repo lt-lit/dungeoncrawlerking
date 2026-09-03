@@ -228,13 +228,14 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   a hole shows the hole): a floor square where a door in an EAST–WEST line
   was captured or burst open keeps the theme's OPEN DOORWAY (`decor-doorway`
   on the same span, GENERATED per theme by the repack tool — round 11:
-  "avoid having something arc over the space above the doorway" — the
-  wall's band ending two pixels in from each side with its brick face, a
-  two-pixel POST in the door's material at each end (pixel-poem's timber,
-  the castle's pale stone, the crypt's iron) and the floor between, top to
-  bottom, so a piece standing in the doorway stands between the posts and
-  nothing arcs over it; the doorway is the theme's, whatever door set is
-  chosen); a floor square where a WALL, a cracked wall, a weak-spot door
+  "avoid having something arc over the space above the doorway" — a
+  two-pixel POST in the door's material (pixel-poem's timber, the castle's
+  pale stone, the crypt's iron) at each edge of the cell, where the
+  neighbour's wall runs flat into it, and the floor between, top to
+  bottom — ten of the sixteen pixels, after "visibly very narrow" — so a
+  piece standing in the doorway stands between the posts and nothing arcs
+  over it; the doorway is the theme's, whatever door set is chosen); a
+  floor square where a WALL, a cracked wall, a weak-spot door
   (the crack in a north–south line — it never leaves a doorway: "cracked
   walls turning into open doors doesn't make any sense") or a rubble skin
   broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
@@ -242,10 +243,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   mask of its solid neighbours) that the repack tool GENERATES like the
   walls, and since round 11 ("wall rubble reads too much like a barrier —
   needs to blend with the floor") the tile IS floor but for the broken END
-  of each joining wall — the band enters two pixels flush from the
-  neighbour, then a ragged hashed fringe with the brick face under it —
-  and a few flat flecks of the stone on the floor between (a lone break is
-  flecks alone); under whatever stands there; the in-house set falls back
+  of each joining wall — the band enters one pixel flush from the
+  neighbour, then a ragged hashed fringe of up to two more with the brick
+  face under it, so the gap is 10–14 of the 16 — and a few flat flecks of
+  the stone on the floor between (a lone break is flecks alone); under
+  whatever stands there; the in-house set falls back
   to its rubble sprite. Other furniture (a crate, a barrel, a table…)
   leaves nothing when it goes — it never continued a wall line. Both kinds
   of residue COUNT AS SOLID to the wall autotile, so the walls either side

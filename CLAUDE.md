@@ -116,12 +116,12 @@ furniture leaves nothing, and ruins AND opened doorways count as SOLID to
 the wall autotile so the line runs on through a break (no more end caps
 at a gap); floor litter (web/bones/skull/candle) is packed away — wall
 props and `^` skins stay; **round 11**: the ruin tile IS FLOOR but for
-the broken END of each joining wall (two flush pixels, then a ragged
-hashed fringe with the brick face under it) and a few flat flecks between
-(round 10's lowered stub "read too much like a barrier"); the open
-doorway is GENERATED per theme — the wall band ending two pixels in from
-each side, a two-pixel post in the door's material at each end, floor
-between top to bottom, NOTHING arching over the space ("pieces sitting in
+the broken END of each joining wall (one flush pixel, then a ragged
+hashed fringe of up to two — the gap is 10–14 of 16 after "visibly very
+narrow") and a few flat flecks between (round 10's lowered stub "read too
+much like a barrier"); the open doorway is GENERATED per theme — a
+two-pixel post in the door's material at each edge of the cell, floor
+between top to bottom (10 of 16 px), NOTHING arching over the space ("pieces sitting in
 open doorways wouldn't look as weird"; the arch/lintel doorways are gone
 and a door set no longer overrides the doorway); piece dials: size /
 lift / SHIFT / PIXEL-PERFECT (Options + `?piecescale=`/`?piecelift=`/
