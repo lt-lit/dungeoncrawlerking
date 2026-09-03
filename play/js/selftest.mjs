@@ -916,6 +916,30 @@ async function main() {
     if (!has('b1', 'ruin') || mask('b1') !== 'wm-10' || at1('b1') !== 'K') throw new Error(`a piece standing on a ruin leaves the stub under it: ${ui.cellClasses('b1')}`);
     ui.setPosition('4/4/4/4/*1*1 w - - 0 1');
     if (has('b1', 'ruin') || mask('b1') !== null || mask('a1') !== 'wm-0') throw new Error(`the ruin and its case go when the ledger forgets the square: ${ui.cellClasses('b1')} / ${mask('a1')}`);
+    // Round 12: a ruin's stub case counts STANDING walls only. Two broken
+    // squares side by side show no stub at each other (each used to draw
+    // one — a clump of wall floating between two floor squares), a ruin
+    // beside an opened doorway shows none toward the doorway's post, and
+    // the walls still run on into every kind of residue.
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { rubble: new Set(['b1', 'c1']) });
+    if (mask('b1') !== 'wm-8' || mask('c1') !== 'wm-2') throw new Error(`adjacent ruins show only the standing walls' ends (${mask('b1')}, ${mask('c1')})`);
+    if (mask('a1') !== 'wm-2' || mask('d1') !== 'wm-8') throw new Error(`the walls still run on into adjacent ruins (${mask('a1')}, ${mask('d1')})`);
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { rubble: new Set(['c1']), opened: new Set(['b1']) });
+    if (mask('c1') !== 'wm-2' || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2' || mask('d1') !== 'wm-8') throw new Error(`a ruin beside an opened doorway shows no stub toward it, and the line runs on (${mask('c1')}, ${dec('b1')}, ${mask('a1')}, ${mask('d1')})`);
+    ui.setPosition('*3/4/4/*3/4 w - - 0 1', { rubble: new Set(['a4', 'a3']) });
+    if (mask('a5') !== 'wm-4' || mask('a4') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== 'wm-1') throw new Error(`a broken column shows one stub per standing end (${mask('a5')}, ${mask('a4')}, ${mask('a3')}, ${mask('a2')})`);
+    ui.setPosition('4/4/4/4/*3 w - - 0 1', { rubble: new Set(['b1', 'c1', 'd1']) });
+    if (mask('b1') !== 'wm-8' || mask('c1') !== 'wm-0' || mask('d1') !== 'wm-0') throw new Error(`a ruin among ruins is flecks alone (${mask('b1')}, ${mask('c1')}, ${mask('d1')})`);
+    // A cracked wall or a standing door beside a ruin IS a wall end; a
+    // crate or a hole is not.
+    ui.setPosition('4/4/4/4/*^1* w - - 0 1', { godCrates: new Set(['b1']), rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-10') throw new Error(`a cracked wall beside a ruin is a wall end (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/*^1* w - - 0 1', { skins: { b1: 'door' }, rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-10') throw new Error(`a standing door beside a ruin is a wall end (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/*^1* w - - 0 1', { skins: { b1: 'crate' }, rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-2') throw new Error(`a crate beside a ruin is no wall end (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/**1* w - - 0 1', { holes: new Set(['b1']), rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-2') throw new Error(`a hole beside a ruin is no wall end (${mask('c1')})`);
     // Props: wall props only — the floor litter is packed away (round 10).
     ui.setPosition('****/4/4/4/4 w - - 0 1');
     for (const d of host.querySelectorAll('.decor')) {

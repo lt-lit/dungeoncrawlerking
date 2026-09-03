@@ -465,11 +465,12 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    doorway stays open — a decor; where a wall broke the RUIN stub stays —
    .cell.ruin below. */
 .decor-doorway { --decor-img: var(--decor-doorway); }
-/* A broken wall's stub (board-ui .ruin + wm-<mask>): the theme's ruin
-   autotile case (tiles.css maps .ruin.wm-<mask> to --ruin-tile; the
-   in-house set falls back to its rubble sprite) over the floor, under
-   whatever stands there — layered like a wall tile, and the .dark rule
-   sets its own size (round 9's specificity bug). */
+/* A broken wall's stub (board-ui .ruin + wm-<mask>, the mask of its
+   STANDING wall neighbours — never another ruin or an opened doorway):
+   the theme's ruin autotile case (tiles.css maps .ruin.wm-<mask> to
+   --ruin-tile; the in-house set falls back to its rubble sprite) over the
+   floor, under whatever stands there — layered like a wall tile, and the
+   .dark rule sets its own size (round 9's specificity bug). */
 .cell.ruin {
   background-image: var(--ruin-tile, var(--sprite-rubble)), var(--tile-floor, none);
   background-size: 100% 100%;

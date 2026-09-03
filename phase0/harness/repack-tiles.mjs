@@ -292,10 +292,19 @@ function wallBlob(spec, sheets) {
 // east–west end — and a scatter of stone chips on the floor between (round
 // 11b: "the gaps are visibly very narrow" — the ends are one flush pixel
 // and up to two of fringe, so the gap is 10–14 of the 16). One of
-// 16 cases by its own solid neighbours (N=1 E=2 S=4 W=8, no diagonals);
-// with nothing to join (mask 0: a lone pillar) it is chips alone. Same
-// palette, bevels, outline and face as the theme's walls.
-const RUIN = { tongue: 1, fringe: 2, chips: 5 };
+// 16 cases by its STANDING wall neighbours (N=1 E=2 S=4 W=8, no
+// diagonals; board-ui counts no ruin or opened doorway here since round
+// 12 — two breaks side by side drew stubs at each other, "clumps of wall
+// between squares"); with nothing to join (mask 0: a lone pillar, or a
+// break among breaks) it is chips alone. Same palette, bevels, outline
+// and face as the theme's walls — except under a NORTH end: a west/east
+// end's face runs flush with the neighbour's (FACE_H rows under the
+// band), but a north end's face is the stump's own, RUIN.face rows — the
+// broken wall stands that much lower than a whole one (round 12: with
+// the wall's full face the stub "covered a ton of the square when
+// pointed south", 8–10 rows of 16; and a north–south case drew NO face
+// at all, the pass having read the south end as the column's bottom).
+const RUIN = { tongue: 1, fringe: 2, chips: 5, face: 2 };
 function ruinBlob(spec, sheets) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
@@ -336,13 +345,21 @@ function ruinBlob(spec, sheets) {
         put(x, y, c);
       }
     }
-    // The brick face under every south edge, as under the walls.
+    // The brick face under every south edge that ends inside the cell: the
+    // body joined to the top edge in each column — a west/east end (the
+    // band, rows 0…BAND.y1) wears FACE_H rows like the wall beside it, a
+    // north end (the tongue, ending above the band's bottom) RUIN.face rows;
+    // a south end has no south edge, and a face never paints over it.
     for (let x = 0; x < T; x++) {
       let yb = -1;
-      for (let y = 0; y < T; y++) if (body(x, y)) yb = y;
+      for (let y = 0; y < T && body(x, y); y++) yb = y;
       if (yb < 0 || yb >= T - 1) continue;
-      const rows = Math.min(FACE_H, T - 1 - yb);
-      for (let r = 0; r < rows; r++) put(x, yb + 1 + r, r === rows - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
+      const rows = Math.min(yb === BAND.y1 ? FACE_H : RUIN.face, T - 1 - yb);
+      for (let r = 0; r < rows; r++) {
+        const y = yb + 1 + r;
+        if (body(x, y)) break;
+        put(x, y, r === rows - 1 || body(x, y + 1) ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
+      }
     }
     const solidAt = (x, y) => x >= 0 && x < T && y >= 0 && y < T && solidPx[y][x];
     for (let y = 0; y < T; y++) {

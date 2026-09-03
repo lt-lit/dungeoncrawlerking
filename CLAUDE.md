@@ -134,7 +134,16 @@ pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
 device-pixel multiple of the set's native `--piece-fit`/`--piece-box`
 from tiles.css, landed on whole pixels); selftest 35/35, ui-smoke green
 asserting the ruin / doorway / nothing per breached square, wall-face-only
-props and the pixel-perfect box — see `play/README.md` § "Art themes");
+props and the pixel-perfect box; **round 12**: a ruin's stub case counts
+STANDING walls only (a wall, a cracked wall or a door — never another
+ruin or an opened doorway: two breaks side by side had drawn stubs at
+each other, "clumps of wall between squares", and a stub grew against a
+doorway post; the walls still see every residue as solid), and a broken
+NORTH end wears a two-row stump face instead of the wall's seven ("cover
+a ton of the square when pointed south"; a north–south case had drawn
+none at all) — `RUIN.face` in the repack tool; the smoke checks every
+live ruin's case against its neighbours — see `play/README.md` § "Art
+themes");
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through

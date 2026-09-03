@@ -240,15 +240,24 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   walls turning into open doors doesn't make any sense") or a rubble skin
   broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
   cases (`--tile-ruin-<mask>`, the cell's `wm-<mask>` is the plain 4-bit
-  mask of its solid neighbours) that the repack tool GENERATES like the
+  mask of its STANDING wall neighbours — a wall, a cracked wall or a
+  door, never another ruin or an opened doorway: round 12, "broken wall
+  segments next to each other form clumps of wall between squares" —
+  each had drawn a stub at the other, and a stub grew against an open
+  doorway's post) that the repack tool GENERATES like the
   walls, and since round 11 ("wall rubble reads too much like a barrier —
   needs to blend with the floor") the tile IS floor but for the broken END
   of each joining wall — the band enters one pixel flush from the
-  neighbour, then a ragged hashed fringe of up to two more with the brick
-  face under it, so the gap is 10–14 of the 16 — and a few flat flecks of
-  the stone on the floor between (a lone break is flecks alone); under
-  whatever stands there; the in-house set falls back
-  to its rubble sprite. Other furniture (a crate, a barrel, a table…)
+  neighbour, then a ragged hashed fringe of up to two more, with the brick
+  face under it: a west or east end's face runs flush with the
+  neighbour's (the wall's seven rows), a NORTH end's is the stump's own
+  two rows (round 12: "these rubble wall edges cover a ton of the square
+  when pointed south" — under the wall's full face the stub took 8–10 of
+  the 16 rows, and a north–south case had drawn no face at all) — so the
+  gap is 10–14 of the 16 across and 8–12 down — and a few flat flecks of
+  the stone on the floor between (a lone break, or a break among breaks,
+  is flecks alone); under whatever stands there; the in-house set falls
+  back to its rubble sprite. Other furniture (a crate, a barrel, a table…)
   leaves nothing when it goes — it never continued a wall line. Both kinds
   of residue COUNT AS SOLID to the wall autotile, so the walls either side
   run on into the break instead of capping ("autotiling gives up when a

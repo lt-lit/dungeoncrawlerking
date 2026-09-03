@@ -330,7 +330,10 @@ if ((await page.evaluate(() => window.__DCK.app.duel?.state)) === 'playing') {
 
 /** Both directions: every ledger hole paints as a hole, every painted
  *  cracked wall is a ledger crate, and every ledger crate still standing as
- *  '^' paints cracked. Runs in the page. */
+ *  '^' paints cracked — and every RUIN wears the stub case of its STANDING
+ *  wall neighbours (a wall, a cracked wall or a door; never another ruin,
+ *  an opened doorway, a hole or a crate — round 12's clumps). Runs in the
+ *  page. */
 function tilesVsLedgers({ holes, godCrates, fen }) {
   const bad = [];
   for (const sq of holes) if (!window.__DCK.marks.cell(sq).includes('hole')) bad.push(`${sq} not a hole`);
@@ -338,6 +341,17 @@ function tilesVsLedgers({ holes, godCrates, fen }) {
   for (const sq of godCrates) {
     const cls = window.__DCK.marks.cell(sq);
     if (cls.includes('furniture') && !cls.includes('cracked')) bad.push(`${sq} god crate painted as authored`);
+  }
+  const standing = (f, r) => {
+    const c = document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"]`);
+    return !!c && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door'));
+  };
+  for (const cell of document.querySelectorAll('#board .cell.ruin')) {
+    const sq = cell.dataset.square;
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq.slice(1), 10);
+    const want = (standing(f, r + 1) ? 1 : 0) | (standing(f + 1, r) ? 2 : 0) | (standing(f, r - 1) ? 4 : 0) | (standing(f - 1, r) ? 8 : 0);
+    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} ruin wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its standing neighbours say wm-${want}`);
   }
   void fen;
   return bad;

@@ -50,10 +50,11 @@
 //   .ruin      a floor square where a wall, a cracked wall or a weak spot
 //              BROKE (main.mjs residue ledger `rubble`): it paints the
 //              theme's ruin stub case (--tile-ruin-<mask>, 16 cases by its
-//              solid neighbours as wm-<mask>) under whatever stands there,
-//              and it COUNTS AS SOLID to its neighbours' wall cases — as
-//              does an opened doorway — so the wall line runs on through
-//              the break instead of capping either side of a gap.
+//              STANDING wall neighbours as wm-<mask> — never another ruin
+//              or an opened doorway, round 12) under whatever stands
+//              there, and it COUNTS AS SOLID to its neighbours' wall cases
+//              — as does an opened doorway — so the wall line runs on
+//              through the break instead of capping either side of a gap.
 // PIECES (2026-09-03): every piece span carries data-piece="<FEN letter>";
 // setPieces(name) stamps data-pieces on the board and tiles.css paints the
 // set's sprite (PIECE_SETS) instead of the glyph; null = the glyphs.
@@ -326,22 +327,36 @@ export class BoardUI {
    * are main.mjs's RESIDUE ledger — floor squares where an east–west door
    * was opened keep its doorway decor, floor squares where a wall broke
    * become `.ruin` cells wearing the broken stub (cosmetic, but both count
-   * as solid to the wall autotile so the line runs on through them).
+   * as solid to the wall autotile so the line runs on through them; a
+   * ruin's own stub case counts only STANDING walls, never residue).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
-    // Solid (for the wall autotile) = stone that is not a hole, a cracked
-    // wall, or a door — the things that continue a wall line to the eye —
-    // and the RESIDUE of one: a broken wall's ruin stub and an opened
-    // doorway keep the line running through the break (round 10).
-    const solid = (ff, rr) => {
+    // STANDING = stone that is not a hole, a cracked wall, or a door — the
+    // things that continue a wall line to the eye. SOLID (for the wall
+    // autotile) = standing, or the RESIDUE of it: a broken wall's ruin stub
+    // and an opened doorway keep the line running through the break (round
+    // 10). A RUIN's own stub case counts STANDING neighbours only (round 12:
+    // two broken squares side by side each drew a stub at the other — a
+    // clump of wall floating between two floor squares — and a stub grew
+    // against an open doorway's post): its stubs are the broken ends of
+    // walls that still stand, and residue has no end to show.
+    const standing = (ff, rr) => {
       if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
       const t = grid[this.ranks - rr]?.[ff] ?? null;
       const name = String.fromCharCode(97 + ff) + rr;
       if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door';
       if (t === WALL) return !holes.has(name);
+      return false;
+    };
+    const solid = (ff, rr) => {
+      if (standing(ff, rr)) return true;
+      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
+      const t = grid[this.ranks - rr]?.[ff] ?? null;
+      if (t === FURNITURE || t === WALL) return false;
+      const name = String.fromCharCode(97 + ff) + rr;
       return rubble.has(name) || opened.has(name);
     };
     for (const [sq, cell] of this.cells) {
@@ -371,11 +386,12 @@ export class BoardUI {
       cell.classList.toggle('ruin', ruin);
       // The autotile case of a wall, cracked wall or weak spot: which
       // neighbours it joins (the 47-case blob); a ruin's is the plain
-      // 4-bit mask of its solid neighbours (the 16 stub cases). One
-      // wm-<mask> class, replaced on every paint.
+      // 4-bit mask of its STANDING neighbours (the 16 stub cases — a
+      // neighbouring ruin or doorway is no wall end). One wm-<mask> class,
+      // replaced on every paint.
       const mask = wallTile || cracked || weak
         ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
-        : ruin ? (N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0)
+        : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
         : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
