@@ -36,12 +36,14 @@
 //              the wall line; crates and the rest do not). A theme paints
 //              the 47 blob cases (--tile-wall-<mask>, tiles.css), the
 //              in-house set one block for all.
-//   .door-v    on a door skin sitting in a north–south wall line: the
-//              sprite is the theme's edge-on door (--sprite-door-v), not
-//              the forward-facing leaf.
-//   .f1/.f2/.f3 the floor's stable texture variant per square (a hash of
-//              the square, fixed for the board's life) — a themed floor
-//              gets a little variety, the plain floor ignores them.
+//   .weak      on a door skin sitting in a north–south wall line: no
+//              edge-on door exists (designer round 6), so the cell paints
+//              its wall case like a cracked wall and the sprite is the
+//              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
+//   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
+// PIECES (2026-09-03): every piece span carries data-piece="<FEN letter>";
+// setPieces(name) stamps data-pieces on the board and tiles.css paints the
+// set's sprite (PIECE_SETS) instead of the glyph; null = the glyphs.
 // THEME (2026-09-03): setTheme(name) stamps data-theme on the board; the
 // repacked tilesets (play/tiles.css) scope their tile variables to it, so
 // the same classes paint hall / castle / crypt art, or the in-house set when
@@ -85,12 +87,19 @@ export function canonicalMask(m) {
 }
 export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) => canonicalMask(m)))].sort((a, b) => a - b);
 
-/** Stable floor-texture variant for a square: f1 (plain) most of the time,
- *  f2/f3 scattered — a fixed function of the square, so a repaint never
- *  makes the floor crawl. */
+/** Piece-sprite sets the board can wear (tiles.css [data-pieces=…];
+ *  repack-tiles.mjs builds them). null / 'classic' = the Unicode glyphs. */
+export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood'];
+/** Floor texture variants a theme may provide (--tile-floor-1..N). */
+export const FLOOR_VARIANTS = 6;
+
+/** Stable floor-texture variant for a square: f1 (the common stone) on
+ *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the
+ *  square, so a repaint never makes the floor crawl. */
 function floorVariant(f, rank) {
-  const h = (f * 7 + rank * 11 + ((f * rank) % 5)) % 9;
-  return h === 0 ? 'f2' : h === 4 ? 'f3' : 'f1';
+  const h = (((f + 1) * 73856093) ^ ((rank + 1) * 19349663)) >>> 0;
+  const r = h % 16;
+  return r < FLOOR_VARIANTS - 1 ? `f${r + 2}` : 'f1';
 }
 
 function svgEl(tag, attrs) {
@@ -296,19 +305,20 @@ export class BoardUI {
       cell.classList.toggle('furniture', isFurniture);
       const cracked = isFurniture && godCrates.has(sq);
       cell.classList.toggle('cracked', cracked);
-      // The autotile case of a wall or cracked wall: which neighbours it
-      // joins. One wm-<mask> class, replaced on every paint.
+      const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
+      for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
+      if (skin) cell.classList.add(`skin-${skin}`);
+      // A door in a north–south wall line is a weak spot in the wall.
       const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
-      const mask = wallTile || cracked
+      const weak = skin === 'door' && (N || S) && !(E || W);
+      cell.classList.toggle('weak', weak);
+      // The autotile case of a wall, cracked wall or weak spot: which
+      // neighbours it joins. One wm-<mask> class, replaced on every paint.
+      const mask = wallTile || cracked || weak
         ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
         : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
-      const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
-      for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
-      if (skin) cell.classList.add(`skin-${skin}`);
-      // A door in a north–south wall line is seen edge-on.
-      cell.classList.toggle('door-v', skin === 'door' && (N || S) && !(E || W));
       let glyph = cell.querySelector('.piece');
       if (v && v !== WALL) {
         if (!glyph) {
@@ -323,10 +333,12 @@ export class BoardUI {
           glyph.textContent = FURNITURE_GLYPH;
           glyph.classList.remove('white', 'black');
           glyph.classList.add('neutral');
+          delete glyph.dataset.piece;
         } else {
           const letter = v.replace('+', '');
           const isWhite = letter === letter.toUpperCase();
           glyph.textContent = GLYPHS[letter.toLowerCase()] ?? letter;
+          glyph.dataset.piece = letter; // the sprite hook (tiles.css [data-pieces] [data-piece])
           glyph.classList.toggle('white', isWhite);
           glyph.classList.toggle('black', !isWhite);
           glyph.classList.remove('neutral');
@@ -390,6 +402,17 @@ export class BoardUI {
 
   get theme() {
     return this.container.dataset.theme ?? null;
+  }
+
+  /** Piece sprites: one of PIECE_SETS stamps data-pieces on the board
+   *  (tiles.css paints the sprites); null clears it — the glyphs. */
+  setPieces(name) {
+    if (name && PIECE_SETS.includes(name)) this.container.dataset.pieces = name;
+    else delete this.container.dataset.pieces;
+  }
+
+  get pieces() {
+    return this.container.dataset.pieces ?? null;
   }
 
   /** The classes on one cell — the test surface for tiles and marks. */
@@ -509,13 +532,15 @@ function coordEl(cls, text) {
   return el;
 }
 
-/** Modal promotion picker (§4.4). No dismissal without choosing. */
-export function pickPromotion(letters) {
+/** Modal promotion picker (§4.4). No dismissal without choosing. `pieces`
+ *  is the board's sprite set, so the buttons show the same art. */
+export function pickPromotion(letters, { pieces = null } = {}) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'promo-overlay';
     const card = document.createElement('div');
     card.className = 'promo-card';
+    if (pieces && PIECE_SETS.includes(pieces)) card.dataset.pieces = pieces;
     const label = document.createElement('div');
     label.className = 'promo-label';
     label.textContent = 'Promote to';
@@ -524,6 +549,8 @@ export function pickPromotion(letters) {
       const btn = document.createElement('button');
       btn.className = 'promo-btn';
       btn.textContent = GLYPHS[l.toLowerCase()] ?? l;
+      btn.dataset.piece = l;
+      btn.setAttribute('aria-label', l);
       btn.addEventListener('click', () => {
         overlay.remove();
         resolve(l);

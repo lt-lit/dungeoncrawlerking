@@ -868,16 +868,25 @@ async function main() {
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
     if (mask('a1') !== 'wm-1' || mask('a2') !== 'wm-5' || mask('a3') !== 'wm-4') throw new Error(`a cracked wall continues the column (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
-    if (mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== null) throw new Error(`a door continues the column, and is not itself a wall tile (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
+    if (mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== 'wm-5') throw new Error(`a door continues the column, and as a weak spot wears the column's own case (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'crate' } });
     if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0') throw new Error(`a crate does not continue the wall line (${mask('a1')}, ${mask('a3')})`);
     ui.setPosition(fen);
     if (mask('a1') !== 'wm-1' || mask('c3') !== 'wm-0') throw new Error('masks must be recomputed on every paint');
-    // A door in a north–south line is edge-on; in an east–west line it is not.
+    // A door in a north–south line is a WEAK SPOT wearing the wall's own
+    // autotile case; in an east–west line it is the door leaf.
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
-    if (!has('a2', 'door-v')) throw new Error(`a door between a1 and a3 is edge-on: ${ui.cellClasses('a2')}`);
+    if (!has('a2', 'weak') || mask('a2') !== 'wm-5') throw new Error(`a door between a1 and a3 is a weak spot in the column: ${ui.cellClasses('a2')}`);
     ui.setPosition('1*^*/4/4/4/4 w - - 0 1', { skins: { c5: 'door' } });
-    if (has('c5', 'door-v') || !has('c5', 'skin-door')) throw new Error(`a door between b5 and d5 faces forward: ${ui.cellClasses('c5')}`);
+    if (has('c5', 'weak') || mask('c5') !== null || !has('c5', 'skin-door')) throw new Error(`a door between b5 and d5 is the leaf, no wall case: ${ui.cellClasses('c5')}`);
+    // Piece sprites: every piece carries its FEN letter; the set is an attribute.
+    ui.setPosition('k3/4/4/4/K2P w - - 0 1');
+    const at = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;
+    if (at('a1') !== 'K' || at('d1') !== 'P' || at('a5') !== 'k') throw new Error(`pieces carry data-piece (${at('a1')}, ${at('d1')}, ${at('a5')})`);
+    ui.setPieces('pixel-chess');
+    if (ui.pieces !== 'pixel-chess' || host.dataset.pieces !== 'pixel-chess') throw new Error('setPieces must stamp data-pieces');
+    ui.setPieces('no-such-set');
+    if (ui.pieces !== null) throw new Error('an unknown piece set clears to the glyphs');
     // Diagonals: a thick 2×2 block fills its inner corners (NE=16 SE=32
     // SW=64 NW=128), and a diagonal alone never counts.
     ui.setPosition('4/4/4/**2/**2 w - - 0 1');
@@ -886,20 +895,27 @@ async function main() {
     }
     ui.setPosition('4/4/4/1*2/*3 w - - 0 1');
     if (mask('a1') !== 'wm-0' || mask('b2') !== 'wm-0') throw new Error(`diagonal-only neighbours do not join (${mask('a1')}, ${mask('b2')})`);
-    // Floor variants: one per square, stable across repaints, some of each.
-    const variants = (sq) => ui.cellClasses(sq).filter((c) => /^f[123]$/.test(c));
+    // Floor variants: one per square, stable across repaints, f1 the
+    // majority and several of f2…f6 scattered over an 8×8.
+    const variants = (sq) => ui.cellClasses(sq).filter((c) => /^f[1-6]$/.test(c));
     const before = {};
-    let f2 = 0, f3 = 0;
     for (const [sq] of ui.cells) {
       const v = variants(sq);
       if (v.length !== 1) throw new Error(`${sq} must carry exactly one floor variant: ${v}`);
       before[sq] = v[0];
-      if (v[0] === 'f2') f2++;
-      if (v[0] === 'f3') f3++;
     }
-    if (!f2 || !f3) throw new Error(`a 4×5 board should scatter both variants (f2 ${f2}, f3 ${f3})`);
     ui.setPosition(fen);
     for (const [sq] of ui.cells) if (variants(sq)[0] !== before[sq]) throw new Error(`${sq}: the floor variant must not change on repaint`);
+    {
+      const big = new BoardUI(document.createElement('div'), { files: 8, ranks: 8 });
+      const tally = {};
+      for (const [sq] of big.cells) {
+        const v = big.cellClasses(sq).find((c) => /^f[1-6]$/.test(c));
+        tally[v] = (tally[v] ?? 0) + 1;
+      }
+      const kinds = Object.keys(tally).filter((k) => k !== 'f1').length;
+      if (!(tally.f1 > 32) || kinds < 3) throw new Error(`8×8 floor: f1 should dominate with several variants scattered (${JSON.stringify(tally)})`);
+    }
     // The theme attribute.
     if (ui.theme !== null || host.dataset.theme !== undefined) throw new Error('a fresh board wears no theme');
     ui.setTheme('crypt');

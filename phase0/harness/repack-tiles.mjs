@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
-import { canonicalMask, WALL_MASK_CODES } from '../../play/js/board-ui.mjs';
+import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, FLOOR_VARIANTS } from '../../play/js/board-ui.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -57,6 +57,12 @@ const PACKS = {
     url: 'https://szadiart.itch.io/rogue-fantasy-catacombs',
     terms: 'Public domain, free for personal or commercial use, edits allowed, credit appreciated. The pack may not be resold, original or changed.',
   },
+  'pixel-chess': {
+    title: 'Pixel Chess',
+    author: 'Dani Maccari',
+    url: 'https://dani-maccari.itch.io/pixel-chess',
+    terms: 'Free for personal or commercial projects as long as it is attributed to DANI MACCARI; edits allowed; the assets may not be repackaged, redistributed or resold — only the twelve piece sprites the game uses are inlined here, with that attribution.',
+  },
 };
 
 // Sheet key → [pack, file under assets-src/<pack>/]. Tile coords below are
@@ -66,28 +72,43 @@ const SHEETS = {
   pp: ['pixel-poem', 'Dungeon_Tileset.png'],
   cat: ['catacombs', 'mainlevbuild.png'],
   catdeco: ['catacombs', 'decorative.png'],
+  pcW: ['pixel-chess', 'WhitePieces.png'],
+  pcB: ['pixel-chess', 'BlackPieces.png'],
+  pcWw: ['pixel-chess', 'WhitePieces_Wood.png'],
+  pcBw: ['pixel-chess', 'BlackPieces_Wood.png'],
 };
+
+// Piece sets (2026-09-03): 96×16 sheets, six pieces in the pack's order.
+// Names are board-ui.mjs PIECE_SETS (the option list); the renderer stamps
+// data-pieces on the board and data-piece="<FEN letter>" on every piece.
+const PIECE_ORDER = 'pnrbqk';
+const PIECE_SHEETS = {
+  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', white: 'pcW', black: 'pcB' },
+  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', white: 'pcWw', black: 'pcBw' },
+};
+for (const name of PIECE_SETS) if (!PIECE_SHEETS[name]) throw new Error(`piece set ${name} has no sheets`);
 
 // Role → the custom property it paints. floor-N are the floor's stable
 // variants (board-ui.mjs picks f1/f2/f3 per square); wall is the plain
 // east–west run (the legend, and the fallback); wall-<mask> are the 47
 // AUTOTILE cases (board-ui.mjs canonicalMask: N=1 E=2 S=4 W=8, diagonals
 // NE=16 SE=32 SW=64 NW=128 — the renderer classes each wall `wm-<mask>`),
-// GENERATED below in the pack's colours with the pack's brick face; door-v
-// is the edge-on door for a north–south wall line; the rest are the
-// furniture sprites (skin-<name>; crate is the '^' default).
+// GENERATED below in the pack's colours with the pack's brick face; weak
+// is the WEAK SPOT overlay a door skin wears in a north–south wall line
+// (designer round 6: no edge-on door — "a cracked weak spot, functionally
+// the same ^"); the rest are the furniture sprites (skin-<name>; crate is
+// the '^' default). floor-1..N are the floor's texture variants (N =
+// board-ui FLOOR_VARIANTS; f1 is the common one).
 const ROLES = {
-  'floor-1': '--tile-floor-1',
-  'floor-2': '--tile-floor-2',
-  'floor-3': '--tile-floor-3',
   wall: '--tile-wall',
   door: '--sprite-door',
-  'door-v': '--sprite-door-v',
+  weak: '--sprite-weak',
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
   rubble: '--sprite-rubble',
 };
+for (let i = 1; i <= FLOOR_VARIANTS; i++) ROLES[`floor-${i}`] = `--tile-floor-${i}`;
 for (const code of WALL_MASK_CODES) ROLES[`wall-${code}`] = `--tile-wall-${code}`;
 
 // ---- the wall blob (round 5, 2026-09-03: "walls still look janky")
@@ -172,27 +193,29 @@ function wallBlob(spec, sheets) {
   return out;
 }
 
-// The edge-on door for a north–south wall line: the wall band continues
-// through the top and bottom rows, and between them a plank door in the
-// pack door's own wood and iron (pixel-poem's leaf, sampled), framed dark.
-const DOOR_WOOD = { wood: hex('#895a45'), woodHi: hex('#bf704d'), seam: hex('#523b40'), woodLo: hex('#724736'), iron: hex('#adc1cf'), ironLo: hex('#90919e'), ink: hex('#25131a') };
-function doorEdgeOn(spec) {
+// The WEAK SPOT a door skin wears in a north–south wall line (round 6: the
+// edge-on door looked wrong; the cell paints its wall case underneath, and
+// this transparent overlay knocks a chunk out of the band — a dark gap with
+// loose chips in the theme's stone, and a hairline crack running the band's
+// length). Distinct from the gods' branching black crack (a weakened wall).
+function weakSpot(spec) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
-  const D = DOOR_WOOD;
   const tile = blank(T, T);
   const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
-  for (let y = 0; y < T; y++) { put(BAND.x0 - 1, y, edge); put(BAND.x1 + 1, y, edge); }
-  for (const y of [0, 1, T - 2, T - 1]) for (let x = BAND.x0; x <= BAND.x1; x++) put(x, y, x === BAND.x0 ? hi : x === BAND.x1 ? lo : fill);
-  for (let x = BAND.x0; x <= BAND.x1; x++) { put(x, 2, D.ink); put(x, T - 3, D.ink); }
-  for (let y = 3; y <= T - 4; y++) {
-    for (let x = BAND.x0; x <= BAND.x1; x++) {
-      const k = x - BAND.x0; // 0..9: three planks with two seams
-      put(x, y, k === 3 || k === 7 ? D.seam : k === 0 || k === 4 || k === 8 ? D.woodHi : k === 9 ? D.woodLo : D.wood);
-    }
-  }
-  for (const y of [5, T - 6]) for (let x = BAND.x0; x <= BAND.x1; x++) put(x, y, (x - BAND.x0) % 4 === 1 ? D.ink : D.iron);
-  for (const y of [6, T - 5]) for (let x = BAND.x0; x <= BAND.x1; x++) put(x, y, D.ironLo);
-  put(BAND.x1 - 1, 8, D.ink); put(BAND.x1, 8, D.iron); // the ring
+  const P = [
+    '...ee...',
+    '..eEEe..',
+    '.eEEgEe.',
+    '.eEgEEe.',
+    '.eEEEge.',
+    '..eEEe..',
+    '...ee...',
+  ];
+  const C = { e: lo, E: edge, g: hi };
+  P.forEach((row, r) => [...row].forEach((ch, c) => { if (C[ch]) put(4 + c, 4 + r, C[ch]); }));
+  // the hairline: from the gap to the top and bottom of the band
+  for (const [x, y] of [[7, 3], [8, 2], [8, 1], [7, 0], [8, 11], [8, 12], [9, 13], [9, 14], [8, 15]]) put(x, y, edge);
+  for (const [x, y] of [[5, 12], [10, 11], [3, 6], [12, 9]]) put(x, y, mix(fill, hi, 0.6)); // chips on the floor of the gap's rim
   return tile;
 }
 
@@ -203,6 +226,9 @@ const THEMES = {
       'floor-1': ['pp', 8, 1],
       'floor-2': ['pp', 6, 0],
       'floor-3': ['pp', 7, 2],
+      'floor-4': ['pp', 9, 1],
+      'floor-5': ['pp', 7, 0],
+      'floor-6': ['pp', 0, 6],
       door: ['pp', 7, 3],
       crate: ['pp', 0, 8],
       chest: ['pp', 2, 8],
@@ -217,6 +243,9 @@ const THEMES = {
       'floor-1': ['dg', 10, 3],
       'floor-2': ['dg', 11, 2],
       'floor-3': ['dg', 13, 2],
+      'floor-4': ['dg', 9, 2],
+      'floor-5': ['dg', 9, 12],
+      'floor-6': ['dg', 9, 13],
       door: ['pp', 7, 3],
       crate: ['pp', 0, 8],
       chest: ['pp', 2, 8],
@@ -229,9 +258,14 @@ const THEMES = {
   crypt: {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
     tiles: {
+      // The six bevelled flagstones of the brown set (designer: "put both
+      // the other themes to shame") — every one of them.
       'floor-1': ['cat', 47, 14],
       'floor-2': ['cat', 46, 13],
       'floor-3': ['cat', 47, 15],
+      'floor-4': ['cat', 46, 14],
+      'floor-5': ['cat', 47, 13],
+      'floor-6': ['cat', 46, 15],
       door: ['pp', 7, 3],
       crate: ['catdeco', 8, 5],
       chest: ['pp', 2, 8],
@@ -285,7 +319,7 @@ themeNames.forEach((theme, row) => {
   provenance.push({ theme, role: 'wall face (brick rows under every south edge)', pack: SHEETS[fs.sheet][0], sheet: SHEETS[fs.sheet][1], x: fs.x, y: fs.y });
   emit('wall', cases['wall-10'], { composed: 'blob case 10 (east–west run)', mask: 10 });
   for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: 'blob in the pack palette + its face', mask: +role.slice(5) });
-  emit('door-v', doorEdgeOn(ws), { composed: 'edge-on door: wall band + pixel-poem door wood' });
+  emit('weak', weakSpot(ws), { composed: 'weak spot overlay in the theme stone' });
   css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
 // Pack tiles fill their 16×16 cell edge to edge; the in-house sprites carry
@@ -296,7 +330,30 @@ for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: va
 css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
 css.push('[data-theme] { --floor-shade: #00000038; }');
 
+// ---- pieces: one row per set, white p n r b q k then black.
+const pieceNames = Object.keys(PIECE_SHEETS);
+const piecesAtlas = blank(12 * T, pieceNames.length * T);
+index.pieces = { order: PIECE_ORDER, sets: {} };
+pieceNames.forEach((name, row) => {
+  const set = PIECE_SHEETS[name];
+  const decl = [];
+  index.pieces.sets[name] = { row, title: set.title, white: SHEETS[set.white][1], black: SHEETS[set.black][1] };
+  [...PIECE_ORDER].forEach((letter, i) => {
+    for (const [side, sheetKey] of [['white', set.white], ['black', set.black]]) {
+      const tile = crop(sheets[sheetKey], i * T, 0, T, T);
+      const col = (side === 'white' ? 0 : 6) + i;
+      blit(piecesAtlas, tile, col * T, row * T);
+      const fen = side === 'white' ? letter.toUpperCase() : letter;
+      decl.push(`  --piece-${fen}: url("data:image/png;base64,${encodePng(tile).toString('base64')}");`);
+    }
+  });
+  css.push(`[data-pieces="${name}"] {\n${decl.join('\n')}\n}`);
+  provenance.push({ theme: 'pieces', role: name, pack: 'pixel-chess', sheet: `${SHEETS[set.white][1]} + ${SHEETS[set.black][1]}`, x: 0, y: 0 });
+});
+for (const letter of [...PIECE_ORDER]) for (const fen of [letter.toUpperCase(), letter]) css.push(`[data-pieces] [data-piece="${fen}"] { --piece-img: var(--piece-${fen}); }`);
+
 mkdirSync(join(PLAY, 'img'), { recursive: true });
+writeFileSync(join(PLAY, 'img', 'pieces.png'), encodePng(piecesAtlas));
 const atlasPng = encodePng(atlas);
 if (!samePixels(decodePng(atlasPng), atlas)) throw new Error('atlas round-trip failed');
 writeFileSync(join(PLAY, 'img', 'tileset.png'), atlasPng);
@@ -307,7 +364,7 @@ writeFileSync(join(PLAY, 'tiles.css'), css.join('\n') + '\n');
 const md = [];
 md.push('# Art credits');
 md.push('');
-md.push('The board tiles in `play/img/tileset.png` (and the same tiles inlined in `play/tiles.css`) are repacked from three free 16×16 pixel-art packs. Only the tiles the game uses are included; the packs themselves are not redistributed here — get them from their authors:');
+md.push('The board tiles in `play/img/tileset.png` and the piece sprites in `play/img/pieces.png` (the same pixels inlined in `play/tiles.css`) are repacked from four free 16×16 pixel-art packs. Only the tiles and sprites the game uses are included; the packs themselves are not redistributed here — get them from their authors:');
 md.push('');
 for (const [key, p] of Object.entries(PACKS)) {
   md.push(`- **${p.title}** by ${p.author} — <${p.url}>  `);
@@ -326,4 +383,4 @@ for (const p of provenance) md.push(`| ${p.theme} | ${p.role} | ${PACKS[p.pack].
 md.push('');
 writeFileSync(join(PLAY, 'CREDITS.md'), md.join('\n'));
 
-console.log(`tileset.png ${atlas.width}×${atlas.height} (${atlasPng.length} B), tiles.css ${css.join('\n').length} B, ${provenance.length} tiles over ${themeNames.length} themes; CREDITS.md written`);
+console.log(`tileset.png ${atlas.width}×${atlas.height} (${atlasPng.length} B), pieces.png ${piecesAtlas.width}×${piecesAtlas.height} (${pieceNames.length} sets), tiles.css ${css.join('\n').length} B, ${provenance.length} provenance rows over ${themeNames.length} themes; CREDITS.md written`);

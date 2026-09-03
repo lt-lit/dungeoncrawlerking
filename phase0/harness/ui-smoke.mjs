@@ -114,6 +114,8 @@ const themeState = () =>
       door: document.querySelector('#board .cell.skin-door .piece.neutral') ? bg('#board .cell.skin-door .piece.neutral') : '',
       doorBg: document.querySelector('#board .cell.skin-door') ? bg('#board .cell.skin-door') : '',
       masks: [...document.querySelectorAll('#board .cell.wall')].map((c) => `${c.dataset.square}:${[...c.classList].find((k) => k.startsWith('wm-'))}`).join(' '),
+      pieces: window.__DCK.pieces,
+      king: (() => { const el = document.querySelector('#board .piece[data-piece="K"]'); const cs = el && getComputedStyle(el); return cs ? { bg: cs.backgroundImage, font: cs.fontSize } : null; })(),
     };
   });
 const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage.theme);
@@ -148,6 +150,18 @@ await setTheme('classic');
 }
 await setTheme('auto');
 expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
+// Piece sprites: the default set paints the king as a PNG sprite; classic is the glyph.
+{
+  const t = await themeState();
+  expect(t.pieces === 'pixel-chess' && t.king?.bg.includes('data:image/png') && t.king?.font === '0px', `pieces default to the Pixel Chess sprites (${t.pieces}, ${t.king?.font})`);
+  await page.evaluate(() => { window.__DCK.options.pieces = 'classic'; window.__DCK.applyOptions(); });
+  const c = await themeState();
+  expect(c.pieces === null && c.king?.bg === 'none' && c.king?.font !== '0px', `"classic" pieces are the glyphs again (${c.king?.bg.slice(0, 20)}, ${c.king?.font})`);
+  await page.evaluate(() => { window.__DCK.options.pieces = 'pixel-chess-wood'; window.__DCK.applyOptions(); });
+  expect((await themeState()).pieces === 'pixel-chess-wood', 'the wood set applies');
+  await shot('00-pieces-wood');
+  await page.evaluate(() => { window.__DCK.options.pieces = 'pixel-chess'; window.__DCK.applyOptions(); });
+}
 
 // --- skins: the doorway's furniture leaf paints as a door from ply 0 ---------
 if (STAGE === 's07-the-doorway') {

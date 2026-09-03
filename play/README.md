@@ -202,15 +202,28 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `canonicalMask`, the standard 47-case blob), where solid means stone that
   is not a hole, a cracked wall, or a DOOR (a door continues a wall line;
   crates and the rest do not) — painting the theme's case
-  (`--tile-wall-<mask>`, else the plain wall); `door-v` on a door skin
-  sitting in a north–south wall line, which paints the theme's edge-on door
-  (`--sprite-door-v`) instead of the forward-facing leaf; and `f1`/`f2`/`f3`, the
-  square's stable floor-texture variant (a hash of the square, so a repaint
-  never makes the floor crawl; ~28% of squares are variants). Every wall,
+  (`--tile-wall-<mask>`, else the plain wall); `weak` on a door skin
+  sitting in a north–south wall line — there is no edge-on door (the
+  designer cut the first attempt), so the cell paints the column's own
+  autotile case like a cracked wall does and its sprite is the theme's
+  WEAK-SPOT overlay (`--sprite-weak`, a chunk out of the band with a
+  hairline crack; the gods' crack is the fallback) — functionally the same
+  capturable `^`; and `f1`…`f6`, the square's stable floor-texture variant
+  (a hash of the square, so a repaint never makes the floor crawl; f1 on
+  ~70% of squares, the rest scattered — `FLOOR_VARIANTS`). Every wall,
   furniture and cracked cell keeps its floor layers UNDER the tile, so a
   themed pillar's transparent sides and every sprite sit on the floor tile
   (the first cut painted the flat in-house colour behind sprites).
   `setTheme(name)` stamps `data-theme` on the board.
+  **Piece sprites (2026-09-03):** every piece span carries
+  `data-piece="<FEN letter>"` and `setPieces(name)` stamps `data-pieces`
+  on the board (`PIECE_SETS`: `pixel-chess`, `pixel-chess-wood` — Dani
+  Maccari's *Pixel Chess*, 16×16, stone and wood palettes; null = the
+  Unicode glyphs). Under a set the glyph goes to size 0 and the span paints
+  the sprite as a 92% background, so the FLIP clone (cell-sized, inline)
+  draws exactly what the cell drew; the promotion picker takes the same
+  set and shows sprite buttons. Options → Look → **Pieces** (persisted,
+  default stone) and `?pieces=` pick it, independently of the theme.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -261,8 +274,12 @@ human-readable record of what was taken) + `img/tileset.json` (per-tile
 provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
 property under `[data-theme="…"]`, so any cell size stays pixel-exact —
 a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
-A theme provides floor variants, the wall in all **47 autotile cases**,
-an edge-on door, and the door, crate, chest, barrel and rubble sprites.
+A theme provides six floor variants (crypt's are the whole brown flagstone
+set of the Catacombs sheet, the designer's favourite), the wall in all
+**47 autotile cases**, a weak-spot overlay, and the door, crate, chest,
+barrel and rubble sprites. The repack tool also builds `img/pieces.png`
+and the `[data-pieces=…]` sprite variables from the Pixel Chess sheets in
+`assets-src/pixel-chess/`.
 The wall cases are GENERATED, not cropped: the packs draw walls as 2.5-D
 room borders two tiles tall (a top surface over a brick face) and ship no
 thin-wall set, and stitching their pieces into one-cell walls made fence
@@ -274,8 +291,7 @@ solid — bevelled where the surface does not continue into a neighbour,
 outlined on the floor, and EXTRUDED: the pack's own brick face (7 rows
 cropped from its wall tile) hangs under every south edge that ends inside
 the cell, so runs read cap-and-face like the pack's, a column's south end
-shows its face and a block faces south along its bottom. The edge-on door
-is the same band with a plank door in pixel-poem's door wood set into it.
+shows its face and a block faces south along its bottom.
 Where a pack lacks a role the theme
 borrows from another (every door is pixel-poem's leaf; castle's barrel is
 Dungeon Gathering's vase) and where none has it (table, chair, shelf, the
@@ -394,8 +410,9 @@ rewound), and **Show eval bar** (player-POV score from the engine's replies
 and the cheat probes). The old "edit enemy pieces" testing tool retired
 with the placement screen — the generator knobs + seeds cover its job.
 Above the Gods section, **Look → Art set** picks the board's theme (the
-stage's own / hall / castle / crypt / classic — "Art themes" above) and
-credits the three packs.
+stage's own / hall / castle / crypt / classic — "Art themes" above),
+**Pieces** the sprite set (Pixel Chess stone / wood / classic glyphs), and
+the panel credits the four packs.
 
 Engine pacing (designer decision, 2026-08): the enemy thinks up to **10
 seconds** per move (`depth 22 movetime 10000` — the depth cap is the WASM

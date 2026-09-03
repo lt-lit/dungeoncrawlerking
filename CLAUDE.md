@@ -72,11 +72,17 @@ blob via `canonicalMask`; holes are not solid, doors are) and the repack
 tool GENERATES each theme's 47 cases as a bevelled top band in the pack's
 colours with the pack's own brick face extruded under every south edge
 (the packs draw 2.5-D room borders and ship no thin-wall set; stitching
-their pieces was rounds 4–5's "walls look like ass / still janky"), plus an
-edge-on door (`door-v`) for doors in north–south wall lines; floor tiles
-show through under every sprite and pillar, and `f1/f2/f3` are floor
-variants; selftest 35/35, ui-smoke asserts the themes and the doorway's
-masks on the live board — see `play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+their pieces was rounds 4–5's "walls look like ass / still janky"); a door
+in a north–south wall line is a WEAK SPOT (`weak`: the column's own case +
+`--sprite-weak`; the edge-on door was cut, designer round 6); floor tiles
+show through under every sprite, `f1…f6` are floor variants (crypt wears
+all six Catacombs flagstones); and **PIECE SPRITES** (round 6): Dani
+Maccari's *Pixel Chess* 16×16 sets (`pixel-chess` stone / `-wood`) via
+`data-piece` on every piece span + `data-pieces` on the board
+(`PIECE_SETS`, Options → Pieces, `?pieces=`; classic = the glyphs), the
+promotion picker included; selftest 35/35, ui-smoke asserts the themes,
+the doorway's masks and the piece sprites on the live board — see
+`play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +
