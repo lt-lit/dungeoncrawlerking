@@ -153,14 +153,17 @@ expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the
 // Piece sprites: the default set paints the king as a PNG sprite; classic is the glyph.
 {
   const t = await themeState();
-  expect(t.pieces === 'pixel-chess' && t.king?.bg.includes('data:image/png') && t.king?.font === '0px', `pieces default to the Pixel Chess sprites (${t.pieces}, ${t.king?.font})`);
+  expect(t.pieces === 'nulltale' && t.king?.bg.includes('data:image/png') && t.king?.font === '0px', `pieces default to the NullTale sprites (${t.pieces}, ${t.king?.font})`);
   await page.evaluate(() => { window.__DCK.options.pieces = 'classic'; window.__DCK.applyOptions(); });
   const c = await themeState();
   expect(c.pieces === null && c.king?.bg === 'none' && c.king?.font !== '0px', `"classic" pieces are the glyphs again (${c.king?.bg.slice(0, 20)}, ${c.king?.font})`);
   await page.evaluate(() => { window.__DCK.options.pieces = 'pixel-chess-wood'; window.__DCK.applyOptions(); });
   expect((await themeState()).pieces === 'pixel-chess-wood', 'the wood set applies');
   await shot('00-pieces-wood');
-  await page.evaluate(() => { window.__DCK.options.pieces = 'pixel-chess'; window.__DCK.applyOptions(); });
+  await page.evaluate(() => { window.__DCK.options.pieces = 'nulltale'; window.__DCK.applyOptions(); });
+  // Decor: props only on walls and floor, never on holes or furniture, one kind each.
+  const decor = await page.evaluate(() => [...document.querySelectorAll('#board .decor')].map((d) => ({ cls: [...d.classList].filter((c) => c.startsWith('decor-')), cell: [...d.parentElement.classList] })));
+  expect(decor.every((d) => d.cls.length === 1 && !d.cell.includes('hole') && !d.cell.includes('furniture')), `${decor.length} cosmetic props, each one kind, on walls/floor only`);
 }
 
 // --- skins: the doorway's furniture leaf paints as a door from ply 0 ---------
@@ -255,6 +258,11 @@ for (let i = 0; i < PLIES; i++) {
           // caught 2026-09-02 by a screenshot).
           const bg = await page.evaluate((s) => getComputedStyle(document.querySelector(`#board [data-square="${s}"] .piece.neutral`)).backgroundImage, sq);
           expect(bg.includes('0b0a10') && !bg.includes('3a2213'), `${sq}: cracked wall paints the crack, not a crate sprite`);
+          // …and the WALL under it: the cell keeps its wall case over the
+          // floor (two image layers), not floor alone (the furniture
+          // floor-through rule once outranked the cracked rule under a theme).
+          const cellBg = await page.evaluate((s) => getComputedStyle(document.querySelector(`#board [data-square="${s}"]`)).backgroundImage, sq);
+          expect((cellBg.match(/url\(/g) ?? []).length >= 2 && cellBg.includes('data:image/png'), `${sq}: cracked wall keeps its wall tile under the crack (${(cellBg.match(/url\(/g) ?? []).length} layers)`);
         }
       }
       for (const sq of wantBreached) {

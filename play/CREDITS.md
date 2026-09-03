@@ -27,6 +27,13 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 | hall | crate | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 8 |
 | hall | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | hall | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
+| hall | torch | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 9 |
+| hall | candle | Dungeon Asset Puck | Dungeon_Tileset.png | 3 | 9 |
+| hall | web | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 6 |
+| hall | bones | Dungeon Asset Puck | Dungeon_Tileset.png | 8 | 6 |
+| hall | skull | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 7 |
+| hall | chain | Dungeon Asset Puck | Dungeon_Tileset.png | 5 | 7 |
+| hall | banner | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 7 |
 | hall | floor-1 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 14 |
 | hall | floor-2 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 13 |
 | hall | floor-3 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 15 |
@@ -34,11 +41,17 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 | hall | floor-5 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 13 |
 | hall | floor-6 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 15 |
 | hall | wall face (brick rows under every south edge) | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 0 |
-| castle | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
-| castle | crate | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 8 |
+| castle | crate | Dungeon Gathering | Set 1.png | 20 | 8 |
 | castle | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | castle | barrel | Dungeon Gathering | Set 1.png | 2 | 12 |
 | castle | rubble | Dungeon Gathering | Set 1.png | 12 | 12 |
+| castle | torch | Dungeon Asset Puck | Dungeon_Tileset.png | 1 | 9 |
+| castle | candle | Dungeon Asset Puck | Dungeon_Tileset.png | 5 | 9 |
+| castle | web | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 6 |
+| castle | bones | Dungeon Asset Puck | Dungeon_Tileset.png | 8 | 6 |
+| castle | skull | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 7 |
+| castle | chain | Dungeon Asset Puck | Dungeon_Tileset.png | 6 | 7 |
+| castle | banner | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 7 |
 | castle | floor-1 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 14 |
 | castle | floor-2 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 13 |
 | castle | floor-3 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 15 |
@@ -46,11 +59,16 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 | castle | floor-5 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 13 |
 | castle | floor-6 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 15 |
 | castle | wall face (brick rows under every south edge) | Dungeon Gathering | Set 1.png | 6 | 10 |
-| crypt | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
 | crypt | crate | Rogue Fantasy Catacombs | decorative.png | 8 | 5 |
 | crypt | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | crypt | barrel | Rogue Fantasy Catacombs | decorative.png | 12 | 8 |
 | crypt | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
+| crypt | torch | Rogue Fantasy Catacombs | torch_1.png | 0 | 0 |
+| crypt | candle | Rogue Fantasy Catacombs | candleA_01.png | 0 | 0 |
+| crypt | chain | Rogue Fantasy Catacombs | decorative.png | 8 | 1 |
+| crypt | web | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 6 |
+| crypt | bones | Dungeon Asset Puck | Dungeon_Tileset.png | 8 | 6 |
+| crypt | skull | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 7 |
 | crypt | floor-1 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 14 |
 | crypt | floor-2 | Rogue Fantasy Catacombs | mainlevbuild.png | 46 | 13 |
 | crypt | floor-3 | Rogue Fantasy Catacombs | mainlevbuild.png | 47 | 15 |

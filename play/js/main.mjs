@@ -218,7 +218,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'pixel-chess' };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale' };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -238,7 +238,7 @@ function loadOptions() {
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
-    if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'pixel-chess';
+    if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
   } catch {
     /* defaults */
   }

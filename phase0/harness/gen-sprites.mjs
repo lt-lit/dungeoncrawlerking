@@ -14,7 +14,7 @@ const CSS = join(ROOT, 'play', 'style.css');
 // Palette (shared so the set reads as one hand).
 const P = {
   mortar: '#262433', stone: '#605e7a', stoneHi: '#8583a3', stoneLo: '#403e55', speck: '#6f6d8c', speckLo: '#52506a',
-  crack: '#0b0a10', crackEdge: '#c9c7de',
+  crack: '#0b0a10',
   ink: '#3a2213', woodHi: '#d09a5c', wood: '#b8713a', woodLo: '#8a4f28', woodDeep: '#5a3418', iron: '#9aa0ad', ironLo: '#5d626e', gold: '#e0c25a', red: '#c96a4a',
 };
 
@@ -30,8 +30,12 @@ const SPRITES = {
     R(1, 1, 14, 1, P.stoneHi) + R(1, 1, 1, 14, P.stoneHi) + R(1, 14, 14, 1, P.stoneLo) + R(14, 1, 1, 14, P.stoneLo) +
     R(4, 5, 1, 1, P.speck) + R(10, 3, 1, 1, P.speck) + R(6, 10, 1, 1, P.speck) + R(12, 11, 1, 1, P.speck) + R(3, 12, 1, 1, P.speck) + R(8, 7, 1, 1, P.speckLo) + R(11, 8, 1, 1, P.speckLo)
   ),
-  // A branching crack, transparent background: laid over the wall tile (the
-  // .cracking fx) and carried by the sprite element on a cracked wall.
+  // THE crack: thin black branching lines and nothing else — transparent
+  // everywhere, no highlight, so it reads on any wall colour. One overlay
+  // for every weakened wall, whoever weakened it (a god's crack and an
+  // authored weak spot are the same '^' — designer 2026-09-03): laid over
+  // the wall tile by the .cracking fx and carried by the sprite element on
+  // a cracked wall or a weak spot.
   'tile-crack': (() => {
     const branches = [
       'M7.5 0v3.5l1 1v2l-1 1v2.5l2 1v2l-1 1.5V16',
@@ -44,9 +48,7 @@ const SPRITES = {
       'M12.5 11.5l1.5 2.5',
       'M3.5 8.5l-2-3',
     ];
-    const edge = branches.map((d) => PATH(d, P.crackEdge, 1.2, ' transform="translate(.9 .9)" opacity=".6"')).join('');
-    const ink = branches.map((d) => PATH(d, P.crack, 2.1)).join('');
-    return svg(edge + ink);
+    return svg(branches.map((d) => PATH(d, P.crack, 1)).join(''));
   })(),
   // A crate: horizontal plank slats with dark seams, a raised lighter lid
   // strip, and four iron nails at the corners of the batten frame — a stack

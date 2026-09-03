@@ -205,32 +205,39 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   (`--tile-wall-<mask>`, else the plain wall); `weak` on a door skin
   sitting in a north–south wall line — there is no edge-on door (the
   designer cut the first attempt), so the cell paints the column's own
-  autotile case like a cracked wall does and its sprite is the theme's
-  WEAK-SPOT overlay (`--sprite-weak`, a chunk out of the band with a
-  hairline crack; the gods' crack is the fallback) — functionally the same
+  autotile case like a cracked wall does and its sprite is THE crack: one
+  overlay for every weakened wall, whoever weakened it (`--tile-crack`,
+  gen-sprites.mjs — thin black branching lines on transparency, nothing
+  else, so it reads on any wall colour) — functionally the same
   capturable `^`; and `f1`…`f6`, the square's stable floor-texture variant
   (a hash of the square, so a repaint never makes the floor crawl; f1 on
-  ~70% of squares, the rest scattered — `FLOOR_VARIANTS`). Every wall,
+  ~70% of squares, the rest scattered — `FLOOR_VARIANTS`); and `.decor`,
+  a cosmetic prop span under the piece (`decorFor`: a torch, banner or
+  chain on an east–west wall face, a cobweb, bones, skull or candle on a
+  floor square, scattered by a stable hash at low rates; the theme's
+  `--decor-<name>` paints it, or nothing — cosmetics only, and a breached
+  wall drops its torch with the repaint). Every wall,
   furniture and cracked cell keeps its floor layers UNDER the tile, so a
   themed pillar's transparent sides and every sprite sit on the floor tile
   (the first cut painted the flat in-house colour behind sprites).
   `setTheme(name)` stamps `data-theme` on the board.
   **Piece sprites (2026-09-03):** every piece span carries
   `data-piece="<FEN letter>"` and `setPieces(name)` stamps `data-pieces`
-  on the board (`PIECE_SETS`: `pixel-chess` / `pixel-chess-wood` — Dani
-  Maccari's *Pixel Chess*, 16×16; `nulltale` / `nulltale-dread` —
-  NullTale's *Chess*, CC BY 4.0, 16×32 tall sprites, classic blue-vs-red
-  and the white-vs-black "dread" set; `deja-view` — Deja View's *Chess
-  Assets*, white-outlined cream vs navy, 18×24; null = the Unicode
-  glyphs). Under a set the glyph goes to size 0 and the span becomes an
-  absolutely positioned box `--piece-w` × `--piece-h` cells (the set's
-  sprite box × 0.92, from tiles.css), bottom-anchored, painting the sprite
-  bottom-centred with `contain` — so a TALL set stands on its square and
-  rises into the one above, and lower ranks (later in DOM order) paint in
-  front. The FLIP clone copies the piece's own box, not the cell's, so it
-  travels unchanged; the promotion picker takes the same set and shows
-  sprite buttons. Options → Look → **Pieces** (persisted, default Pixel
-  Chess stone) and `?pieces=` pick it, independently of the theme.
+  on the board (`PIECE_SETS`: `nulltale` / `nulltale-dread` — NullTale's
+  *Chess*, CC BY 4.0, the classic blue-vs-red silhouettes and the
+  white-vs-black "dread" set, the DEFAULT; `pixel-chess` / `pixel-chess-wood`
+  — Dani Maccari's *Pixel Chess*, 16×16; `deja-view` — Deja View's *Chess
+  Assets*, cream vs navy with its white outline recoloured dark by the
+  repack tool; null = the Unicode glyphs). Under a set the glyph goes to
+  size 0 and the span becomes an absolutely positioned box `--piece-w` ×
+  `--piece-h` cells, bottom-anchored, painting the sprite bottom-centred
+  with `contain`. Every set is FITTED: the box is scaled so the set's
+  tallest piece stands 0.96 cell, so no piece rises into the square above
+  (designer: tall pieces overlapping the piece north of them read badly
+  clustered). The FLIP clone copies the piece's own box, not the cell's;
+  the promotion picker takes the same set and shows sprite buttons.
+  Options → Look → **Pieces** (persisted, default NullTale classic) and
+  `?pieces=` pick it, independently of the theme.
   **Motion:** pieces travel between squares as FLIP clones on an
   `.fx-layer` overlay (`animateSlide`/`animateSlides`) instead of teleporting
   — used by both the engine's replies and quake displacements, with captures
@@ -286,7 +293,14 @@ brown set (the designer's verdict: the only floor tiles that look good) —
 crypt wears them as drawn, hall and castle wear them RECOLOURED into their
 own pack's floor tone (each pixel keeps its shading relative to the
 flagstones' base colour and takes the target hue, so bevels, cracks and
-grain survive). A theme also provides the wall in all
+grain survive). Each theme has its OWN door: the hall keeps pixel-poem's
+timber leaf; neither Dungeon Gathering nor Catacombs draws a wooden door,
+so the castle's is a portcullis drawn into Dungeon Gathering's own arched
+doorway tile and the crypt's a barred gate in its stone. The castle's
+crate is Dungeon Gathering's stone block. Each theme also carries its
+cosmetic PROPS (torch, candle, cobweb, bones, skull, chain, banner —
+pixel-poem's and Catacombs' own torch, candle and chain; the rest
+borrowed from pixel-poem). A theme also provides the wall in all
 **47 autotile cases**, a weak-spot overlay, and the door, crate, chest,
 barrel and rubble sprites. The repack tool also builds `img/pieces.png`
 (32-px atlas cells, one row per set) and the `[data-pieces=…]` sprite

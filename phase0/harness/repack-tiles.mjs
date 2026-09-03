@@ -90,6 +90,8 @@ const SHEETS = {
   pcBw: ['pixel-chess', 'BlackPieces_Wood.png'],
   nt: ['nulltale', 'NullTale Chess.png'],
   dv: ['deja-view', 'ChessAssets.png'],
+  cattorch: ['catacombs', 'torch_1.png'],
+  catcandle: ['catacombs', 'candleA_01.png'],
 };
 
 // Piece sets (2026-09-03). Names are board-ui.mjs PIECE_SETS (the option
@@ -101,19 +103,24 @@ const SHEETS = {
 // 26 px, Deja View's 23) stand on their square and rise into the one above.
 const PIECE_ORDER = 'pnrbqk';
 const row6 = (sheet, y, w = 16, h = 16, x0 = 0, step = 16) => Object.fromEntries([...PIECE_ORDER].map((l, i) => [l, [sheet, x0 + i * step, y, w, h]]));
+// `fit` is the set's tallest piece in px: the box is scaled so that piece
+// stands 0.96 cell tall — no set rises into the square above (designer
+// round 8: tall pieces overlapping the piece north of them read badly when
+// clustered). `outline` recolours a set's outline pixels (that colour, next
+// to transparency) — Deja View's white outline becomes a dark one.
 const PIECE_SHEETS = {
-  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], white: row6('pcW', 0), black: row6('pcB', 0) },
-  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], white: row6('pcWw', 0), black: row6('pcBw', 0) },
+  'pixel-chess': { title: 'Pixel Chess — stone (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], fit: 16, white: row6('pcW', 0), black: row6('pcB', 0) },
+  'pixel-chess-wood': { title: 'Pixel Chess — wood (Dani Maccari)', pack: 'pixel-chess', box: [16, 16], fit: 16, white: row6('pcWw', 0), black: row6('pcBw', 0) },
   // NullTale: 16-px columns 1–6 = pawn rook knight bishop queen king, each
   // colour a 32-px band bottom-aligned; the classic silhouettes are the
   // blue (white side) and dark-red (black side) rows, the "dread" ones the
-  // white-and-red and near-black rows.
-  nulltale: { title: 'NullTale — classic (blue vs red)', pack: 'nulltale', box: [16, 32], white: ntRow(208), black: ntRow(176) },
-  'nulltale-dread': { title: 'NullTale — dread (white vs black)', pack: 'nulltale', box: [16, 32], white: ntRow(96), black: ntRow(64) },
+  // white-and-red and near-black rows. Kings are 23 / 26 px.
+  nulltale: { title: 'NullTale — classic (blue vs red)', pack: 'nulltale', box: [16, 32], fit: 23, white: ntRow(208), black: ntRow(176) },
+  'nulltale-dread': { title: 'NullTale — dread (white vs black)', pack: 'nulltale', box: [16, 32], fit: 26, white: ntRow(96), black: ntRow(64) },
   // Deja View: exact sprite bounds on the 108×104 sheet (connected
-  // components), white-outlined cream vs navy.
+  // components), cream vs navy; its white outline is recoloured dark.
   'deja-view': {
-    title: 'Deja View (cream vs navy)', pack: 'deja-view', box: [18, 24],
+    title: 'Deja View (cream vs navy)', pack: 'deja-view', box: [18, 24], fit: 23, outline: { from: [0xfa, 0xf5, 0xf0], to: [0x1c, 0x1a, 0x24] },
     white: { p: ['dv', 48, 40, 13, 16], r: ['dv', 77, 39, 13, 17], n: ['dv', 45, 63, 17, 17], b: ['dv', 95, 61, 13, 19], q: ['dv', 48, 83, 13, 21], k: ['dv', 78, 81, 13, 23] },
     black: { p: ['dv', 62, 40, 13, 16], r: ['dv', 91, 39, 13, 17], n: ['dv', 63, 63, 17, 17], b: ['dv', 81, 61, 13, 19], q: ['dv', 62, 83, 13, 21], k: ['dv', 92, 81, 13, 23] },
   },
@@ -129,20 +136,31 @@ for (const name of PIECE_SETS) if (!PIECE_SHEETS[name]) throw new Error(`piece s
 // east–west run (the legend, and the fallback); wall-<mask> are the 47
 // AUTOTILE cases (board-ui.mjs canonicalMask: N=1 E=2 S=4 W=8, diagonals
 // NE=16 SE=32 SW=64 NW=128 — the renderer classes each wall `wm-<mask>`),
-// GENERATED below in the pack's colours with the pack's brick face; weak
-// is the WEAK SPOT overlay a door skin wears in a north–south wall line
-// (designer round 6: no edge-on door — "a cracked weak spot, functionally
-// the same ^"); the rest are the furniture sprites (skin-<name>; crate is
-// the '^' default). floor-1..N are the floor's texture variants (N =
-// board-ui FLOOR_VARIANTS; f1 is the common one).
+// GENERATED below in the pack's colours with the pack's brick face; the
+// rest are the furniture sprites (skin-<name>; crate is the '^' default).
+// floor-1..N are the floor's texture variants (N = board-ui FLOOR_VARIANTS;
+// f1 is the common one). A door skin in a north–south wall line is a WEAK
+// SPOT: the column's own wall case under the in-house crack overlay
+// (gen-sprites --tile-crack, the same one a god-weakened wall wears).
 const ROLES = {
   wall: '--tile-wall',
   door: '--sprite-door',
-  weak: '--sprite-weak',
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
   rubble: '--sprite-rubble',
+  // DECOR (round 8: "cosmetic props like torches on the wall"): purely
+  // cosmetic sprites board-ui scatters by a stable hash — torch / chain /
+  // banner on east–west wall faces, web / bones / skull / candle on floor
+  // squares — painted by a .decor span under the piece; a theme without a
+  // role paints nothing there.
+  torch: '--decor-torch',
+  candle: '--decor-candle',
+  web: '--decor-web',
+  bones: '--decor-bones',
+  skull: '--decor-skull',
+  chain: '--decor-chain',
+  banner: '--decor-banner',
 };
 for (let i = 1; i <= FLOOR_VARIANTS; i++) ROLES[`floor-${i}`] = `--tile-floor-${i}`;
 for (const code of WALL_MASK_CODES) ROLES[`wall-${code}`] = `--tile-wall-${code}`;
@@ -229,32 +247,6 @@ function wallBlob(spec, sheets) {
   return out;
 }
 
-// The WEAK SPOT a door skin wears in a north–south wall line (round 6: the
-// edge-on door looked wrong; the cell paints its wall case underneath, and
-// this transparent overlay knocks a chunk out of the band — a dark gap with
-// loose chips in the theme's stone, and a hairline crack running the band's
-// length). Distinct from the gods' branching black crack (a weakened wall).
-function weakSpot(spec) {
-  const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
-  const tile = blank(T, T);
-  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
-  const P = [
-    '...ee...',
-    '..eEEe..',
-    '.eEEgEe.',
-    '.eEgEEe.',
-    '.eEEEge.',
-    '..eEEe..',
-    '...ee...',
-  ];
-  const C = { e: lo, E: edge, g: hi };
-  P.forEach((row, r) => [...row].forEach((ch, c) => { if (C[ch]) put(4 + c, 4 + r, C[ch]); }));
-  // the hairline: from the gap to the top and bottom of the band
-  for (const [x, y] of [[7, 3], [8, 2], [8, 1], [7, 0], [8, 11], [8, 12], [9, 13], [9, 14], [8, 15]]) put(x, y, edge);
-  for (const [x, y] of [[5, 12], [10, 11], [3, 6], [12, 9]]) put(x, y, mix(fill, hi, 0.6)); // chips on the floor of the gap's rim
-  return tile;
-}
-
 // ---- floors (round 7, 2026-09-03: "the crypt floor tiles put both the
 // other themes to shame — palette-swap them for the other themes"). Every
 // theme's floor is the six bevelled flagstones of the Catacombs brown set;
@@ -285,6 +277,53 @@ function recolour(tile, base, target) {
   return out;
 }
 
+/** Pixels of colour `from` that touch transparency (or the sprite's edge)
+ *  become `to` — a white outline turns dark without touching the fill. */
+function recolourOutline(tile, from, to) {
+  const { width: w, height: h } = tile;
+  const a = (x, y) => x >= 0 && x < w && y >= 0 && y < h && tile.data[(y * w + x) * 4 + 3] > 0;
+  const out = blank(w, h);
+  tile.data.copy(out.data);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4;
+      if (!tile.data[o + 3] || tile.data[o] !== from[0] || tile.data[o + 1] !== from[1] || tile.data[o + 2] !== from[2]) continue;
+      if (!a(x - 1, y) || !a(x + 1, y) || !a(x, y - 1) || !a(x, y + 1)) { out.data[o] = to[0]; out.data[o + 1] = to[1]; out.data[o + 2] = to[2]; }
+    }
+  }
+  return out;
+}
+
+/** A w×h crop pasted bottom-centred into a 16×16 tile (small props). */
+function cropFit(sheets, key, x, y, w, h) {
+  const sprite = crop(sheets[key], x, y, w, h);
+  const tile = blank(T, T);
+  blit(tile, sprite, Math.floor((T - w) / 2), T - h);
+  return tile;
+}
+
+// ---- doors per theme (round 8: "why one door for all themes?"). The hall
+// keeps pixel-poem's timber leaf. Neither Dungeon Gathering nor Catacombs
+// draws a wooden door, so theirs are GATES: the castle's is a portcullis
+// dropped into Dungeon Gathering's own arched doorway tile, the crypt's a
+// barred gate in the theme's stone with Catacombs-dark iron.
+function portcullis(base, bar, shadow, y0 = 6) {
+  const tile = blank(T, T);
+  tile.data.set(base.data);
+  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+  for (const x of [4, 8, 12]) for (let y = y0; y < T; y++) { put(x, y, bar); put(x + 1, y, shadow); }
+  for (const y of [y0 + 3, y0 + 7]) for (let x = 3; x <= 13; x++) if (x !== 4 && x !== 8 && x !== 12) put(x, y, y === y0 + 3 ? bar : shadow);
+  return tile;
+}
+function barredGate(spec) {
+  const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
+  const tile = blank(T, T);
+  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) put(x, y, y < 2 || x < 2 || x > 13 ? (x === 2 - 1 || y === 1 ? lo : x === 14 ? hi : fill) : edge);
+  for (let x = 2; x <= 13; x++) put(x, 2, lo);
+  return portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3);
+}
+
 const THEMES = {
   hall: {
     title: 'The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors',
@@ -293,6 +332,14 @@ const THEMES = {
       crate: ['pp', 0, 8],
       chest: ['pp', 2, 8],
       rubble: ['cat', 20, 22],
+      // cosmetic props (board-ui scatters them; see DECOR below)
+      torch: ['pp', 0, 9],
+      candle: ['pp', 3, 9],
+      web: ['pp', 4, 6],
+      bones: ['pp', 8, 6],
+      skull: ['pp', 7, 7],
+      chain: ['pp', 5, 7],
+      banner: ['pp', 4, 7],
     },
     // Top band in the pack's cap colours; the face is its own brick rows.
     wall: { fill: '#6e4a48', hi: '#916a62', lo: '#4c2f49', edge: '#25131a', speckle: 0, face: { sheet: 'pp', x: 2, y: 0, row: 4 } },
@@ -302,12 +349,19 @@ const THEMES = {
   castle: {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
     tiles: {
-      door: ['pp', 7, 3],
-      crate: ['pp', 0, 8],
+      crate: ['dg', 20, 8], // the pack's stone block
       chest: ['pp', 2, 8],
       barrel: ['dg', 2, 12],
       rubble: ['dg', 12, 12],
+      torch: ['pp', 1, 9],
+      candle: ['pp', 5, 9],
+      web: ['pp', 4, 6],
+      bones: ['pp', 8, 6],
+      skull: ['pp', 7, 7],
+      chain: ['pp', 6, 7],
+      banner: ['pp', 4, 7],
     },
+    gate: { arch: ['dg', 11, 11], bar: '#c7cfdd', shadow: '#5a6787' }, // a portcullis in the pack's arched doorway
     // The pack's wall-top blue with its highlight/shade; brick face rows.
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
     // The Catacombs flagstones in Dungeon Gathering's floor blue-grey.
@@ -316,12 +370,18 @@ const THEMES = {
   crypt: {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
     tiles: {
-      door: ['pp', 7, 3],
       crate: ['catdeco', 8, 5],
       chest: ['pp', 2, 8],
       barrel: ['catdeco', 12, 8],
       rubble: ['cat', 20, 22],
+      torch: ['cattorch', 0, 0],
+      candle: ['catcandle', 0, 0, 7, 14],
+      chain: ['catdeco', 8, 1],
+      web: ['pp', 4, 6],
+      bones: ['pp', 8, 6],
+      skull: ['pp', 7, 7],
     },
+    gate: { barred: true }, // a barred gate in the crypt's own stone
     // Lifted a step above the pack's near-black stone so a wall reads
     // against its own floor; speckled like its column.
     wall: { fill: '#3c3129', hi: '#5a5347', lo: '#231f19', edge: '#0e0a08', speckle: 14, face: { sheet: 'cat', x: 33, y: 8, row: 6 } },
@@ -360,9 +420,16 @@ themeNames.forEach((theme, row) => {
     if (!prov.composed) provenance.push({ theme, role, ...prov });
   };
   const tiles = {};
-  for (const [role, [sheet, x, y]] of Object.entries(THEMES[theme].tiles)) {
-    tiles[role] = crop(sheets[sheet], x * T, y * T, T, T);
+  for (const [role, [sheet, x, y, w, h]] of Object.entries(THEMES[theme].tiles)) {
+    tiles[role] = w ? cropFit(sheets, sheet, x, y, w, h) : crop(sheets[sheet], x * T, y * T, T, T);
     emit(role, tiles[role], { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
+  }
+  const gate = THEMES[theme].gate;
+  if (gate?.arch) {
+    const [sheet, x, y] = gate.arch;
+    emit('door', portcullis(crop(sheets[sheet], x * T, y * T, T, T), hex(gate.bar), hex(gate.shadow)), { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, composed: 'portcullis drawn into the pack arch' });
+  } else if (gate?.barred) {
+    emit('door', barredGate(THEMES[theme].wall), { composed: 'barred gate in the theme stone' });
   }
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
@@ -381,7 +448,7 @@ themeNames.forEach((theme, row) => {
   provenance.push({ theme, role: 'wall face (brick rows under every south edge)', pack: SHEETS[fs.sheet][0], sheet: SHEETS[fs.sheet][1], x: fs.x, y: fs.y });
   emit('wall', cases['wall-10'], { composed: 'blob case 10 (east–west run)', mask: 10 });
   for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: 'blob in the pack palette + its face', mask: +role.slice(5) });
-  emit('weak', weakSpot(ws), { composed: 'weak spot overlay in the theme stone' });
+
   css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
 // Pack tiles fill their 16×16 cell edge to edge; the in-house sprites carry
@@ -400,12 +467,14 @@ index.pieces = { order: PIECE_ORDER, cell: PA, sets: {} };
 pieceNames.forEach((name, row) => {
   const set = PIECE_SHEETS[name];
   const [bw, bh] = set.box;
-  const decl = [`  --piece-w: ${((bw / T) * 0.92).toFixed(3)};`, `  --piece-h: ${((bh / T) * 0.92).toFixed(3)};`];
+  const scale = 0.96 / set.fit; // cells per sprite px: the tallest piece stands 0.96 cell
+  const decl = [`  --piece-w: ${(bw * scale).toFixed(3)};`, `  --piece-h: ${(bh * scale).toFixed(3)};`];
   index.pieces.sets[name] = { row, title: set.title, pack: set.pack, box: set.box, sheets: [...new Set([...Object.values(set.white), ...Object.values(set.black)].map((c) => SHEETS[c[0]][1]))] };
   [...PIECE_ORDER].forEach((letter, i) => {
     for (const side of ['white', 'black']) {
       const [sheetKey, x, y, w, h] = set[side][letter];
-      const sprite = crop(sheets[sheetKey], x, y, w, h);
+      let sprite = crop(sheets[sheetKey], x, y, w, h);
+      if (set.outline) sprite = recolourOutline(sprite, set.outline.from, set.outline.to);
       const tile = blank(bw, bh);
       blit(tile, sprite, Math.floor((bw - w) / 2), bh - h); // bottom-centred
       const col = (side === 'white' ? 0 : 6) + i;

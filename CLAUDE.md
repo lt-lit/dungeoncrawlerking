@@ -78,17 +78,25 @@ in a north–south wall line is a WEAK SPOT (`weak`: the column's own case +
 show through under every sprite, `f1…f6` are floor variants — EVERY theme
 wears the six Catacombs flagstones, palette-swapped into the pack's floor
 tone for hall and castle (designer round 7: the only floor tiles that look
-good); and **PIECE SPRITES** (round 6): Dani
-Maccari's *Pixel Chess* 16×16 sets (`pixel-chess` stone / `-wood`),
-NullTale's *Chess* (CC BY 4.0; `nulltale` classic, `nulltale-dread`; 16×32
-TALL sprites that stand on their square and rise into the one above — the
-piece box is `--piece-w`×`--piece-h` cells, bottom-anchored, and the FLIP
-clone copies the piece's own box) and Deja View's *Chess Assets*
-(`deja-view`, 18×24) via `data-piece` on every piece span + `data-pieces`
-on the board (`PIECE_SETS`, Options → Pieces, `?pieces=`; classic = the
-glyphs), the promotion picker included; selftest 35/35, ui-smoke asserts the themes,
-the doorway's masks and the piece sprites on the live board — see
-`play/README.md` § "Art themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
+good); **round 8**: ONE crack (`--tile-crack`, thin black lines on
+transparency) for every weakened wall — god-cracked or authored weak spot
+(the generated "weak spot" sprite is gone); each theme has its OWN door
+(pixel-poem's leaf, a portcullis in Dungeon Gathering's arch, a barred gate
+in Catacombs stone) and cosmetic PROPS (`.decor` spans board-ui scatters
+by hash: torches/banners/chains on wall faces, cobwebs/bones/skulls/
+candles on floor — never on holes or furniture; a theme's `--decor-*`
+paints them); and **PIECE SPRITES** (rounds 6–8): NullTale's *Chess* (CC
+BY 4.0; `nulltale` classic — the DEFAULT — and `nulltale-dread`), Dani
+Maccari's *Pixel Chess* (`pixel-chess` stone / `-wood`) and Deja View's
+*Chess Assets* (`deja-view`, its white outline recoloured dark), every set
+FITTED so its tallest piece stands 0.96 cell — no piece rises into the
+square above (designer: overlap reads badly clustered) — via `data-piece`
+on every piece span + `data-pieces` on the board (`PIECE_SETS`, Options →
+Pieces, `?pieces=`; classic = the glyphs), the promotion picker included;
+the FLIP clone copies the piece's own box; selftest 35/35, ui-smoke asserts
+the themes, the doorway's masks, the crack over its wall, the props and
+the piece sprites on the live board — see `play/README.md` § "Art
+themes"); **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
 path, candidate census + board heat, RNG-free probability getters +

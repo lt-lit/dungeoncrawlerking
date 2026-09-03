@@ -41,6 +41,10 @@
 //              its wall case like a cracked wall and the sprite is the
 //              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
+//   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
+//              chain / banner on an east–west wall face, web / bones /
+//              skull / candle on floor), scattered by a stable hash of the
+//              square; the theme's --decor-<name> paints it, or nothing.
 // PIECES (2026-09-03): every piece span carries data-piece="<FEN letter>";
 // setPieces(name) stamps data-pieces on the board and tiles.css paints the
 // set's sprite (PIECE_SETS) instead of the glyph; null = the glyphs.
@@ -96,6 +100,22 @@ export const FLOOR_VARIANTS = 6;
 /** Stable floor-texture variant for a square: f1 (the common stone) on
  *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the
  *  square, so a repaint never makes the floor crawl. */
+/** Stable per-square hash for cosmetic scatter (decor). */
+function squareHash(f, rank, salt) {
+  return (((f + 1) * 2654435761) ^ ((rank + 1) * 40503) ^ (salt * 97)) >>> 0;
+}
+
+/** Which cosmetic prop a square carries, or null. Walls facing south (an
+ *  east–west run with floor below) get wall-mounted props; floor squares
+ *  get litter, cobwebs only against a wall. Low rates — a prop must never
+ *  read as a piece or as terrain. */
+function decorFor({ wallTile, cracked, floor, mask, nearWall, f, rank }) {
+  const r = squareHash(f, rank, 7) % 1000;
+  if (wallTile && !cracked && (mask & 10) && !(mask & 4)) return r < 200 ? 'torch' : r < 260 ? 'banner' : r < 320 ? 'chain' : null;
+  if (floor) return r < 22 && nearWall ? 'web' : r < 42 ? 'bones' : r < 54 ? 'skull' : r < 74 && nearWall ? 'candle' : null;
+  return null;
+}
+
 function floorVariant(f, rank) {
   const h = (((f + 1) * 73856093) ^ ((rank + 1) * 19349663)) >>> 0;
   const r = h % 16;
@@ -319,6 +339,17 @@ export class BoardUI {
         : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
+      // Cosmetic props (one span under the piece; removed when the square
+      // changes kind — a breached wall drops its torch).
+      const decor = decorFor({ wallTile, cracked, floor: !isWall && !isFurniture, mask, nearWall: N || E || S || W, f, rank });
+      let span = cell.querySelector(':scope > .decor');
+      if (decor) {
+        if (!span) {
+          span = document.createElement('span');
+          cell.insertBefore(span, cell.querySelector('.piece'));
+        }
+        span.className = `decor decor-${decor}`;
+      } else if (span) span.remove();
       let glyph = cell.querySelector('.piece');
       if (v && v !== WALL) {
         if (!glyph) {
