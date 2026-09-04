@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s65-guard-post",
+ "title": "Guard Post",
+ "notes": "A two-wide corridor runs top to bottom with a side passage joining from the west edge. A store NW open at one corner, a barracks SW behind a door with a broken gap in its wall, the guard room east (table) behind a door, a passage NE off the east edge, and a strip of floor along the bottom.",
+ "theme": "castle",
+ "map": [
+  "......#...",
+  "...#......",
+  "####..####",
+  "......#...",
+  "......#...",
+  "##^#..^...",
+  "...#..#.^.",
+  "......#...",
+  "...#..####",
+  "...#.....^"
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..D...D...",
+  "........T.",
+  "..........",
+  "..........",
+  ".........X"
+ ],
+ "wave": 6
+}

@@ -19,7 +19,7 @@
 // TERRAIN (the both-orientations testing convention), not the view.
 //
 // Test/debug query params (the E2E driver contract):
-//   ?stage=<id>      auto-select that stage (e.g. s07-twin-chambers)
+//   ?stage=<id>      auto-select that stage (e.g. s59-hall-corner)
 //   &flip=1&ct=&cb=  stage orientation + crop far/near
 //   &turn=w|b        initiative (b = enemy moves first)
 //   &seed=<n>        the master setup seed

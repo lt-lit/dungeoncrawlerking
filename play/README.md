@@ -138,13 +138,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `phase0/harness/verify-stages.mjs`, and the meter-lab corpus builder —
   never re-assemble the pipeline by hand (the crumbleFilter split is the
   cautionary tale).
-- `stages/*.json` — the stage set, authored with §4.6 capturable walls
-  from the start (wave 4, s01–s33: the furniture bed — locked, all 33
-  accepted 2026-08-27, replacing the retired waves 1–3; wave 5,
-  s34–s58: rooms & breaches — sectioned maps, crate clusters,
-  furniture in wall structures, breakable double doors, and the s51+
-  floorplans (multi-room maps: hallways, doors to and between rooms,
-  per-room furniture patterns) — locked, all 25 accepted 2026-08-27);
+- `stages/*.json` — the stage set: **wave 6, s59–s94 — the 2026-09-04
+  arena refresh: 36 hand-authored 10×10 arenas, designer-approved in
+  three previewed batches, now THE test bed** (see "Stages (schema 2)"
+  below for what they are). Waves 4–5 (s01–s58, the 1.2.4 bed: the
+  furniture bed and the rooms & breaches set, incl. the s51+ floorplans)
+  are ARCHIVED in `stages-archive/` — not loaded, kept because the
+  godlab and meter-lab corpora in `phase0/results/` were played on them;
   `stages/manifest.json` is the
   generated browser bundle (regenerate with
   `phase0/harness/gen-stage-manifest.mjs` after any stage edit —
@@ -374,7 +374,8 @@ assigned by `gen-skins.mjs` from the stage NAME's vocabulary (tombs, rubble
 and warrens are crypt; gates, parapets and redoubts are castle; pantries,
 banquets and doorways are hall), the rest balanced across the three so
 neighbouring floors differ, plus a reviewed override table — 18 / 21 / 19
-over the 58. Cosmetics only: a theme changes what the renderer paints,
+over the archived 58; the wave-6 bed sets `theme` by hand, 12 / 12 / 12
+over the 36. Cosmetics only: a theme changes what the renderer paints,
 never the grid, the deal or the gods.
 
 The packs are NOT in the repo (their terms allow use in projects but not
@@ -472,6 +473,40 @@ manifest after running it. The locked stages are a curated
 sample of plausible dungeon slices — Phase 2's dungeon generator replaces
 authoring wholesale, so there is no editor; the diff and the gallery are
 the review surface.
+
+**The wave-6 bed (s59–s94, 2026-09-04)** is thirty-six 10×10 arenas —
+the designer's verdict on the 1.2.4 bed was that the small stages had
+become useless and the big complex ones were the fun — hand-drawn under
+three rules the generator inherits: (1) every arena is a plausible CROP
+of a bigger dungeon, never a set piece fitted to the frame — rooms show
+two or three walls with the rest off-frame, corridors enter on one edge
+and leave by another, wall lines stop where the crop cut them; (2)
+nothing is symmetric under a mirror or a 180° rotation (a scratch lint
+rejected exact symmetry and flagged >80% agreement); (3) both king rows
+keep floor near the centre files so no deal auto-crops, and every stage
+dealt 15/15 in both orientations through `dealMatchup` before it was
+shown. Skins and themes are hand-authored (gen-skins.mjs skips wave ≥ 6).
+The design vocabulary, each with a stage: a hall corner (s59), a
+T-junction with a hallway sliced lengthwise (s60), a cell block (s61),
+an armoury behind barred doors (s62), a chapel nave with a colonnade
+(s63), kitchens and larder (s64), a guard post on a corridor (s65), a
+pillared cistern (s66), a gallery cut lengthwise (s67), a switchback of
+wall stubs (s68), a breached curtain wall with a tower base (s69), a
+strongroom with a crate-blocked door (s70), a stair core wrapped by its
+passage (s71), barracks (s72), a ROUND tower wall two thick at the
+steps (s73), a wine cellar of barrel aisles (s74), a cave-in you smash
+through or bypass (s75), an ossuary with uneven alcoves (s76), a smithy
+(s77), a scriptorium of shelf stacks (s78), a gatehouse wall two thick
+with a portcullis pair and a postern (s79), a mess hall defined by its
+tables (s80), a rock-cut dead-end warren (s81), a natural grotto (s82),
+a throne room with a dais (s83), a diagonal fissure (s84), twin parallel
+passages (s85), a crate warehouse (s86), stables (s87), a RUIN whose
+walls decay into stone/rubble/gap runs (s88), an enfilade of rooms
+(s89), a true four-way crossing with unequal quadrants (s90), an arcade
+(s91), masonry giving way to cave (s92), a cloister garth (s93) and an
+L-shaped tannery with an alley (s94). Rooms reachable only through a
+door are legal (§4.6 smash-in) and were flagged in review: s59, s61,
+s62, s73 and s79 keep theirs by design.
 
 **The deal pipeline** (armygen `dealMatchup`, one call): stage →
 `flipStageVertical`? → `cropStage`? → per-side armies (`makeArmy`: width

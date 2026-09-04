@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s94-the-tannery",
+ "title": "The Tannery",
+ "notes": "An L-shaped workshop: vats in a block, a frame table, a partition stub from the top edge, a pillar; the L's inner corner is a wall two thick with a broken door, and an alley two wide runs down the east edge behind it with a door into the L's foot.",
+ "theme": "hall",
+ "map": [
+  "..#...##..",
+  "..#.^.##..",
+  "......##..",
+  "......^#..",
+  "......##..",
+  "....#.#^..",
+  "..........",
+  ".^^.......",
+  ".^^......^",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "....T.....",
+  "..........",
+  "......R...",
+  "..........",
+  ".......D..",
+  "..........",
+  ".BB.......",
+  ".BB......X",
+  ".........."
+ ],
+ "wave": 6
+}

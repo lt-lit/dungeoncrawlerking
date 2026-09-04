@@ -205,6 +205,10 @@ for (const file of readdirSync(STAGE_DIR).sort()) {
   if (!file.endsWith('.json') || file === 'manifest.json') continue;
   const path = join(STAGE_DIR, file);
   const json = JSON.parse(readFileSync(path, 'utf8'));
+  // Wave 6+ (the 2026-09-04 arena refresh) carries HAND-AUTHORED skins and
+  // themes — this tool's rules and override table were written for waves
+  // 4–5 (now in play/stages-archive/) and must never overwrite them.
+  if ((json.wave ?? 0) >= 6) continue;
   const { theme, why } = themeFor(json, themeTally);
   if (ONLY && json.id !== ONLY) continue;
   const { rows, reasons } = skinGrid(json);

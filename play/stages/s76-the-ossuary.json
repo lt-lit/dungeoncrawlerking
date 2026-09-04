@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s76-the-ossuary",
+ "title": "The Ossuary",
+ "notes": "A long bone-hall with the west wall in frame (broken open at its south end) and side-alcoves down the east behind wall stubs of uneven length. An altar at the north end, ossuary chests in the alcoves, bones where they fell, one pillar.",
+ "theme": "crypt",
+ "map": [
+  "#..^....^.",
+  "#.........",
+  "#^.....###",
+  "#.......^.",
+  "#...#.....",
+  "#.^....##.",
+  "#.........",
+  "#........^",
+  ".....^.###",
+  ".........."
+ ],
+ "skin": [
+  "...T....X.",
+  "..........",
+  ".X........",
+  "........X.",
+  "..........",
+  "..R.......",
+  "..........",
+  ".........R",
+  ".....R....",
+  ".........."
+ ],
+ "wave": 6
+}

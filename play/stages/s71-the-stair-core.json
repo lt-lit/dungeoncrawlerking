@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s71-the-stair-core",
+ "title": "The Stair Core",
+ "notes": "A stair's solid core stands off-centre with the passage wrapping three sides of it. A long wall down file e closes off a west chamber (tables, a closet cut off by a stub from the top edge) with one door; the passage's south end meets a wall with a door into a wide room the crop cut lengthwise.",
+ "theme": "castle",
+ "map": [
+  "..#.#.....",
+  "..#.#.....",
+  "....^.....",
+  ".^^.#.##..",
+  "....#.##..",
+  "....#.....",
+  ".^..#.....",
+  "...#####^#",
+  "..^...#...",
+  ".........^"
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "....D.....",
+  ".TT.......",
+  "..........",
+  "..........",
+  ".B........",
+  "........D.",
+  "..K.......",
+  ".........X"
+ ],
+ "wave": 6
+}

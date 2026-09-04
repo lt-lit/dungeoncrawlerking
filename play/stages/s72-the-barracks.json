@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s72-the-barracks",
+ "title": "The Barracks",
+ "notes": "A long barrack room with bunks along the walls (one collapsed), a latrine nook behind a partition with its own door, a corridor two wide down the west edge behind a wall with one door, and a corridor along the south with two doors into the room.",
+ "theme": "castle",
+ "map": [
+  "..#.......",
+  "..#.^^....",
+  "..#.....^^",
+  "..#.......",
+  "..^.^^....",
+  "..#.....^.",
+  "..#...#...",
+  "..#...#^..",
+  "..###^#^##",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "....TT....",
+  "........TT",
+  "..........",
+  "..D.TT....",
+  "........R.",
+  "..........",
+  ".......B..",
+  ".....D.D..",
+  ".........."
+ ],
+ "wave": 6
+}

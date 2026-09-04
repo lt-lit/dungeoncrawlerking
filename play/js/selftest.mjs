@@ -105,7 +105,8 @@ async function main() {
   });
 
   // --- Catalog extremes: smallest and largest boards construct and move.
-  // 3x5 IS the real minimum the setup screen serves (s01-the-closet). ---
+  // 3x5 is the catalog's floor (the archived wave-4 bed served it; the
+  // wave-6 bed is all 10x10, but the catalog still carries every size). ---
   const extremeSpecs = [
     {
       files: 3, ranks: 5, walls: [],

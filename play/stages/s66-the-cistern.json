@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s66-the-cistern",
+ "title": "The Cistern",
+ "notes": "A vaulted cistern: pillars scattered where the vault needed them, not on a grid; a small walled chamber in the NE corner with a door and a broken corner; a wall stub from the west edge; fallen masonry and stores near the south.",
+ "theme": "crypt",
+ "map": [
+  ".......#..",
+  ".......^..",
+  "..#.....#.",
+  "..........",
+  ".....#....",
+  "#.#.......",
+  "#.....#..#",
+  "...#......",
+  ".......^^.",
+  ".#....^..^"
+ ],
+ "skin": [
+  "..........",
+  ".......D..",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  ".......RR.",
+  "......K..B"
+ ],
+ "wave": 6
+}

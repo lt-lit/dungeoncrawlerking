@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s89-the-solar",
+ "title": "The Solar",
+ "notes": "An enfilade of three rooms with their doors in a line: a closet west with a privy screen, the bedchamber (bed, hearth block, chest, a second door) and a room east the crop cut short, its wall broken at the top. The west wall has a gap low down; the east door stands open.",
+ "theme": "castle",
+ "map": [
+  "...#......",
+  ".#.#..^^..",
+  "...#^^.#..",
+  "...#...#..",
+  "...^......",
+  "...#...#..",
+  "...#...#^.",
+  "...#^^.#..",
+  ".......#..",
+  "...#...#.."
+ ],
+ "skin": [
+  "..........",
+  "......XD..",
+  "....TT....",
+  "..........",
+  "...D......",
+  "..........",
+  "........T.",
+  "..........",
+  "..........",
+  ".........."
+ ],
+ "wave": 6
+}

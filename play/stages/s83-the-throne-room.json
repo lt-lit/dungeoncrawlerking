@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s83-the-throne-room",
+ "title": "The Throne Room",
+ "notes": "An audience hall: the dais wall across the north end with the steps as a two-wide gap off-centre and a side door at its east end, the throne on the dais, pillars flanking an aisle at uneven spacing (one fallen to rubble), the east wall in frame with one door and a chest beneath it.",
+ "theme": "hall",
+ "map": [
+  "..........",
+  "...^......",
+  ".##..###^#",
+  ".........#",
+  "..#......#",
+  ".......#.^",
+  "..#......#",
+  ".......#.#",
+  "..#...^..^",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "...C......",
+  "........D.",
+  "..........",
+  "..........",
+  ".........D",
+  "..........",
+  "..........",
+  "......R..X",
+  ".........."
+ ],
+ "wave": 6
+}

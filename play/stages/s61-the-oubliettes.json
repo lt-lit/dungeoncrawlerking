@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s61-the-oubliettes",
+ "title": "The Oubliettes",
+ "notes": "A row of cells along the north edge \u2014 three doored, one with the door torn off, the last cut by the frame with its wall fallen to rubble. A two-wide corridor below them runs off the east edge and turns south along the west edge; the guardroom SE (table, an alcove with a chest) opens by a door from the corridor and one from the west passage.",
+ "theme": "castle",
+ "map": [
+  "..#..#..#.",
+  "..#..#..#.",
+  "#^##.##^#^",
+  "..........",
+  "..........",
+  "..###^####",
+  "..#.......",
+  "..^.......",
+  "..#..^^.#.",
+  "..#.....#^"
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  ".D.....D.R",
+  "..........",
+  "..........",
+  ".....D....",
+  "..........",
+  "..D.......",
+  ".....TT...",
+  ".........X"
+ ],
+ "wave": 6
+}

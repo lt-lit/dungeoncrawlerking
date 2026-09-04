@@ -132,10 +132,12 @@ if (cfg.stageSpread && cfg.stageSpread < allStages.length) {
 const ORIENTATIONS = cfg.orientations === 'normal' ? [false] : cfg.orientations === 'flipped' ? [true] : [false, true];
 
 // Stage class for the per-class breakdowns (wave 4 = the furniture bed,
-// wave 5 splits at the s51 floorplans — see CLAUDE.md's 1.2.4 notes).
+// wave 5 splits at the s51 floorplans — see CLAUDE.md's 1.2.4 notes;
+// wave 6, s59+, is the 2026-09-04 refresh — 36 hand-authored 10×10
+// arenas, one class: every one is a floorplan-scale crop).
 function stageClass(id) {
   const n = parseInt(id.match(/^s(\d+)/)?.[1] ?? '0', 10);
-  return n >= 51 ? 'floorplan' : n >= 34 ? 'rooms' : 'core';
+  return n >= 59 ? 'refresh' : n >= 51 ? 'floorplan' : n >= 34 ? 'rooms' : 'core';
 }
 
 // Army width scales with the stage or the 5x5 end of the bed rejects every

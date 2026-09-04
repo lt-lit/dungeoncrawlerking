@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s75-the-cave-in",
+ "title": "The Cave-in",
+ "notes": "A corridor two wide crosses the frame; halfway along, the roof came down \u2014 stone and rubble fill it. Smash through the rubble, or go round: an open doorway and a door into the room above, and below, the wall stops short of the west edge and has a gap further east. A stub from the east edge in the south room.",
+ "theme": "crypt",
+ "map": [
+  ".......#..",
+  "....^..#..",
+  "..........",
+  "##.####^##",
+  "....#^^...",
+  "....^#....",
+  "..####.###",
+  ".........#",
+  "......#..#",
+  ".^........"
+ ],
+ "skin": [
+  "..........",
+  "....X.....",
+  "..........",
+  ".......D..",
+  ".....RR...",
+  "....R.....",
+  "..........",
+  "..........",
+  "..........",
+  ".B........"
+ ],
+ "wave": 6
+}
