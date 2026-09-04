@@ -443,7 +443,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 /* A door in a north–south wall line (board-ui `weak`) is a WEAK SPOT: the
    cell paints its wall case like a cracked wall does, and the sprite is THE
    crack — the same thin black branching overlay a god-weakened wall wears
-   (one crack for every weakened wall). The same capturable '^'. */
+   (one of the crack drawings, by square — .ck1…ckN above). The same
+   capturable '^'. */
 .cell.skin-door.weak {
   background-image: var(--wall-tile), var(--tile-floor, none);
   background-size: 100% 100%;

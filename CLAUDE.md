@@ -39,8 +39,9 @@ TILES by kind — wall slab / hole / crate / cracked wall, painted from
 `director.holes` + `godCrates` via `setPosition(fen, ledgers)`; edge
 coordinates; hint arrows gold/silver/bronze by RANK at half size; the gods'
 residue in their own light-blue hue, one mark per rung plus a dashed arrow
-per displacement, merged across quakes and mirrored in a gods line under
-the board; per-rung terrain fx held on their end frame; the hint probe
+per displacement (since rounds 13–14: a solid arrow alone per
+displacement, one blue frame per terrain rung), merged across quakes and
+mirrored in a gods line under the board; per-rung terrain fx held on their end frame; the hint probe
 STREAMS at the enemy's own `depth 22 movetime 10000` with a "Keep
 evaluating" option, `?probe=` override, and cancel hardening — an
 unanswered `stop` recycles the instance and `duel.#search` pins MultiPV 1;
@@ -166,8 +167,13 @@ crumble fx ends on the lone-pit case); **round 14**: FOUR crack drawings
 stable hash, so neighbouring cracks differ and never swap) and the gods'
 residue is ONE 3-px light-blue frame for crack, breach and hole alike
 (the breach fill and the hole's rust rim are gone — "all god actions in
-light blue"; the three classes stay for the tests) — see
-`play/README.md` § "Art themes");
+light blue"; the three classes stay for the tests). Known nits from the
+round-13 review, accepted for now: an edge-file piece can overlap the
+2-px board border by a hair (the clip-path clips at the border box, where
+overflow:hidden clipped at the padding box); with pixel-perfect on, the
+headroom margin can over-reserve by up to one sprite step; the pit
+outline is per tile, so it does not wrap the inner corner of an L of
+joined pits — see `play/README.md` § "Art themes");
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
