@@ -408,6 +408,23 @@ that ends a fully-locked board is unchanged (it immobilizes, it does not
 eat). The favored-seat model/edge for the live-regime
 arm still needs the designer. Then **Phase 2 — exploration slice**.
 
+**2026-09-04 — ARENA REFRESH: the test bed is now WAVE 6, s59–s94, thirty-six
+hand-authored 10×10 arenas** (designer: the small stages had become useless,
+the big complex 10×10s were the fun; each batch of twelve was previewed and
+approved before anything was written). Rules of the bed, which the Phase 2
+generator inherits: every arena is a plausible CROP of a bigger dungeon (rooms
+with walls off-frame, corridors leaving by the edges, wall lines the crop cut
+short), NOTHING is symmetric under mirror or 180° rotation — the designer's
+standing complaint, and a fable session had just burned 40% of a weekly budget
+on a dozen symmetric set pieces — and both king rows keep centre floor so no
+deal auto-crops. Skins and themes are HAND-AUTHORED (`gen-skins.mjs` skips
+wave ≥ 6; 12/12/12 hall/castle/crypt). The 1.2.4 bed (s01–s58) is ARCHIVED in
+`play/stages-archive/` — not loaded; the godlab/meter-lab corpora in
+`phase0/results/` were played on it, and `godlab/run.mjs stageClass` still
+recognises its id ranges (the new bed is one class, `refresh`). The ui-smoke
+default stage is `s59-hall-corner` (door at d8). The design vocabulary, stage
+by stage, is listed in `play/README.md` § "Stages (schema 2)".
+
 ## Layout
 
 - `play/` — the Phase 1 game (vanilla-JS ES modules, GitHub Pages). Phase 0

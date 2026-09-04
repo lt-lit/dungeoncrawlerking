@@ -9,7 +9,7 @@
 //
 // Setup (once): cd phase0 && npm i --no-save playwright  (Chromium: see
 // selftest-headless.mjs). Usage: cd phase0 && node harness/ui-smoke.mjs
-//   [--stage s07-the-doorway] [--plies 60] [--seed 3] [--shots]
+//   [--stage s59-hall-corner] [--plies 60] [--seed 3] [--shots]
 //   [--go 'depth 8 movetime 120']  (the engine's search limits per move —
 //   shallower searches grab material, which is how to reproduce the
 //   "cracked wall captured in the reply" path below)
@@ -29,7 +29,7 @@ const arg = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
 };
-const STAGE = arg('stage', 's07-the-doorway');
+const STAGE = arg('stage', 's59-hall-corner');
 const PLIES = parseInt(arg('plies', '60'), 10);
 const SEED = arg('seed', '3');
 const SHOTS = argv.includes('--shots');
@@ -108,7 +108,7 @@ const shot = async (name) => {
 // --- art themes (2026-09-03): the stage's own theme dresses the live board;
 // the Art-set option and ?theme= override it; the legend follows. ---------
 const themeState = () =>
-  page.evaluate(() => {
+  page.evaluate(async () => {
     const board = document.getElementById('board');
     // null when nothing matches — a stage with no stone wall (s49 Crate
     // Quarry is crates only) has no wall cell to probe; never hand a null
@@ -121,9 +121,35 @@ const themeState = () =>
       legend: document.querySelector('.legend').dataset.theme ?? null,
       wall: bg('#board .cell.wall'),
       floor: bg('#board .cell.light:not(.wall):not(.furniture):not(.hole)'),
-      door: document.querySelector('#board .cell.skin-door .piece.neutral') ? bg('#board .cell.skin-door .piece.neutral') : '',
-      doorBg: document.querySelector('#board .cell.skin-door') ? bg('#board .cell.skin-door') : '',
-      masks: [...document.querySelectorAll('#board .cell.wall')].map((c) => `${c.dataset.square}:${[...c.classList].find((k) => k.startsWith('wm-'))}`).join(' '),
+      // s59's g5 is a door in an EAST–WEST wall line — the one that paints the
+      // leaf. (d8, in the north–south line down file d, is a weak spot: the
+      // wall tile with a crack, no leaf — the ply-0 skins check below.)
+      door: document.querySelector('#board [data-square="g5"] .piece.neutral') ? bg('#board [data-square="g5"] .piece.neutral') : '',
+      doorBg: document.querySelector('#board [data-square="g5"]') ? bg('#board [data-square="g5"]') : '',
+      // Every wall's autotile case, re-derived from its neighbours by the
+      // renderer's own rule (a standing wall, a cracked wall or a door is
+      // solid; a hole, floor or loose furniture is not; off-board is not)
+      // through the renderer's own canonicalMask — stage-independent, so
+      // it runs on any --stage.
+      masksBad: await (async () => {
+        const { canonicalMask } = await import('/play/js/board-ui.mjs');
+        const cells = new Map([...document.querySelectorAll('#board .cell[data-square]')].map((c) => [c.dataset.square, c]));
+        const solid = (f, r) => {
+          const c = cells.get(String.fromCharCode(97 + f) + r);
+          return !!c && !c.classList.contains('hole') && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door'));
+        };
+        const bad = [];
+        let n = 0;
+        for (const [sq, c] of cells) {
+          if (!c.classList.contains('wall') || c.classList.contains('hole')) continue;
+          n++;
+          const f = sq.charCodeAt(0) - 97;
+          const r = parseInt(sq.slice(1), 10);
+          const want = canonicalMask((solid(f, r + 1) ? 1 : 0) | (solid(f + 1, r) ? 2 : 0) | (solid(f, r - 1) ? 4 : 0) | (solid(f - 1, r) ? 8 : 0) | (solid(f + 1, r + 1) ? 16 : 0) | (solid(f + 1, r - 1) ? 32 : 0) | (solid(f - 1, r - 1) ? 64 : 0) | (solid(f - 1, r + 1) ? 128 : 0));
+          if (!c.classList.contains(`wm-${want}`)) bad.push(`${sq}:${[...c.classList].find((k) => k.startsWith('wm-')) ?? 'none'}≠wm-${want}`);
+        }
+        return { n, bad };
+      })(),
       pieces: window.__DCK.pieces,
       king: (() => { const el = document.querySelector('#board .piece[data-piece="K"]'); const cs = el && getComputedStyle(el); return cs ? { bg: cs.backgroundImage, font: cs.fontSize } : null; })(),
     };
@@ -138,12 +164,11 @@ const short = (v) => (v ?? 'none').slice(0, 30);
   const t = await themeState();
   expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
   expect(wallOk(t.wall, 'data:image/png') && (t.floor ?? '').includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${short(t.wall)}…, floor ${short(t.floor)}…)${wallNote(t)}`);
-  if (STAGE === 's07-the-doorway') {
-    expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite');
-    // d6 is a dark square: the checker shade (a flat gradient) is allowed, the in-house bevel (160deg) is not.
+  expect(t.masksBad.n > 0 && t.masksBad.bad.length === 0, `wall autotile masks match the standing-neighbour rule on all ${t.masksBad.n} walls${t.masksBad.bad.length ? ` — ${t.masksBad.bad.join(' ')}` : ''}`);
+  if (STAGE === 's59-hall-corner') {
+    expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite (g5, a door in an east–west line)');
+    // g5 is a dark square: the checker shade (a flat gradient) is allowed, the in-house bevel (160deg) is not.
     expect(t.doorBg.includes('data:image/png') && !t.doorBg.includes('160deg'), `the floor tile shows behind the door, no in-house bevel (${t.doorBg.slice(0, 60)}…)`);
-    // ##.^## on rank 6: a6 joins east, b6 west, e6 joins the door west and f6 east, f6 west.
-    expect(t.masks === 'a6:wm-2 b6:wm-8 e6:wm-10 f6:wm-8', `wall autotile masks on the doorway's wall line (${t.masks})`);
   }
 }
 const setTheme = (name) =>
@@ -187,10 +212,12 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   expect(decor.every((d) => d.cls.length === 1 && (d.cls[0] === 'decor-doorway' ? !d.cell.includes('wall') && !d.cell.includes('furniture') : d.cell.includes('wall') && ['decor-torch', 'decor-banner', 'decor-chain'].includes(d.cls[0]))), `${decor.length} cosmetic props: wall props on wall faces only, no floor litter`);
 }
 
-// --- skins: the doorway's furniture leaf paints as a door from ply 0 ---------
-if (STAGE === 's07-the-doorway') {
-  const door = await page.evaluate(() => ({ cls: window.__DCK.marks.cell('d6'), sprite: !!document.querySelector('#board [data-square="d6"] .piece.neutral') }));
-  expect(door.cls?.includes('furniture') && door.cls?.includes('skin-door') && door.sprite, `d6 is the door leaf with its sprite (${door.cls})`);
+// --- skins: the hall's doors paint from ply 0 — g5 (east–west line) as the
+// leaf, d8 (north–south line) as a weak spot ---------------------------------
+if (STAGE === 's59-hall-corner') {
+  const door = await page.evaluate(() => ({ g5: window.__DCK.marks.cell('g5'), d8: window.__DCK.marks.cell('d8'), sprite: !!document.querySelector('#board [data-square="g5"] .piece.neutral') }));
+  expect(door.g5?.includes('furniture') && door.g5?.includes('skin-door') && door.sprite, `g5 is the door leaf with its sprite (${door.g5})`);
+  expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('weak'), `d8, the door in the north–south line, is a weak spot (${door.d8})`);
 }
 
 // --- the streaming probe: arrows appear, ranked, with a depth readout --------

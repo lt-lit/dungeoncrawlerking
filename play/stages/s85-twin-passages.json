@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s85-twin-passages",
+ "title": "Twin Passages",
+ "notes": "Two passages running top to bottom, separated by a wall (its north end gone) with a door, an open gap and a second door blocked by a crate dragged in front of it. A second wall east with a rubble gap, a door and an open end closes three bays of uneven height along the east edge; a chest in the middle one.",
+ "theme": "castle",
+ "map": [
+  ".......#..",
+  "...#...^..",
+  "...^...#..",
+  "...#...#..",
+  "...#...###",
+  ".......^.^",
+  "...#...#..",
+  "...#...###",
+  "...^^.....",
+  "...#......"
+ ],
+ "skin": [
+  "..........",
+  ".......R..",
+  "...D......",
+  "..........",
+  "..........",
+  ".......D.X",
+  "..........",
+  "..........",
+  "...DK.....",
+  ".........."
+ ],
+ "wave": 6
+}

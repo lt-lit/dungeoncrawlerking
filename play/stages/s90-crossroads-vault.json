@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s90-crossroads-vault",
+ "title": "Crossroads Vault",
+ "notes": "A true four-way crossing, off-centre, with four unequal quadrants: rock NW with a shrine niche cut into it, a vaulted room NE with a door on one arm and a gap on the other, open cave SW, a small chamber SE behind a door.",
+ "theme": "crypt",
+ "map": [
+  "##..#.....",
+  "##..#.....",
+  "##..^.....",
+  "##..#.....",
+  "....###.##",
+  "^.........",
+  "..........",
+  "....###^##",
+  "....#.....",
+  "....#..^.."
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "....D.....",
+  "..........",
+  "..........",
+  "X.........",
+  "..........",
+  ".......D..",
+  "..........",
+  ".......X.."
+ ],
+ "wave": 6
+}

@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s88-the-ruin",
+ "title": "The Ruin",
+ "notes": "Decay: the outlines of two rooms whose walls have fallen into runs of stone, rubble and gaps \u2014 a wall is standing here, rubble there, nothing at all further along. A collapsed partition, a broken pillar, a chest still in its corner.",
+ "theme": "castle",
+ "map": [
+  "....#.....",
+  "....^..^..",
+  ".^....#...",
+  "....#.....",
+  "....#.....",
+  "^##.#.....",
+  ".....##.^#",
+  ".....#....",
+  "..^^.....^",
+  ".....^...."
+ ],
+ "skin": [
+  "..........",
+  "....R..R..",
+  ".R........",
+  "..........",
+  "..........",
+  "R.........",
+  "........R.",
+  "..........",
+  "..RR.....X",
+  ".....R...."
+ ],
+ "wave": 6
+}

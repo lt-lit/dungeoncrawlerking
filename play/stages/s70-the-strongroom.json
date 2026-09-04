@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s70-the-strongroom",
+ "title": "The Strongroom",
+ "notes": "The strongroom SE with its far walls off-frame: three chests, a door blocked by a crate dragged in front of it, and a rubble breach in its north wall \u2014 the second way in. An antechamber west with a pillar, a wide passage across the middle, and a room across the top behind a wall with one door and an open end.",
+ "theme": "crypt",
+ "map": [
+  "..........",
+  "..^.......",
+  "###^###...",
+  "..........",
+  "..........",
+  "......##^#",
+  ".....#....",
+  ".#..^^..^.",
+  ".....#.^..",
+  "..^..#...^"
+ ],
+ "skin": [
+  "..........",
+  "..B.......",
+  "...D......",
+  "..........",
+  "..........",
+  "........R.",
+  "..........",
+  "....KD..X.",
+  ".......X..",
+  "..B......X"
+ ],
+ "wave": 6
+}

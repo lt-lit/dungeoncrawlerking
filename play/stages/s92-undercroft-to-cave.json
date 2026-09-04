@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s92-undercroft-to-cave",
+ "title": "Undercroft to Cave",
+ "notes": "Where the built dungeon ends: masonry on the west \u2014 a straight wall with a door, piers, a south wall with a gap \u2014 giving way to natural rock in clumps on the east, with rubble where the two meet and a chest lost in the cave.",
+ "theme": "crypt",
+ "map": [
+  "....#..##.",
+  "....#..#..",
+  "....^.....",
+  ".#..#.....",
+  ".#..#...##",
+  "........#.",
+  "..#..^....",
+  "###......^",
+  "..^....##.",
+  "........#."
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "....D.....",
+  "..........",
+  "..........",
+  "..........",
+  ".....R....",
+  ".........X",
+  "..B.......",
+  ".........."
+ ],
+ "wave": 6
+}

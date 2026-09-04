@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s62-the-armoury",
+ "title": "The Armoury",
+ "notes": "The armoury fills the NE with its north and east walls off-frame: racks along the back, a chest, barred double doors west, a door south and a collapsed corner. West of it a small guard closet over a stub of passage; below, a corridor along the bottom edge.",
+ "theme": "castle",
+ "map": [
+  "...#......",
+  "..^#.^^.^.",
+  "...^......",
+  "...^......",
+  "#^##......",
+  "...#....^.",
+  "...#......",
+  "...##^###^",
+  "..........",
+  ".^........"
+ ],
+ "skin": [
+  "..........",
+  "..B..SS.S.",
+  "...D......",
+  "...D......",
+  ".D........",
+  "........X.",
+  "..........",
+  ".....D...R",
+  "..........",
+  ".B........"
+ ],
+ "wave": 6
+}

@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s64-kitchens-and-larder",
+ "title": "Kitchens and Larder",
+ "notes": "The kitchen SW (long table, barrels) with a doorway north into a servery passage; the larder NW behind its own door; the great hall east of a long wall with a serving hatch and a door, its far side off-frame.",
+ "theme": "hall",
+ "map": [
+  "...#......",
+  "...^......",
+  "..^#......",
+  "####.##...",
+  "......#...",
+  "......#..^",
+  "......^...",
+  ".^^^..#...",
+  "......^...",
+  "^.....#..."
+ ],
+ "skin": [
+  "..........",
+  "...D......",
+  "..B.......",
+  "..........",
+  "..........",
+  ".........X",
+  "......D...",
+  ".TTT......",
+  "......D...",
+  "B........."
+ ],
+ "wave": 6
+}

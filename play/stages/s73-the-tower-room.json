@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s73-the-tower-room",
+ "title": "The Tower Room",
+ "notes": "A round tower's interior: its curved wall sweeps across the frame from the curtain wall to the south edge, two thick at the steps so nothing slips through diagonally. A stair newel stands inside; a door in the curtain leads to a corridor along the top, another door opens on the narrow passage that runs round the tower's outside.",
+ "theme": "castle",
+ "map": [
+  "..........",
+  "........^.",
+  "##^####^##",
+  ".....##...",
+  "......##..",
+  ".......#..",
+  "..#....#..",
+  ".......#..",
+  ".......#.^",
+  "^.....##.."
+ ],
+ "skin": [
+  "..........",
+  "........K.",
+  "..D....D..",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  ".........B",
+  "X........."
+ ],
+ "wave": 6
+}

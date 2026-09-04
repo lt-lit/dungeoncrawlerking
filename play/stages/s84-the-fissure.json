@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s84-the-fissure",
+ "title": "The Fissure",
+ "notes": "A fault runs across the frame from NW to SE, two thick so nothing slips through on the diagonal. It is crossed once through choked rubble and once through a clean gap near the east edge; a stalagmite and a rock stub from the bottom edge stand on the wide side, a chest lies in the far point.",
+ "theme": "crypt",
+ "map": [
+  "..##......",
+  "...##....^",
+  "....##....",
+  ".....^^...",
+  "......##..",
+  ".......##.",
+  ".........#",
+  ".........#",
+  "...#...#..",
+  ".^.....#.."
+ ],
+ "skin": [
+  "..........",
+  ".........X",
+  "..........",
+  ".....RR...",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  ".R........"
+ ],
+ "wave": 6
+}

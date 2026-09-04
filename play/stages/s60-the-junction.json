@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s60-the-junction",
+ "title": "The Junction",
+ "notes": "A north\u2013south corridor meets an east\u2013west one at a T off-centre. A hallway sliced lengthwise runs along the west edge; a chamber NE with a door on each corridor and a rubble gap in its corner; the south room's far walls are off-frame and a wall stub from the bottom edge half-divides it.",
+ "theme": "crypt",
+ "map": [
+  ".#..#.....",
+  ".#..#..^..",
+  ".#..^.....",
+  ".#..#.....",
+  ".#..###^#^",
+  "..........",
+  "..........",
+  "###^##.###",
+  "......#...",
+  ".^....#..^"
+ ],
+ "skin": [
+  "..........",
+  ".......X..",
+  "....D.....",
+  "..........",
+  ".......D.R",
+  "..........",
+  "..........",
+  "...D......",
+  "..........",
+  ".B.......X"
+ ],
+ "wave": 6
+}

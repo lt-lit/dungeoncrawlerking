@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s82-the-grotto",
+ "title": "The Grotto",
+ "notes": "A natural cave: no straight walls, rock in clumps \u2014 a mass in the NW corner, a boulder mid-floor, a tongue of rock from the east edge, stalagmites in the south \u2014 with fallen rubble and a lost chest.",
+ "theme": "crypt",
+ "map": [
+  "##......#.",
+  "#......##.",
+  "......^...",
+  "...#......",
+  "..#.##....",
+  "..#..#..^.",
+  ".........#",
+  ".^......##",
+  ".#.^.....#",
+  "..#......."
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "......X...",
+  "..........",
+  "..........",
+  "........R.",
+  "..........",
+  ".R........",
+  "...R......",
+  ".........."
+ ],
+ "wave": 6
+}

@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s67-side-gallery",
+ "title": "Side Gallery",
+ "notes": "A four-wide gallery cut lengthwise down the west, a colonnade (one pillar fallen) along its east side, and beyond it two chambers split by a partial wall \u2014 the north one with a table, the south with a chest \u2014 plus a wall fragment at the top and a stub at the east edge from rooms off-frame.",
+ "theme": "hall",
+ "map": [
+  ".....##...",
+  "....#..^^.",
+  "..........",
+  "....#.....",
+  "......####",
+  "....^.....",
+  "..........",
+  "....#...##",
+  ".........^",
+  "......^..."
+ ],
+ "skin": [
+  "..........",
+  ".......TT.",
+  "..........",
+  "..........",
+  "..........",
+  "....R.....",
+  "..........",
+  "..........",
+  ".........X",
+  "......B..."
+ ],
+ "wave": 6
+}

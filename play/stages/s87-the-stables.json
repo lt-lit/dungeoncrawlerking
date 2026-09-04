@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s87-the-stables",
+ "title": "The Stables",
+ "notes": "Stalls along the north wall, divided by stubs at uneven spacing (one stall a single square wide), a hay store in the last, water barrels along the west, a cart standing in the aisle, a tack wall east, and the yard wall south with one door.",
+ "theme": "castle",
+ "map": [
+  ".#..#.#...",
+  ".#..#.#..^",
+  "..........",
+  "..........",
+  "^......#..",
+  "^..^^..#..",
+  ".......#..",
+  "...###^###",
+  "........^.",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  ".........B",
+  "..........",
+  "..........",
+  "B.........",
+  "B..KK.....",
+  "..........",
+  "......D...",
+  "........X.",
+  ".........."
+ ],
+ "wave": 6
+}

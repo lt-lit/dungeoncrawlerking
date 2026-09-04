@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s74-wine-cellar",
+ "title": "Wine Cellar",
+ "notes": "Rows of barrels make the aisles \u2014 capturable stores everywhere. A partition with an open gap and a door closes off a stair alcove NW; a pier of three stone blocks props the vault on the east; a chest in a corner.",
+ "theme": "hall",
+ "map": [
+  "...#......",
+  "...#......",
+  "...##.##^#",
+  "..........",
+  "..^^^^..#.",
+  "........#.",
+  "........#.",
+  ".^^^^^....",
+  ".........^",
+  "^........."
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  "........D.",
+  "..........",
+  "..BBBB....",
+  "..........",
+  "..........",
+  ".BBBBB....",
+  ".........X",
+  "B........."
+ ],
+ "wave": 6
+}

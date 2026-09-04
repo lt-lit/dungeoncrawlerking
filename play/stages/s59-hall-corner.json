@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s59-hall-corner",
+ "title": "Hall Corner",
+ "notes": "CROP of a great hall's SW corner: two of its walls in frame (west wall down file d with a door, south wall on rank 5 with double doors), the hall's north and east walls lie off-frame. A passage runs down the west edge past a wall stub, a corridor crosses under the hall, and two lesser rooms sit below it \u2014 one through a door, one through a broken gap and a corridor mouth at the east edge.",
+ "theme": "hall",
+ "map": [
+  "...#......",
+  "...#.^^...",
+  "...^......",
+  "...#..#...",
+  ".#.#......",
+  ".#.###^^##",
+  "..........",
+  "##^##.###.",
+  "......#...",
+  "......#..^"
+ ],
+ "skin": [
+  "..........",
+  ".....TT...",
+  "...D......",
+  "..........",
+  "..........",
+  "......DD..",
+  "..........",
+  "..D.......",
+  "..........",
+  ".........K"
+ ],
+ "wave": 6
+}

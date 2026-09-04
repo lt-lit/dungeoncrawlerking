@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s81-dead-ends",
+ "title": "Dead Ends",
+ "notes": "A rock-cut warren: a corridor four wide comes in from the top and turns along the bottom. Off it, a side passage that dead-ends at a collapsed chest niche, another that runs off the east edge, an alcove in the west wall, and a rubble pile at the turn.",
+ "theme": "crypt",
+ "map": [
+  "#....#####",
+  "#.......##",
+  "#......^^#",
+  "^....#####",
+  "#.........",
+  "#.........",
+  "#....#####",
+  "..........",
+  "..^.......",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  "..........",
+  ".......XR.",
+  "X.........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..R.......",
+  ".........."
+ ],
+ "wave": 6
+}

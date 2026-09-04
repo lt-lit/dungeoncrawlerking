@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s80-the-mess",
+ "title": "The Mess",
+ "notes": "A mess hall defined by its furniture: three long tables staggered down the room, one broken, two pillars, and the kitchen wall east with a serving hatch, a door, and its north end open where the partition stops short.",
+ "theme": "hall",
+ "map": [
+  "..........",
+  ".........^",
+  ".^^^...#.^",
+  ".......#..",
+  "...#^^^#..",
+  ".......^..",
+  ".^^^...#..",
+  "....#..#..",
+  ".....^.^..",
+  ".......#.^"
+ ],
+ "skin": [
+  "..........",
+  ".........B",
+  ".TTT.....B",
+  "..........",
+  "....TTT...",
+  ".......D..",
+  ".TTT......",
+  "..........",
+  ".....R.D..",
+  ".........X"
+ ],
+ "wave": 6
+}

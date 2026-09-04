@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s93-the-garth",
+ "title": "The Garth",
+ "notes": "A cloister garth: the walk along the north and east behind pillar rows at uneven spacing, the open garden with a well, a building corner intruding SW, a buttress from the bottom edge, a bench and a chest in the walk.",
+ "theme": "hall",
+ "map": [
+  ".........^",
+  "..^.......",
+  ".#.#..#.#.",
+  "..........",
+  ".......#..",
+  "....^.....",
+  "...#......",
+  ".......#..",
+  "#....#....",
+  "##...#.#.."
+ ],
+ "skin": [
+  ".........X",
+  "..C.......",
+  "..........",
+  "..........",
+  "..........",
+  "....R.....",
+  "..........",
+  "..........",
+  "..........",
+  ".........."
+ ],
+ "wave": 6
+}

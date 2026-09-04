@@ -1,0 +1,32 @@
+{
+ "schema": 2,
+ "id": "s78-the-scriptorium",
+ "title": "The Scriptorium",
+ "notes": "Stacks of shelves in uneven rows with aisles between, a partition wall with a door and a gap where it ends, a reading room beyond (tables, a chest), a wall along the south with one door and a corridor under it.",
+ "theme": "hall",
+ "map": [
+  "..........",
+  ".^^^^.#...",
+  "......#.^^",
+  ".^^^..#...",
+  "......^...",
+  ".^^^^^#...",
+  "......#..^",
+  "......#...",
+  "###^###...",
+  ".........."
+ ],
+ "skin": [
+  "..........",
+  ".SSSS.....",
+  "........TT",
+  ".SSS......",
+  "......D...",
+  ".SSSSS....",
+  ".........X",
+  "..........",
+  "...D......",
+  ".........."
+ ],
+ "wave": 6
+}
