@@ -1595,16 +1595,15 @@ function paintBoard(fen) {
   app.boardUI.setPosition(fen, { holes: dir?.holes ?? new Set(), godCrates: dir?.godCrates ?? new Set(), skins, opened: res.opened, rubble: res.rubble });
 }
 
-/** Compose all in-play board marks (selection, last move, check, the gods'
- *  residue by rung, hint + quake arrows). */
+/** Compose all in-play board marks (selection, check, the gods' terrain
+ *  residue by rung, and the arrows: the enemy's last move, the gods'
+ *  displacements, the oracle's hints). */
 function renderPlayMarks() {
   const q = app.quakeMarks;
+  const last = lastMoveArrow();
   const marks = {
-    lastMove: lastMoveMarks(),
     check: checkMark(),
-    arrows: [...(q?.arrows ?? []), ...app.cheatArrows],
-    quakeFrom: q?.from ?? [],
-    quakeTo: q?.to ?? [],
+    arrows: [...(last ? [last] : []), ...(q?.arrows ?? []), ...app.cheatArrows],
     pits: q?.pits ?? [],
     cracked: q?.cracked ?? [],
     breached: q?.breached ?? [],
@@ -1646,11 +1645,17 @@ function onSquareTap(sq) {
   renderPlayMarks();
 }
 
-function lastMoveMarks() {
-  const moves = app.duel?.record.moves;
-  if (!moves || !moves.length) return [];
+/** The ENEMY's most recent move as a red arrow (round 13: "stop trying to
+ *  indicate the previous move with the square color filters"), shown
+ *  while it is the last move played — from the reply until the player
+ *  answers it; the player's own move gets no arrow. */
+function lastMoveArrow() {
+  const duel = app.duel;
+  const moves = duel?.record.moves;
+  if (!moves || !moves.length) return null;
+  if (duel.turnColor() !== app.session.playerColor) return null; // the player moved last
   const p = moves[moves.length - 1].match(UCI_MOVE_RE);
-  return p ? [p[1], p[2]] : [];
+  return p ? { from: p[1], to: p[2], strength: 1, kind: 'last' } : null;
 }
 
 async function playPlayerMove(from, to, matches) {

@@ -10,6 +10,9 @@
 // Setup (once): cd phase0 && npm i --no-save playwright  (Chromium: see
 // selftest-headless.mjs). Usage: cd phase0 && node harness/ui-smoke.mjs
 //   [--stage s07-the-doorway] [--plies 60] [--seed 3] [--shots]
+//   [--go 'depth 8 movetime 120']  (the engine's search limits per move —
+//   shallower searches grab material, which is how to reproduce the
+//   "cracked wall captured in the reply" path below)
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -31,6 +34,7 @@ const PLIES = parseInt(arg('plies', '60'), 10);
 const SEED = arg('seed', '3');
 const SHOTS = argv.includes('--shots');
 const THEME = arg('theme', null); // ?theme= override for the run (default: the stage's own)
+const GO = arg('go', 'depth 8 movetime 120');
 
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
@@ -69,7 +73,7 @@ const q = new URLSearchParams({
   autobegin: '1',
   fx: '0',
   seed: SEED,
-  go: 'depth 8 movetime 120',
+  go: GO,
   probe: 'depth 12 movetime 400',
   onset: '1',
   mramp: '2',
@@ -106,7 +110,11 @@ const shot = async (name) => {
 const themeState = () =>
   page.evaluate(() => {
     const board = document.getElementById('board');
-    const bg = (sel) => getComputedStyle(document.querySelector(sel)).backgroundImage;
+    // null when nothing matches — a stage with no stone wall (s49 Crate
+    // Quarry is crates only) has no wall cell to probe; never hand a null
+    // to getComputedStyle, which throws out of page.evaluate and kills the
+    // run instead of failing a check.
+    const bg = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).backgroundImage : null; };
     return {
       theme: window.__DCK.theme,
       attr: board.dataset.theme ?? null,
@@ -121,10 +129,15 @@ const themeState = () =>
     };
   });
 const stageTheme = THEME ?? (await page.evaluate(() => window.__DCK.app.session.deal.stage.theme));
+// The wall half of a theme check passes vacuously on a stage with no stone
+// wall (themeState's wall is null there); the note says so.
+const wallOk = (wall, want) => wall === null || wall.includes(want);
+const wallNote = (t) => (t.wall === null ? ' — no stone wall on this stage, wall check skipped' : '');
+const short = (v) => (v ?? 'none').slice(0, 30);
 {
   const t = await themeState();
   expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
-  expect(t.wall.includes('data:image/png') && t.floor.includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${t.wall.slice(0, 30)}…, floor ${t.floor.slice(0, 30)}…)`);
+  expect(wallOk(t.wall, 'data:image/png') && (t.floor ?? '').includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${short(t.wall)}…, floor ${short(t.floor)}…)${wallNote(t)}`);
   if (STAGE === 's07-the-doorway') {
     expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite');
     // d6 is a dark square: the checker shade (a flat gradient) is allowed, the in-house bevel (160deg) is not.
@@ -141,13 +154,13 @@ const setTheme = (name) =>
 for (const name of THEME ? [] : ['hall', 'castle', 'crypt']) {
   await setTheme(name);
   const t = await themeState();
-  expect(t.theme === name && t.legend === name && t.wall.includes('data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})`);
+  expect(t.theme === name && t.legend === name && wallOk(t.wall, 'data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})${wallNote(t)}`);
   await shot(`00-theme-${name}`);
 }
 if (!THEME) await setTheme('classic');
 if (!THEME) {
   const t = await themeState();
-  expect(t.theme === null && t.attr === null && t.wall.includes('data:image/svg') && !t.floor.includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${t.wall.slice(0, 30)}…)`);
+  expect(t.theme === null && t.attr === null && wallOk(t.wall, 'data:image/svg') && !(t.floor ?? '').includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${short(t.wall)}…)${wallNote(t)}`);
   await shot('00-theme-classic');
 }
 await setTheme('auto');
@@ -248,7 +261,7 @@ for (let i = 0; i < PLIES; i++) {
       const wantFrom = fresh.flatMap((e) => e.displacements.map((d) => d.from));
       const wantCracked = fresh.flatMap((e) => (e.terrain ?? []).filter((t) => t.kind === 'weaken').map((t) => t.square));
       const wantBreached = fresh.flatMap((e) => (e.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square));
-      expect(wantFrom.every((sq) => m.from.includes(sq)) && m.arrows.length >= wantFrom.length, `merged residue keeps every displacement (${wantFrom}) as from-mark + arrow`);
+      expect(wantFrom.every((sq) => m.from.includes(sq)) && m.arrows.length >= wantFrom.length, `merged residue records every displacement (${wantFrom}) and draws its arrow`);
       // A later rung supersedes: a crack that then broke open lives on as a breach, a breach that collapsed as a pit.
       expect(wantCracked.every((sq) => m.cracked.includes(sq) || m.breached.includes(sq)), `merged residue keeps every crack (${wantCracked})`);
       expect(wantBreached.every((sq) => m.breached.includes(sq) || m.pits.includes(sq)), `merged residue keeps every breach (${wantBreached})`);
@@ -259,13 +272,22 @@ for (let i = 0; i < PLIES; i++) {
       // cracked and then broken open in one window shows as a breach.
       for (const sq of wantCracked) {
         if (m.breached.includes(sq)) expect(cells[sq]?.includes('fresh-breach') && !cells[sq]?.includes('fresh-crack'), `${sq}: cracked then breached → breach mark only (${cells[sq]})`);
-        else {
+        else if (!cells[sq]?.includes('furniture')) {
+          // A cracked wall is a capturable '^': when the ENEMY'S REPLY took
+          // it, the sprite went with it and the square is a ruin now
+          // (main.mjs residue). Nothing about the crack is left to assert —
+          // and the sprite queries below would throw on a missing element
+          // (2026-09-03: the harness died with a stack trace when a run
+          // under CPU load took this path; the engine's timed searches make
+          // the game trajectory load-dependent).
+          expect(true, `${sq}: cracked wall captured in the reply — no sprite to check (${cells[sq]})`);
+        } else {
           expect(cells[sq]?.includes('fresh-crack') && cells[sq]?.includes('cracked') && cells[sq]?.includes('furniture'), `${sq}: cracked-wall tile + fresh-crack ring (${cells[sq]})`);
           // The sprite on a cracked wall is the CRACK, never a crate (the
           // crate default and the crack rule share a specificity — order bug
           // caught 2026-09-02 by a screenshot).
-          const bg = await page.evaluate((s) => getComputedStyle(document.querySelector(`#board [data-square="${s}"] .piece.neutral`)).backgroundImage, sq);
-          expect(bg.includes('0b0a10') && !bg.includes('3a2213'), `${sq}: cracked wall paints the crack, not a crate sprite`);
+          const bg = await page.evaluate((s) => { const el = document.querySelector(`#board [data-square="${s}"] .piece.neutral`); return el ? getComputedStyle(el).backgroundImage : null; }, sq);
+          expect(bg !== null && bg.includes('0b0a10') && !bg.includes('3a2213'), `${sq}: cracked wall paints the crack, not a crate sprite${bg === null ? ' (no sprite element!)' : ''}`);
           // …and the WALL under it: the cell keeps its wall case over the
           // floor (two image layers), not floor alone (the furniture
           // floor-through rule once outranked the cracked rule under a theme).
@@ -277,7 +299,9 @@ for (let i = 0; i < PLIES; i++) {
         if (wantPits.includes(sq)) expect(cells[sq]?.includes('hole') && !cells[sq]?.includes('fresh-breach'), `${sq}: breached then collapsed → hole only (${cells[sq]})`);
         else expect(cells[sq]?.includes('fresh-breach') && !cells[sq]?.includes('furniture'), `${sq}: breach opened to floor + fresh-breach ring (${cells[sq]})`);
       }
-      for (const sq of wantFrom) expect(cells[sq]?.includes('quake-from'), `${sq}: quake-from mark (${cells[sq]})`);
+      // A displacement is its arrow alone (round 13): no square mark on
+      // either end.
+      for (const sq of wantFrom) expect(!cells[sq]?.includes('quake-from') && !cells[sq]?.includes('quake-to'), `${sq}: a displacement leaves no square mark, only its arrow (${cells[sq]})`);
       // EVERY fresh hole keeps its rim — two crumbles in one window used to
       // leave only the latest marked.
       for (const sq of wantPits) expect(cells[sq]?.includes('hole') && cells[sq]?.includes('fresh-pit'), `${sq}: hole tile + fresh-pit ring (${cells[sq]})`);
@@ -330,7 +354,12 @@ if ((await page.evaluate(() => window.__DCK.app.duel?.state)) === 'playing') {
 
 /** Both directions: every ledger hole paints as a hole, every painted
  *  cracked wall is a ledger crate, and every ledger crate still standing as
- *  '^' paints cracked. Runs in the page. */
+ *  '^' paints cracked — and every RUIN wears the stub case of its STANDING
+ *  wall neighbours (a wall, a cracked wall or a door; never another ruin,
+ *  an opened doorway, a hole or a crate — round 12's clumps), every opened
+ *  DOORWAY the east/west mask of its standing walls (its posts), and every
+ *  HOLE the 4-bit mask of its hole neighbours (round 13's pit autotile).
+ *  Runs in the page. */
 function tilesVsLedgers({ holes, godCrates, fen }) {
   const bad = [];
   for (const sq of holes) if (!window.__DCK.marks.cell(sq).includes('hole')) bad.push(`${sq} not a hole`);
@@ -338,6 +367,33 @@ function tilesVsLedgers({ holes, godCrates, fen }) {
   for (const sq of godCrates) {
     const cls = window.__DCK.marks.cell(sq);
     if (cls.includes('furniture') && !cls.includes('cracked')) bad.push(`${sq} god crate painted as authored`);
+  }
+  const standing = (f, r) => {
+    const c = document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"]`);
+    return !!c && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door'));
+  };
+  for (const cell of document.querySelectorAll('#board .cell.ruin')) {
+    const sq = cell.dataset.square;
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq.slice(1), 10);
+    const want = (standing(f, r + 1) ? 1 : 0) | (standing(f + 1, r) ? 2 : 0) | (standing(f, r - 1) ? 4 : 0) | (standing(f - 1, r) ? 8 : 0);
+    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} ruin wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its standing neighbours say wm-${want}`);
+  }
+  for (const span of document.querySelectorAll('#board .decor-doorway')) {
+    const cell = span.parentElement;
+    const sq = cell.dataset.square;
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq.slice(1), 10);
+    const want = (standing(f + 1, r) ? 2 : 0) | (standing(f - 1, r) ? 8 : 0);
+    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} doorway wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its standing walls say wm-${want}`);
+  }
+  const isHole = (f, r) => !!document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"].hole`);
+  for (const cell of document.querySelectorAll('#board .cell.hole')) {
+    const sq = cell.dataset.square;
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq.slice(1), 10);
+    const want = (isHole(f, r + 1) ? 1 : 0) | (isHole(f + 1, r) ? 2 : 0) | (isHole(f, r - 1) ? 4 : 0) | (isHole(f - 1, r) ? 8 : 0);
+    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} hole wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its hole neighbours say wm-${want}`);
   }
   void fen;
   return bad;

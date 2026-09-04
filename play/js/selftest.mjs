@@ -806,44 +806,51 @@ async function main() {
     if (files !== 'abcd') throw new Error(`file coordinates: ${files}`);
     if (ranks !== '5,4,3,2,1') throw new Error(`rank coordinates: ${ranks}`);
     if (host.querySelectorAll('[data-square="a1"] .coord').length !== 2) throw new Error('a1 carries both coordinates');
-    // Residue marks, one class per rung; arrows ranked, the quake arrow beneath.
+    // Terrain residue, one class per rung; a displacement and the enemy's
+    // last move are ARROWS alone (round 13: no square marks for moves);
+    // hints ranked, the quake arrow beneath everything, the last move
+    // above it.
     ui.setMarks({
       cracked: ['a1'],
       breached: ['c2'],
       pit: 'b1',
-      quakeFrom: ['a3'],
-      quakeTo: ['a4'],
       arrows: [
         { from: 'a3', to: 'a4', strength: 1, rank: 1, kind: 'hint', label: '+0.8' },
         { from: 'b3', to: 'b4', strength: 0.5, rank: 2, kind: 'hint' },
         { from: 'c3', to: 'c4', strength: 0.2, rank: 3, kind: 'hint' },
         { from: 'd3', to: 'd4', strength: 0.7, kind: 'quake' },
+        { from: 'a2', to: 'b2', strength: 1, kind: 'last' },
       ],
     });
-    for (const [sq, cls] of [['a1', 'fresh-crack'], ['c2', 'fresh-breach'], ['b1', 'fresh-pit'], ['a3', 'quake-from'], ['a4', 'quake-to']]) {
+    for (const [sq, cls] of [['a1', 'fresh-crack'], ['c2', 'fresh-breach'], ['b1', 'fresh-pit']]) {
       if (!has(sq, cls)) throw new Error(`${sq} should carry ${cls}: ${ui.cellClasses(sq)}`);
     }
+    for (const sq of ['d3', 'd4', 'a2', 'b2']) {
+      if (ui.cellClasses(sq).some((c) => ['quake-from', 'quake-to', 'last'].includes(c))) throw new Error(`${sq}: a move is an arrow, never a square mark: ${ui.cellClasses(sq)}`);
+    }
     const gs = [...host.querySelectorAll('.arrow-layer g.arrow')];
-    if (gs.length !== 4) throw new Error(`expected 4 arrows, got ${gs.length}`);
-    if (!gs[0].classList.contains('arrow-quake')) throw new Error('the quake arrow must draw first (beneath the hints)');
-    const rankOrder = gs.slice(1).map((g) => g.dataset.rank).join('');
+    if (gs.length !== 5) throw new Error(`expected 5 arrows, got ${gs.length}`);
+    if (!gs[0].classList.contains('arrow-quake')) throw new Error('the quake arrow must draw first (beneath everything)');
+    if (!gs[1].classList.contains('arrow-last')) throw new Error('the last-move arrow draws above the quake arrow, beneath the hints');
+    if (gs[1].querySelectorAll('.halo').length !== 2 || gs[1].querySelector('line:not(.halo)') === null) throw new Error('the last-move arrow is drawn like every other: halo line + head, shaft, head');
+    const rankOrder = gs.slice(2).map((g) => g.dataset.rank).join('');
     if (rankOrder !== '321') throw new Error(`hint arrows must draw worst→best (best on top), got ranks ${rankOrder}`);
-    if (!gs[3].classList.contains('rank-1') || !gs[3].classList.contains('arrow-hint')) throw new Error('rank-1 hint arrow class missing');
-    const bestWidth = parseFloat(gs[3].querySelector('line:not(.halo)').getAttribute('stroke-width'));
+    if (!gs[4].classList.contains('rank-1') || !gs[4].classList.contains('arrow-hint')) throw new Error('rank-1 hint arrow class missing');
+    const bestWidth = parseFloat(gs[4].querySelector('line:not(.halo)').getAttribute('stroke-width'));
     if (!(bestWidth > 2.4 && bestWidth < 2.6)) throw new Error(`a labelled arrow's shaft should be 2.5 viewBox units (25% of a cell), got ${bestWidth}`);
-    const rank2Width = parseFloat(gs[2].querySelector('line:not(.halo)').getAttribute('stroke-width'));
+    const rank2Width = parseFloat(gs[3].querySelector('line:not(.halo)').getAttribute('stroke-width'));
     if (!(rank2Width > 1.6 && rank2Width < 2.0)) throw new Error(`an unlabelled arrow's shaft scales with strength (~1.8 at 0.5), got ${rank2Width}`);
-    if (gs[3].querySelectorAll('.halo').length !== 2) throw new Error('every arrow carries a halo line + head');
-    const labelEl = gs[3].querySelector('text.label');
+    if (gs[4].querySelectorAll('.halo').length !== 2) throw new Error('every arrow carries a halo line + head');
+    const labelEl = gs[4].querySelector('text.label');
     if (labelEl?.textContent !== '+0.8') throw new Error('the rank-1 arrow carries its eval label');
     if (!/^rotate\(-?\d+(\.\d+)? /.test(labelEl.getAttribute('transform') ?? '')) throw new Error('the label runs along the arrow (rotate transform)');
     const fs = parseFloat(labelEl.getAttribute('font-size'));
     if (!(fs >= 1.3 && fs <= 2.0)) throw new Error(`label font sized to the shaft, got ${fs}`);
-    if (gs[3].querySelector('rect') || gs[3].querySelector('text.label-halo')) throw new Error('no box or halo twin behind the label — the eval sits inside the arrow');
-    if (gs[2].querySelector('text.label')) throw new Error('an arrow without a label draws none');
+    if (gs[4].querySelector('rect') || gs[4].querySelector('text.label-halo')) throw new Error('no box or halo twin behind the label — the eval sits inside the arrow');
+    if (gs[3].querySelector('text.label')) throw new Error('an arrow without a label draws none');
     ui.setMarks({});
     if (host.querySelector('.arrow-layer g.arrow') || has('a1', 'fresh-crack') || has('b1', 'fresh-pit')) throw new Error('setMarks({}) must clear marks and arrows');
-    return 'wall/hole/crate/cracked (+ a door skin) from the ledgers, a–d + 5–1 coordinates, 5 rung marks, arrows ranked 3→2→1 over the quake arrow, eval label on rank 1';
+    return 'wall/hole/crate/cracked (+ a door skin) from the ledgers, a–d + 5–1 coordinates, 3 terrain rung marks, arrows ranked 3→2→1 over the last-move arrow over the quake arrow, eval label on rank 1';
   });
 
   // --- Art themes (2026-09-03): the repacked tilesets ride a data-theme
@@ -864,7 +871,7 @@ async function main() {
     if (mask('b3') !== null) throw new Error('floor carries no autotile class');
     // A hole is not solid (it breaks the column); a cracked wall and a door are; a crate is not.
     ui.setPosition(fen, { holes: new Set(['a2']) });
-    if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0' || mask('a2') !== null) throw new Error(`a hole between two walls must break the column (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
+    if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0' || mask('a2') !== 'wm-0') throw new Error(`a hole between two walls must break the column, and wears its own lone-pit case (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
     if (mask('a1') !== 'wm-1' || mask('a2') !== 'wm-5' || mask('a3') !== 'wm-4') throw new Error(`a cracked wall continues the column (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
@@ -899,23 +906,77 @@ async function main() {
     ui.setDoors(null);
     if (ui.doors !== null) throw new Error('setDoors(null) clears to the theme door');
     const at1 = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;
-    // Residue: an opened doorway is a decor on a floor square; a broken
-    // wall is a RUIN cell wearing the 4-bit case of its solid neighbours;
-    // and both count as solid to the walls beside them — no end caps at a
-    // break. Rank 1 here is wall, ruin, wall: one east–west line.
+    // Residue: an opened doorway is a decor on a floor square wearing the
+    // east/west mask of its STANDING walls (its posts); a broken wall is a
+    // RUIN cell wearing the 4-bit case of its standing neighbours; and both
+    // count as solid to the walls beside them — no end caps at a break.
+    // Rank 1 here is wall, ruin, wall: one east–west line.
     ui.setPosition('4/4/4/4/*1*1 w - - 0 1', { opened: new Set(['d3']), rubble: new Set(['b1', 'zz9']) });
     const dec = (sq) => host.querySelector(`[data-square="${sq}"] .decor`)?.className ?? null;
     if (dec('d3') !== 'decor decor-doorway') throw new Error(`doorway decor (${dec('d3')})`);
     if (!has('b1', 'ruin') || mask('b1') !== 'wm-10' || dec('b1') !== null) throw new Error(`a broken wall between two walls is a ruin wearing the east–west stub case: ${ui.cellClasses('b1')}`);
     if (mask('a1') !== 'wm-2' || mask('c1') !== 'wm-8') throw new Error(`the walls run on into the ruin (${mask('a1')}, ${mask('c1')})`);
     ui.setPosition('4/4/4/4/*1*1 w - - 0 1', { opened: new Set(['b1']) });
-    if (has('b1', 'ruin') || mask('b1') !== null || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2') throw new Error(`an opened doorway keeps the wall line too: ${ui.cellClasses('b1')} / ${mask('a1')}`);
+    if (has('b1', 'ruin') || mask('b1') !== 'wm-10' || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2') throw new Error(`an opened doorway keeps the wall line too, and wears the full frame between two walls: ${ui.cellClasses('b1')} / ${mask('a1')}`);
     ui.setPosition('4/4/4/1^2/*1*1 w - - 0 1', { opened: new Set(['b2']), rubble: new Set(['b1']) });
     if (dec('b2') !== null) throw new Error('a square that is furniture again carries no doorway decor');
     ui.setPosition('4/4/4/4/*K*1 w - - 0 1', { rubble: new Set(['b1']) });
     if (!has('b1', 'ruin') || mask('b1') !== 'wm-10' || at1('b1') !== 'K') throw new Error(`a piece standing on a ruin leaves the stub under it: ${ui.cellClasses('b1')}`);
     ui.setPosition('4/4/4/4/*1*1 w - - 0 1');
     if (has('b1', 'ruin') || mask('b1') !== null || mask('a1') !== 'wm-0') throw new Error(`the ruin and its case go when the ledger forgets the square: ${ui.cellClasses('b1')} / ${mask('a1')}`);
+    // Round 12: a ruin's stub case counts STANDING walls only. Two broken
+    // squares side by side show no stub at each other (each used to draw
+    // one — a clump of wall floating between two floor squares), a ruin
+    // beside an opened doorway shows none toward the doorway's post, and
+    // the walls still run on into every kind of residue.
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { rubble: new Set(['b1', 'c1']) });
+    if (mask('b1') !== 'wm-8' || mask('c1') !== 'wm-2') throw new Error(`adjacent ruins show only the standing walls' ends (${mask('b1')}, ${mask('c1')})`);
+    if (mask('a1') !== 'wm-2' || mask('d1') !== 'wm-8') throw new Error(`the walls still run on into adjacent ruins (${mask('a1')}, ${mask('d1')})`);
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { rubble: new Set(['c1']), opened: new Set(['b1']) });
+    if (mask('c1') !== 'wm-2' || dec('b1') !== 'decor decor-doorway' || mask('a1') !== 'wm-2' || mask('d1') !== 'wm-8') throw new Error(`a ruin beside an opened doorway shows no stub toward it, and the line runs on (${mask('c1')}, ${dec('b1')}, ${mask('a1')}, ${mask('d1')})`);
+    ui.setPosition('*3/4/4/*3/4 w - - 0 1', { rubble: new Set(['a4', 'a3']) });
+    if (mask('a5') !== 'wm-4' || mask('a4') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== 'wm-1') throw new Error(`a broken column shows one stub per standing end (${mask('a5')}, ${mask('a4')}, ${mask('a3')}, ${mask('a2')})`);
+    ui.setPosition('4/4/4/4/*3 w - - 0 1', { rubble: new Set(['b1', 'c1', 'd1']) });
+    if (mask('b1') !== 'wm-8' || mask('c1') !== 'wm-0' || mask('d1') !== 'wm-0') throw new Error(`a ruin among ruins is flecks alone (${mask('b1')}, ${mask('c1')}, ${mask('d1')})`);
+    // A cracked wall or a standing door beside a ruin IS a wall end; a
+    // crate or a hole is not.
+    ui.setPosition('4/4/4/4/*^1* w - - 0 1', { godCrates: new Set(['b1']), rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-10') throw new Error(`a cracked wall beside a ruin is a wall end (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/*^1* w - - 0 1', { skins: { b1: 'door' }, rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-10') throw new Error(`a standing door beside a ruin is a wall end (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/*^1* w - - 0 1', { skins: { b1: 'crate' }, rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-2') throw new Error(`a crate beside a ruin is no wall end (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/**1* w - - 0 1', { holes: new Set(['b1']), rubble: new Set(['c1']) });
+    if (mask('c1') !== 'wm-2') throw new Error(`a hole beside a ruin is no wall end (${mask('c1')})`);
+    // …and a DOORWAY's posts stand only beside standing walls: one post
+    // beside a break (the west post = wm-8, the east = wm-2), none between
+    // two breaks (wm-0) — the frame's post fell with the wall it framed.
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { opened: new Set(['b1']), rubble: new Set(['c1']) });
+    if (mask('b1') !== 'wm-8' || dec('b1') !== 'decor decor-doorway') throw new Error(`a doorway with its east wall broken keeps the west post only (${mask('b1')}, ${dec('b1')})`);
+    ui.setPosition('4/4/4/4/*2* w - - 0 1', { opened: new Set(['c1']), rubble: new Set(['b1']) });
+    if (mask('c1') !== 'wm-2' || dec('c1') !== 'decor decor-doorway') throw new Error(`a doorway with its west wall broken keeps the east post only (${mask('c1')}, ${dec('c1')})`);
+    ui.setPosition('4/4/4/4/4 w - - 0 1', { opened: new Set(['b1']), rubble: new Set(['a1', 'c1']) });
+    if (mask('b1') !== 'wm-0' || dec('b1') !== 'decor decor-doorway' || !has('b1', 'wm-0')) throw new Error(`a doorway between two breaks has no posts (${mask('b1')}, ${dec('b1')})`);
+    ui.setPosition('4/4/4/4/1*2 w - - 0 1', { opened: new Set(['c1']) });
+    if (mask('c1') !== 'wm-8') throw new Error(`a doorway's post stands beside its wall, none beside plain floor (${mask('c1')})`);
+    ui.setPosition('4/4/4/4/4 w - - 0 1');
+    if (mask('b1') !== null || dec('b1') !== null) throw new Error('a forgotten doorway leaves neither decor nor case');
+    // Every cell carries ONE crack drawing (ck1…ckN, round 14), fixed by its
+    // square: a repaint never swaps it.
+    const ck = (sq) => ui.cellClasses(sq).filter((c) => /^ck[1-4]$/.test(c));
+    if (ck('a1').length !== 1 || ck('d5').length !== 1) throw new Error(`one crack variant per cell (${ck('a1')}, ${ck('d5')})`);
+    const ckBefore = ck('a1')[0];
+    ui.setPosition('1***/4/*1*1/*3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
+    if (ck('a1')[0] !== ckBefore) throw new Error('a repaint must not swap a crack variant');
+    // Holes autotile too (round 13): a pit's case joins other pits only —
+    // never a wall — so joined pits read as one and a pit beside stone
+    // keeps its rim.
+    ui.setPosition('4/4/4/4/**2 w - - 0 1', { holes: new Set(['a1', 'b1']) });
+    if (mask('a1') !== 'wm-2' || mask('b1') !== 'wm-8') throw new Error(`joined pits are one pit (${mask('a1')}, ${mask('b1')})`);
+    ui.setPosition('4/4/4/**2/**2 w - - 0 1', { holes: new Set(['a1', 'b1', 'a2', 'b2']) });
+    if (mask('a2') !== 'wm-6' || mask('b2') !== 'wm-12' || mask('a1') !== 'wm-3' || mask('b1') !== 'wm-9') throw new Error(`a 2×2 pit, N=1 E=2 S=4 W=8 (${mask('a2')}, ${mask('b2')}, ${mask('a1')}, ${mask('b1')})`);
+    ui.setPosition('4/4/4/4/**2 w - - 0 1', { holes: new Set(['a1']) });
+    if (mask('a1') !== 'wm-0' || mask('b1') !== 'wm-0') throw new Error(`a pit beside a wall: neither joins the other (${mask('a1')}, ${mask('b1')})`);
     // Props: wall props only — the floor litter is packed away (round 10).
     ui.setPosition('****/4/4/4/4 w - - 0 1');
     for (const d of host.querySelectorAll('.decor')) {

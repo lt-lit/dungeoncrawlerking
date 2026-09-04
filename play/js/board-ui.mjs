@@ -9,7 +9,11 @@
 // TERRAIN is a CELL treatment, one class per kind — a tileset later replaces
 // only what each class paints:
 //   .wall       authored stone: a raised slab.
-//   .hole       a square the gods crumbled: a sunken pit, permanent. FSF reads
+//   .hole       a square the gods crumbled: a sunken pit, permanent — under a
+//               theme the pit AUTOTILES like the ruins (round 13: wm-<mask>
+//               = the 4-bit mask of its HOLE neighbours, so joined pits are
+//               one pit with a ragged rim only where floor meets them;
+//               --tile-hole-<mask>). FSF reads
 //               both as '*' and only the Director's `holes` ledger tells them
 //               apart, so setPosition takes that ledger as an argument.
 //   .furniture  a crate '^' (§4.6). Deliberately renders like a PIECE — a
@@ -41,19 +45,24 @@
 //              its wall case like a cracked wall and the sprite is the
 //              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
+//   .ck1…ckN   the crack drawing this square's wall would wear
+//              (CRACK_VARIANTS; style.css maps it to --tile-crack).
 //   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
 //              chain / banner on an east–west wall face, scattered by a
 //              stable hash of the square — floor litter is packed away
 //              since round 10 — and decor-doorway, the OPEN DOORWAY an
-//              east–west door left behind); the theme's --decor-<name>
-//              paints it, or nothing.
+//              east–west door left behind, whose cell also wears wm-<mask>
+//              = the east (2) / west (8) walls still STANDING beside it,
+//              so a post stands only where its wall does — round 12); the
+//              theme's --decor-<name> paints it, or nothing.
 //   .ruin      a floor square where a wall, a cracked wall or a weak spot
 //              BROKE (main.mjs residue ledger `rubble`): it paints the
 //              theme's ruin stub case (--tile-ruin-<mask>, 16 cases by its
-//              solid neighbours as wm-<mask>) under whatever stands there,
-//              and it COUNTS AS SOLID to its neighbours' wall cases — as
-//              does an opened doorway — so the wall line runs on through
-//              the break instead of capping either side of a gap.
+//              STANDING wall neighbours as wm-<mask> — never another ruin
+//              or an opened doorway, round 12) under whatever stands
+//              there, and it COUNTS AS SOLID to its neighbours' wall cases
+//              — as does an opened doorway — so the wall line runs on
+//              through the break instead of capping either side of a gap.
 // PIECES (2026-09-03): every piece span carries data-piece="<FEN letter>";
 // setPieces(name) stamps data-pieces on the board and tiles.css paints the
 // set's sprite (PIECE_SETS) instead of the glyph; null = the glyphs.
@@ -67,8 +76,10 @@
 // square the log, the hint list and the gods line name is findable.
 //
 // MARKS live on separate channels so they compose instead of clobbering:
-// terrain paints `background`, residue/debug rings paint `box-shadow`, the
-// last-move tint is a `filter`, selection/check are `outline` (style.css).
+// terrain paints `background`, residue/debug rings paint `box-shadow`,
+// selection/check are `outline` (style.css); MOVES are arrows on the SVG
+// layer — the enemy's last move in red, the gods' displacements in their
+// blue, the oracle's hints by rank (round 13: no square tints for moves).
 import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
 
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
@@ -108,6 +119,10 @@ export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nullt
 export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
+/** Crack drawings (gen-sprites --tile-crack-1..N): every cell carries
+ *  ck1…ckN by a stable hash of its square, so neighbouring cracked walls
+ *  differ and a repaint never swaps a crack (round 14). */
+export const CRACK_VARIANTS = 4;
 
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
@@ -140,6 +155,11 @@ function floorVariant(f, rank) {
   const h = (((f + 1) * 73856093) ^ ((rank + 1) * 19349663)) >>> 0;
   const r = h % 16;
   return r < FLOOR_VARIANTS - 1 ? `f${r + 2}` : 'f1';
+}
+
+/** Which of the crack drawings a square wears if its wall cracks. */
+function crackVariant(f, rank) {
+  return `ck${1 + (squareHash(f, rank, 11) % CRACK_VARIANTS)}`;
 }
 
 function svgEl(tag, attrs) {
@@ -183,7 +203,7 @@ export class BoardUI {
         const sq = String.fromCharCode(97 + f) + rank;
         const cell = document.createElement('div');
         // a1 dark: (file + rankFromBottom) even = dark.
-        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank);
+        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank);
         cell.dataset.square = sq;
         cell.addEventListener('click', () => {
           if (this.interactive && this.onSquareTap) this.onSquareTap(sq);
@@ -233,11 +253,15 @@ export class BoardUI {
    * starts at the origin square's centre so even a one-square move has
    * room; strength then only drives its opacity.
    * `kind` is 'hint' (default — the oracle's best lines; COLOUR carries the
-   * rank: 1 gold, 2 silver, 3 bronze) or 'quake' (a displacement the gods
-   * just made, in the gods' hue, dashed). `strength` ∈ (0,1] still nudges
+   * rank: 1 gold, 2 silver, 3 bronze), 'quake' (a displacement the gods
+   * just made, in the gods' hue) or 'last' (the enemy's most recent move,
+   * red — round 13, in place of the old square tints). All three share
+   * one geometry and outline; only the colour differs (the quake dash is
+   * gone). `strength` ∈ (0,1] still nudges
    * width and opacity, lichess-style ("how close to the best"), but never
    * carries the rank — two equal-eval moves used to be indistinguishable.
-   * Quake arrows draw beneath hints; the best hint draws on top of all.
+   * Quake arrows draw beneath everything, the last move above them, then
+   * hints; the best hint draws on top of all.
    * Geometry is about half the old size: a 3×5 board's cells are ~30 px on a
    * phone and the old head was two thirds of a cell.
    */
@@ -245,7 +269,7 @@ export class BoardUI {
     this.svg.textContent = '';
     // Ascending sort key: quake arrows first (drawn first = underneath), then
     // hints from worst rank to best, so rank 1 is appended last (on top).
-    const key = (a) => (a.kind === 'quake' ? -100 : -(a.rank ?? 2 - (a.strength ?? 1)));
+    const key = (a) => (a.kind === 'quake' ? -100 : a.kind === 'last' ? -90 : -(a.rank ?? 2 - (a.strength ?? 1)));
     const sorted = [...arrows].sort((a, b) => key(a) - key(b));
     for (const { from, to, strength = 1, rank = null, kind = 'hint', label = null } of sorted) {
       const [x1, y1] = this.#squareCenter(from);
@@ -266,7 +290,7 @@ export class BoardUI {
       // pulls short of the destination centre so the head never covers a
       // piece. Labelled: start at the origin centre and pull back less, so
       // a one-square move still has ~6 units of shaft for the number.
-      const tail = label ? 0 : kind === 'quake' ? 0.22 : 0.32;
+      const tail = label ? 0 : 0.32;
       const pull = label ? 0.06 : 0.2;
       const tipX = x2 - ux * CELL * pull;
       const tipY = y2 - uy * CELL * pull;
@@ -326,22 +350,43 @@ export class BoardUI {
    * are main.mjs's RESIDUE ledger — floor squares where an east–west door
    * was opened keep its doorway decor, floor squares where a wall broke
    * become `.ruin` cells wearing the broken stub (cosmetic, but both count
-   * as solid to the wall autotile so the line runs on through them).
+   * as solid to the wall autotile so the line runs on through them; a
+   * ruin's own stub case and a doorway's posts count only STANDING walls,
+   * never residue).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
-    // Solid (for the wall autotile) = stone that is not a hole, a cracked
-    // wall, or a door — the things that continue a wall line to the eye —
-    // and the RESIDUE of one: a broken wall's ruin stub and an opened
-    // doorway keep the line running through the break (round 10).
-    const solid = (ff, rr) => {
+    // STANDING = stone that is not a hole, a cracked wall, or a door — the
+    // things that continue a wall line to the eye. SOLID (for the wall
+    // autotile) = standing, or the RESIDUE of it: a broken wall's ruin stub
+    // and an opened doorway keep the line running through the break (round
+    // 10). A RUIN's own stub case counts STANDING neighbours only (round 12:
+    // two broken squares side by side each drew a stub at the other — a
+    // clump of wall floating between two floor squares — and a stub grew
+    // against an open doorway's post): its stubs are the broken ends of
+    // walls that still stand, and residue has no end to show.
+    const standing = (ff, rr) => {
       if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
       const t = grid[this.ranks - rr]?.[ff] ?? null;
       const name = String.fromCharCode(97 + ff) + rr;
       if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door';
       if (t === WALL) return !holes.has(name);
+      return false;
+    };
+    // A HOLE's autotile case joins only other holes (round 13): joined pits
+    // are one pit, and the ragged rim runs only where floor meets them.
+    const isHole = (ff, rr) => {
+      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
+      return grid[this.ranks - rr]?.[ff] === WALL && holes.has(String.fromCharCode(97 + ff) + rr);
+    };
+    const solid = (ff, rr) => {
+      if (standing(ff, rr)) return true;
+      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
+      const t = grid[this.ranks - rr]?.[ff] ?? null;
+      if (t === FURNITURE || t === WALL) return false;
+      const name = String.fromCharCode(97 + ff) + rr;
       return rubble.has(name) || opened.has(name);
     };
     for (const [sq, cell] of this.cells) {
@@ -353,8 +398,9 @@ export class BoardUI {
       cell.classList.remove(...FX_CLASSES);
       cell.style.removeProperty('--fx-ms');
       const wallTile = isWall && !holes.has(sq);
+      const hole = isWall && holes.has(sq);
       cell.classList.toggle('wall', wallTile);
-      cell.classList.toggle('hole', isWall && holes.has(sq));
+      cell.classList.toggle('hole', hole);
       cell.classList.toggle('furniture', isFurniture);
       const cracked = isFurniture && godCrates.has(sq);
       cell.classList.toggle('cracked', cracked);
@@ -371,17 +417,28 @@ export class BoardUI {
       cell.classList.toggle('ruin', ruin);
       // The autotile case of a wall, cracked wall or weak spot: which
       // neighbours it joins (the 47-case blob); a ruin's is the plain
-      // 4-bit mask of its solid neighbours (the 16 stub cases). One
-      // wm-<mask> class, replaced on every paint.
+      // 4-bit mask of its STANDING neighbours (the 16 stub cases — a
+      // neighbouring ruin or doorway is no wall end); a hole's is the plain
+      // 4-bit mask of its HOLE neighbours (a diagonal floor square touches a
+      // pit only at a corner point, so 16 cases cover it). One wm-<mask> class,
+      // replaced on every paint.
+      // An opened doorway's posts stand only beside STANDING walls too
+      // (round 12: "awkward looking vertical door frames between empty
+      // spaces" — a frame's post falls with the wall it framed): the cell
+      // wears the east/west standing mask, and tiles.css picks the frame,
+      // one post, or nothing.
+      const doorway = floor && !ruin && opened.has(sq);
       const mask = wallTile || cracked || weak
         ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
-        : ruin ? (N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0)
+        : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
+        : doorway ? (standing(f + 1, rank) ? 2 : 0) | (standing(f - 1, rank) ? 8 : 0)
+        : hole ? (isHole(f, rank + 1) ? 1 : 0) | (isHole(f + 1, rank) ? 2 : 0) | (isHole(f, rank - 1) ? 4 : 0) | (isHole(f - 1, rank) ? 8 : 0)
         : -1;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
       // Cosmetic props (one span under the piece; removed when the square
       // changes kind — a breached wall drops its torch).
-      const decor = decorFor({ wallTile, cracked, mask, f, rank, earned: floor && !ruin && opened.has(sq) ? 'doorway' : null });
+      const decor = decorFor({ wallTile, cracked, mask, f, rank, earned: doorway ? 'doorway' : null });
       let span = cell.querySelector(':scope > .decor');
       if (decor) {
         if (!span) {
@@ -423,34 +480,27 @@ export class BoardUI {
   /** Replace ALL marks. Absent keys clear their mark class; `arrows` feeds
    *  the SVG overlay (see setArrows).
    *
-   *  `quakeFrom`/`quakeTo`/`pit`/`cracked`/`breached` are the gods' residue,
-   *  one class per RUNG so crack and break-through read differently: they
-   *  outlive the animation and the enemy's reply, and clear only when the
-   *  player moves, so "what just happened" is answerable from the board
-   *  instead of the log. from and to are marked DIFFERENTLY (and the
-   *  displacement itself is an arrow, see setArrows) — the old cue flashed
-   *  both with one class, which showed that something moved but never
-   *  which way.
+   *  `pit`/`cracked`/`breached` are the gods' TERRAIN residue, one class per
+   *  rung so crack and break-through read differently: they outlive the
+   *  animation and the enemy's reply, and clear only when the player
+   *  moves, so "what just happened" is answerable from the board instead
+   *  of the log. A displacement is an ARROW alone (round 13: the from/to
+   *  square marks are gone — "the blue arrow is enough"), as is the
+   *  enemy's last move (kind 'last'; the last-move square tint is gone).
    *
    *  `heat` (Phase 1.2, Gods debug overlay) is a {square: 'a'|'b'|'c'|'t'}
    *  map painting the Director's candidate census — displacement landing
    *  squares by tier, 't' for terminal crumbles. Debug-only chrome: its CSS
    *  sits before the quake marks so live-game marks win ties. */
-  setMarks({ selected = null, targets = [], lastMove = [], check = null, arrows = [], quakeFrom = [], quakeTo = [], pit = null, pits = [], cracked = [], breached = [], heat = {} } = {}) {
+  setMarks({ selected = null, targets = [], check = null, arrows = [], pit = null, pits = [], cracked = [], breached = [], heat = {} } = {}) {
     const targetSet = new Set(targets);
-    const lastSet = new Set(lastMove);
-    const quakeFromSet = new Set(quakeFrom);
-    const quakeToSet = new Set(quakeTo);
     const pitSet = new Set(pit ? [pit, ...pits] : pits); // `pit` is the one-square form
     const crackedSet = new Set(cracked);
     const breachedSet = new Set(breached);
     for (const [sq, cell] of this.cells) {
       cell.classList.toggle('sel', sq === selected);
       cell.classList.toggle('target', targetSet.has(sq));
-      cell.classList.toggle('last', lastSet.has(sq));
       cell.classList.toggle('check', sq === check);
-      cell.classList.toggle('quake-from', quakeFromSet.has(sq));
-      cell.classList.toggle('quake-to', quakeToSet.has(sq));
       cell.classList.toggle('fresh-pit', pitSet.has(sq));
       cell.classList.toggle('fresh-crack', crackedSet.has(sq));
       cell.classList.toggle('fresh-breach', breachedSet.has(sq));

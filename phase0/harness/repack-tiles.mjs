@@ -165,7 +165,14 @@ const ROLES = {
   skull: '--decor-skull',
   chain: '--decor-chain',
   banner: '--decor-banner',
-  doorway: '--decor-doorway', // the OPEN door left behind where a door was captured (main.mjs residue ledger)
+  // The OPEN DOORWAY left behind where an east–west door was captured
+  // (main.mjs residue ledger): the frame between two standing walls, and
+  // (round 12) the one-post cases — 8 = the west post alone, 2 = the east
+  // post alone — for a doorway whose other wall broke; nothing between two
+  // breaks (board-ui wm-<mask> on the cell: E=2 W=8 of its STANDING walls).
+  doorway: '--decor-doorway',
+  'doorway-8': '--decor-doorway-8',
+  'doorway-2': '--decor-doorway-2',
 };
 // Where a prop sits inside its 16×16 tile: props paint at native scale,
 // pixel-aligned with the tiles (designer round 9), so placement is baked
@@ -196,6 +203,9 @@ for (const code of WALL_MASK_CODES) ROLES[`wall-${code}`] = `--tile-wall-${code}
 // ruin-<mask>: the 16 BROKEN-WALL stub cases (ruinBlob below) a floor
 // square wears where a wall broke (board-ui .ruin, main.mjs residue).
 for (let m = 0; m < 16; m++) ROLES[`ruin-${m}`] = `--tile-ruin-${m}`;
+// hole-<mask>: the 16 PIT cases (holeBlob below) a god-made hole wears by
+// its hole neighbours (board-ui .hole + wm-<mask>) — round 13.
+for (let m = 0; m < 16; m++) ROLES[`hole-${m}`] = `--tile-hole-${m}`;
 
 // ---- the wall blob (round 5, 2026-09-03: "walls still look janky")
 // The packs draw walls as 2.5-D ROOM BORDERS two tiles tall (a top surface
@@ -292,10 +302,21 @@ function wallBlob(spec, sheets) {
 // east–west end — and a scatter of stone chips on the floor between (round
 // 11b: "the gaps are visibly very narrow" — the ends are one flush pixel
 // and up to two of fringe, so the gap is 10–14 of the 16). One of
-// 16 cases by its own solid neighbours (N=1 E=2 S=4 W=8, no diagonals);
-// with nothing to join (mask 0: a lone pillar) it is chips alone. Same
-// palette, bevels, outline and face as the theme's walls.
-const RUIN = { tongue: 1, fringe: 2, chips: 5 };
+// 16 cases by its STANDING wall neighbours (N=1 E=2 S=4 W=8, no
+// diagonals; board-ui counts no ruin or opened doorway here since round
+// 12 — two breaks side by side drew stubs at each other, "clumps of wall
+// between squares"); with nothing to join (mask 0: a lone pillar, or a
+// break among breaks) it is chips alone. Same palette, bevels, outline
+// and face as the theme's walls — except under a NORTH end: a west/east
+// end's columns hang FACE_H rows under their lowest chunk (the flush
+// column's face runs on into the neighbour's, a fringe column's follows
+// its own ragged bottom), but a north end's face is the stump's own,
+// RUIN.face rows — the
+// broken wall stands that much lower than a whole one (round 12: with
+// the wall's full face the stub "covered a ton of the square when
+// pointed south", 8–10 rows of 16; and a north–south case drew NO face
+// at all, the pass having read the south end as the column's bottom).
+const RUIN = { tongue: 1, fringe: 2, chips: 5, face: 2 };
 function ruinBlob(spec, sheets) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
@@ -336,13 +357,26 @@ function ruinBlob(spec, sheets) {
         put(x, y, c);
       }
     }
-    // The brick face under every south edge, as under the walls.
+    // The brick face under every south edge that ends inside the cell, by
+    // COLUMN ZONE: outside the band (a west/east end's columns) it hangs
+    // FACE_H rows under the column's lowest chunk, as under the walls —
+    // the flush column's runs on into the neighbour's face, a fringe
+    // column's under its own ragged bottom; inside the band it is the NORTH
+    // tongue's (the run joined to the top edge — a south tongue never is),
+    // RUIN.face rows. A south end has no south edge. Geometry keeps the
+    // two apart (the north tongue ends by row 2, the south begins at row
+    // 13); the break guards a taller RUIN.face.
     for (let x = 0; x < T; x++) {
       let yb = -1;
-      for (let y = 0; y < T; y++) if (body(x, y)) yb = y;
+      if (inBand(x)) for (let y = 0; y < T && body(x, y); y++) yb = y;
+      else for (let y = 0; y < T; y++) if (body(x, y)) yb = y;
       if (yb < 0 || yb >= T - 1) continue;
-      const rows = Math.min(FACE_H, T - 1 - yb);
-      for (let r = 0; r < rows; r++) put(x, yb + 1 + r, r === rows - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
+      const rows = Math.min(inBand(x) ? RUIN.face : FACE_H, T - 1 - yb);
+      for (let r = 0; r < rows; r++) {
+        const y = yb + 1 + r;
+        if (body(x, y)) break;
+        put(x, y, r === rows - 1 ? mix(facePx(x, r), edge, 0.5) : facePx(x, r));
+      }
     }
     const solidAt = (x, y) => x >= 0 && x < T && y >= 0 && y < T && solidPx[y][x];
     for (let y = 0; y < T; y++) {
@@ -370,6 +404,73 @@ function ruinBlob(spec, sheets) {
       if (cw === 2) { tile.data[o + 4] = hi[0]; tile.data[o + 5] = hi[1]; tile.data[o + 6] = hi[2]; tile.data[o + 7] = 255; }
     }
     out[`ruin-${m}`] = tile;
+  }
+  return out;
+}
+
+// ---- the hole blob (round 13, 2026-09-03: "ragged edges on hole tiles?
+// Needs complete autotiling"). A god-made pit AUTOTILES by its HOLE
+// neighbours (N=1 E=2 S=4 W=8 — the four sides are the whole story: a
+// diagonal floor square touches a pit only at a corner point, so there
+// are no inner-corner cases and 16 tiles cover every shape). On a side
+// that faces floor the pit stops short of the cell edge by a ragged
+// 1…1+HOLE.fringe pixels, hashed per pair of pixels along the side, so the
+// floor tile shows through the margin and the break in it is a jagged
+// line; on a side that faces another pit it runs edge to edge, so joined
+// pits read as one pit. The pit floor is near-black in the theme's own
+// dark, a 1-px outline in the theme's edge colour rims the break on the
+// floor side (so the rim is 1–3 px of which the innermost is the lip and
+// the rest floor), and under a north rim the pit's FAR WALL shows —
+// HOLE.face rows of the wall's top colour shaded and one darker — with a
+// 1-px lit strip down a west rim: the same light as the walls' bevels.
+// The wall shows only in columns whose pit BEGINS at the north rim (a
+// column inside a ragged west/east rim begins lower — round 13's first cut
+// lit a stray fragment there, caught in review), the strip only in rows
+// whose pit begins at the west rim, below the wall.
+const HOLE = { fringe: 2, face: 2 };
+function holeBlob(spec) {
+  const fill = hex(spec.fill), edge = hex(spec.edge);
+  const black = [0, 0, 0];
+  const pitC = mix(edge, black, 0.85);
+  const faceC = mix(fill, black, 0.5), faceLo = mix(fill, black, 0.68);
+  const out = {};
+  for (let m = 0; m < 16; m++) {
+    const n = m & 1, e = m & 2, s = m & 4, w = m & 8;
+    const rim = (k, salt) => 1 + (hash(k >> 1, m, salt) % (HOLE.fringe + 1));
+    const pit = (x, y) => {
+      if (x < 0 || x >= T || y < 0 || y >= T) return false;
+      if (!n && y < rim(x, 31)) return false;
+      if (!s && y >= T - rim(x, 33)) return false;
+      if (!w && x < rim(y, 35)) return false;
+      if (!e && x >= T - rim(y, 37)) return false;
+      return true;
+    };
+    const tile = blank(T, T);
+    const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (pit(x, y)) put(x, y, pitC);
+    // The far wall under a north rim; the lit strip down a west rim.
+    for (let x = 0; x < T; x++) {
+      if (n) break;
+      const y0 = rim(x, 31);
+      if (!pit(x, y0)) continue; // this column is inside a west/east rim
+      for (let r = 0; r <= HOLE.face && pit(x, y0 + r); r++) put(x, y0 + r, r < HOLE.face ? faceC : faceLo);
+    }
+    for (let y = 0; y < T; y++) {
+      if (w) break;
+      const x0 = rim(y, 35);
+      if (!pit(x0, y)) continue; // this row is inside a north/south rim
+      if (!n && y <= rim(x0, 31) + HOLE.face) continue; // the far wall owns these rows
+      put(x0, y, faceLo);
+    }
+    // The outline: floor pixels touching the pit take the theme's edge
+    // colour — the broken lip of the floor.
+    for (let y = 0; y < T; y++) {
+      for (let x = 0; x < T; x++) {
+        if (pit(x, y)) continue;
+        if (pit(x - 1, y) || pit(x + 1, y) || pit(x, y - 1) || pit(x, y + 1)) put(x, y, edge);
+      }
+    }
+    out[`hole-${m}`] = tile;
   }
   return out;
 }
@@ -455,23 +556,24 @@ function barredGate(spec) {
 // don't look great — avoid having something arc over the space above the
 // doorway"): no lintel, no arch. A two-pixel POST in the door's material —
 // timber for the hall, pale stone for the castle, iron for the crypt —
-// stands at each edge of the cell, full height, where the neighbour's wall
-// case runs flat into it (the doorway is solid to its neighbours), and
+// stands at each edge of the cell WHERE A WALL STILL STANDS (`sides`:
+// W=8 / E=2, the cell's wm-<mask> — round 12: a frame's post falls with
+// the wall it framed; a doorway beside a break keeps one post, one
+// between two breaks nothing — "awkward looking vertical door frames
+// between empty spaces"), full height, where the neighbour's wall case
+// runs flat into it (the doorway is solid to its neighbours), and
 // everything between is transparent: the floor, top to bottom, so a piece
 // standing in the doorway stands between the posts under open sky. The
 // opening is ten of the sixteen pixels (round 11b: "visibly very narrow"
 // with the wall band carried two pixels in on each side).
-function doorwayTile(spec, sheets, post) {
-  const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
-  const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);
-  const facePx = (x, r) => { const o = (r * T + x) * 4; return [face.data[o], face.data[o + 1], face.data[o + 2]]; };
+function doorwayTile(spec, post, sides) {
+  const edge = hex(spec.edge);
   const lit = hex(post.lit), dark = hex(post.dark);
   const tile = blank(T, T);
   const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
   for (let y = 0; y < T; y++) {
-    put(0, y, lit); put(1, y, dark);
-    put(14, y, lit); put(15, y, dark);
-    put(2, y, edge); put(13, y, edge);
+    if (sides & 8) { put(0, y, lit); put(1, y, dark); put(2, y, edge); }
+    if (sides & 2) { put(13, y, edge); put(14, y, lit); put(15, y, dark); }
   }
   return tile;
 }
@@ -600,7 +702,7 @@ themeNames.forEach((theme, row) => {
     door = tiles.door;
   }
   doorSets[THEMES[theme].doorSet] = { door };
-  emit('doorway', doorwayTile(THEMES[theme].wall, sheets, THEMES[theme].doorPost), { composed: 'the wall ends, two posts in the door material, floor between' });
+  for (const [role, sides] of [['doorway', 10], ['doorway-8', 8], ['doorway-2', 2]]) emit(role, doorwayTile(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 10 ? 'posts in the door material at both edges, floor between' : `one post in the door material at the ${sides === 8 ? 'west' : 'east'} edge, floor between`, mask: sides });
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
     const tint = THEMES[theme].floor.tint;
@@ -619,6 +721,7 @@ themeNames.forEach((theme, row) => {
   emit('wall', cases['wall-10'], { composed: 'blob case 10 (east–west run)', mask: 10 });
   for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: 'blob in the pack palette + its face', mask: +role.slice(5) });
   for (const [role, tile] of Object.entries(ruinBlob(ws, sheets))) emit(role, tile, { composed: 'ruin blob: the broken wall stub in the pack palette + its face', mask: +role.slice(5) });
+  for (const [role, tile] of Object.entries(holeBlob(ws))) emit(role, tile, { composed: 'hole blob: the pit in the pack palette, rimmed where floor meets it', mask: +role.slice(5) });
 
   css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
@@ -634,9 +737,20 @@ for (const name of DOOR_SETS) {
 // The autotile classes → the theme's case, the plain wall as the fallback
 // (so the in-house set, with no per-case tiles, paints its one block).
 for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: var(--tile-wall-${code}, var(--tile-wall)); }`);
-// A ruin cell (board-ui .ruin, wm-<mask> = its 4-bit solid-neighbour
-// mask) → the theme's stub case; the in-house set paints its rubble sprite.
+// A ruin cell (board-ui .ruin, wm-<mask> = the 4-bit mask of its STANDING
+// wall neighbours) → the theme's stub case; the in-house set paints its
+// rubble sprite.
 for (let m = 0; m < 16; m++) css.push(`.cell.ruin.wm-${m} { --ruin-tile: var(--tile-ruin-${m}, var(--sprite-rubble)); }`);
+// An opened doorway (board-ui decor-doorway on a floor cell, wm-<mask> =
+// which of its west (8) / east (2) neighbours still STANDS): the full frame
+// between two walls, one post beside a break, nothing between two breaks
+// (round 12). The in-house set has no doorway at all.
+css.push('.cell.wm-8 > .decor-doorway { --decor-img: var(--decor-doorway-8, var(--decor-doorway)); }');
+css.push('.cell.wm-2 > .decor-doorway { --decor-img: var(--decor-doorway-2, var(--decor-doorway)); }');
+css.push('.cell.wm-0 > .decor-doorway { --decor-img: none; }');
+// A hole (board-ui .hole, wm-<mask> = the 4-bit mask of its HOLE neighbours)
+// → the theme's pit case; the in-house set keeps style.css's gradient pit.
+for (let m = 0; m < 16; m++) css.push(`.cell.hole.wm-${m} { --hole-tile: var(--tile-hole-${m}); }`);
 css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
 css.push('[data-theme] { --floor-shade: #00000038; }');
 
@@ -693,7 +807,7 @@ for (const [key, p] of Object.entries(PACKS)) {
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas) and the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — the wall ends and two posts in the door\'s material (pixel-poem\'s door timber colours for the hall, the packs\' stone and iron tones for the others).');
+md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas), the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) and the HOLE autotile (16 cases, `hole-<mask>` — the pit the gods leave, rimmed where floor meets it) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber colours for the hall, the packs\' stone and iron tones for the others) at each edge where a wall still stands, the floor between.');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');
