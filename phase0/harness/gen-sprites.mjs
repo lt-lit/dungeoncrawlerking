@@ -35,20 +35,23 @@ const SPRITES = {
   // for every weakened wall, whoever weakened it (a god's crack and an
   // authored weak spot are the same '^' — designer 2026-09-03): laid over
   // the wall tile by the .cracking fx and carried by the sprite element on
-  // a cracked wall or a weak spot.
+  // a cracked wall or a weak spot. Round 13: drawn ON THE 16×16 PIXEL GRID
+  // — one black pixel per wall pixel, 8-connected so it stays one pixel
+  // thin on the diagonals — where the first cut was 1-unit strokes at
+  // half-pixel offsets that rasterised finer and softer than the wall
+  // under it ("make a 16x16 version that actually matches the resolution
+  // of the wall"). A main fissure top to bottom, four branches.
   'tile-crack': (() => {
-    const branches = [
-      'M7.5 0v3.5l1 1v2l-1 1v2.5l2 1v2l-1 1.5V16',
-      'M8.5 4.5l3-1 3 1',
-      'M7.5 7.5l-3 1-2-2-2.5 1',
-      'M9.5 10.5l3 1 3-1',
-      'M8.5 12.5l-3 1-2 2',
-      'M4.5 8.5l-1 3',
-      'M11.5 3.5l1-2.5',
-      'M12.5 11.5l1.5 2.5',
-      'M3.5 8.5l-2-3',
+    const lines = [
+      [[7, 0], [7, 1], [6, 2], [6, 3], [5, 4], [5, 5], [6, 6], [6, 7], [7, 8], [7, 9], [7, 10], [8, 11], [8, 12], [7, 13], [7, 14], [8, 15]], // the fissure
+      [[7, 5], [8, 4], [9, 4], [10, 3], [11, 3], [12, 2]], // up and right
+      [[4, 5], [3, 6], [2, 6], [1, 7]], // left
+      [[9, 11], [10, 12], [11, 12], [12, 13], [13, 13]], // down and right
+      [[6, 14], [5, 14], [4, 15]], // down and left
+      [[8, 8], [9, 8]], // a nick
     ];
-    return svg(branches.map((d) => PATH(d, P.crack, 1)).join(''));
+    const px = new Set(lines.flat().map(([x, y]) => `${x},${y}`));
+    return svg([...px].map((k) => { const [x, y] = k.split(',').map(Number); return R(x, y, 1, 1, P.crack); }).join(''));
   })(),
   // A crate: horizontal plank slats with dark seams, a raised lighter lid
   // strip, and four iron nails at the corners of the batten frame — a stack

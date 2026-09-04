@@ -299,7 +299,9 @@ for (let i = 0; i < PLIES; i++) {
         if (wantPits.includes(sq)) expect(cells[sq]?.includes('hole') && !cells[sq]?.includes('fresh-breach'), `${sq}: breached then collapsed → hole only (${cells[sq]})`);
         else expect(cells[sq]?.includes('fresh-breach') && !cells[sq]?.includes('furniture'), `${sq}: breach opened to floor + fresh-breach ring (${cells[sq]})`);
       }
-      for (const sq of wantFrom) expect(cells[sq]?.includes('quake-from'), `${sq}: quake-from mark (${cells[sq]})`);
+      // A displacement is its arrow alone (round 13): no square mark on
+      // either end.
+      for (const sq of wantFrom) expect(!cells[sq]?.includes('quake-from') && !cells[sq]?.includes('quake-to'), `${sq}: a displacement leaves no square mark, only its arrow (${cells[sq]})`);
       // EVERY fresh hole keeps its rim — two crumbles in one window used to
       // leave only the latest marked.
       for (const sq of wantPits) expect(cells[sq]?.includes('hole') && cells[sq]?.includes('fresh-pit'), `${sq}: hole tile + fresh-pit ring (${cells[sq]})`);
@@ -355,8 +357,9 @@ if ((await page.evaluate(() => window.__DCK.app.duel?.state)) === 'playing') {
  *  '^' paints cracked — and every RUIN wears the stub case of its STANDING
  *  wall neighbours (a wall, a cracked wall or a door; never another ruin,
  *  an opened doorway, a hole or a crate — round 12's clumps), every opened
- *  DOORWAY the east/west mask of its standing walls (its posts). Runs in
- *  the page. */
+ *  DOORWAY the east/west mask of its standing walls (its posts), and every
+ *  HOLE the 4-bit mask of its hole neighbours (round 13's pit autotile).
+ *  Runs in the page. */
 function tilesVsLedgers({ holes, godCrates, fen }) {
   const bad = [];
   for (const sq of holes) if (!window.__DCK.marks.cell(sq).includes('hole')) bad.push(`${sq} not a hole`);
@@ -383,6 +386,14 @@ function tilesVsLedgers({ holes, godCrates, fen }) {
     const r = parseInt(sq.slice(1), 10);
     const want = (standing(f + 1, r) ? 2 : 0) | (standing(f - 1, r) ? 8 : 0);
     if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} doorway wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its standing walls say wm-${want}`);
+  }
+  const isHole = (f, r) => !!document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"].hole`);
+  for (const cell of document.querySelectorAll('#board .cell.hole')) {
+    const sq = cell.dataset.square;
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq.slice(1), 10);
+    const want = (isHole(f, r + 1) ? 1 : 0) | (isHole(f + 1, r) ? 2 : 0) | (isHole(f, r - 1) ? 4 : 0) | (isHole(f - 1, r) ? 8 : 0);
+    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} hole wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its hole neighbours say wm-${want}`);
   }
   void fen;
   return bad;

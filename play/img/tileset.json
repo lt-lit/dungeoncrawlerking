@@ -85,7 +85,23 @@
   "ruin-12",
   "ruin-13",
   "ruin-14",
-  "ruin-15"
+  "ruin-15",
+  "hole-0",
+  "hole-1",
+  "hole-2",
+  "hole-3",
+  "hole-4",
+  "hole-5",
+  "hole-6",
+  "hole-7",
+  "hole-8",
+  "hole-9",
+  "hole-10",
+  "hole-11",
+  "hole-12",
+  "hole-13",
+  "hole-14",
+  "hole-15"
  ],
  "themes": {
   "hall": {
@@ -550,6 +566,86 @@
     "ruin-15": {
      "col": 84,
      "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
+    },
+    "hole-0": {
+     "col": 85,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 0
+    },
+    "hole-1": {
+     "col": 86,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 1
+    },
+    "hole-2": {
+     "col": 87,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 2
+    },
+    "hole-3": {
+     "col": 88,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 3
+    },
+    "hole-4": {
+     "col": 89,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 4
+    },
+    "hole-5": {
+     "col": 90,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 5
+    },
+    "hole-6": {
+     "col": 91,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 6
+    },
+    "hole-7": {
+     "col": 92,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 7
+    },
+    "hole-8": {
+     "col": 93,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 8
+    },
+    "hole-9": {
+     "col": 94,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 9
+    },
+    "hole-10": {
+     "col": 95,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 10
+    },
+    "hole-11": {
+     "col": 96,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 11
+    },
+    "hole-12": {
+     "col": 97,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 12
+    },
+    "hole-13": {
+     "col": 98,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 13
+    },
+    "hole-14": {
+     "col": 99,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 14
+    },
+    "hole-15": {
+     "col": 100,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
     }
    }
@@ -1025,6 +1121,86 @@
      "col": 84,
      "composed": "ruin blob: the broken wall stub in the pack palette + its face",
      "mask": 15
+    },
+    "hole-0": {
+     "col": 85,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 0
+    },
+    "hole-1": {
+     "col": 86,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 1
+    },
+    "hole-2": {
+     "col": 87,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 2
+    },
+    "hole-3": {
+     "col": 88,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 3
+    },
+    "hole-4": {
+     "col": 89,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 4
+    },
+    "hole-5": {
+     "col": 90,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 5
+    },
+    "hole-6": {
+     "col": 91,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 6
+    },
+    "hole-7": {
+     "col": 92,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 7
+    },
+    "hole-8": {
+     "col": 93,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 8
+    },
+    "hole-9": {
+     "col": 94,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 9
+    },
+    "hole-10": {
+     "col": 95,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 10
+    },
+    "hole-11": {
+     "col": 96,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 11
+    },
+    "hole-12": {
+     "col": 97,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 12
+    },
+    "hole-13": {
+     "col": 98,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 13
+    },
+    "hole-14": {
+     "col": 99,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 14
+    },
+    "hole-15": {
+     "col": 100,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 15
     }
    }
   },
@@ -1481,6 +1657,86 @@
     "ruin-15": {
      "col": 84,
      "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "mask": 15
+    },
+    "hole-0": {
+     "col": 85,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 0
+    },
+    "hole-1": {
+     "col": 86,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 1
+    },
+    "hole-2": {
+     "col": 87,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 2
+    },
+    "hole-3": {
+     "col": 88,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 3
+    },
+    "hole-4": {
+     "col": 89,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 4
+    },
+    "hole-5": {
+     "col": 90,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 5
+    },
+    "hole-6": {
+     "col": 91,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 6
+    },
+    "hole-7": {
+     "col": 92,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 7
+    },
+    "hole-8": {
+     "col": 93,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 8
+    },
+    "hole-9": {
+     "col": 94,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 9
+    },
+    "hole-10": {
+     "col": 95,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 10
+    },
+    "hole-11": {
+     "col": 96,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 11
+    },
+    "hole-12": {
+     "col": 97,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 12
+    },
+    "hole-13": {
+     "col": 98,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 13
+    },
+    "hole-14": {
+     "col": 99,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
+     "mask": 14
+    },
+    "hole-15": {
+     "col": 100,
+     "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
     }
    }

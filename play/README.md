@@ -194,8 +194,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   state. Edge **coordinates** (`.coord`: files along the bottom row,
   ranks down the left column) make every square the log names findable.
   Marks compose on separate channels: terrain = `background`, residue and
-  debug rings = `box-shadow`, last move = `filter`, selection/check =
-  `outline`, targets = `::after`. Three more cell classes serve the themes:
+  debug rings = `box-shadow`, selection/check = `outline`, targets =
+  `::after`; MOVES are arrows on the SVG layer — the enemy's last move in
+  red (`kind: 'last'`, shown from the reply until the player answers;
+  round 13 retired the last-move square tint), the gods' displacements in
+  their blue, the oracle's hints by rank — all one geometry and outline,
+  the colour alone says whose. Three more cell classes serve the themes:
   `wm-<mask>` on a wall (or cracked wall) is its AUTOTILE case — the mask
   of solid neighbours, N=1 E=2 S=4 W=8 plus the diagonals NE=16 SE=32 SW=64
   NW=128 (a diagonal counts only when both its orthogonals are solid —
@@ -208,7 +212,9 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   autotile case like a cracked wall does and its sprite is THE crack: one
   overlay for every weakened wall, whoever weakened it (`--tile-crack`,
   gen-sprites.mjs — thin black branching lines on transparency, nothing
-  else, so it reads on any wall colour) — functionally the same
+  else, so it reads on any wall colour; since round 13 drawn ON the 16-px
+  pixel grid, one black pixel per wall pixel, 8-connected — the first cut's
+  half-pixel strokes rasterised finer than the wall) — functionally the same
   capturable `^`; and `f1`…`f6`, the square's stable floor-texture variant
   (a hash of the square, so a repaint never makes the floor crawl; f1 on
   ~70% of squares, the rest scattered — `FLOOR_VARIANTS`); and `.decor`,
@@ -303,7 +309,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   / +4% with pixel-perfect ON (board-ui, mirrored as style.css's
   fallbacks): a piece stands on its square's bottom edge and rises well
   into the one above — which is earlier in the DOM, so the nearer (lower)
-  piece paints in front, as it should. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
+  piece paints in front, as it should. The board is OPEN at the top
+  (round 13: `overflow: visible` with a `clip-path` that still clips the
+  sides and bottom), so a tall piece on the top row rises past the border
+  instead of losing its head, and under a sprite set the board steps down
+  by that overhang (`.board[data-pieces] { margin-top }`, from the same
+  dials) so the heads never sit on the bar above. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
   ResizeObserver) measures a cell, reads the set's native box from
   tiles.css (`--piece-fit` / `--piece-box`), takes the largest whole
   device-pixel scale k that fits the size dial and lands the box on whole
@@ -324,9 +335,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   motion → settle), with terrain fx per RUNG (`animateTerrain`: a weaken
   cracks, a breach bursts, a crumble sinks — each held on its end frame
   until the commit), and leave the gods' **residue** in their own light-blue
-  hue: `quake-from` hollow, `quake-to` filled plus a dashed **arrow** on the
-  SVG layer for every displacement, `fresh-crack`, `fresh-breach`, and
-  `fresh-pit` (rust). Residue persists through the enemy's reply, MERGES
+  hue: a solid **arrow** on the SVG layer for every displacement and
+  nothing on its squares (round 13: "the blue arrow is enough" — the
+  `quake-from`/`quake-to` marks and the dash are gone), `fresh-crack`,
+  `fresh-breach`, and `fresh-pit` (rust). Residue persists through the enemy's reply, MERGES
   across quakes in one window, and clears when the player moves; the same
   actions are written to the **gods line** in the player's bar under the
   board ("⚡ the gods: wall cracks c4 · your knight e4→e5") and to the log.
@@ -383,7 +395,16 @@ pixel-poem's and Catacombs' own torch, candle and chain; the rest
 borrowed from pixel-poem; the floor litter is repacked but no longer
 scattered). A theme also provides the wall in all **47 autotile cases**,
 the broken wall in **16 ruin cases** (`ruin-<mask>`, generated the same
-way — see the renderer notes above), and the door, crate, chest, barrel
+way — see the renderer notes above), the god-made pit in **16 hole
+cases** (`hole-<mask>`, round 13: the cell's `wm-<mask>` is the 4-bit
+mask of its HOLE neighbours — the four sides are the whole story, a
+diagonal floor square touches a pit only at a corner — and the tool draws
+a ragged 1–3 px margin on every floor-facing side, with the floor showing
+through it and a 1-px outline in the theme's edge colour as the broken
+lip, the pit's far wall in the wall's shaded tone under a north rim, and
+pit edge to edge toward another hole, so joined pits read as one; the
+in-house set keeps its gradient pit, and the crumble fx ends on the
+lone-pit case), and the door, crate, chest, barrel
 and rubble sprites. The repack tool also builds `img/pieces.png` (32-px
 atlas cells, one row per set) and the `[data-pieces=…]` sprite variables
 from the sheets in `assets-src/pixel-chess/`, `assets-src/nulltale/` and

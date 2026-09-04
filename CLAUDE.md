@@ -149,7 +149,19 @@ review); and an opened DOORWAY's posts stand only beside standing walls
 too (the cell wears the east/west mask, `doorway-8` / `doorway-2` are
 the one-post tiles, wm-0 paints nothing — "awkward looking vertical door
 frames between empty spaces"); the smoke checks every live ruin's and
-doorway's case against its neighbours — see `play/README.md` § "Art
+doorway's case against its neighbours; **round 13**: the crack is drawn
+ON the 16-px pixel grid (one black pixel per wall pixel); the enemy's
+last move is a RED ARROW (`kind: 'last'`, no square tint), a displacement
+is its blue arrow ALONE (the `quake-from`/`quake-to` marks and the dash
+are gone — every arrow shares one style, the colour says whose); the
+board is OPEN at the top (`overflow: visible` + a `clip-path` for the
+sides and bottom) with a headroom margin from the piece dials, so tall
+top-row pieces keep their heads; and HOLES AUTOTILE — 16 cases by the
+4-bit mask of HOLE neighbours (`--tile-hole-<mask>`, `holeBlob`: a ragged
+floor-showing margin and edge-colour lip on every floor-facing side, the
+pit's far wall under a north rim, edge to edge toward another pit so
+joined pits read as one; the in-house set keeps its gradient pit; the
+crumble fx ends on the lone-pit case) — see `play/README.md` § "Art
 themes");
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll

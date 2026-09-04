@@ -203,6 +203,9 @@ for (const code of WALL_MASK_CODES) ROLES[`wall-${code}`] = `--tile-wall-${code}
 // ruin-<mask>: the 16 BROKEN-WALL stub cases (ruinBlob below) a floor
 // square wears where a wall broke (board-ui .ruin, main.mjs residue).
 for (let m = 0; m < 16; m++) ROLES[`ruin-${m}`] = `--tile-ruin-${m}`;
+// hole-<mask>: the 16 PIT cases (holeBlob below) a god-made hole wears by
+// its hole neighbours (board-ui .hole + wm-<mask>) — round 13.
+for (let m = 0; m < 16; m++) ROLES[`hole-${m}`] = `--tile-hole-${m}`;
 
 // ---- the wall blob (round 5, 2026-09-03: "walls still look janky")
 // The packs draw walls as 2.5-D ROOM BORDERS two tiles tall (a top surface
@@ -401,6 +404,68 @@ function ruinBlob(spec, sheets) {
       if (cw === 2) { tile.data[o + 4] = hi[0]; tile.data[o + 5] = hi[1]; tile.data[o + 6] = hi[2]; tile.data[o + 7] = 255; }
     }
     out[`ruin-${m}`] = tile;
+  }
+  return out;
+}
+
+// ---- the hole blob (round 13, 2026-09-03: "ragged edges on hole tiles?
+// Needs complete autotiling"). A god-made pit AUTOTILES by its HOLE
+// neighbours (N=1 E=2 S=4 W=8 — the four sides are the whole story: a
+// diagonal floor square touches a pit only at a corner point, so there
+// are no inner-corner cases and 16 tiles cover every shape). On a side
+// that faces floor the pit stops short of the cell edge by a ragged
+// 1…1+HOLE.fringe pixels, hashed per pair of pixels along the side, so the
+// floor tile shows through the margin and the break in it is a jagged
+// line; on a side that faces another pit it runs edge to edge, so joined
+// pits read as one pit. The pit floor is near-black in the theme's own
+// dark, a 1-px outline in the theme's edge colour rims the break on the
+// floor side, and under a north rim the pit's FAR WALL shows — HOLE.face
+// rows of the wall's shaded tone and one darker — with a 1-px lit strip
+// down a west rim: the same light as the walls' bevels.
+const HOLE = { fringe: 2, face: 2 };
+function holeBlob(spec) {
+  const lo = hex(spec.lo), edge = hex(spec.edge);
+  const black = [0, 0, 0];
+  const pitC = mix(edge, black, 0.75);
+  const faceC = mix(lo, black, 0.55), faceLo = mix(lo, black, 0.78);
+  const out = {};
+  for (let m = 0; m < 16; m++) {
+    const n = m & 1, e = m & 2, s = m & 4, w = m & 8;
+    const rim = (k, salt) => 1 + (hash(k >> 1, m, salt) % (HOLE.fringe + 1));
+    const pit = (x, y) => {
+      if (x < 0 || x >= T || y < 0 || y >= T) return false;
+      if (!n && y < rim(x, 31)) return false;
+      if (!s && y >= T - rim(x, 33)) return false;
+      if (!w && x < rim(y, 35)) return false;
+      if (!e && x >= T - rim(y, 37)) return false;
+      return true;
+    };
+    const tile = blank(T, T);
+    const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (pit(x, y)) put(x, y, pitC);
+    // The far wall under a north rim; the lit strip down a west rim.
+    for (let x = 0; x < T; x++) {
+      if (n) break;
+      let y0 = -1;
+      for (let y = 0; y < T; y++) if (pit(x, y)) { y0 = y; break; }
+      if (y0 < 0) continue;
+      for (let r = 0; r <= HOLE.face && y0 + r < T && pit(x, y0 + r); r++) put(x, y0 + r, r < HOLE.face ? faceC : faceLo);
+    }
+    for (let y = 0; y < T; y++) {
+      if (w) break;
+      let x0 = -1;
+      for (let x = 0; x < T; x++) if (pit(x, y)) { x0 = x; break; }
+      if (x0 >= 0 && !(!n && y < rim(x0, 31) + HOLE.face + 1)) put(x0, y, faceLo);
+    }
+    // The outline: floor pixels touching the pit take the theme's edge
+    // colour — the broken lip of the floor.
+    for (let y = 0; y < T; y++) {
+      for (let x = 0; x < T; x++) {
+        if (pit(x, y)) continue;
+        if (pit(x - 1, y) || pit(x + 1, y) || pit(x, y - 1) || pit(x, y + 1)) put(x, y, edge);
+      }
+    }
+    out[`hole-${m}`] = tile;
   }
   return out;
 }
@@ -651,6 +716,7 @@ themeNames.forEach((theme, row) => {
   emit('wall', cases['wall-10'], { composed: 'blob case 10 (east–west run)', mask: 10 });
   for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: 'blob in the pack palette + its face', mask: +role.slice(5) });
   for (const [role, tile] of Object.entries(ruinBlob(ws, sheets))) emit(role, tile, { composed: 'ruin blob: the broken wall stub in the pack palette + its face', mask: +role.slice(5) });
+  for (const [role, tile] of Object.entries(holeBlob(ws))) emit(role, tile, { composed: 'hole blob: the pit in the pack palette, rimmed where floor meets it', mask: +role.slice(5) });
 
   css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
@@ -677,6 +743,9 @@ for (let m = 0; m < 16; m++) css.push(`.cell.ruin.wm-${m} { --ruin-tile: var(--t
 css.push('.cell.wm-8 > .decor-doorway { --decor-img: var(--decor-doorway-8, var(--decor-doorway)); }');
 css.push('.cell.wm-2 > .decor-doorway { --decor-img: var(--decor-doorway-2, var(--decor-doorway)); }');
 css.push('.cell.wm-0 > .decor-doorway { --decor-img: none; }');
+// A hole (board-ui .hole, wm-<mask> = the 4-bit mask of its HOLE neighbours)
+// → the theme's pit case; the in-house set keeps style.css's gradient pit.
+for (let m = 0; m < 16; m++) css.push(`.cell.hole.wm-${m} { --hole-tile: var(--tile-hole-${m}); }`);
 css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
 css.push('[data-theme] { --floor-shade: #00000038; }');
 
@@ -733,7 +802,7 @@ for (const [key, p] of Object.entries(PACKS)) {
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas) and the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber colours for the hall, the packs\' stone and iron tones for the others) at each edge where a wall still stands, the floor between.');
+md.push('The remaining sprites (table, chair, shelf, the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas), the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) and the HOLE autotile (16 cases, `hole-<mask>` — the pit the gods leave, rimmed where floor meets it) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber colours for the hall, the packs\' stone and iron tones for the others) at each edge where a wall still stands, the floor between.');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');
