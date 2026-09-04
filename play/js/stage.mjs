@@ -19,7 +19,7 @@
 //
 // SKINS (2026-09-02, optional): a parallel "skin" grid, same shape as the
 // map, says what each '^' LOOKS like — 'D' door · 'B' barrel · 'T' table ·
-// 'C' chair · 'S' shelf · 'X' chest · 'K' crate · 'R' rubble (weak masonry) ·
+// 'C' chair · 'S' shelf · 'X' chest · 'K' crate · 'R' cracked masonry ·
 // '.' default (crate).
 // Pure cosmetics: every skin is the same '^' to the engine, molding, crop,
 // the camp line and the gods (README: "skins are a cosmetic layer, never
@@ -39,7 +39,12 @@ import { catalogVariantName } from './variant.mjs';
 import { WALL, FURNITURE } from './fen.mjs';
 
 /** Skin letter → skin name (the renderer's `skin-<name>` cell class). */
-export const SKIN_CHARS = { D: 'door', B: 'barrel', T: 'table', C: 'chair', S: 'shelf', X: 'chest', K: 'crate', R: 'rubble' };
+// ('R' reads MASONRY, not a heap: the rubble-pile sprite was retired
+//  2026-09-04 — "they look absurdly out of place. Why not just use a
+//  cracked wall?" — and weak masonry now paints the wall block with THE
+//  crack across it, exactly like a god-weakened wall and the weak-spot
+//  door. The letter stays 'R' so the locked stage files never moved.)
+export const SKIN_CHARS = { D: 'door', B: 'barrel', T: 'table', C: 'chair', S: 'shelf', X: 'chest', K: 'crate', R: 'masonry' };
 export const SKIN_NAMES = Object.values(SKIN_CHARS);
 /** Art themes (2026-09-03): which repacked tileset a stage's board wears —
  *  `hall` (pixel-poem), `castle` (Dungeon Gathering), `crypt` (Catacombs);

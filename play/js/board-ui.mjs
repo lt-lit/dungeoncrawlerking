@@ -31,19 +31,24 @@
 //   .furniture stays on a .cracked cell: everything that keys off "this cell
 //   holds a capturable sprite" keeps working, and the cell carries the look.
 //   skin-<name> on a .furniture cell picks the SPRITE (door, barrel, table,
-//   chair, shelf, chest, rubble; the crate is the default) from the stage's
-//   skin grid (stage.mjs stageSkins) — cosmetics only, never grid state.
+//   chair, shelf, chest; the crate is the default) from the stage's skin
+//   grid (stage.mjs stageSkins) — cosmetics only, never grid state. The
+//   masonry skin has no sprite of its own: it is a .weak cell (below).
 //   .wm-<mask> on a wall/cracked cell: its AUTOTILE case — the mask of
 //              solid neighbours (N=1 E=2 S=4 W=8, diagonals NE=16 SE=32
 //              SW=64 NW=128, canonicalMask below; solid = stone that is
-//              not a hole, a cracked wall, or a DOOR skin — a door continues
-//              the wall line; crates and the rest do not). A theme paints
-//              the 47 blob cases (--tile-wall-<mask>, tiles.css), the
-//              in-house set one block for all.
-//   .weak      on a door skin sitting in a north–south wall line: no
-//              edge-on door exists (designer round 6), so the cell paints
-//              its wall case like a cracked wall and the sprite is the
-//              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
+//              not a hole, a cracked wall, a DOOR skin or MASONRY — those
+//              continue the wall line; crates and the rest do not). A
+//              theme paints the 47 blob cases (--tile-wall-<mask>,
+//              tiles.css), the in-house set one block for all.
+//   .weak      an authored WEAK SPOT: the masonry skin anywhere, or a door
+//              skin in a north–south wall line (no edge-on door exists,
+//              designer round 6). The cell paints its wall case and the
+//              sprite is THE crack (--tile-crack), the same overlay a
+//              god-weakened wall wears — the same capturable '^'. Since
+//              2026-09-04 masonry is a weak spot, not a rubble heap
+//              ("they look absurdly out of place. Why not just use a
+//              cracked wall?"); the heap sprite is residue-only.
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
 //   .ck1…ckN   the crack drawing this square's wall would wear
 //              (CRACK_VARIANTS; style.css maps it to --tile-crack).
@@ -358,7 +363,8 @@ export class BoardUI {
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
-    // STANDING = stone that is not a hole, a cracked wall, or a door — the
+    // STANDING = stone that is not a hole: a wall, a cracked wall, a door,
+    // authored masonry (a weak spot is still stone in the line) — the
     // things that continue a wall line to the eye. SOLID (for the wall
     // autotile) = standing, or the RESIDUE of it: a broken wall's ruin stub
     // and an opened doorway keep the line running through the break (round
@@ -371,7 +377,7 @@ export class BoardUI {
       if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
       const t = grid[this.ranks - rr]?.[ff] ?? null;
       const name = String.fromCharCode(97 + ff) + rr;
-      if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door';
+      if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door' || skins[name] === 'masonry';
       if (t === WALL) return !holes.has(name);
       return false;
     };
@@ -407,9 +413,13 @@ export class BoardUI {
       const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);
-      // A door in a north–south wall line is a weak spot in the wall.
+      // WEAK SPOTS wear the crack (2026-09-04): authored masonry anywhere,
+      // and a door in a north–south wall line (there is no edge-on door, so
+      // it reads as the weakened stone it stands in). Both paint the wall
+      // block with THE crack, exactly like a god-weakened wall — the same
+      // capturable '^'.
       const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
-      const weak = skin === 'door' && (N || S) && !(E || W);
+      const weak = skin === 'masonry' || (skin === 'door' && (N || S) && !(E || W));
       cell.classList.toggle('weak', weak);
       // A floor square where a wall broke keeps the broken stub.
       const floor = !isWall && !isFurniture;

@@ -1581,13 +1581,13 @@ function paintBoard(fen) {
       // What stood there is read off the LAST paint's cell classes. A door
       // in an east–west line leaves its OPEN DOORWAY; a weak-spot door (the
       // crack in a north–south line — round 10: "cracked walls turning into
-      // open doors doesn't make any sense"), a wall, a cracked wall or a
-      // rubble skin leaves the RUIN stub; any other furniture (a crate, a
+      // open doors doesn't make any sense"), a wall, a cracked wall or
+      // authored masonry leaves the RUIN stub; any other furniture (a crate, a
       // barrel, a table…) leaves nothing — it never continued a wall line.
       const was = app.boardUI.cellClasses(sq) ?? [];
       const wasDoor = skins[sq] === 'door' && !dir?.godCrates.has(sq);
       if (wasDoor && !was.includes('weak')) res.opened.add(sq);
-      else if (wasDoor || was.includes('wall') || was.includes('cracked') || was.includes('skin-rubble')) res.rubble.add(sq);
+      else if (wasDoor || was.includes('wall') || was.includes('cracked') || was.includes('skin-masonry')) res.rubble.add(sq);
     }
     for (const sq of after) { res.opened.delete(sq); res.rubble.delete(sq); } // undo brought it back
   }

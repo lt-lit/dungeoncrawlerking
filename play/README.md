@@ -180,7 +180,8 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   the setup preview passes skins only). The in-house tiles and furniture
   SPRITES are pixel-art SVG data URIs generated into `style.css` by
   `phase0/harness/gen-sprites.mjs` (crate, door, barrel, table, chair,
-  shelf, chest, rubble, the stone block, the crack) — and since
+  shelf, chest, the stone block, the crack, and the rubble heap the ruin
+  tile falls back to) — and since
   **2026-09-03 the board wears one of three ART THEMES** repacked from free
   16×16 packs (`tiles.css`, `img/tileset.png`, `CREDITS.md`; see "Art
   themes" below): a theme only overrides those same variables under
@@ -204,11 +205,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   of solid neighbours, N=1 E=2 S=4 W=8 plus the diagonals NE=16 SE=32 SW=64
   NW=128 (a diagonal counts only when both its orthogonals are solid —
   `canonicalMask`, the standard 47-case blob), where solid means stone that
-  is not a hole, a cracked wall, or a DOOR (a door continues a wall line;
-  crates and the rest do not) — painting the theme's case
-  (`--tile-wall-<mask>`, else the plain wall); `weak` on a door skin
-  sitting in a north–south wall line — there is no edge-on door (the
-  designer cut the first attempt), so the cell paints the column's own
+  is not a hole, a cracked wall, a DOOR or authored MASONRY (those continue
+  a wall line; crates and the rest do not) — painting the theme's case
+  (`--tile-wall-<mask>`, else the plain wall); `weak` on an authored WEAK
+  SPOT — the `masonry` skin anywhere, or a door skin
+  sitting in a north–south wall line (there is no edge-on door, the
+  designer cut the first attempt) — so the cell paints its own
   autotile case like a cracked wall does and its sprite is THE crack: one
   overlay for every weakened wall, whoever weakened it (`--tile-crack`,
   gen-sprites.mjs — thin black branching lines on transparency, nothing
@@ -252,8 +254,8 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   whatever door set is chosen); a
   floor square where a WALL, a cracked wall, a weak-spot door
   (the crack in a north–south line — it never leaves a doorway: "cracked
-  walls turning into open doors doesn't make any sense") or a rubble skin
-  broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
+  walls turning into open doors doesn't make any sense") or authored
+  masonry broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
   cases (`--tile-ruin-<mask>`, the cell's `wm-<mask>` is the plain 4-bit
   mask of its STANDING wall neighbours — a wall, a cracked wall or a
   door, never another ruin or an opened doorway: round 12, "broken wall
@@ -413,8 +415,10 @@ lip in the theme's edge colour, the rest floor showing through — the
 pit's far wall in the wall's top colour shaded under a north rim, and
 pit edge to edge toward another hole, so joined pits read as one; the
 in-house set keeps its gradient pit, and the crumble fx ends on the
-lone-pit case), and the door, crate, chest, barrel
-and rubble sprites. The repack tool also builds `img/pieces.png` (32-px
+lone-pit case), and the door, crate, chest and barrel sprites (the packs'
+rubble tile is still repacked, but since round 15 nothing reads it:
+authored masonry paints as a cracked wall, and every theme generates its
+own ruin cases). The repack tool also builds `img/pieces.png` (32-px
 atlas cells, one row per set) and the `[data-pieces=…]` sprite variables
 from the sheets in `assets-src/pixel-chess/`, `assets-src/nulltale/` and
 `assets-src/deja-view/` — each set names the exact crop per piece,
@@ -457,8 +461,11 @@ an ordinary capture in play; `^`→`.` derives the stone-only corpus control
 arm from the same file); rectangular, top rank first; 3–12 files × 5–10
 ranks (the engine's largeboard caps). An optional **`skin`** grid, the same
 shape as the map, says what each `^` LOOKS like — `D` door · `B` barrel ·
-`T` table · `C` chair · `S` shelf · `X` chest · `K` crate · `R` rubble ·
-`.` default (crate). Skins are cosmetics only (the same `^` to the engine,
+`T` table · `C` chair · `S` shelf · `X` chest · `K` crate · `R` cracked
+masonry · `.` default (crate). `R` paints as a WEAK SPOT — the wall block
+wearing the crack, exactly like a god-weakened wall — since round 15
+(2026-09-04: "why not just use a cracked wall?"); the rubble-heap sprite
+it used to wear is retired to residue duty. Skins are cosmetics only (the same `^` to the engine,
 molding, crop, the camp line and the gods); a letter on a non-`^` square is
 a load error. They ride flip, crop and the auto-crop beside the map and
 reach the renderer as `stageSkins()` (a square→skin map). An optional
@@ -501,7 +508,7 @@ with a portcullis pair and a postern (s79), a mess hall defined by its
 tables (s80), a rock-cut dead-end warren (s81), a natural grotto (s82),
 a throne room with a dais (s83), a diagonal fissure (s84), twin parallel
 passages (s85), a crate warehouse (s86), stables (s87), a RUIN whose
-walls decay into stone/rubble/gap runs (s88), an enfilade of rooms
+walls decay into stone/cracked-masonry/gap runs (s88), an enfilade of rooms
 (s89), a true four-way crossing with unequal quadrants (s90), an arcade
 (s91), masonry giving way to cave (s92), a cloister garth (s93) and an
 L-shaped tannery with an alley (s94). Rooms reachable only through a

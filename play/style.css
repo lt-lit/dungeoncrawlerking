@@ -422,8 +422,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 /* Furniture SPRITES (§4.6 skins, stage.mjs SKIN_CHARS): the neutral sprite
    element paints a pixel-art icon instead of a glyph. The crate is the
    default; a stage's skin grid picks doors, barrels, tables, chairs,
-   shelves, chests and rubble per square (cell class `skin-<name>`). All the
-   same '^' to the engine and the gods. */
+   shelves and chests per square (cell class `skin-<name>`). All the same
+   '^' to the engine and the gods. */
 .cell.furniture .piece.neutral {
   display: block;
   width: 84%;
@@ -439,21 +439,27 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .cell.skin-chair .piece.neutral { background-image: var(--sprite-chair); }
 .cell.skin-chest .piece.neutral { background-image: var(--sprite-chest); }
 .cell.skin-shelf .piece.neutral { background-image: var(--sprite-shelf); width: 90%; height: 90%; }
-.cell.skin-rubble .piece.neutral { background-image: var(--sprite-rubble); width: 96%; height: 96%; }
-/* A door in a north–south wall line (board-ui `weak`) is a WEAK SPOT: the
-   cell paints its wall case like a cracked wall does, and the sprite is THE
-   crack — the same thin black branching overlay a god-weakened wall wears
-   (one of the crack drawings, by square — .ck1…ckN above). The same
-   capturable '^'. */
-.cell.skin-door.weak {
+/* (There is no masonry sprite: authored masonry is a WEAK SPOT, below.) */
+
+/* WEAK SPOTS (board-ui `weak`): authored masonry anywhere, and a door in a
+   north–south wall line. The cell paints its wall case like a cracked wall
+   does, and the sprite is THE crack — the same thin black branching overlay
+   a god-weakened wall wears (one of the crack drawings, by square — .ck1…ckN
+   above). The same capturable '^'. Keyed on .furniture, not the skin, so
+   both flavors match and the rule still outranks the per-skin sprite rules
+   above (five classes to the door leaf's four — the leaf must lose here).
+   2026-09-04: masonry used to paint a rubble HEAP; the designer
+   killed it ("absurdly out of place — why not just use a cracked wall?"),
+   the same look rounds 11–12 had already driven out of the ruin tile. */
+.cell.furniture.weak {
   background-image: var(--wall-tile), var(--tile-floor, none);
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.skin-door.weak { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
-.cell.skin-door.weak .piece.neutral {
+.cell.dark.furniture.weak { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
+.cell.furniture.weak .piece.neutral {
   width: 100%;
   height: 100%;
   background-image: var(--tile-crack);
@@ -463,7 +469,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    mask), so on a north–south column it never spills onto the floor
    margins; the in-house block is opaque, so classic is unchanged. */
 .cell.cracked .piece.neutral,
-.cell.skin-door.weak .piece.neutral {
+.cell.furniture.weak .piece.neutral {
   -webkit-mask: var(--wall-tile) center / 100% 100% no-repeat;
   mask: var(--wall-tile) center / 100% 100% no-repeat;
 }

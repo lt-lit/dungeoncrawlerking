@@ -53,7 +53,7 @@ the block with a branching black crack and NO crate sprite, hint arrows are
 outlined on shaft and head and carry their eval written into the arrow (paints
 are depth-consistent across ranks), the floor is warm grey, and `^` has
 SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
-crate/rubble; cosmetics only, never grid state) authored over the whole bed
+crate/masonry; cosmetics only, never grid state) authored over the whole bed
 by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
 family by the stage notes, a reviewed override table) with sprites
 generated into `style.css` by `gen-sprites.mjs`; **round 3, 2026-09-03 —
@@ -110,7 +110,7 @@ wall tile at 16 px in the middle of the cell ("shrunk down") — every
 **round 10**: piece boxes are the set's tallest piece high (trimmed
 sprites, one baseline — a 32-px box centred in the square had hung the
 feet below it, "chopped in half") and dials place them; RUIN AUTOTILE — a
-broken wall, cracked wall, weak spot or rubble skin leaves a `.ruin` cell
+broken wall, cracked wall, weak spot or authored masonry leaves a `.ruin` cell
 wearing one of 16 GENERATED cases (`--tile-ruin-<mask>`, the 4-bit
 neighbour mask — solid neighbours then, STANDING walls only since round
 12), a weak-spot door never leaves a doorway, other
@@ -167,7 +167,19 @@ crumble fx ends on the lone-pit case); **round 14**: FOUR crack drawings
 stable hash, so neighbouring cracks differ and never swap) and the gods'
 residue is ONE 3-px light-blue frame for crack, breach and hole alike
 (the breach fill and the hole's rust rim are gone — "all god actions in
-light blue"; the three classes stay for the tests). Known nits from the
+light blue"; the three classes stay for the tests); **round 15,
+2026-09-04 — THE RUBBLE HEAP IS DEAD**: the `R` skin (41 squares across
+22 of wave 6's 36 arenas) painted a heap of loose stones sitting on the
+floor — "shitty… absurdly out of place. Why not just use a cracked
+wall?", the same look rounds 11–12 had already driven out of the ruin
+tile, and inverted: a heap that IS a standing obstacle reads as debris
+already broken. `R` is now the `masonry` skin and paints a WEAK SPOT
+(`weak`, board-ui.mjs) — its wall autotile case wearing THE crack,
+pixel-identical to a god-weakened wall and to the weak-spot door, and it
+counts as STANDING so a wall line runs through it. Nothing in the locked
+stage files moved (the letter is still `R`); the heap sprite survives only
+as the in-house set's ruin fallback, and the options legend lost its
+rubble tile (5 tiles: one "cracked wall" covers both origins). Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the

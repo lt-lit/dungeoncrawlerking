@@ -887,6 +887,13 @@ async function main() {
     if (!has('a2', 'weak') || mask('a2') !== 'wm-5') throw new Error(`a door between a1 and a3 is a weak spot in the column: ${ui.cellClasses('a2')}`);
     ui.setPosition('1*^*/4/4/4/4 w - - 0 1', { skins: { c5: 'door' } });
     if (has('c5', 'weak') || mask('c5') !== null || !has('c5', 'skin-door')) throw new Error(`a door between b5 and d5 is the leaf, no wall case: ${ui.cellClasses('c5')}`);
+    // MASONRY (2026-09-04) is a weak spot WHEREVER it stands — the wall
+    // block with the crack, never the retired rubble heap — and it
+    // continues a wall line like the stone it is.
+    ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'masonry' } });
+    if (!has('a2', 'weak') || mask('a2') !== 'wm-5' || mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4') throw new Error(`masonry is a weak spot continuing the column (${ui.cellClasses('a2')}, ${mask('a1')}, ${mask('a3')})`);
+    ui.setPosition('4/4/2^1/4/4 w - - 0 1', { skins: { c3: 'masonry' } });
+    if (!has('c3', 'weak') || mask('c3') !== 'wm-0') throw new Error(`masonry alone on the floor is still a weak spot, lone-block case: ${ui.cellClasses('c3')}`);
     // Piece sprites: every piece carries its FEN letter; the set is an attribute.
     ui.setPosition('k3/4/4/4/K2P w - - 0 1');
     const at = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;

@@ -145,6 +145,8 @@ const SPRITES = {
     R(4, 7, 3, 3, P.iron) + R(9, 8, 2, 2, P.gold) + R(5, 11, 2, 2, P.red) + R(9, 11, 3, 2, P.wood)
   ),
   // Rubble: a heap of loose stone — weak masonry, a plug, a fallen arch.
+  // The rubble HEAP is residue-only since 2026-09-04 (the classic set's ruin
+  // fallback): authored masonry is a weak spot wearing the crack.
   rubble: svg(
     R(1, 8, 7, 7, P.mortar) + R(2, 9, 5, 5, P.stone) + R(2, 9, 5, 1, P.stoneHi) +
     R(7, 9, 8, 6, P.mortar) + R(8, 10, 6, 4, P.stone) + R(8, 10, 6, 1, P.stoneHi) + R(8, 13, 6, 1, P.stoneLo) +

@@ -151,6 +151,8 @@ const ROLES = {
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
+  // --sprite-rubble is the IN-HOUSE set's ruin fallback only (2026-09-04:
+  // authored masonry paints as a cracked wall, so no theme reads its heap).
   rubble: '--sprite-rubble',
   // DECOR (round 8: "cosmetic props like torches on the wall"): purely
   // cosmetic sprites board-ui scatters by a stable hash — torch / chain /
