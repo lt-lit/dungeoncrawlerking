@@ -26,6 +26,10 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 | hall | door | Dungeon Asset Puck | Dungeon_Tileset.png | 7 | 3 |
 | hall | crate | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 8 |
 | hall | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
+| hall | barrel | Dungeon Asset Puck | Dungeon_Tileset.png | 8 | 3 |
+| hall | table | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 9 |
+| hall | chair | Dungeon Asset Puck | Dungeon_Tileset.png | 6 | 9 |
+| hall | shelf | Dungeon Asset Puck | Dungeon_Tileset.png | 1 | 8 |
 | hall | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
 | hall | torch | Dungeon Asset Puck | Dungeon_Tileset.png | 0 | 9 |
 | hall | candle | Dungeon Asset Puck | Dungeon_Tileset.png | 3 | 9 |
@@ -44,6 +48,9 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 | castle | crate | Dungeon Gathering | Set 1.png | 20 | 8 |
 | castle | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | castle | barrel | Dungeon Gathering | Set 1.png | 2 | 12 |
+| castle | table | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 9 |
+| castle | chair | Dungeon Asset Puck | Dungeon_Tileset.png | 6 | 9 |
+| castle | shelf | Dungeon Asset Puck | Dungeon_Tileset.png | 1 | 8 |
 | castle | rubble | Dungeon Gathering | Set 1.png | 12 | 12 |
 | castle | torch | Dungeon Asset Puck | Dungeon_Tileset.png | 1 | 9 |
 | castle | candle | Dungeon Asset Puck | Dungeon_Tileset.png | 5 | 9 |
@@ -62,6 +69,9 @@ Tile coordinates are 16-px tile units on the named sheet (column, row; 0-based).
 | crypt | crate | Rogue Fantasy Catacombs | decorative.png | 8 | 5 |
 | crypt | chest | Dungeon Asset Puck | Dungeon_Tileset.png | 2 | 8 |
 | crypt | barrel | Rogue Fantasy Catacombs | decorative.png | 12 | 8 |
+| crypt | table | Dungeon Asset Puck | Dungeon_Tileset.png | 4 | 9 |
+| crypt | chair | Dungeon Asset Puck | Dungeon_Tileset.png | 6 | 9 |
+| crypt | shelf | Dungeon Asset Puck | Dungeon_Tileset.png | 1 | 8 |
 | crypt | rubble | Rogue Fantasy Catacombs | mainlevbuild.png | 20 | 22 |
 | crypt | torch | Rogue Fantasy Catacombs | torch_1.png | 0 | 0 |
 | crypt | candle | Rogue Fantasy Catacombs | candleA_01.png | 0 | 0 |

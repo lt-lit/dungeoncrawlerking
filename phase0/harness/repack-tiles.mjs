@@ -151,6 +151,15 @@ const ROLES = {
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
+  // Furniture the skins name that no theme carried until 2026-09-04 —
+  // they fell through to the in-house SVGs ("I don't like the sprites you
+  // authored, they look worse than the ones from the asset packs").
+  // pixel-poem draws all three; the other two packs draw none, so they
+  // wear pixel-poem's PALETTE-SWAPPED into their own stone or timber (the
+  // theme's `tint` map below) — the floors' move, round 7.
+  table: '--sprite-table',
+  chair: '--sprite-chair',
+  shelf: '--sprite-shelf',
   // --sprite-rubble is the IN-HOUSE set's ruin fallback only (2026-09-04:
   // authored masonry paints as a cracked wall, so no theme reads its heap).
   rubble: '--sprite-rubble',
@@ -507,6 +516,35 @@ function recolour(tile, base, target) {
   return out;
 }
 
+/** A prop's dominant FILL: its most common opaque colour that is not its
+ *  outline (luma under 70) — on a small sprite mostCommon() IS the outline. */
+function dominantFill(tile) {
+  const hist = new Map();
+  for (let i = 0; i < tile.width * tile.height; i++) {
+    const o = i * 4;
+    if (!tile.data[o + 3] || luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) < 70) continue;
+    const k = (tile.data[o] << 16) | (tile.data[o + 1] << 8) | tile.data[o + 2];
+    hist.set(k, (hist.get(k) ?? 0) + 1);
+  }
+  const k = [...hist.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return [k >> 16, (k >> 8) & 255, k & 255];
+}
+const luma = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
+/** A borrowed prop in the theme's colour: the fill is recoloured like the
+ *  floors (channel-wise, relative to its dominant fill), the dark outline
+ *  pixels are left alone so the drawing keeps its edge. */
+function recolourFill(tile, target) {
+  const base = dominantFill(tile);
+  const out = blank(tile.width, tile.height);
+  for (let i = 0; i < tile.width * tile.height; i++) {
+    const o = i * 4;
+    const dark = luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) < 70;
+    for (let c = 0; c < 3; c++) out.data[o + c] = dark ? tile.data[o + c] : Math.max(0, Math.min(255, Math.round((target[c] * tile.data[o + c]) / Math.max(1, base[c]))));
+    out.data[o + 3] = tile.data[o + 3];
+  }
+  return out;
+}
+
 /** Pixels of colour `from` that touch transparency (or the sprite's edge)
  *  become `to` — a white outline turns dark without touching the fill. */
 function recolourOutline(tile, from, to) {
@@ -587,6 +625,10 @@ const THEMES = {
       door: ['pp', 7, 3],
       crate: ['pp', 0, 8],
       chest: ['pp', 2, 8],
+      barrel: ['pp', 8, 3], // the pack's own barrel (the hall had none — its barrels were in-house)
+      table: ['pp', 4, 9], // pedestal table
+      chair: ['pp', 6, 9], // stool
+      shelf: ['pp', 1, 8], // rack
       rubble: ['cat', 20, 22],
       // cosmetic props (board-ui scatters them; see DECOR below)
       torch: ['pp', 0, 9],
@@ -610,6 +652,9 @@ const THEMES = {
       crate: ['dg', 20, 8], // the pack's stone block
       chest: ['pp', 2, 8],
       barrel: ['dg', 2, 12],
+      table: ['pp', 4, 9], // Dungeon Gathering draws no furniture: pixel-poem's, in the pack's stone (tint)
+      chair: ['pp', 6, 9],
+      shelf: ['pp', 1, 8],
       rubble: ['dg', 12, 12],
       torch: ['pp', 1, 9],
       candle: ['pp', 5, 9],
@@ -619,6 +664,9 @@ const THEMES = {
       chain: ['pp', 6, 7],
       banner: ['pp', 4, 7],
     },
+    // Borrowed furniture recoloured to the wall-top stone (the sprite's
+    // fill takes the hue, its outline stays).
+    tint: { table: '#92a1b9', chair: '#92a1b9', shelf: '#92a1b9' },
     gate: { arch: ['dg', 11, 11], bar: '#c7cfdd', shadow: '#5a6787' }, // a portcullis in the pack's arched doorway
     doorSet: 'portcullis',
     doorPost: { lit: '#c7cfdd', dark: '#5a6787' }, // the pack's pale stone
@@ -633,6 +681,9 @@ const THEMES = {
       crate: ['catdeco', 8, 5],
       chest: ['pp', 2, 8],
       barrel: ['catdeco', 12, 8],
+      table: ['pp', 4, 9], // the Catacombs draw no table, chair or shelf: pixel-poem's, in the crate's timber (tint)
+      chair: ['pp', 6, 9],
+      shelf: ['pp', 1, 8],
       rubble: ['cat', 20, 22],
       torch: ['cattorch', 0, 0],
       candle: ['catcandle', 0, 0, 7, 14],
@@ -641,6 +692,7 @@ const THEMES = {
       bones: ['pp', 8, 6],
       skull: ['pp', 7, 7],
     },
+    tint: { table: '#54453b', chair: '#54453b', shelf: '#54453b' }, // the Catacombs crate's wood
     gate: { barred: true }, // a barred gate in the crypt's own stone
     doorSet: 'gate',
     doorPost: { lit: '#7a7264', dark: '#3a352d' }, // Catacombs iron
@@ -653,11 +705,23 @@ const THEMES = {
 
 // ---- load sheets
 const sheets = {};
+// The TILE packs are required. A PIECE pack that is not on disk is tolerated
+// (2026-09-04, so tile work does not need the chess packs to hand): that
+// set's fitted sprites are read back from the committed play/img/pieces.png
+// — the atlas holds exactly the tiles this tool wrote, at known cells — and
+// its CSS, index and credit rows still come from the spec, unchanged.
+const pieceOnlySheets = new Set(Object.values(PIECE_SHEETS).flatMap((set) => [...Object.values(set.white), ...Object.values(set.black)].map((c) => c[0])));
+let oldPieces = null;
 for (const [key, [pack, file]] of Object.entries(SHEETS)) {
   const p = join(SRC, pack, file);
   if (!existsSync(p)) {
-    console.error(`missing ${p}\n  download ${PACKS[pack].title} from ${PACKS[pack].url} and put "${file}" there`);
-    process.exit(2);
+    if (!pieceOnlySheets.has(key)) {
+      console.error(`missing ${p}\n  download ${PACKS[pack].title} from ${PACKS[pack].url} and put "${file}" there`);
+      process.exit(2);
+    }
+    oldPieces ??= decodePng(readFileSync(join(PLAY, 'img', 'pieces.png')));
+    console.error(`(${pack}/${file} not on disk — its piece sprites are read back from play/img/pieces.png)`);
+    continue;
   }
   sheets[key] = decodePng(readFileSync(p));
 }
@@ -686,8 +750,10 @@ themeNames.forEach((theme, row) => {
   for (const [role, [sheet, x, y, w, h]] of Object.entries(THEMES[theme].tiles)) {
     let tile = w ? cropFit(sheets, sheet, x, y, w, h) : crop(sheets[sheet], x * T, y * T, T, T);
     if (DECOR_ANCHOR[role]) tile = anchorSprite(tile, DECOR_ANCHOR[role]);
+    const tint = THEMES[theme].tint?.[role];
+    if (tint) tile = recolourFill(tile, hex(tint));
     tiles[role] = tile;
-    emit(role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y });
+    emit(role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: tint ? `fill to ${tint}` : undefined });
   }
   // The door — also collected as a selectable DOOR SET (Options → Doors,
   // board-ui DOOR_SETS) — and the theme's generated doorway.
@@ -773,13 +839,18 @@ pieceNames.forEach((name, row) => {
   [...PIECE_ORDER].forEach((letter, i) => {
     for (const side of ['white', 'black']) {
       const [sheetKey, x, y, w, h] = set[side][letter];
-      let sprite = crop(sheets[sheetKey], x, y, w, h);
-      if (set.outline) sprite = recolourOutline(sprite, set.outline.from, set.outline.to);
-      sprite = trim(sprite);
-      if (sprite.width > bw || sprite.height > bh) throw new Error(`${name} ${side} ${letter}: ${sprite.width}×${sprite.height} exceeds its ${bw}×${bh} box`);
-      const tile = blank(bw, bh);
-      blit(tile, sprite, Math.floor((bw - sprite.width) / 2), bh - sprite.height); // one baseline per set: every foot on the box's bottom row
       const col = (side === 'white' ? 0 : 6) + i;
+      let tile;
+      if (sheets[sheetKey]) {
+        let sprite = crop(sheets[sheetKey], x, y, w, h);
+        if (set.outline) sprite = recolourOutline(sprite, set.outline.from, set.outline.to);
+        sprite = trim(sprite);
+        if (sprite.width > bw || sprite.height > bh) throw new Error(`${name} ${side} ${letter}: ${sprite.width}×${sprite.height} exceeds its ${bw}×${bh} box`);
+        tile = blank(bw, bh);
+        blit(tile, sprite, Math.floor((bw - sprite.width) / 2), bh - sprite.height); // one baseline per set: every foot on the box's bottom row
+      } else {
+        tile = crop(oldPieces, col * PA, row * PA + (PA - bh), bw, bh); // the pack is not on disk: the committed atlas holds this exact tile
+      }
       blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
       const fen = side === 'white' ? letter.toUpperCase() : letter;
       decl.push(`  --piece-${fen}: url("data:image/png;base64,${encodePng(tile).toString('base64')}");`);

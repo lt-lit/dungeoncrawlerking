@@ -437,9 +437,21 @@ cropped from its wall tile) hangs under every south edge that ends inside
 the cell, so runs read cap-and-face like the pack's, a column's south end
 shows its face and a block faces south along its bottom.
 Where a pack lacks a role the theme
-borrows from another (every door is pixel-poem's leaf; castle's barrel is
-Dungeon Gathering's vase) and where none has it (table, chair, shelf, the
-hole, the crack) the in-house sprite paints, unchanged. `phase0/lib/png.mjs`
+borrows from another (every chest is pixel-poem's; castle's barrel is
+Dungeon Gathering's vase, the crypt's a Catacombs urn) — and since round
+15 (2026-09-04) that goes for FURNITURE too: pixel-poem is the only pack
+that draws a table, a stool and a rack, so the hall wears them (and its own
+barrel, which it had lacked — its barrels were the in-house sprite) and
+castle and crypt wear the same three PALETTE-SWAPPED into their own stone
+and timber (the theme's `tint` map: the sprite's fill is recoloured like
+the flagstones, its dark outline left alone — `recolourFill`). The
+designer's verdict on the in-house furniture: "I don't like the sprites you
+authored, they look worse than the ones from the asset packs" — so no `^`
+paints an in-house sprite under a theme any more; only the hole and the
+crack are drawn in-house. The tool also runs WITHOUT the three chess packs
+on disk: a missing piece pack's fitted sprites are read back from the
+committed `img/pieces.png` (the atlas holds exactly the tiles it wrote), so
+tile work needs only the three tile packs. `phase0/lib/png.mjs`
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.

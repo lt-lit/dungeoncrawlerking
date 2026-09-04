@@ -179,7 +179,25 @@ pixel-identical to a god-weakened wall and to the weak-spot door, and it
 counts as STANDING so a wall line runs through it. Nothing in the locked
 stage files moved (the letter is still `R`); the heap sprite survives only
 as the in-house set's ruin fallback, and the options legend lost its
-rubble tile (5 tiles: one "cracked wall" covers both origins). Known nits from the
+rubble tile (5 tiles: one "cracked wall" covers both origins). Same day, the
+FURNITURE THEME GAP: the skins' table / chair / shelf had never been in the
+repack tool's ROLES (no pack was asked for them) and hall had no barrel, so
+86 of the bed's 268 `^` painted the in-house SVGs — bright orange on every
+theme ("I don't like the sprites you authored, they look worse than the
+ones from the asset packs. Palette swap some of those"). The designer
+re-supplied the three tile packs: pixel-poem draws a pedestal table, a
+stool, a rack and a barrel, so the hall wears them natively and castle and
+crypt wear the same three palette-swapped into their stone / timber
+(`tint` per theme, `recolourFill` — fill recoloured like the floors,
+outline kept); the tool now runs without the chess packs (a missing piece
+pack's sprites are read back from the committed `img/pieces.png`) and
+reproduced every committed file byte-for-byte before the change. Also that
+day: a skin audit of all 268 `^` against each stage's notes fixed seven
+(three "broken furniture" squares authored as `R` for the old heap, two
+"bones", and s89's two UNSKINNED `^` — the bed's only ones), and the lesson
+that bit: **the game loads `play/stages/manifest.json`, not the stage
+files — run `gen-stage-manifest.mjs` after ANY stage edit** or the change
+is invisible (the first commit of that audit shipped stale). Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the
