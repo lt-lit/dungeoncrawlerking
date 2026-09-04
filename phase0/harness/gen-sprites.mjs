@@ -40,19 +40,53 @@ const SPRITES = {
   // thin on the diagonals — where the first cut was 1-unit strokes at
   // half-pixel offsets that rasterised finer and softer than the wall
   // under it ("make a 16x16 version that actually matches the resolution
-  // of the wall"). A main fissure top to bottom, four branches.
-  'tile-crack': (() => {
-    const lines = [
-      [[7, 0], [7, 1], [6, 2], [6, 3], [5, 4], [5, 5], [6, 6], [6, 7], [7, 8], [7, 9], [7, 10], [8, 11], [8, 12], [7, 13], [7, 14], [8, 15]], // the fissure
-      [[7, 5], [8, 4], [9, 4], [10, 3], [11, 3], [12, 2]], // up and right
-      [[4, 5], [3, 6], [2, 6], [1, 7]], // left
-      [[9, 11], [10, 12], [11, 12], [12, 13], [13, 13]], // down and right
-      [[6, 14], [5, 14], [4, 15]], // down and left
-      [[8, 8], [9, 8]], // a nick
-    ];
+  // of the wall"). Round 14: FOUR drawings ("make a few more variations
+  // and we can use a mix of them" — board-ui stamps ck1…ck4 on every cell
+  // by a stable hash of the square, style.css maps them): a fissure top to
+  // bottom, a diagonal, a fork, a low crack across the block.
+  ...Object.fromEntries([
+    [ // 1: the fissure, four branches and a nick
+      [[7, 0], [7, 1], [6, 2], [6, 3], [5, 4], [5, 5], [6, 6], [6, 7], [7, 8], [7, 9], [7, 10], [8, 11], [8, 12], [7, 13], [7, 14], [8, 15]],
+      [[7, 5], [8, 4], [9, 4], [10, 3], [11, 3], [12, 2]],
+      [[4, 5], [3, 6], [2, 6], [1, 7]],
+      [[9, 11], [10, 12], [11, 12], [12, 13], [13, 13]],
+      [[6, 14], [5, 14], [4, 15]],
+      [[8, 8], [9, 8]],
+    ],
+    [ // 2: a diagonal, top-left to bottom-right
+      [[2, 0], [3, 1], [3, 2], [4, 3], [5, 4], [5, 5], [6, 6], [7, 7], [8, 8], [8, 9], [9, 10], [10, 11], [10, 12], [11, 13], [12, 14], [12, 15]],
+      [[4, 6], [3, 7], [2, 7], [1, 8]],
+      [[9, 7], [10, 6], [11, 6], [12, 5], [13, 4]],
+      [[9, 13], [8, 14], [7, 14]],
+      [[4, 2], [5, 2]],
+    ],
+    [ // 3: a fork — one stem from the bottom, two arms to the top
+      [[6, 15], [6, 14], [7, 13], [7, 12], [7, 11], [8, 10], [8, 9], [8, 8], [8, 7]],
+      [[7, 6], [6, 5], [6, 4], [5, 3], [5, 2], [4, 1], [4, 0]],
+      [[9, 6], [10, 5], [10, 4], [11, 3], [11, 2], [12, 1], [12, 0]],
+      [[9, 9], [10, 9], [11, 8], [12, 8]],
+      [[6, 12], [5, 11], [4, 11], [3, 10]],
+      [[3, 3], [4, 3]],
+    ],
+    [ // 4: a low crack across the block, edge to edge
+      [[0, 9], [1, 9], [2, 8], [3, 8], [4, 9], [5, 10], [6, 10], [7, 9], [8, 9], [9, 8], [10, 8], [11, 9], [12, 10], [13, 10], [14, 11], [15, 11]],
+      [[7, 8], [8, 7], [8, 6], [9, 5], [9, 4]],
+      [[3, 7], [2, 6], [2, 5]],
+      [[13, 11], [13, 12], [14, 13]],
+      [[4, 10], [3, 11], [3, 12]],
+      [[10, 7], [11, 6]],
+    ],
+  ].map((lines, i) => {
+    // Every line is one pixel thin and 8-connected: consecutive points
+    // differ by at most one in each axis, all on the 16×16 grid.
+    for (const line of lines) for (let k = 0; k < line.length; k++) {
+      const [x, y] = line[k];
+      if (x < 0 || x > 15 || y < 0 || y > 15) throw new Error(`crack ${i + 1}: (${x},${y}) off the grid`);
+      if (k && (Math.abs(x - line[k - 1][0]) > 1 || Math.abs(y - line[k - 1][1]) > 1)) throw new Error(`crack ${i + 1}: (${x},${y}) is not 8-connected to its predecessor`);
+    }
     const px = new Set(lines.flat().map(([x, y]) => `${x},${y}`));
-    return svg([...px].map((k) => { const [x, y] = k.split(',').map(Number); return R(x, y, 1, 1, P.crack); }).join(''));
-  })(),
+    return [`tile-crack-${i + 1}`, svg([...px].map((k) => { const [x, y] = k.split(',').map(Number); return R(x, y, 1, 1, P.crack); }).join(''))];
+  })),
   // A crate: horizontal plank slats with dark seams, a raised lighter lid
   // strip, and four iron nails at the corners of the batten frame — a stack
   // of planks reads as a crate where a box with an X read as a tile.

@@ -419,15 +419,20 @@ function ruinBlob(spec, sheets) {
 // line; on a side that faces another pit it runs edge to edge, so joined
 // pits read as one pit. The pit floor is near-black in the theme's own
 // dark, a 1-px outline in the theme's edge colour rims the break on the
-// floor side, and under a north rim the pit's FAR WALL shows — HOLE.face
-// rows of the wall's shaded tone and one darker — with a 1-px lit strip
-// down a west rim: the same light as the walls' bevels.
+// floor side (so the rim is 1–3 px of which the innermost is the lip and
+// the rest floor), and under a north rim the pit's FAR WALL shows —
+// HOLE.face rows of the wall's top colour shaded and one darker — with a
+// 1-px lit strip down a west rim: the same light as the walls' bevels.
+// The wall shows only in columns whose pit BEGINS at the north rim (a
+// column inside a ragged west/east rim begins lower — round 13's first cut
+// lit a stray fragment there, caught in review), the strip only in rows
+// whose pit begins at the west rim, below the wall.
 const HOLE = { fringe: 2, face: 2 };
 function holeBlob(spec) {
-  const lo = hex(spec.lo), edge = hex(spec.edge);
+  const fill = hex(spec.fill), edge = hex(spec.edge);
   const black = [0, 0, 0];
-  const pitC = mix(edge, black, 0.75);
-  const faceC = mix(lo, black, 0.55), faceLo = mix(lo, black, 0.78);
+  const pitC = mix(edge, black, 0.85);
+  const faceC = mix(fill, black, 0.5), faceLo = mix(fill, black, 0.68);
   const out = {};
   for (let m = 0; m < 16; m++) {
     const n = m & 1, e = m & 2, s = m & 4, w = m & 8;
@@ -446,16 +451,16 @@ function holeBlob(spec) {
     // The far wall under a north rim; the lit strip down a west rim.
     for (let x = 0; x < T; x++) {
       if (n) break;
-      let y0 = -1;
-      for (let y = 0; y < T; y++) if (pit(x, y)) { y0 = y; break; }
-      if (y0 < 0) continue;
-      for (let r = 0; r <= HOLE.face && y0 + r < T && pit(x, y0 + r); r++) put(x, y0 + r, r < HOLE.face ? faceC : faceLo);
+      const y0 = rim(x, 31);
+      if (!pit(x, y0)) continue; // this column is inside a west/east rim
+      for (let r = 0; r <= HOLE.face && pit(x, y0 + r); r++) put(x, y0 + r, r < HOLE.face ? faceC : faceLo);
     }
     for (let y = 0; y < T; y++) {
       if (w) break;
-      let x0 = -1;
-      for (let x = 0; x < T; x++) if (pit(x, y)) { x0 = x; break; }
-      if (x0 >= 0 && !(!n && y < rim(x0, 31) + HOLE.face + 1)) put(x0, y, faceLo);
+      const x0 = rim(y, 35);
+      if (!pit(x0, y)) continue; // this row is inside a north/south rim
+      if (!n && y <= rim(x0, 31) + HOLE.face) continue; // the far wall owns these rows
+      put(x0, y, faceLo);
     }
     // The outline: floor pixels touching the pit take the theme's edge
     // colour — the broken lip of the floor.

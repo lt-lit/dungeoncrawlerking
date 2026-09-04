@@ -961,6 +961,13 @@ async function main() {
     if (mask('c1') !== 'wm-8') throw new Error(`a doorway's post stands beside its wall, none beside plain floor (${mask('c1')})`);
     ui.setPosition('4/4/4/4/4 w - - 0 1');
     if (mask('b1') !== null || dec('b1') !== null) throw new Error('a forgotten doorway leaves neither decor nor case');
+    // Every cell carries ONE crack drawing (ck1…ckN, round 14), fixed by its
+    // square: a repaint never swaps it.
+    const ck = (sq) => ui.cellClasses(sq).filter((c) => /^ck[1-4]$/.test(c));
+    if (ck('a1').length !== 1 || ck('d5').length !== 1) throw new Error(`one crack variant per cell (${ck('a1')}, ${ck('d5')})`);
+    const ckBefore = ck('a1')[0];
+    ui.setPosition('1***/4/*1*1/*3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
+    if (ck('a1')[0] !== ckBefore) throw new Error('a repaint must not swap a crack variant');
     // Holes autotile too (round 13): a pit's case joins other pits only —
     // never a wall — so joined pits read as one and a pit beside stone
     // keeps its rim.

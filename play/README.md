@@ -214,7 +214,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   gen-sprites.mjs — thin black branching lines on transparency, nothing
   else, so it reads on any wall colour; since round 13 drawn ON the 16-px
   pixel grid, one black pixel per wall pixel, 8-connected — the first cut's
-  half-pixel strokes rasterised finer than the wall) — functionally the same
+  half-pixel strokes rasterised finer than the wall; since round 14 FOUR
+  drawings, `--tile-crack-1…4`, and every cell carries `ck1…ck4` by a
+  stable hash of its square (`CRACK_VARIANTS`), style.css mapping it to
+  `--tile-crack`, so neighbouring cracks differ and never swap on a
+  repaint) — functionally the same
   capturable `^`; and `f1`…`f6`, the square's stable floor-texture variant
   (a hash of the square, so a repaint never makes the floor crawl; f1 on
   ~70% of squares, the rest scattered — `FLOOR_VARIANTS`); and `.decor`,
@@ -337,14 +341,18 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   until the commit), and leave the gods' **residue** in their own light-blue
   hue: a solid **arrow** on the SVG layer for every displacement and
   nothing on its squares (round 13: "the blue arrow is enough" — the
-  `quake-from`/`quake-to` marks and the dash are gone), `fresh-crack`,
-  `fresh-breach`, and `fresh-pit` (rust). Residue persists through the enemy's reply, MERGES
+  `quake-from`/`quake-to` marks and the dash are gone), and ONE 3-px
+  light-blue frame on a square the gods cracked, breached or collapsed
+  (`fresh-crack` / `fresh-breach` / `fresh-pit` stay distinct classes
+  but paint alike — round 14: "just a blue frame around the square is
+  enough; all god actions in light blue", so the breach's fill and the
+  hole's rust rim are gone). Residue persists through the enemy's reply, MERGES
   across quakes in one window, and clears when the player moves; the same
   actions are written to the **gods line** in the player's bar under the
   board ("⚡ the gods: wall cracks c4 · your knight e4→e5") and to the log.
   Colour roles: gold = the player's own marks, gold/silver/bronze = the
-  oracle's ranked hints, light blue = the gods, rust = a fresh hole, red =
-  check. Every CSS-timed motion is also gated by `data-fx="0"` on `<html>`
+  oracle's ranked hints, light blue = the gods (every mark and arrow of
+  theirs), red = check and the enemy's last-move arrow. Every CSS-timed motion is also gated by `data-fx="0"` on `<html>`
   (stamped for `?fx=0`), not only by the OS reduced-motion setting.
 - `js/main.mjs` — boot, the setup screen (stage picker + generator panel),
   duel driving, win/loss.
@@ -399,9 +407,9 @@ way — see the renderer notes above), the god-made pit in **16 hole
 cases** (`hole-<mask>`, round 13: the cell's `wm-<mask>` is the 4-bit
 mask of its HOLE neighbours — the four sides are the whole story, a
 diagonal floor square touches a pit only at a corner — and the tool draws
-a ragged 1–3 px margin on every floor-facing side, with the floor showing
-through it and a 1-px outline in the theme's edge colour as the broken
-lip, the pit's far wall in the wall's shaded tone under a north rim, and
+a ragged 1–3 px rim on every floor-facing side — its innermost pixel a
+lip in the theme's edge colour, the rest floor showing through — the
+pit's far wall in the wall's top colour shaded under a north rim, and
 pit edge to edge toward another hole, so joined pits read as one; the
 in-house set keeps its gradient pit, and the crumble fx ends on the
 lone-pit case), and the door, crate, chest, barrel

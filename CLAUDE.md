@@ -161,8 +161,13 @@ top-row pieces keep their heads; and HOLES AUTOTILE — 16 cases by the
 floor-showing margin and edge-colour lip on every floor-facing side, the
 pit's far wall under a north rim, edge to edge toward another pit so
 joined pits read as one; the in-house set keeps its gradient pit; the
-crumble fx ends on the lone-pit case) — see `play/README.md` § "Art
-themes");
+crumble fx ends on the lone-pit case); **round 14**: FOUR crack drawings
+(`--tile-crack-1…4`, `CRACK_VARIANTS`; every cell wears `ck1…ck4` by a
+stable hash, so neighbouring cracks differ and never swap) and the gods'
+residue is ONE 3-px light-blue frame for crack, breach and hole alike
+(the breach fill and the hole's rust rim are gone — "all god actions in
+light blue"; the three classes stay for the tests) — see
+`play/README.md` § "Art themes");
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through

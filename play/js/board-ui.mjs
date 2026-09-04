@@ -45,6 +45,8 @@
 //              its wall case like a cracked wall and the sprite is the
 //              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
+//   .ck1…ckN   the crack drawing this square's wall would wear
+//              (CRACK_VARIANTS; style.css maps it to --tile-crack).
 //   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
 //              chain / banner on an east–west wall face, scattered by a
 //              stable hash of the square — floor litter is packed away
@@ -117,6 +119,10 @@ export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nullt
 export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
+/** Crack drawings (gen-sprites --tile-crack-1..N): every cell carries
+ *  ck1…ckN by a stable hash of its square, so neighbouring cracked walls
+ *  differ and a repaint never swaps a crack (round 14). */
+export const CRACK_VARIANTS = 4;
 
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
@@ -149,6 +155,11 @@ function floorVariant(f, rank) {
   const h = (((f + 1) * 73856093) ^ ((rank + 1) * 19349663)) >>> 0;
   const r = h % 16;
   return r < FLOOR_VARIANTS - 1 ? `f${r + 2}` : 'f1';
+}
+
+/** Which of the crack drawings a square wears if its wall cracks. */
+function crackVariant(f, rank) {
+  return `ck${1 + (squareHash(f, rank, 11) % CRACK_VARIANTS)}`;
 }
 
 function svgEl(tag, attrs) {
@@ -192,7 +203,7 @@ export class BoardUI {
         const sq = String.fromCharCode(97 + f) + rank;
         const cell = document.createElement('div');
         // a1 dark: (file + rankFromBottom) even = dark.
-        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank);
+        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank);
         cell.dataset.square = sq;
         cell.addEventListener('click', () => {
           if (this.interactive && this.onSquareTap) this.onSquareTap(sq);
