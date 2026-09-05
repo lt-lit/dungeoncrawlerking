@@ -20,6 +20,7 @@
 // SKINS (2026-09-02, optional): a parallel "skin" grid, same shape as the
 // map, says what each '^' LOOKS like — 'D' door · 'B' barrel · 'T' table ·
 // 'C' chair · 'S' shelf · 'X' chest · 'K' crate · 'R' cracked masonry ·
+// 'W' wreckage (a broken crate / a spilled urn) ·
 // (T and C paint as a CRATE and a CHEST since 2026-09-05 — "the stools and
 //  tables don't look good and no version of them ever has so far. Drop the
 //  category for now" — the letters stay in the files as authoring intent.)
@@ -47,7 +48,10 @@ import { WALL, FURNITURE } from './fen.mjs';
 //  cracked wall?" — and weak masonry now paints the wall block with THE
 //  crack across it, exactly like a god-weakened wall and the weak-spot
 //  door. The letter stays 'R' so the locked stage files never moved.)
-export const SKIN_CHARS = { D: 'door', B: 'barrel', T: 'crate', C: 'chest', S: 'shelf', X: 'chest', K: 'crate', R: 'masonry' };
+// 'W' WRECKAGE (round 18): a broken crate or a spilled urn — smashed
+// furniture that still blocks the square. 'S' (shelf) paints as a crate
+// since the rack was X'd on the in-use sheet.
+export const SKIN_CHARS = { D: 'door', B: 'barrel', T: 'crate', C: 'chest', S: 'crate', X: 'chest', K: 'crate', R: 'masonry', W: 'wreckage' };
 export const SKIN_NAMES = Object.values(SKIN_CHARS);
 /** Art themes (2026-09-03): which repacked tileset a stage's board wears —
  *  `hall` (pixel-poem), `castle` (Dungeon Gathering), `crypt` (Catacombs);

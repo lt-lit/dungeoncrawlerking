@@ -9,7 +9,7 @@
   "crate",
   "chest",
   "barrel",
-  "shelf",
+  "wreckage",
   "rubble",
   "torch",
   "candle",
@@ -108,7 +108,6 @@
   "hole-15",
   "crate-2",
   "crate-3",
-  "crate-4",
   "chest-2",
   "chest-3",
   "chest-4",
@@ -116,7 +115,18 @@
   "barrel-2",
   "barrel-3",
   "barrel-4",
-  "barrel-5"
+  "barrel-5",
+  "barrel-6",
+  "barrel-7",
+  "barrel-8",
+  "barrel-9",
+  "barrel-10",
+  "wreckage-2",
+  "wreckage-3",
+  "wreckage-4",
+  "wreckage-5",
+  "wreckage-6",
+  "wreckage-7"
  ],
  "themes": {
   "hall": {
@@ -159,28 +169,28 @@
      "y": 8
     },
     "chest-2": {
-     "col": 107,
+     "col": 106,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 2,
      "y": 8
     },
     "chest-3": {
-     "col": 108,
+     "col": 107,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 5,
      "y": 8
     },
     "chest-4": {
-     "col": 109,
+     "col": 108,
      "pack": "pixel-poem",
      "sheet": "box_1_1.png",
      "x": 0,
      "y": 0
     },
     "chest-5": {
-     "col": 110,
+     "col": 109,
      "pack": "pixel-poem",
      "sheet": "mini_box_1_1.png",
      "x": 0,
@@ -188,17 +198,99 @@
     },
     "barrel": {
      "col": 6,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 8,
-     "y": 3
+     "pack": "dungeon-gathering",
+     "sheet": "Set 1.png",
+     "x": 2,
+     "y": 12,
+     "recoloured": "all to #bf704d"
     },
-    "shelf": {
+    "barrel-2": {
+     "col": 110,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 7,
+     "recoloured": "all to #bf704d"
+    },
+    "barrel-3": {
+     "col": 111,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 8,
+     "recoloured": "all to #bf704d"
+    },
+    "barrel-4": {
+     "col": 112,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 8,
+     "recoloured": "all to #bf704d"
+    },
+    "barrel-5": {
+     "col": 113,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 13,
+     "y": 8,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage": {
      "col": 7,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 1,
-     "y": 8
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 6,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage-2": {
+     "col": 119,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 6,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage-3": {
+     "col": 120,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 9,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage-4": {
+     "col": 121,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 9,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage-5": {
+     "col": 122,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 11,
+     "y": 9,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage-6": {
+     "col": 123,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 12,
+     "recoloured": "all to #bf704d"
+    },
+    "wreckage-7": {
+     "col": 124,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 12,
+     "recoloured": "all to #bf704d"
     },
     "rubble": {
      "col": 8,
@@ -749,24 +841,19 @@
     },
     "crate": {
      "col": 4,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 20,
-     "y": 8
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 5,
+     "recoloured": "wood to #6b6f8a"
     },
     "crate-2": {
      "col": 104,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 19,
-     "y": 8
-    },
-    "crate-3": {
-     "col": 105,
-     "pack": "dungeon-gathering",
-     "sheet": "Set 1.png",
-     "x": 21,
-     "y": 8
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 5,
+     "recoloured": "wood to #6b6f8a"
     },
     "chest": {
      "col": 5,
@@ -776,21 +863,21 @@
      "y": 8
     },
     "chest-2": {
-     "col": 107,
+     "col": 106,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 5,
      "y": 8
     },
     "chest-3": {
-     "col": 108,
+     "col": 107,
      "pack": "pixel-poem",
      "sheet": "box_1_1.png",
      "x": 0,
      "y": 0
     },
     "chest-4": {
-     "col": 109,
+     "col": 108,
      "pack": "pixel-poem",
      "sheet": "mini_box_1_1.png",
      "x": 0,
@@ -803,13 +890,82 @@
      "x": 2,
      "y": 12
     },
-    "shelf": {
+    "barrel-2": {
+     "col": 110,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 8
+    },
+    "barrel-3": {
+     "col": 111,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 13,
+     "y": 8
+    },
+    "barrel-4": {
+     "col": 112,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 11,
+     "y": 11
+    },
+    "wreckage": {
      "col": 7,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 1,
-     "y": 8,
-     "recoloured": "wood to #6b6f8a"
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 6,
+     "recoloured": "all to #6b6f8a"
+    },
+    "wreckage-2": {
+     "col": 119,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 6,
+     "recoloured": "all to #6b6f8a"
+    },
+    "wreckage-3": {
+     "col": 120,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 9,
+     "recoloured": "all to #6b6f8a"
+    },
+    "wreckage-4": {
+     "col": 121,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 9,
+     "recoloured": "all to #6b6f8a"
+    },
+    "wreckage-5": {
+     "col": 122,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 11,
+     "y": 9,
+     "recoloured": "all to #6b6f8a"
+    },
+    "wreckage-6": {
+     "col": 123,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 12,
+     "recoloured": "all to #6b6f8a"
+    },
+    "wreckage-7": {
+     "col": 124,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 12,
+     "recoloured": "all to #6b6f8a"
     },
     "rubble": {
      "col": 8,
@@ -1374,47 +1530,29 @@
      "x": 9,
      "y": 5
     },
-    "crate-3": {
-     "col": 105,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 11,
-     "y": 5
-    },
-    "crate-4": {
-     "col": 106,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 13,
-     "y": 5
-    },
     "chest": {
      "col": 5,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
-     "y": 4
+     "y": 4,
+     "recoloured": "wood to #5c4a3c"
     },
     "chest-2": {
-     "col": 107,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 8,
-     "y": 4
+     "col": 106,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 3,
+     "y": 8,
+     "recoloured": "wood to #5c4a3c"
     },
     "chest-3": {
-     "col": 108,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 13,
-     "y": 4
-    },
-    "chest-4": {
-     "col": 109,
-     "pack": "catacombs",
-     "sheet": "decorative.png",
-     "x": 11,
-     "y": 4
+     "col": 107,
+     "pack": "pixel-poem",
+     "sheet": "Dungeon_Tileset.png",
+     "x": 2,
+     "y": 8,
+     "recoloured": "wood to #5c4a3c"
     },
     "barrel": {
      "col": 6,
@@ -1424,40 +1562,116 @@
      "y": 7
     },
     "barrel-2": {
-     "col": 111,
+     "col": 110,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
-     "y": 7
+     "y": 8
     },
     "barrel-3": {
-     "col": 112,
+     "col": 111,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
-     "y": 7
+     "y": 8
     },
     "barrel-4": {
+     "col": 112,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 8
+    },
+    "barrel-5": {
      "col": 113,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 13,
+     "y": 8
+    },
+    "barrel-6": {
+     "col": 114,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
      "y": 10
     },
-    "barrel-5": {
-     "col": 114,
+    "barrel-7": {
+     "col": 115,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
-     "y": 10
+     "y": 11
     },
-    "shelf": {
+    "barrel-8": {
+     "col": 116,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 11,
+     "y": 11
+    },
+    "barrel-9": {
+     "col": 117,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 12,
+     "y": 11
+    },
+    "barrel-10": {
+     "col": 118,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 13,
+     "y": 11
+    },
+    "wreckage": {
      "col": 7,
-     "pack": "pixel-poem",
-     "sheet": "Dungeon_Tileset.png",
-     "x": 1,
-     "y": 8,
-     "recoloured": "wood to #5c4a3c"
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 8,
+     "y": 6
+    },
+    "wreckage-2": {
+     "col": 119,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 6
+    },
+    "wreckage-3": {
+     "col": 120,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 9
+    },
+    "wreckage-4": {
+     "col": 121,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 9
+    },
+    "wreckage-5": {
+     "col": 122,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 11,
+     "y": 9
+    },
+    "wreckage-6": {
+     "col": 123,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 9,
+     "y": 12
+    },
+    "wreckage-7": {
+     "col": 124,
+     "pack": "catacombs",
+     "sheet": "decorative.png",
+     "x": 10,
+     "y": 12
     },
     "rubble": {
      "col": 8,

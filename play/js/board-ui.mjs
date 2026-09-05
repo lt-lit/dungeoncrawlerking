@@ -144,7 +144,7 @@ export const CRACK_VARIANTS = 4;
  *  of its square, and tiles.css maps svN on a skin to the theme's Nth
  *  sprite for that role (--sprite-<role>-N, the base as the fallback), so
  *  a row of urns is not five identical urns and a repaint never swaps one. */
-export const SKIN_VARIANTS = 5;
+export const SKIN_VARIANTS = 10;
 
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —

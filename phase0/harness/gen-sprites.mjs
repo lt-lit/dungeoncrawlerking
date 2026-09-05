@@ -126,13 +126,6 @@ const SPRITES = {
     R(7, 6, 2, 3, P.gold) + R(7, 7, 2, 1, P.ink)
   ),
   // A shelf unit with odds and ends on it.
-  shelf: svg(
-    R(2, 1, 12, 14, P.ink) + R(3, 2, 10, 12, P.woodDeep) +
-    R(3, 2, 10, 1, P.wood) + R(3, 6, 10, 1, P.wood) + R(3, 10, 10, 1, P.wood) + R(3, 13, 10, 1, P.woodLo) +
-    R(4, 3, 2, 3, P.gold) + R(7, 4, 2, 2, P.iron) + R(10, 3, 2, 3, P.red) +
-    R(4, 7, 3, 3, P.iron) + R(9, 8, 2, 2, P.gold) + R(5, 11, 2, 2, P.red) + R(9, 11, 3, 2, P.wood)
-  ),
-  // Rubble: a heap of loose stone — weak masonry, a plug, a fallen arch.
   // The rubble HEAP is residue-only since 2026-09-04 (the classic set's ruin
   // fallback): authored masonry is a weak spot wearing the crack.
   rubble: svg(

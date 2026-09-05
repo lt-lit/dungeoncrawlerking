@@ -162,13 +162,15 @@ const ROLES = {
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
-  // The rack (2026-09-04: the skins' shelf had never been in ROLES and fell
-  // through to an in-house SVG). pixel-poem draws it; the other packs draw
-  // none, so they wear pixel-poem's with the wood recoloured (`tint`).
-  // TABLE and CHAIR are DROPPED (round 17, 2026-09-05: "the stools and
-  // tables don't look good and no version of them ever has" — stage.mjs
-  // maps T / C onto crate / chest until the category has art).
-  shelf: '--sprite-shelf',
+  // WRECKAGE (round 18, 2026-09-05 — the designer's O's on the pack sheet):
+  // the Catacombs' broken crates and spilled urns, the smashed-furniture
+  // look three stages' notes wanted ("one bunk collapsed", "one row broken
+  // to rubble", "bones where they fell") and lost when the heap died.
+  // TABLE, CHAIR and SHELF are DROPPED (rounds 17–18: "the stools and
+  // tables don't look good and no version of them ever has"; the rack was
+  // X'd on the in-use sheet) — stage.mjs maps T / C / S onto crate / chest
+  // / crate until a category has art.
+  wreckage: '--sprite-wreckage',
   // --sprite-rubble is the IN-HOUSE set's ruin fallback only (2026-09-04:
   // authored masonry paints as a cracked wall, so no theme reads its heap).
   rubble: '--sprite-rubble',
@@ -533,22 +535,39 @@ const sat = (r, g, b) => Math.max(r, g, b) - Math.min(r, g, b);
  *  brightness (target × luma / luma of the dominant wood), while greys
  *  (iron bands, pale supports) and the dark outline are left alone, so a
  *  slate-stained door keeps its iron. */
-function recolourHue(tile, target) {
+function recolourHue(tile, target, force = false) {
   const wood = (o) => tile.data[o + 3] && luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) >= 70 && sat(tile.data[o], tile.data[o + 1], tile.data[o + 2]) >= 40;
   const hist = new Map();
-  for (let i = 0; i < tile.width * tile.height; i++) {
+  if (!force) for (let i = 0; i < tile.width * tile.height; i++) {
     const o = i * 4;
     if (!wood(o)) continue;
     const k = (tile.data[o] << 16) | (tile.data[o + 1] << 8) | tile.data[o + 2];
     hist.set(k, (hist.get(k) ?? 0) + 1);
   }
+  // A sprite with no saturated wood at all (the Catacombs' grey-purple
+  // urns) — or a role tinted `{ whole: true }` (the urns and shards as a
+  // set: the green ones are saturated enough to be half-taken otherwise) —
+  // takes the tint as a WHOLE: every non-dark pixel, at its own shading.
+  const whole = !hist.size;
+  // In whole mode only the near-black outline is spared (the Catacombs'
+  // green urns are dark enough — luma ≈ 64 — that the wood cut-off of 70
+  // would leave their bodies green with tinted highlights).
+  const lit = (o) => tile.data[o + 3] && luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) >= 32;
+  if (whole) for (let i = 0; i < tile.width * tile.height; i++) { const o = i * 4; if (!lit(o)) continue; const k = (tile.data[o] << 16) | (tile.data[o + 1] << 8) | tile.data[o + 2]; hist.set(k, (hist.get(k) ?? 0) + 1); }
   if (!hist.size) return tile;
   const k = [...hist.entries()].sort((a, b) => b[1] - a[1])[0][0];
-  const baseL = luma(k >> 16, (k >> 8) & 255, k & 255);
+  // Wood mode scales each pixel by its brightness relative to the dominant
+  // wood; whole mode by its brightness relative to the sprite's BRIGHTEST
+  // pixel, which lands at 1.25× the target — so a sprite whose common
+  // colour is dark (a broken crate) does not blow its highlights out.
+  let maxL = 0;
+  if (whole) for (let i = 0; i < tile.width * tile.height; i++) { const o = i * 4; if (lit(o)) maxL = Math.max(maxL, luma(tile.data[o], tile.data[o + 1], tile.data[o + 2])); }
+  const baseL = whole ? maxL / 1.25 : luma(k >> 16, (k >> 8) & 255, k & 255);
+  const takes = whole ? lit : wood;
   const out = blank(tile.width, tile.height);
   for (let i = 0; i < tile.width * tile.height; i++) {
     const o = i * 4;
-    const f = wood(o) ? luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) / baseL : null;
+    const f = takes(o) ? luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) / baseL : null;
     for (let c = 0; c < 3; c++) out.data[o + c] = f === null ? tile.data[o + c] : Math.max(0, Math.min(255, Math.round(target[c] * f)));
     out.data[o + 3] = tile.data[o + 3];
   }
@@ -633,8 +652,10 @@ const THEMES = {
       // square): the first is the role's tile, the rest --sprite-<role>-N.
       crate: [['pp', 0, 8], ['ppbox2', 0, 0], ['ppmini2', 0, 0]], // the pack's boxes — plain, banded, small
       chest: [['pp', 3, 8], ['pp', 2, 8], ['pp', 5, 8], ['ppbox1', 0, 0], ['ppmini1', 0, 0]], // its five chests
-      barrel: ['pp', 8, 3], // the pack's own barrel (the hall had none — its barrels were in-house)
-      shelf: ['pp', 1, 8], // rack
+      // Round 18: the pack's keg (8,3) was X'd. Dungeon Gathering's vase is
+      // already the hall's orange; the Catacombs urns come in as terracotta.
+      barrel: [['dg', 2, 12], tall('catdeco', 9, 8), ['catdeco', 10, 8], ['catdeco', 12, 8], ['catdeco', 13, 8]],
+      wreckage: [['catdeco', 8, 6], ['catdeco', 9, 6], ['catdeco', 9, 9], ['catdeco', 10, 9], ['catdeco', 11, 9], ['catdeco', 9, 12], ['catdeco', 10, 12]],
       rubble: ['cat', 20, 22],
       // cosmetic props (board-ui scatters them; see DECOR below)
       torch: ['pp', 0, 9],
@@ -646,6 +667,8 @@ const THEMES = {
       banner: ['pp', 4, 7],
     },
     door2: [['pp', 6, 6], ['pp', 7, 6]], // the pack's DOUBLE door — a side-by-side pair of door skins wears it
+    // Borrowed Catacombs pieces in the hall's timber / terracotta (the vase is that orange already, so it comes through unchanged).
+    tint: { barrel: { to: '#bf704d', whole: true }, wreckage: { to: '#bf704d', whole: true } },
     doorSet: 'hall',
     doorPost: { lit: '#bf704d', dark: '#895a45' }, // the leaf's own timber
     wall: { fill: '#6e4a48', hi: '#916a62', lo: '#4c2f49', edge: '#25131a', speckle: 0, face: { sheet: 'pp', x: 2, y: 0, row: 4 } },
@@ -656,10 +679,10 @@ const THEMES = {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
     tiles: {
       door: ['pp', 7, 3], // pixel-poem's leaf, slate-stained (tint) — round 17: "the doors on Castle and Crypt suck"
-      crate: [['dg', 20, 8], ['dg', 19, 8], ['dg', 21, 8]], // the pack's stone blocks, three shades
+      crate: [['catdeco', 8, 5], ['catdeco', 9, 5]], // round 18: the pack's stone blocks were X'd — the Catacombs crates, slate-stained (tint)
       chest: [['pp', 2, 8], ['pp', 5, 8], ['ppbox1', 0, 0], ['ppmini1', 0, 0]], // pixel-poem's iron-bound chests — already in the castle's grey
-      barrel: ['dg', 2, 12], // the pack's vase
-      shelf: ['pp', 1, 8], // pixel-poem's rack, its wood slate-stained (tint)
+      barrel: [['dg', 2, 12], ['catdeco', 12, 8], ['catdeco', 13, 8], ['catdeco', 11, 11]], // the pack's vase + the small Catacombs urns as they are (their grey-purple and green sit in the castle's cool palette)
+      wreckage: [['catdeco', 8, 6], ['catdeco', 9, 6], ['catdeco', 9, 9], ['catdeco', 10, 9], ['catdeco', 11, 9], ['catdeco', 9, 12], ['catdeco', 10, 12]],
       rubble: ['dg', 12, 12],
       torch: ['pp', 1, 9],
       candle: ['pp', 5, 9],
@@ -673,7 +696,7 @@ const THEMES = {
     // Borrowed timber recoloured (recolourHue: the wood takes the hue at
     // its own brightness, iron and outline stay) to a slate stain that sits
     // in the pack's blue-grey; the doorway posts are cut from the same.
-    tint: { door: '#6b6f8a', door2: '#6b6f8a', shelf: '#6b6f8a' },
+    tint: { door: '#6b6f8a', door2: '#6b6f8a', crate: '#6b6f8a', wreckage: { to: '#6b6f8a', whole: true } },
     doorSet: 'castle',
     doorPost: { lit: '#9094b0', dark: '#43465c' },
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
@@ -684,12 +707,12 @@ const THEMES = {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
     tiles: {
       door: ['pp', 7, 3], // pixel-poem's leaf in dark oak (tint)
-      crate: [['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 11, 5], ['catdeco', 13, 5]], // the pack's four crates
-      chest: [['catdeco', 9, 4], ['catdeco', 8, 4], ['catdeco', 13, 4], ['catdeco', 11, 4]], // its four low boxes (pixel-poem's grey chest is off the crypt)
-      // Its urns, purple and green — the big ones are 20 px tall and rise
-      // into the tile above, so they are cropped 16×32 (`tall`).
-      barrel: [tall('catdeco', 9, 8), tall('catdeco', 10, 8), tall('catdeco', 11, 8), tall('catdeco', 9, 11), tall('catdeco', 10, 11)],
-      shelf: ['pp', 1, 8],
+      crate: [['catdeco', 8, 5], ['catdeco', 9, 5]], // the pack's two wide crates (round 18: the narrow dark pair was X'd)
+      chest: [['catdeco', 9, 4], ['pp', 3, 8], ['pp', 2, 8]], // its wide low box (the narrow ones were X'd) + pixel-poem's two chests in dark oak (tint) — a proposal
+      // All ten of its urns, purple and green — the big ones are 20 px tall
+      // and rise into the tile above, so they are cropped 16×32 (`tall`).
+      barrel: [tall('catdeco', 9, 8), ['catdeco', 10, 8], ['catdeco', 11, 8], ['catdeco', 12, 8], ['catdeco', 13, 8], tall('catdeco', 9, 11), ['catdeco', 10, 11], ['catdeco', 11, 11], ['catdeco', 12, 11], ['catdeco', 13, 11]],
+      wreckage: [['catdeco', 8, 6], ['catdeco', 9, 6], ['catdeco', 9, 9], ['catdeco', 10, 9], ['catdeco', 11, 9], ['catdeco', 9, 12], ['catdeco', 10, 12]], // its broken crates and spilled urns
       rubble: ['cat', 20, 22],
       torch: ['cattorch', 0, 0],
       candle: ['catcandle', 0, 0, 7, 14],
@@ -699,7 +722,7 @@ const THEMES = {
       skull: ['pp', 7, 7],
     },
     door2: [['pp', 6, 6], ['pp', 7, 6]],
-    tint: { door: '#5c4a3c', door2: '#5c4a3c', shelf: '#5c4a3c' }, // dark oak, a step above the Catacombs crate
+    tint: { door: '#5c4a3c', door2: '#5c4a3c', chest: '#5c4a3c' }, // dark oak, a step above the Catacombs crate
     doorSet: 'crypt',
     doorPost: { lit: '#7d6753', dark: '#372c24' },
     wall: { fill: '#3c3129', hi: '#5a5347', lo: '#231f19', edge: '#0e0a08', speckle: 14, face: { sheet: 'cat', x: 33, y: 8, row: 6 } },
@@ -736,7 +759,7 @@ for (const [key, [pack, file]] of Object.entries(SHEETS)) {
 // by a stable hash and the rules emitted below map svN on a skin to its
 // Nth sprite, the base as the fallback. A theme with fewer variants than N
 // WRAPS AROUND by alias, so every variant it has is used evenly.
-const SKIN_ROLES = ['crate', 'chest', 'barrel', 'shelf'];
+const SKIN_ROLES = ['crate', 'chest', 'barrel', 'wreckage'];
 const variantCount = {};
 for (const t of Object.values(THEMES)) for (const [role, spec] of Object.entries(t.tiles)) if (Array.isArray(spec[0])) variantCount[role] = Math.max(variantCount[role] ?? 1, spec.length);
 for (const [role, k] of Object.entries(variantCount)) {
@@ -772,11 +795,12 @@ themeNames.forEach((theme, row) => {
     crops.forEach(([sheet, x, y, w, h], i) => {
       let tile = w ? (prop ? crop(sheets[sheet], x, y, w, h) : cropFit(sheets, sheet, x, y, w, h)) : crop(sheets[sheet], x * T, y * T, T, T);
       if (DECOR_ANCHOR[role]) tile = anchorSprite(tile, DECOR_ANCHOR[role]);
-      const tint = THEMES[theme].tint?.[role];
-      if (tint) tile = recolourHue(tile, hex(tint));
+      const spec = THEMES[theme].tint?.[role];
+      const tint = typeof spec === 'string' ? spec : spec?.to;
+      if (tint) tile = recolourHue(tile, hex(tint), !!spec?.whole);
       if (prop) tile = placeProp(tile); // 16×32: centred small, standing tall
       if (!i) tiles[role] = tile;
-      emit(i ? `${role}-${i + 1}` : role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x: w ? x / T : x, y: w ? y / T : y, recoloured: tint ? `wood to ${tint}` : undefined });
+      emit(i ? `${role}-${i + 1}` : role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x: w ? x / T : x, y: w ? y / T : y, recoloured: tint ? `${spec?.whole ? 'all' : 'wood'} to ${tint}` : undefined });
     });
     // Fewer variants than SKIN_VARIANTS: wrap around, so sv4 on a role with
     // three sprites is its first again, sv5 its second.
@@ -854,7 +878,7 @@ css.push('.cell.wm-0 > .decor-doorway { --decor-img: none; }');
 // → the theme's pit case; the in-house set keeps style.css's gradient pit.
 for (let m = 0; m < 16; m++) css.push(`.cell.hole.wm-${m} { --hole-tile: var(--tile-hole-${m}); }`);
 css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
-// Furniture PROPS (crate / chest / barrel / shelf — not a door, not a crack)
+// Furniture PROPS (crate / chest / barrel / wreckage — not a door, not a crack)
 // are 16×32 boxes (placeProp): the sprite element spans its cell AND the
 // one above, anchored to the cell's bottom, so a small prop sits centred in
 // its square and a tall urn rises into the square north (which paints
