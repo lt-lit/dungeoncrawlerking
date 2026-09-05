@@ -90,17 +90,20 @@ const SHEETS = {
   pcBw: ['pixel-chess', 'BlackPieces_Wood.png'],
   nt: ['nulltale', 'NullTale Chess.png'],
   dv: ['deja-view', 'ChessAssets.png'],
-  // pixel-poem's loose 16×16 box sprites (items and trap_animation/<box>/<box>_1.png, copied flat)
-  ppbox1: ['pixel-poem', 'box_1_1.png'],
-  ppbox2: ['pixel-poem', 'box_2_1.png'],
-  ppmini1: ['pixel-poem', 'mini_box_1_1.png'],
-  ppmini2: ['pixel-poem', 'mini_box_2_1.png'],
-  // its DOMED chests (chest/chest_N.png, mini_chest/mini_chest_N.png): frame
-  // 1 is the closed chest, frame 2 its squat bounce frame — two silhouettes
-  ppchest: ['pixel-poem', 'chest_1.png'],
-  ppchest2: ['pixel-poem', 'chest_2.png'],
-  ppminichest: ['pixel-poem', 'mini_chest_1.png'],
-  ppminichest2: ['pixel-poem', 'mini_chest_2.png'],
+  // pixel-poem's loose 16×16 prop sprites (items and trap_animation/<prop>/
+  // <prop>_N.png, copied flat). Every prop is a four-frame idle bounce and
+  // only its REST pose is a closed box: frame 1 lifts the lid (the chest's
+  // floats a clear row above the body, the boxes pinch a waist under it —
+  // "these look like they're for an open animation, or the lid is detached",
+  // round 19c), frame 2 stretches (the same pinch), frame 3 is the rest pose
+  // the static sheet already carries ((4,8) / (5,8) ARE chest_3 /
+  // mini_chest_3 pixel for pixel; (3,8) / (0,8) sit a row taller than
+  // box_2_3 / mini_box_2_3), and frame 4 is the SQUAT — lid seated, body a
+  // pixel wider — the one extra silhouette that still reads closed.
+  ppboxsquat: ['pixel-poem', 'box_2_4.png'],
+  ppminiboxsquat: ['pixel-poem', 'mini_box_2_4.png'],
+  ppchestsquat: ['pixel-poem', 'chest_2.png'],
+  ppminichestsquat: ['pixel-poem', 'mini_chest_2.png'],
   cattorch: ['catacombs', 'torch_1.png'],
   catcandle: ['catacombs', 'candleA_01.png'],
 };
@@ -658,14 +661,15 @@ const THEMES = {
       // square): the first is the role's tile, the rest --sprite-<role>-N.
       // Round 19: the line between the two is the LID — a chest has a rounded
       // one ("chests need to all have rounded tops like hall chest 3"), a
-      // crate is a flat box. So the flat pixel-poem boxes are crates, joined
-      // by the Catacombs' slatted crates in the hall's timber, and the four
-      // domed pixel-poem chests are the chests.
-      // (Round 19b: only the DOMED lid counts as a chest — the pack's chest
-      // and mini chest, closed frame and squat frame; the grey flat-lidded
-      // boxes (2,8), box_1, mini_box_1 are crates like the orange ones.)
-      crate: [['pp', 0, 8], ['pp', 3, 8], ['pp', 2, 8], ['ppbox1', 0, 0], ['ppbox2', 0, 0], ['ppmini1', 0, 0], ['ppmini2', 0, 0], ['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 9, 4]],
-      chest: [['ppchest', 0, 0], ['ppminichest', 0, 0], ['ppchest2', 0, 0], ['ppminichest2', 0, 0]],
+      // crate is a flat box. Round 19c: the pack's GREY boxes are out of the
+      // crates ("let's not use silver/grey on crates, looks too much like
+      // chests" — the chests are its silver-bodied domed ones), and every
+      // prop is its rest pose or its squat, never the lid-lifted frame (see
+      // SHEETS). Crates: the sheet's two orange boxes, their squats, and the
+      // Catacombs' three slatted crates in the hall's timber.
+      crate: [['pp', 3, 8], ['pp', 0, 8], ['ppboxsquat', 0, 0], ['ppminiboxsquat', 0, 0], ['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 9, 4]],
+      // Chests: the sheet's closed domed chest and mini chest, and their squats.
+      chest: [['pp', 4, 8], ['pp', 5, 8], ['ppchestsquat', 0, 0], ['ppminichestsquat', 0, 0]],
       // Round 18: the pack's keg (8,3) was X'd. Dungeon Gathering's vase is
       // already the hall's orange; the Catacombs urns come in as terracotta.
       barrel: [['dg', 2, 12], tall('catdeco', 9, 8), ['catdeco', 10, 8], ['catdeco', 12, 8], ['catdeco', 13, 8]],
@@ -693,8 +697,8 @@ const THEMES = {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
     tiles: {
       door: ['pp', 7, 3], // pixel-poem's leaf, walnut-stained (tint) — round 17: "the doors on Castle and Crypt suck"; round 18: "less blue/grey"
-      crate: [['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 9, 4], ['pp', 0, 8], ['pp', 3, 8], ['pp', 2, 8], ['ppbox1', 0, 0], ['ppbox2', 0, 0], ['ppmini1', 0, 0], ['ppmini2', 0, 0]], // round 18: the stone blocks were X'd; round 19: the Catacombs crates and pixel-poem's flat boxes, all slate-stained (tint)
-      chest: [['ppchest', 0, 0], ['ppminichest', 0, 0], ['ppchest2', 0, 0], ['ppminichest2', 0, 0]], // pixel-poem's DOMED chests — already in the castle's grey
+      crate: [['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 9, 4], ['pp', 3, 8], ['pp', 0, 8], ['ppboxsquat', 0, 0], ['ppminiboxsquat', 0, 0]], // round 18: the stone blocks were X'd; round 19c: the Catacombs crates and pixel-poem's orange boxes, walnut like the door (tint) — the slate stain made a grey crate, and grey is the chests' colour
+      chest: [['pp', 4, 8], ['pp', 5, 8], ['ppchestsquat', 0, 0], ['ppminichestsquat', 0, 0]], // pixel-poem's closed DOMED chests — already in the castle's grey
       barrel: [['dg', 2, 12], ['catdeco', 12, 8], ['catdeco', 13, 8], ['catdeco', 11, 11]], // the pack's vase + the small Catacombs urns as they are (their grey-purple and green sit in the castle's cool palette)
       wreckage: [['catdeco', 8, 6], ['catdeco', 9, 6], ['catdeco', 9, 9], ['catdeco', 10, 9], ['catdeco', 11, 9], ['catdeco', 9, 12], ['catdeco', 10, 12]],
       rubble: ['dg', 12, 12],
@@ -711,9 +715,11 @@ const THEMES = {
     // its own brightness, iron and outline stay). The DOORS are a cool
     // walnut (round 18: the slate stain was "too blue/grey") — the same
     // brightness as the slate, warmer, still sitting against the pack's
-    // vase; the crates and wreckage keep the slate. The doorway posts are
-    // cut from the door's walnut.
-    tint: { door: '#7d6455', door2: '#7d6455', crate: '#6b6f8a', wreckage: { to: '#6b6f8a', whole: true } },
+    // vase. Round 19c: the crates and their wreckage wear the same walnut
+    // (the slate stain made a grey crate — "let's not use silver/grey on
+    // crates, looks too much like chests"). The doorway posts are cut from
+    // the door's walnut.
+    tint: { door: '#7d6455', door2: '#7d6455', crate: '#7d6455', wreckage: { to: '#7d6455', whole: true } },
     doorSet: 'castle',
     doorPost: { lit: '#a58a76', dark: '#4a3b32' },
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
@@ -724,8 +730,8 @@ const THEMES = {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
     tiles: {
       door: ['pp', 7, 3], // pixel-poem's leaf in dark oak (tint)
-      crate: [['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 9, 4], ['pp', 0, 8], ['pp', 3, 8], ['pp', 2, 8], ['ppbox1', 0, 0], ['ppbox2', 0, 0], ['ppmini1', 0, 0], ['ppmini2', 0, 0]], // its two wide crates and its low box + pixel-poem's flat boxes in dark oak (tint)
-      chest: [['ppchest', 0, 0], ['ppminichest', 0, 0], ['ppchest2', 0, 0], ['ppminichest2', 0, 0]], // pixel-poem's domed chests in dark oak (tint)
+      crate: [['catdeco', 8, 5], ['catdeco', 9, 5], ['catdeco', 9, 4], ['pp', 3, 8], ['pp', 0, 8], ['ppboxsquat', 0, 0], ['ppminiboxsquat', 0, 0]], // its two wide crates and its low box + pixel-poem's orange boxes in dark oak (tint)
+      chest: [['pp', 4, 8], ['pp', 5, 8], ['ppchestsquat', 0, 0], ['ppminichestsquat', 0, 0]], // pixel-poem's closed domed chests in dark oak (tint)
       // All ten of its urns, purple and green — the big ones are 20 px tall
       // and rise into the tile above, so they are cropped 16×32 (`tall`).
       barrel: [tall('catdeco', 9, 8), ['catdeco', 10, 8], ['catdeco', 11, 8], ['catdeco', 12, 8], ['catdeco', 13, 8], tall('catdeco', 9, 11), ['catdeco', 10, 11], ['catdeco', 11, 11], ['catdeco', 12, 11], ['catdeco', 13, 11]],

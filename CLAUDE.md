@@ -232,7 +232,15 @@ ten urns (`SKIN_VARIANTS` 10), SHELF is dropped (`S` → crate), a new
 WRECKAGE skin `W` (broken crates + spilled urns) sits on the seven
 "broken / collapsed / spilled" squares, castle doors are a cool walnut
 (#7d6455 — slate was "too blue/grey"), and `tint` accepts `{ to, whole }`
-for sprites the wood-only recolour cannot take whole. Known nits from the
+for sprites the wood-only recolour cannot take whole. **Round 19, same
+day — the LID is the line**: a chest has a DOMED lid, a crate is a FLAT
+box; chests are pixel-poem's closed chest + mini chest (sheet (4,8) /
+(5,8)) and their squat frames, crates its two orange boxes + squats + the
+Catacombs' three, NO grey ("looks too much like chests" — castle crates
+are walnut like its door, not slate); every pixel-poem prop is a
+four-frame bounce whose frame 1 LIFTS the lid ("an open animation, or
+the lid is detached") — only the rest pose (frame 3 = the sheet tile) and
+the squat (frame 4) are used. Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the

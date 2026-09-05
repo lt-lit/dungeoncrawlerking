@@ -514,13 +514,33 @@ small urns as they are, crypt barrels all ten of its urns
 crates and five spilled urns, native on the crypt, timber / terracotta on
 the hall, slate on the castle — on the seven squares whose notes say
 broken, collapsed or spilled. The castle's doors are a cool WALNUT
-(`#7d6455`; the slate was "too blue/grey"), its crates and wreckage keep
-the slate. A tint may be `{ to, whole: true }`: a WHOLE-sprite tint —
+(`#7d6455`; the slate was "too blue/grey"), its crates and wreckage kept
+the slate until round 19. A tint may be `{ to, whole: true }`: a WHOLE-sprite tint —
 every pixel but the near-black outline, normalised to the sprite's
 brightest pixel at 1.25× the target — for the urns and shards, whose green
 ones are saturated enough to be half-taken by the wood-only recolour and
 whose broken crates blew their highlights out under dominant-colour
-scaling. `phase0/lib/png.mjs`
+scaling. **Round 19 (2026-09-05) — the LID is the line.** "Chests need
+to all have rounded tops like hall chest 3. What's even the difference
+between chests and crates?" A CHEST has a domed lid, a CRATE is a flat
+box, and every pack sprite sorted onto one side. Chests are pixel-poem's
+closed domed chest and mini chest — the sheet's (4,8) and (5,8) — plus
+their SQUAT poses (`chest_2` / `mini_chest_2`, copied flat into
+`assets-src/pixel-poem/`), silver-bodied as drawn on the hall and castle,
+dark oak on the crypt. Crates are the sheet's two orange boxes (3,8) and
+(0,8), their squats (`box_2_4` / `mini_box_2_4`) and the Catacombs' three
+slatted crates — timber on the hall, dark oak on the crypt, and WALNUT on
+the castle like its door: the slate stain made a grey crate, and the
+pack's grey boxes are out for the same reason ("let's not use silver/grey
+on crates, looks too much like chests"). The trap that cost two previews:
+every pixel-poem prop is a four-frame idle BOUNCE and only frame 3 is the
+rest pose the static sheet carries ((4,8) / (5,8) are `chest_3` /
+`mini_chest_3` pixel for pixel) — frame 1 LIFTS the lid (a clear row above
+the chest's body, a pinched waist under the box's) and frame 2 stretches
+it, so the loose `chest_1` / `box_2_1` frames the first cut shipped read
+as "an open animation, or the lid is detached"; frame 4, the squat, keeps
+the lid seated on a body a pixel wider and is the one extra silhouette.
+`phase0/lib/png.mjs`
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.
