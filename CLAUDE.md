@@ -210,8 +210,21 @@ pair (`door2-l` / `door2-r`, west to east, never a god-cracked leaf, never
 a vertical pair) and paint `--sprite-door2-l/-r`: pixel-poem's own double,
 the castle's portcullis in the pack's two-wide arch, a generated two-wide
 barred gate for the crypt, each door set carrying its double, two leaves
-as the fallback; the pairing is recomputed every paint, so a captured leaf
-leaves a single. Known nits from the
+as the fallback. **Round 17, same day**, seven designer points: crates
+and chests vary like the urns (pixel-poem's loose `box_1_1` /
+`mini_box_1_1` sprites join the sheet's, all four Catacombs crate columns
+are distinct); every furniture PROP is a 16×32 board box (`placeProp` —
+small props CENTRED in their square, the 20-px urns cropped `tall` and
+standing on the bottom edge, rising into the square north; the sprite
+element spans two cells on the board, the legend shows the lower half);
+the double-door pair is AUTHORED (skin grid, painted on a standing leaf),
+so a leaf keeps its half after its partner goes; the castle's portcullis
+and the crypt's barred gate are GONE — every theme wears pixel-poem's
+leaf + double, slate-stained / dark oak by `recolourHue` (wood takes the
+hue at its brightness, iron and outline stay), `DOOR_SETS` = hall /
+castle / crypt; and TABLE / CHAIR are DROPPED — `T` / `C` stay in the
+files, `SKIN_CHARS` maps them onto crate / chest until the category has
+art. Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the

@@ -192,8 +192,8 @@ if (!THEME) {
 await setTheme('auto');
 expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
 // Doors: the option overrides the theme's door; auto returns it.
-await page.evaluate(() => { window.__DCK.options.doors = 'portcullis'; window.__DCK.applyOptions(); });
-expect((await page.evaluate(() => window.__DCK.doors)) === 'portcullis', 'Doors option stamps the door set');
+await page.evaluate(() => { window.__DCK.options.doors = 'castle'; window.__DCK.applyOptions(); });
+expect((await page.evaluate(() => window.__DCK.doors)) === 'castle', 'Doors option stamps the door set');
 await page.evaluate(() => { window.__DCK.options.doors = 'auto'; window.__DCK.applyOptions(); });
 expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" is the theme\'s own');
 // Piece sprites: the default set paints the king as a PNG sprite; classic is the glyph.
@@ -226,6 +226,14 @@ if (STAGE === 's59-hall-corner') {
     return { g5: window.__DCK.marks.cell('g5'), h5: window.__DCK.marks.cell('h5'), same: bg('g5') === bg('h5'), png: bg('g5').includes('data:image/png') };
   });
   expect(dbl.g5?.includes('door2-l') && dbl.h5?.includes('door2-r') && dbl.png && !dbl.same, `g5+h5 are one double door: left half + right half, two different pack sprites (${dbl.g5} / ${dbl.h5})`);
+  // Round 17: a furniture PROP's sprite box is two cells tall, anchored to
+  // its cell's bottom (small props centred in the square, tall urns rising
+  // north); a door's stays one cell.
+  const boxes = await page.evaluate(() => {
+    const h = (sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const p = c.querySelector('.piece.neutral'); return p ? Math.round(p.getBoundingClientRect().height / c.getBoundingClientRect().height * 100) / 100 : null; };
+    return { crate: h('j1'), door: h('g5') };
+  });
+  expect(boxes.crate === 2 && boxes.door === 1, `a prop's sprite box is 2 cells tall, a door's 1 (j1 crate ${boxes.crate}, g5 door ${boxes.door})`);
   expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('weak'), `d8, the door in the north–south line, is a weak spot (${door.d8})`);
 }
 

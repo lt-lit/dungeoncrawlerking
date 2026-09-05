@@ -59,8 +59,9 @@
 //              in its rank (round 16): the two paint ONE two-wide door —
 //              the west leaf its left half, the east its right
 //              (--sprite-door2-l / -r; a theme or door set without a
-//              double falls back to two leaves). Paired west to east, so
-//              a run of three is a double and a single.
+//              double falls back to two leaves). Paired west to east on
+//              the AUTHORED skin grid, so a run of three is a double and a
+//              single, and a leaf keeps its half after its partner goes.
 //   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
 //              chain / banner on an east–west wall face, scattered by a
 //              stable hash of the square — floor litter is packed away
@@ -128,9 +129,10 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
 /** Piece-sprite sets the board can wear (tiles.css [data-pieces=…];
  *  repack-tiles.mjs builds them). null / 'classic' = the Unicode glyphs. */
 export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nulltale-dread', 'deja-view'];
-/** Door sets (tiles.css [data-doors=…]): each theme's door, selectable
- *  over any theme — the leaf, the portcullis, the barred gate. */
-export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
+/** Door sets (tiles.css [data-doors=…]): each theme's door (and its
+ *  double), selectable over any theme — since round 17 all three are
+ *  pixel-poem's leaf, in the hall's timber, a slate stain, dark oak. */
+export const DOOR_SETS = ['hall', 'castle', 'crypt'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
 /** Crack drawings (gen-sprites --tile-crack-1..N): every cell carries
@@ -415,11 +417,12 @@ export class BoardUI {
       return rubble.has(name) || opened.has(name);
     };
     // DOUBLE DOORS (round 16): two door skins side by side in a rank are
-    // one two-wide door. A god-cracked '^' is stone, not a leaf.
-    const isDoor = (ff, rr) => {
-      const name = String.fromCharCode(97 + ff) + rr;
-      return grid[this.ranks - rr]?.[ff] === FURNITURE && !godCrates.has(name) && skins[name] === 'door';
-    };
+    // one two-wide door. Paired on the AUTHORED skin grid (round 17: "if
+    // one opens or is destroyed, the closed door next to it suddenly
+    // becomes a normal door"), so a leaf keeps its half after its partner
+    // is captured, burst or god-cracked — the half is painted only on a
+    // leaf that still stands (the toggle below).
+    const isDoor = (ff, rr) => skins[String.fromCharCode(97 + ff) + rr] === 'door';
     const leftLeaf = new Set(), rightLeaf = new Set();
     for (let rr = 1; rr <= this.ranks; rr++) {
       for (let ff = 0; ff < this.files - 1; ff++) {
@@ -435,8 +438,6 @@ export class BoardUI {
       const v = grid[this.ranks - rank]?.[f] ?? null;
       const isWall = v === WALL;
       const isFurniture = v === FURNITURE;
-      cell.classList.toggle('door2-l', leftLeaf.has(sq));
-      cell.classList.toggle('door2-r', rightLeaf.has(sq));
       cell.classList.remove(...FX_CLASSES);
       cell.style.removeProperty('--fx-ms');
       const wallTile = isWall && !holes.has(sq);
@@ -449,6 +450,8 @@ export class BoardUI {
       const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);
+      cell.classList.toggle('door2-l', skin === 'door' && leftLeaf.has(sq));
+      cell.classList.toggle('door2-r', skin === 'door' && rightLeaf.has(sq));
       // WEAK SPOTS wear the crack (2026-09-04): authored masonry anywhere,
       // and a door in a north–south wall line (there is no edge-on door, so
       // it reads as the weakened stone it stands in). Both paint the wall

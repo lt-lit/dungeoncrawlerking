@@ -119,18 +119,6 @@ const SPRITES = {
     R(3, 4, 10, 1, P.iron) + R(3, 5, 10, 1, P.ironLo) + R(3, 10, 10, 1, P.iron) + R(3, 11, 10, 1, P.ironLo)
   ),
   // A round table seen from above.
-  table: svg(
-    R(3, 2, 10, 12, P.ink) + R(2, 3, 12, 10, P.ink) + R(1, 5, 14, 6, P.ink) +
-    R(4, 3, 8, 10, P.wood) + R(3, 4, 10, 8, P.wood) + R(2, 6, 12, 4, P.wood) +
-    R(4, 3, 8, 1, P.woodHi) + R(3, 4, 1, 8, P.woodHi) + R(3, 7, 10, 1, P.woodLo) + R(4, 10, 8, 1, P.woodLo) + R(2, 6, 12, 1, P.woodHi)
-  ),
-  // A chair, side on: back, seat, two legs.
-  chair: svg(
-    R(4, 1, 3, 9, P.ink) + R(5, 2, 1, 7, P.wood) + R(5, 4, 1, 1, P.woodLo) + R(5, 6, 1, 1, P.woodLo) +
-    R(3, 8, 11, 3, P.ink) + R(4, 9, 9, 1, P.wood) + R(4, 9, 3, 1, P.woodHi) +
-    R(3, 11, 3, 4, P.ink) + R(11, 11, 3, 4, P.ink) + R(4, 11, 1, 3, P.woodLo) + R(12, 11, 1, 3, P.woodLo)
-  ),
-  // A banded chest with a lock.
   chest: svg(
     R(2, 2, 12, 5, P.ink) + R(3, 3, 10, 3, P.woodLo) + R(3, 3, 10, 1, P.wood) +
     R(2, 7, 12, 7, P.ink) + R(3, 8, 10, 5, P.wood) + R(3, 8, 10, 1, P.woodHi) +

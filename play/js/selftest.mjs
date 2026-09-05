@@ -903,8 +903,13 @@ async function main() {
     if (!has('a5', 'door2-l') || !has('b5', 'door2-r') || has('c5', 'door2-l') || has('c5', 'door2-r')) throw new Error(`three doors in a row: a double and a single (${ui.cellClasses('c5')})`);
     ui.setPosition('1***/4/*1*1/^3/^3 w - - 0 1', { skins: { a1: 'door', a2: 'door' } });
     if (has('a1', 'door2-l') || has('a1', 'door2-r') || has('a2', 'door2-l') || has('a2', 'door2-r') || !has('a2', 'weak')) throw new Error(`doors stacked in a column never pair (${ui.cellClasses('a2')})`);
+    // Round 17: the pair is AUTHORED — a leaf keeps its half after its
+    // partner is god-cracked, captured or burst (the half paints only on a
+    // leaf that still stands).
     ui.setPosition('*^^*/4/4/4/4 w - - 0 1', { skins: { b5: 'door', c5: 'door' }, godCrates: new Set(['c5']) });
-    if (has('b5', 'door2-l') || !has('c5', 'cracked')) throw new Error('a god-cracked partner is stone, not a leaf: no double');
+    if (!has('b5', 'door2-l') || !has('c5', 'cracked') || has('c5', 'door2-r')) throw new Error(`a god-cracked partner is stone, the other leaf keeps its half: ${ui.cellClasses('b5')} / ${ui.cellClasses('c5')}`);
+    ui.setPosition('*^1*/4/4/4/4 w - - 0 1', { skins: { b5: 'door', c5: 'door' }, opened: new Set(['c5']) });
+    if (!has('b5', 'door2-l') || has('c5', 'door2-r') || has('c5', 'door2-l')) throw new Error(`a captured leaf leaves the other as its half of the double, not a single leaf: ${ui.cellClasses('b5')} / ${ui.cellClasses('c5')}`);
     ui.setPosition('4/4/4/4/4 w - - 0 1');
     if (has('b5', 'door2-l') || has('c5', 'door2-r')) throw new Error('the pair classes clear on repaint');
     // SKIN VARIANTS: every cell carries exactly one stable sv1…svN class.
@@ -927,8 +932,8 @@ async function main() {
     if (ui.pieceFit.scale !== null || ui.pieceFit.lift !== null || ui.pieceFit.snap || 'pieceSnap' in host.dataset) throw new Error('setPieceFit({}) clears to the CSS defaults');
     ui.setPieces('no-such-set');
     if (ui.pieces !== null) throw new Error('an unknown piece set clears to the glyphs');
-    ui.setDoors('portcullis');
-    if (ui.doors !== 'portcullis' || host.dataset.doors !== 'portcullis') throw new Error('setDoors must stamp data-doors');
+    ui.setDoors('castle');
+    if (ui.doors !== 'castle' || host.dataset.doors !== 'castle') throw new Error('setDoors must stamp data-doors');
     ui.setDoors(null);
     if (ui.doors !== null) throw new Error('setDoors(null) clears to the theme door');
     const at1 = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;

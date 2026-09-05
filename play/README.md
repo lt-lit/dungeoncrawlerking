@@ -473,8 +473,34 @@ pixel-poem draws the double (6,6)+(7,6); the castle's is its portcullis
 dropped into the pack's two-wide arch (12,8)+(13,8) with the bars
 continuing through the seam; the crypt's a generated two-wide barred gate;
 every door SET carries its double too, and a theme or set without one falls
-back to two leaves. (Capturing one leaf repaints the other as a single
-leaf — the pairing is recomputed every paint.) `phase0/lib/png.mjs`
+back to two leaves. **Round 17 (2026-09-05)**, seven points from the
+designer: (1) crates and chests vary like the urns — hall crates are
+pixel-poem's three boxes and its chests five (the sheet's three plus the
+loose `box_1_1` / `mini_box_1_1` sprites, copied flat into `assets-src/
+pixel-poem/`), castle chests four, crypt crates and low boxes four each
+(all four Catacombs crate columns are distinct sprites); (2) + (3) every
+furniture PROP is a 16×32 BOARD BOX (`placeProp`: trimmed to its pixels,
+centred left–right; a prop that fits a cell sits CENTRED in the lower
+cell, a taller one — the big urns are 20 px, cropped 16×32 with `tall` —
+stands on the cell's bottom edge and rises into the cell north, which
+paints behind it by DOM order as a tall piece does), and tiles.css gives
+the sprite element the same 1×2-cell box on the board (`#board[data-
+theme] .cell.furniture:not(.skin-door):not(.weak):not(.cracked)
+.piece.neutral`; the options legend shows a prop's lower half); (4) the
+double-door pair is AUTHORED — paired on the stage's skin grid, painted
+only on a leaf that still stands — so a leaf keeps its half after its
+partner is captured, burst or god-cracked instead of "suddenly becoming a
+normal door"; (5) the castle's portcullis and the crypt's barred gate are
+GONE ("the doors on Castle and Crypt suck"): every theme wears pixel-
+poem's leaf and double, the castle's in a slate stain and the crypt's in
+dark oak by `recolourHue` — the WOOD (saturated, non-dark pixels) takes
+the target hue at its own brightness, the iron bands and the outline stay
+— and the doorway posts follow (`doorPost`); the Doors option is the three
+themes' leaves (`DOOR_SETS` hall / castle / crypt); (6) TABLE and CHAIR
+are DROPPED ("no version of them ever has [looked good]") — `T` / `C`
+stay in the stage files as authoring intent and `SKIN_CHARS` maps them
+onto crate / chest until the category has art; the in-house SVGs and CSS
+went with them. `phase0/lib/png.mjs`
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.
