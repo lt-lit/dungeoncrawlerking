@@ -389,7 +389,11 @@ export class DuelController {
       // renderer's cracked-wall tile): an undo that dropped them would paint
       // a weakened wall as an authored crate and lose the gods' +3 on it.
       godCrates: [...this.director.godCrates],
-      meter: this.director.meter.value,
+      // v4: the meter carries a heat window now, and the Director a threat
+      // ledger (replaced, never mutated — holding the reference is enough).
+      meter: this.director.meter.snapshot(),
+      ledger: this.director.ledger,
+      threats: this.director.snapshotThreats(),
       lens: {
         moves: this.record.moves.length,
         quakes: this.record.quakes.length,
@@ -426,7 +430,10 @@ export class DuelController {
     this.director.debt = s.debt;
     this.director.holes = new Set(s.holes ?? []);
     this.director.godCrates = new Set(s.godCrates ?? []);
-    this.director.meter.value = s.meter ?? 0;
+    if (typeof s.meter === 'number') this.director.meter.restore({ value: s.meter }); // pre-v4 snapshot shape
+    else this.director.meter.restore(s.meter);
+    this.director.ledger = s.ledger ?? null;
+    this.director.restoreThreats(s.threats);
     this.record.moves.length = s.lens.moves;
     this.record.sans.length = s.lens.moves;
     this.record.quakes.length = s.lens.quakes;

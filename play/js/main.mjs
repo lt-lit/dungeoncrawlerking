@@ -866,14 +866,17 @@ function renderGodsSummary() {
   // is — and it sets how fast restlessness climbs.
   const stale = dir.lastStaleness;
   const funBit = stale ? `fun ${pctOf(stale.fun)} (${stale.moves} moves, ${stale.captures} captures, ${stale.lockedPawns}/${stale.pawns} pawns locked)` : 'fun —';
+  // v4: heat is the record's recent temperature (hot plies over the window)
+  // and scales the fill; the threats are what the last move created.
+  const threats = dir.lastThreats?.length ? ` (${dir.lastThreats.join(' ')})` : '';
   $('gods-meters').textContent =
-    `${funBit} · restlessness ${dir.meter.value.toFixed(1)}/${dir.meter.rampPlies} → ` +
-    `pressure ${pctOf(dir.pressure(nextPly))}${dir.meter.floor(nextPly) > dir.meter.p() ? ' (BACKSTOP floor)' : ''}`;
+    `${funBit} · heat ${pctOf(dir.meter.heat)}${threats} · tedium ${pctOf(dir.meter.t)} · restlessness ${dir.meter.value.toFixed(1)}/${dir.meter.rampPlies} → ` +
+    `pressure ${pctOf(dir.pressure(nextPly))}${dir.meter.deadFloor() > 0 && dir.meter.deadFloor() >= dir.meter.p() && dir.meter.deadFloor() >= dir.meter.floor(nextPly) ? ' (DEAD-BOARD floor)' : dir.meter.floor(nextPly) > dir.meter.p() ? ' (BACKSTOP floor)' : ''}`;
 
   const held = dir.holdInCheck && dir.lastTrace?.held ? ' · HELD (king in check)' : '';
   $('gods-summary').textContent =
     `next roll p${nextPly}: P(quake) ${pctOf(dir.pQuake(nextPly))} · ` +
-    `budget ${1 + Math.floor(dir.pressure(nextPly) * dir.extraActions)} action(s) · ` +
+    `budget ~${1 + Math.floor(dir.meter.t * dir.favor * dir.extraActions)} action(s) · ` +
     `debt ${dir.debt}/${dir.debtCap} · intensity ${dir.favor.toFixed(1)}${held}`;
 
   // The ladder, as it stands right now — rung weights are a pure function of
@@ -903,7 +906,11 @@ function godsTraceCls(t) {
 
 /** One compact line per roll trace — the per-ply record, reason codes and all. */
 function godsTraceLine(t) {
-  const meterBit = `meter ${t.meter?.toFixed(1) ?? '?'} · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`;
+  const meterBit =
+    `meter ${t.meter?.toFixed(1) ?? '?'}${typeof t.meterAfter === 'number' ? `→${t.meterAfter.toFixed(1)}` : ''}` +
+    ` · heat ${typeof t.heat === 'number' ? pctOf(t.heat) : '?'}${t.threats ? ` (+${t.threats} threat${t.threats === 1 ? '' : 's'})` : ''}` +
+    `${typeof t.tedium === 'number' ? ` · tedium ${pctOf(t.tedium)}` : ''}` +
+    ` · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`;
   if (t.outcome === 'quiet') {
     if (t.held) return `p${t.ply} · HELD — a king is in check, the gods sit it out`;
     const r = t.rolls.find((x) => x.roll === 'quake');
@@ -916,6 +923,13 @@ function godsTraceLine(t) {
   const spent = t.rungsSpent ?? [];
   bits.push(`budget ${spent.length}/${t.budget ?? '?'} → ${spent.join(' + ') || 'nothing'}`);
   if (t.rungFallback?.length) bits.push(`fell back: ${t.rungFallback.join(', ')}`);
+  // v4: what the gods were forbidden to touch — the threat ledger's pieces
+  // and squares plus every forced win's net (tactics.mjs).
+  if (t.protected) {
+    const pr = t.protected;
+    const wins = pr.wins ? `wins w${pr.wins.white}/b${pr.wins.black}` : '';
+    bits.push(`protected ${pr.pieces} piece${pr.pieces === 1 ? '' : 's'} / ${pr.squares} sq · ${wins}${pr.truncated ? ' (search cut)' : ''}`);
+  }
 
   const c = t.census;
   if (c?.displacement) {
@@ -2114,6 +2128,9 @@ window.__DCK = {
         pQuake: dir.pQuake(ply),
         pressure: dir.pressure(ply),
         meter: dir.meter.value,
+        heat: dir.meter.heat,
+        tedium: dir.meter.t,
+        threats: dir.lastThreats ?? [],
         staleness: dir.lastStaleness?.staleness ?? null,
         rungWeights: dir.rungWeights(ply),
         crumbleForced: dir.debt >= dir.debtCap,

@@ -15,6 +15,8 @@ import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { captureLoss } from './threat.mjs';
+import { threatLedger, gridOf, forcedWins, winInOne, newThreats } from './tactics.mjs';
+import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
 import { BoardUI } from './board-ui.mjs';
@@ -583,15 +585,17 @@ async function main() {
     if (applied.rampPlies !== 8 || 'bogus' in applied) throw new Error(`tune misapplied: ${JSON.stringify(applied)}`);
     d.meter.value = 8;
     if (d.pQuake(20) !== 1) throw new Error('tuned rampPlies not reflected in pQuake');
-    // The ladder escalates: crumble weight is zero at low pressure and the
-    // top rungs only open up as the meter climbs.
-    d.meter.value = 0;
+    // The ladder escalates with TEDIUM (v4 — how long the board has been
+    // dead; v3 keyed it to pressure, which a discharging meter rarely
+    // reaches): crumble weight is zero on a live board and the top rungs
+    // only open up as tedium climbs.
+    d.meter.cold = [false, false, false, false]; // every recent ply an event: live
     const lo = d.rungWeights(20);
-    if (lo.crumble !== 0 || lo.displace !== 0) throw new Error('low pressure must not reach the destructive rungs');
+    if (lo.crumble !== 0 || lo.displace !== 0) throw new Error('a live board must not reach the destructive rungs');
     if (!(lo.weaken > 0)) throw new Error('weaken must always be on the menu');
-    d.meter.value = 8; // full ramp after the tune above → pressure 1
+    d.meter.cold = [true, true, true, true]; // nothing irreversible for the whole window: dead
     const hi = d.rungWeights(20);
-    if (!(hi.crumble > 0) || !(hi.displace > lo.displace)) throw new Error('high pressure must open the destructive rungs');
+    if (!(hi.crumble > 0) || !(hi.displace > lo.displace)) throw new Error('a dead board must open the destructive rungs');
     const f = d.forecast(20);
     if (!(f.nextQuake > 20)) throw new Error(`implausible forecast ${JSON.stringify(f)}`);
     return `tune + getters consistent; ladder escalates; forecast ${JSON.stringify(f)}`;
@@ -748,6 +752,194 @@ async function main() {
     });
     if (!quakes) throw new Error('fixture produced no quakes — check the config');
     return `${dirTraces.length} traces, ${quakes} quakes, outcomes+paths consistent`;
+  });
+
+  // --- THE GODS v4 (designer 2026-09-05): memory, heat, protection --------
+  // Every check here is a measured v3 defect turned into an invariant: the
+  // meter banked debt past its ramp and a quake never spent it; a quake
+  // touched the same square twice; the gods un-mated forced wins (a third of
+  // the quakes that fired onto one, on the v3 corpora); and building an
+  // attack read as boredom because only fifty-move events were "forcing".
+
+  await check('v4 tactics: the ledger reads hang / fork / pin / skewer', () => {
+    const L = (fen) => threatLedger(gridOf(fen, 8, 8), 8, 8);
+    const fork = L('8/8/1q3r2/3N4/8/8/8/4K2k w - - 0 1');
+    for (const k of ['hang:b6', 'hang:f6', 'fork:d5']) if (!fork.white.keys.has(k)) throw new Error(`fork fixture lacks ${k}`);
+    for (const sq of ['d5', 'b6', 'f6']) if (!fork.white.pieces.has(sq)) throw new Error(`fork fixture does not protect ${sq}`);
+    const pin = L('r3k3/8/2n5/1B6/8/8/8/4K3 w - - 0 1');
+    if (!pin.white.keys.has('pin:c6')) throw new Error('pin fixture lacks pin:c6');
+    if (!pin.white.squares.has('d7') || !pin.white.pieces.has('e8')) throw new Error('pin fixture: ray square d7 / king e8 not protected');
+    const skewer = L('8/8/8/R3k2r/8/8/8/4K3 w - - 0 1');
+    if (!skewer.white.keys.has('skewer:e5')) throw new Error('skewer fixture lacks skewer:e5');
+    if (!skewer.white.pieces.has('h5')) throw new Error('skewer fixture: the piece behind is not protected');
+    const quiet = L('4k3/pppppppp/8/8/8/8/PPPPPPPP/4K3 w - - 0 1');
+    if (quiet.white.keys.size || quiet.black.keys.size) throw new Error('a quiet opening reads as threats');
+    // A new threat is the difference between two ledgers, for the MOVER only.
+    const before = L('4k3/8/8/8/8/8/8/R3K3 w - - 0 1');
+    const rookLift = L('4k3/8/8/8/8/8/8/4K2R b - - 0 1'); // Ra1-h1: nothing new
+    const attack = L('R3k3/8/8/8/8/8/8/4K3 b - - 0 1'); // Ra8+: the king is hit
+    if (newThreats(before, rookLift, 'white').length) throw new Error('an idle rook lift counted as a threat');
+    if (!newThreats(before, attack, 'white').length) throw new Error('Ra8+ created no threat key');
+    return 'hang/fork/pin/skewer keys, pieces and ray squares; new-threat diff is mover-only';
+  });
+
+  await check('v4 meter: ceiling at the ramp, discharge on a quake, heat slows the fill', () => {
+    const quiet = { capture: false, check: false, pawnAdvance: false, promotion: false, threat: false };
+    const hot = { ...quiet, capture: true };
+    const m = new RestlessnessMeter({ rampPlies: 10, sate: 3, stalenessFloor: 1, stalenessGain: 0, heatWindow: 4, heatGain: 1 });
+    for (let i = 0; i < 40; i++) m.observe(quiet, 1);
+    if (m.value !== 10) throw new Error(`meter overshot the ramp: ${m.value}`);
+    m.observe(hot, 1);
+    if (m.value !== 7) throw new Error(`one hot ply did not refund sate: ${m.value}`);
+    if (m.discharge() !== 0) throw new Error('a quake did not discharge the meter');
+    // A hot record fills slowly: 4 hot plies then a quiet one adds ~nothing;
+    // a cold record fills at the full rate.
+    const c = new RestlessnessMeter({ rampPlies: 10, sate: 3, stalenessFloor: 1, stalenessGain: 0, heatWindow: 4, heatGain: 1 });
+    for (let i = 0; i < 4; i++) c.observe(hot, 1);
+    if (c.heat !== 1) throw new Error(`heat after 4 hot plies should be 1, got ${c.heat}`);
+    const before = c.value;
+    c.observe(quiet, 1);
+    if (c.value - before > 1e-9) throw new Error(`a quiet ply on a fully hot record still filled (${c.value - before})`);
+    const cold = new RestlessnessMeter({ rampPlies: 10, sate: 3, stalenessFloor: 1, stalenessGain: 0, heatWindow: 4, heatGain: 1 });
+    cold.observe(quiet, 1);
+    if (Math.abs(cold.value - 1) > 1e-9) throw new Error(`a quiet ply on a cold record should fill 1, got ${cold.value}`);
+    // A new threat or a CHECK heats but does not sate: the meter neither
+    // fills nor refunds on such a ply, and the record reads it as hot. A
+    // repeated position is cold whatever the move was.
+    const t = new RestlessnessMeter({ rampPlies: 10, sate: 3, heatWindow: 4 });
+    t.value = 5;
+    t.observe({ ...quiet, threat: true }, 1);
+    t.observe({ ...quiet, check: true }, 1);
+    if (t.value !== 5) throw new Error(`a threat or check ply must leave the meter alone, got ${t.value}`);
+    if (t.heat !== 1) throw new Error('threat and check plies must read as hot');
+    const rep = new RestlessnessMeter({ rampPlies: 20, sate: 3, repBonus: 2, stalenessFloor: 1, stalenessGain: 0, heatGain: 0 });
+    rep.value = 5;
+    rep.observe({ ...hot, repetition: true }, 1);
+    if (rep.value !== 8 || rep.window.at(-1) !== false) throw new Error(`a repeated position must be cold, capture or not (got ${rep.value})`);
+    // relief 0 is v3's behaviour (never discharged) — the A/B control.
+    const v3 = new RestlessnessMeter({ rampPlies: 10, relief: 0 });
+    v3.value = 6;
+    if (v3.discharge() !== 6) throw new Error('relief 0 must leave the meter alone');
+    // The backstop floor counts plies since the LAST QUAKE (wave 6 games run
+    // ~200 plies; a floor from ply 0 fired half of calm's quakes there).
+    const fl = new RestlessnessMeter({ floorOnsetPly: 100, floorRampPlies: 100 });
+    if (fl.floor(150) !== 0.5) throw new Error(`floor from ply 0: expected 0.5 at p150, got ${fl.floor(150)}`);
+    fl.discharge(140);
+    if (fl.floor(150) !== 0) throw new Error('a quake at p140 must restart the backstop');
+    if (fl.floor(340) !== 1) throw new Error('the backstop must still reach 1 — the guarantee holds from the last quake');
+    // Tedium is the cold share of the recent record — never discharged,
+    // never sated, blind to threats — the ladder's clock.
+    const td = new RestlessnessMeter({ rampPlies: 10, tediumPlies: 10, stalenessFloor: 1, stalenessGain: 0 });
+    for (let i = 0; i < 20; i++) td.observe(quiet, 1);
+    if (td.value !== 10 || td.t !== 1) throw new Error(`meter/tedium after 20 quiet plies: ${td.value}/${td.t}`);
+    td.discharge(20);
+    if (td.value !== 0 || td.t !== 1) throw new Error('a quake must discharge the meter and leave tedium alone');
+    for (let i = 0; i < 5; i++) td.observe(hot, 1);
+    if (Math.abs(td.t - 0.5) > 1e-9) throw new Error(`five events in a ten-ply window should read 0.5, got ${td.t}`);
+    td.observe({ ...quiet, threat: true }, 1);
+    if (Math.abs(td.t - 0.5) > 1e-9) throw new Error('a threat is not progress: tedium must not fall on it');
+    // The dead-board backstop: on after a full dead window plus a cold
+    // streak, gone the ply something irreversible happens.
+    const db = new RestlessnessMeter({ tediumPlies: 10, tediumDeadAt: 0.8, coldStreak: 3, tediumFloor: 0.4 });
+    for (let i = 0; i < 9; i++) db.observe(quiet, 1);
+    if (db.deadFloor() !== 0) throw new Error('the dead floor must wait for a full window');
+    db.observe(quiet, 1);
+    if (db.deadFloor() !== 0.4) throw new Error(`a dead window + streak must raise the floor, got ${db.deadFloor()}`);
+    db.observe(hot, 1);
+    if (db.deadFloor() !== 0) throw new Error('one event must drop the dead floor');
+    if (Math.abs(db.t - 0.9) > 1e-9) throw new Error(`tedium after one event in ten should be 0.9, got ${db.t}`);
+    for (let i = 0; i < 3; i++) db.observe(quiet, 1);
+    if (db.deadFloor() !== 0.4) throw new Error('the streak must rebuild the dead floor');
+    return 'ceiling, sate, discharge, heat-scaled fill, threat = hot, relief 0 = v3, floor counts from the last quake, tedium undischarged';
+  });
+
+  await check('v4: nothing is touched twice in one quake, and the quake spends the meter', () => {
+    // The replay fixture again, with a wide budget so several actions land
+    // per quake — every square edited or vacated and every piece moved must
+    // be unique within the quake, and the meter must read 0 afterwards.
+    let quakes = 0;
+    let multi = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const d = new Director({ ...dirCfg, extraActions: 3, seed });
+      let fen = dirFen;
+      for (let ply = 1; ply <= 24; ply++) {
+        d.observePly(ffish, dirVariant, fen, 5, 6, QUIET_PLY);
+        if (d.meter.value > d.meter.rampPlies + 1e-9) throw new Error(`meter above the ramp at ply ${ply}`);
+        const q = d.quake(ffish, dirVariant, fen, 5, 6, ply);
+        if (!q) continue;
+        quakes++;
+        const touched = [];
+        const movers = [];
+        for (const x of q.displacements) {
+          if (movers.includes(x.from)) throw new Error(`seed ${seed} p${ply}: a piece moved twice (${x.piece} ${x.from}→${x.to})`);
+          movers.push(x.to);
+          touched.push(x.from, x.to);
+        }
+        for (const t of q.terrain) touched.push(t.square);
+        if (q.crumble) touched.push(q.crumble.square);
+        if (new Set(touched).size !== touched.length) throw new Error(`seed ${seed} p${ply}: a square was touched twice (${touched.join(' ')})`);
+        if (touched.length > 1) multi++;
+        if (d.lastTrace.meterAfter !== 0) throw new Error(`seed ${seed} p${ply}: meter after the quake is ${d.lastTrace.meterAfter}, not 0`);
+        if (q.endsGame) break;
+        fen = q.postFen;
+      }
+    }
+    if (!multi) throw new Error('fixture produced no multi-action quake — the check is vacuous');
+    return `${quakes} quakes (${multi} multi-action) over 4 seeds: no double-touch, meter discharged`;
+  });
+
+  await check('v4: a forced win survives the gods — mate-in-1, the trap set, the strip', () => {
+    // The designer's treadmill, as an invariant: whichever side has a win on
+    // the move must still have it on the board the gods hand back. The
+    // unprotected control shows what v3 did to the same positions.
+    const v8 = catalogVariantName(8, 8);
+    const cases = [
+      ['mate-in-1', '6k1/5ppp/8/8/8/2N5/1P4P1/R5K1 w - - 0 1'],
+      ['trap set', '6k1/5ppp/8/8/8/2N5/1P4P1/R5K1 b - - 0 1'],
+      ['mate-in-2 K+R', '6k1/7p/5K2/8/3n4/8/8/R7 w - - 0 1'],
+      ['strip-in-1', '4k3/8/8/8/8/8/R2n4/4K3 w - - 0 1'],
+    ];
+    const flip = (fen) => fen.replace(/ ([wb]) /, (m, t) => (t === 'w' ? ' b ' : ' w '));
+    const winsOn = (fen) => {
+      let n = 0;
+      for (const f of [fen, flip(fen)]) {
+        if (ffish.validateFen(f, v8) !== 1) continue;
+        const b = new ffish.Board(v8, f);
+        n += winInOne(b).wins.length;
+        b.delete();
+      }
+      return n;
+    };
+    let fired = 0;
+    let unmatedControl = 0;
+    let controlFired = 0;
+    for (const [label, fen] of cases) {
+      if (ffish.validateFen(fen, v8) !== 1) throw new Error(`${label}: fixture rejected`);
+      if (!winsOn(fen)) throw new Error(`${label}: fixture has no win-in-1 to protect`);
+      const fw = forcedWins(ffish, v8, fen, 8, 8);
+      if (!fw.wins.white) throw new Error(`${label}: forcedWins found no white win`);
+      for (let seed = 1; seed <= 6; seed++) {
+        for (const protect of [true, seed <= 2 ? false : null]) {
+          if (protect === null) continue;
+          const d = new Director({ onsetPly: 0, rampPlies: 1, extraActions: 3, seed, protect });
+          d.observePly(ffish, v8, fen, 8, 8, QUIET_PLY);
+          d.meter.value = 1; // pinned: the roll always passes
+          const q = d.quake(ffish, v8, fen, 8, 8, 5);
+          if (!q) continue;
+          const kept = winsOn(q.postFen) > 0;
+          if (protect) {
+            fired++;
+            if (!kept) throw new Error(`${label} seed ${seed}: the gods un-mated it — ${JSON.stringify(d.lastTrace.chosen)}`);
+            if (!d.lastTrace.protected || !(d.lastTrace.protected.pieces > 0)) throw new Error(`${label}: trace carries no protected census`);
+          } else {
+            controlFired++;
+            if (!kept) unmatedControl++;
+          }
+        }
+      }
+    }
+    if (!fired) throw new Error('no protected quake fired — the check is vacuous');
+    return `${fired} protected quakes kept the win; unprotected control un-mated ${unmatedControl}/${controlFired}`;
   });
 
   // --- Game-end protocol (rule 4): numberLegalMoves()===0, mover loses ---

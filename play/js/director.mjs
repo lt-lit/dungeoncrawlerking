@@ -80,6 +80,41 @@
 // displacement handing a game away is the SEE landing guard (rule 13), which
 // is untouched and now applies across the whole action budget.
 //
+// v4 (designer 2026-09-05) — THE GODS GET A MEMORY. Three defects of v3,
+// each measured on the corpora before the change:
+//  - No cooldown: a quake never touched the meter, so at full pressure the
+//    gods fired every ply (wrathful's median gap was ONE ply, 62% of its
+//    quakes on the very next ply; calm 21%). And the meter had no ceiling,
+//    so a quiet stretch banked a debt no realistic aggression could repay.
+//    Now a quake DISCHARGES the meter (meter.relief) and the meter is capped
+//    at the ramp. No hard cooldown — "too predictable" — the refill is the
+//    board's staleness, at random.
+//  - No memory within a quake: the budget re-enumerated on the post-edit
+//    board with only the landed squares carried forward, so one quake moved
+//    a piece twice, stepped a second piece into the square the first had
+//    just left, cracked a wall and smashed it in the same breath (deleting
+//    the telegraph the ladder was built on), and opened a hole where a crate
+//    stood a second ago — a third of calm's multi-action quakes, more than
+//    half of wrathful's. Now a TOUCHED set (every square edited or vacated,
+//    every piece moved) is threaded through the rungs: nothing is touched
+//    twice in one quake. No cross-quake memory (designer: "just stop
+//    fucking with the same stuff multiple times in one turn").
+//  - No tactical vocabulary: the guards asked only whether an edit CREATES a
+//    hanging piece, never whether it RELIEVES one, and the second
+//    displacement tier hunted immobilized pieces — which is what a mating
+//    net is. A third of the quakes that fired onto a forced mate destroyed
+//    or delayed it. Now tactics.mjs reads a THREAT LEDGER every ply (pieces
+//    won by SEE, pins, skewers, forks, mate threats — both sides) and, on
+//    quake plies, every FORCED WIN (win-in-1 exact for either side, mate-in-2
+//    bounded) with its net; the union is a PROTECTED SET and three vetoes
+//    hold on every rung: no displacement of a protected piece, no landing
+//    on a protected square, no terrain edit or hole on a protected square.
+//    Everything else stays fair game — the gods still act, they just cannot
+//    un-mate. Symmetric: colour never enters.
+//  Plus HEAT (meter.mjs): a ply that creates a new threat is hot, and a hot
+//  record scales the fill rate down — so aggression keeps the gods asleep and
+//  the meter stops rewarding pawn shuffles over building an attack.
+//
 // Retained from v2 unchanged: exhaustive candidate enumeration (sampling
 // starves on late walled boards), the SEE landing guard on displacements
 // plus the editExposes exposure guard on every line-editing rung
@@ -101,6 +136,7 @@ import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
 import { landingIsSafe, editExposes } from './threat.mjs';
+import { threatLedger, newThreats, winInOne, protectedSet } from './tactics.mjs';
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
 
@@ -190,6 +226,20 @@ function stuckCount(ffish, variant, fen) {
 const KING_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 /**
+ * v4 exclusion for one candidate: 'touched' if this quake already edited or
+ * vacated either square, 'protected' if a threat or a forced win runs
+ * through it (tactics.mjs), else null. `mover` is the square whose occupant
+ * would move (for a terrain edit, the edited square itself); `target` the
+ * square that changes. Pure set lookups — runs before every ffish probe.
+ */
+function blockedReason(blocked, mover, target) {
+  if (!blocked) return null;
+  if (blocked.touched.has(mover) || blocked.touched.has(target)) return 'touched';
+  if (blocked.pieces.has(mover) || blocked.squares.has(mover) || blocked.squares.has(target)) return 'protected';
+  return null;
+}
+
+/**
  * Every legal crumble candidate, enumerated exhaustively and bucketed:
  *   neutral  — passes the §4.5 filter; play continues.
  *   terminal — rejected ONLY as instant stalemate/checkmate: collapsing it
@@ -202,7 +252,7 @@ const KING_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], 
  *              (walls AND furniture — §4.6 interim) and offboard squares
  *              stay silent — they were never candidates.
  */
-export function crumbleCandidates(ffish, variant, fen, files, ranks) {
+export function crumbleCandidates(ffish, variant, fen, files, ranks, blocked = null) {
   const neutral = [];
   const terminal = [];
   const rejected = [];
@@ -226,6 +276,14 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks) {
       // neither arises. `pieceLost` stays in the record schema, always
       // null, so exports and the UI dissolve path need no change.
       if (occ) continue;
+      // v4: never twice in one quake, never through a threat or a net.
+      {
+        const block = blockedReason(blocked, sq, sq);
+        if (block) {
+          rejected.push({ sq, reason: block });
+          continue;
+        }
+      }
       // "No new winning capture" (editExposes): a hole SEVERS lines — a
       // defender behind this square stops defending through it, which can
       // hang a piece just as surely as opening a line does. Grid-only,
@@ -287,7 +345,7 @@ export function terrainCensus(fen, files, ranks, holes) {
  * no line opens, no check can be discovered and no side can be stalemated;
  * the edit only ADDS a capture option, symmetrically, to both armies.
  */
-export function weakenCandidates(fen, files, ranks, holes) {
+export function weakenCandidates(fen, files, ranks, holes, blocked = null) {
   const g = fenGrid(fen, files, ranks);
   const lockedFiles = new Set(lockedPawns(fen, files, ranks).map((p) => p.f));
   const out = [];
@@ -296,6 +354,7 @@ export function weakenCandidates(fen, files, ranks, holes) {
       if (g[r][f] !== WALL) continue;
       const sq = SQ(f, r);
       if (holes.has(sq)) continue;
+      if (blockedReason(blocked, sq, sq)) continue; // v4: touched this quake, or inside a net
       let open = 0;
       for (const [df, dr] of ORTHO) {
         const nf = f + df;
@@ -323,7 +382,7 @@ export function weakenCandidates(fen, files, ranks, holes) {
  * Costs two ffish Boards per crate, which is why the caller only enumerates
  * this rung once the roll has already chosen it (rule 14).
  */
-export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = null) {
+export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = null, blocked = null) {
   const ok = [];
   const rejected = [];
   const g = fenGrid(fen, files, ranks);
@@ -333,6 +392,16 @@ export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = 
       if (g[r][f] !== FURNITURE) continue;
       const sq = SQ(f, r);
       const veto = (reason) => rejected.push({ sq, reason });
+      // v4: never twice in one quake, never a crate a net or a threat runs
+      // through (a crate on a mated king's flight square, smashed, is an
+      // escape).
+      {
+        const block = blockedReason(blocked, sq, sq);
+        if (block) {
+          veto(block);
+          continue;
+        }
+      }
       // "No new winning capture" (threat.mjs editExposes — the promoted
       // old-1.3 rule): opening this line must not turn any standing piece
       // SEE-safe → SEE-losing, either side. Live play produced exactly this
@@ -411,7 +480,7 @@ export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = 
  * per side is the Phase 1.3 starvation-risk metric: it counts what a stricter
  * symmetric rule would additionally have to survive.
  */
-export function displacementCandidates(ffish, variant, fen, files, ranks) {
+export function displacementCandidates(ffish, variant, fen, files, ranks, blocked = null) {
   const A = [];
   const B = [];
   const C = [];
@@ -436,6 +505,17 @@ export function displacementCandidates(ffish, variant, fen, files, ranks) {
         if (g0[nr][nf] !== null) continue;
         const to = SQ(nf, nr);
         const veto = (reason) => rejected.push({ from, to, piece: occ, white: occ === occ.toUpperCase(), reason });
+        // v4: a piece moved this quake, or a square edited or vacated this
+        // quake, is off limits; so is every piece a threat or a forced win
+        // depends on, and every square one runs through (the gods do not
+        // un-fork, un-pin or un-mate).
+        {
+          const block = blockedReason(blocked, from, to);
+          if (block) {
+            veto(block);
+            continue;
+          }
+        }
         // Landing safety (Phase 1.1 stopgap) + the promoted "no new winning
         // capture" rule (editExposes): the gods hand out no free material,
         // neither by where the piece LANDS nor by what its move UNCOVERS —
@@ -577,6 +657,17 @@ export const DIRECTOR_DEFAULTS = {
   //                  The budget is what makes the gods unreadable: neither the
   //                  kind nor the COUNT of what happens is a signature.
 
+  // --- v4: protection (designer 2026-09-05) --------------------------------
+  protect: true, // the threat ledger + every forced win's net are untouchable
+  threatMemory: 100000, // a threat key the mover already held within this many plies is not NEW
+  //                       again — longer than any duel, so a threat is news ONCE per side per
+  //                       game. A 16-ply memory left 25–39% of the plies in 600-ply shuffles
+  //                       reading as hot (a slow cycle of threats re-created every 20 plies),
+  //                       which held both meters down and stopped the hole clock. Finite and
+  //                       JSON-safe on purpose (Infinity would replay as 0 from a record).
+  winDepth: 2, // forced-win search: 1 = win-in-1 only (exact), 2 = + bounded mate-in-2
+  winNodes: 12000, // that search's node budget — pushes, never a clock (replay-safe)
+
   // --- the ladder: pressure thresholds and biases -------------------------
   // Each rung's weight is `bias × max(0, pressure − at)`, except weaken which
   // is always available and fades as pressure climbs. The rung is then a
@@ -636,9 +727,17 @@ export const DIRECTOR_DEFAULTS = {
  * and it anchors the scale.
  */
 export const GOD_PRESETS = {
-  calm: { onsetPly: 30, rampPlies: 44, sate: 6, debtCap: 14, extraActions: 1, stalenessFloor: 0.35, stalenessGain: 0.55, floorOnsetPly: 160, floorRampPlies: 140 },
-  restless: { onsetPly: 12, rampPlies: 20, sate: 4, debtCap: 10, extraActions: 2, stalenessFloor: 0.45, stalenessGain: 0.85 },
-  wrathful: { onsetPly: 4, rampPlies: 9, sate: 3, debtCap: 6, extraActions: 3 },
+  // v4 ramps (2026-09-05): a discharging, heat-scaled meter fills far
+  // slower than v3's, so the ramps came down. Measured on the wave 6 bed
+  // (results/godlab/v4-findings.md): 4.2 / 7.8 / 10.7 quakes per 100 plies
+  // (v3 on the same bed: 13.8 / 17.2 / 32.1, half of it the ply floor),
+  // next-ply quakes 10% / 14% / 14% (53 / 32 / 59) and every one of those
+  // on a record with nothing irreversible for coldStreak plies — the
+  // dead-board backstop (tediumFloor) by construction. tediumPlies is the
+  // window tedium reads.
+  calm: { onsetPly: 30, rampPlies: 26, sate: 6, debtCap: 14, extraActions: 1, stalenessFloor: 0.35, stalenessGain: 0.55, floorOnsetPly: 160, floorRampPlies: 140, tediumPlies: 60, tediumFloor: 0.25, coldStreak: 8 },
+  restless: { onsetPly: 12, rampPlies: 14, sate: 4, debtCap: 10, extraActions: 2, stalenessFloor: 0.45, stalenessGain: 0.85, tediumPlies: 40, tediumFloor: 0.35, coldStreak: 6 },
+  wrathful: { onsetPly: 4, rampPlies: 6, sate: 3, debtCap: 6, extraActions: 3, tediumPlies: 24, tediumFloor: 0.5, coldStreak: 4 },
   off: { onsetPly: Infinity, rampPlies: 16, sate: 4, debtCap: 10, extraActions: 2 },
 };
 
@@ -672,6 +771,10 @@ export class Director {
     this.conserveTerrain = c.conserveTerrain !== false;
     this.conserveAt = c.conserveAt;
     this.conserveFloor = c.conserveFloor;
+    this.protect = c.protect !== false;
+    this.threatMemory = Math.max(0, c.threatMemory);
+    this.winDepth = Math.max(1, Math.min(2, c.winDepth));
+    this.winNodes = Math.max(100, c.winNodes);
     this.seed = c.seed ?? 1; // kept for the export — a trace without its seed cannot be replayed
     this.rng = mulberry32(childSeed(this.seed, 'director'));
     this.debt = 0; // quakes since the last crumble (ALL rungs count — the
@@ -684,12 +787,24 @@ export class Director {
     // are accepted FLAT as well as nested, so a preset and a live dial name
     // the same thing (`rampPlies`, `sate`, …) — the nested form wins.
     const flatMeter = {};
-    for (const k of ['sate', 'repBonus', 'rampPlies', 'stalenessFloor', 'stalenessGain', 'floorOnsetPly', 'floorRampPlies']) {
+    for (const k of ['sate', 'repBonus', 'rampPlies', 'stalenessFloor', 'stalenessGain', 'floorOnsetPly', 'floorRampPlies', 'heatWindow', 'heatGain', 'relief', 'tediumPlies', 'tediumDeadAt', 'coldStreak', 'tediumFloor']) {
       if (typeof c[k] === 'number' && !Number.isNaN(c[k])) flatMeter[k] = c[k];
     }
     this.meter = new RestlessnessMeter({ ...flatMeter, ...(c.meter ?? {}) });
     this.stalenessConfig = c.staleness ?? {};
     this.lastStaleness = null; // full stalenessOf() record, for the overlay
+    // v4: the threat ledger of the last observed position (tactics.mjs) —
+    // what each side is threatening. observePly diffs the mover's keys
+    // against it to decide whether the ply was hot; a quake re-bases it on
+    // the board the gods left. Replaced, never mutated, so an undo snapshot
+    // can hold the reference (duel.mjs).
+    this.ledger = null;
+    this.lastThreats = []; // the mover's new threat keys on the last ply
+    // v4 threat memory: key → the last ply each side held it. A key seen
+    // within threatMemory plies is not new again, so shuffling a piece
+    // between two threats reads as the shuffle it is.
+    this.threatSeen = { white: new Map(), black: new Map() };
+    this.plyObserved = 0; // observePly calls so far — the memory's clock
     // Holes: squares a crumble created. FSF sees the same '*' as an authored
     // wall; the gods must not, because a hole is permanent (never weakened,
     // never reopened) and that permanence is the termination guarantee. Not
@@ -725,6 +840,10 @@ export class Director {
       conserveTerrain: this.conserveTerrain,
       conserveAt: this.conserveAt,
       conserveFloor: this.conserveFloor,
+      protect: this.protect,
+      threatMemory: this.threatMemory,
+      winDepth: this.winDepth,
+      winNodes: this.winNodes,
       meter: this.meter.config0,
       staleness: { ...this.stalenessConfig },
     });
@@ -738,15 +857,70 @@ export class Director {
    */
   observePly(ffish, variant, fen, files, ranks, ev) {
     let stale = { staleness: 0, fun: 1 };
+    let ledger = null;
     if (ffish.validateFen(fen, variant) === 1) {
       const b = new ffish.Board(variant, fen);
       const legal = b.legalMoves();
+      const grid = fenGrid(fen, files, ranks);
+      stale = stalenessOf(grid, legal, files, ranks, this.stalenessConfig);
+      ledger = this.#ledgerOf(ffish, variant, fen, files, ranks, b, grid);
       b.delete();
-      stale = stalenessOf(fenGrid(fen, files, ranks), legal, files, ranks, this.stalenessConfig);
     }
     this.lastStaleness = stale;
-    const meter = this.meter.observe(ev, stale.staleness);
-    return { meter, staleness: stale };
+    // v4: a ply that CREATES a threat is hot. The mover is the side not to
+    // move in `fen`; its new keys are whatever it holds now that it did not
+    // hold on the previous position. No previous ledger (the first ply, or
+    // an unreadable position) means nothing is new — the deal's opening
+    // threats are nobody's doing.
+    const mover = fen.split(' ')[1] === 'w' ? 'black' : 'white';
+    const ply = ++this.plyObserved;
+    let created = ledger && this.ledger ? newThreats(this.ledger, ledger, mover) : [];
+    // The memory: a key the mover held within threatMemory plies is a
+    // repeat, not a creation. Then every key either side holds now is
+    // stamped with this ply.
+    if (ledger) {
+      const seen = this.threatSeen[mover];
+      created = created.filter((k) => !seen.has(k) || ply - seen.get(k) > this.threatMemory);
+      for (const side of ['white', 'black']) {
+        const m = this.threatSeen[side];
+        for (const k of ledger[side].keys) m.set(k, ply);
+        if (m.size > 256) for (const [k, p] of m) if (ply - p > this.threatMemory) m.delete(k); // bound the map
+      }
+    }
+    this.lastThreats = created;
+    this.ledger = ledger;
+    const meter = this.meter.observe({ ...ev, threat: created.length > 0 }, stale.staleness);
+    return { meter, staleness: stale, heat: this.meter.heat, tedium: this.meter.t, threats: created };
+  }
+
+  /** v4 threat-memory state for the duel's undo stack (duel.mjs). */
+  snapshotThreats() {
+    return { ply: this.plyObserved, white: [...this.threatSeen.white], black: [...this.threatSeen.black] };
+  }
+
+  restoreThreats(s) {
+    this.plyObserved = s?.ply ?? 0;
+    this.threatSeen = { white: new Map(s?.white ?? []), black: new Map(s?.black ?? []) };
+  }
+
+  /** The threat ledger of `fen` (tactics.mjs) plus a `win1` key for each
+   *  side that could end the game on the move: the side to move on the board
+   *  the caller holds, the other side on a turn-flipped copy (one extra
+   *  Board; skipped when the mover is in check, where the flip is illegal). */
+  #ledgerOf(ffish, variant, fen, files, ranks, board, grid) {
+    const ledger = threatLedger(grid, files, ranks);
+    const toMove = fen.split(' ')[1] === 'w' ? 'white' : 'black';
+    const other = toMove === 'white' ? 'black' : 'white';
+    if (winInOne(board).wins.length) ledger[toMove].keys.add('win1');
+    if (!board.isCheck()) {
+      const flipped = flipTurn(fen);
+      if (ffish.validateFen(flipped, variant) === 1) {
+        const fb = new ffish.Board(variant, flipped);
+        if (winInOne(fb).wins.length) ledger[other].keys.add('win1');
+        fb.delete();
+      }
+    }
+    return ledger;
   }
 
   /** Active trace collector; set only for the duration of a quake() call. */
@@ -788,6 +962,16 @@ export class Director {
       repBonus: (v) => (this.meter.repBonus = v),
       floorOnsetPly: (v) => (this.meter.floorOnsetPly = v),
       floorRampPlies: (v) => (this.meter.floorRampPlies = Math.max(1, v)),
+      heatWindow: (v) => (this.meter.heatWindow = Math.max(1, Math.round(v))),
+      heatGain: (v) => (this.meter.heatGain = Math.min(1, Math.max(0, v))),
+      relief: (v) => (this.meter.relief = Math.min(1, Math.max(0, v))),
+      tediumPlies: (v) => (this.meter.tediumPlies = Math.max(1, v)),
+      tediumDeadAt: (v) => (this.meter.tediumDeadAt = Math.min(1, Math.max(0, v))),
+      coldStreak: (v) => (this.meter.coldStreak = Math.max(0, Math.round(v))),
+      tediumFloor: (v) => (this.meter.tediumFloor = Math.min(1, Math.max(0, v))),
+      threatMemory: (v) => (this.threatMemory = Math.max(0, v)),
+      winDepth: (v) => (this.winDepth = Math.max(1, Math.min(2, v))),
+      winNodes: (v) => (this.winNodes = Math.max(100, v)),
     };
     const read = {
       rampPlies: () => this.meter.rampPlies,
@@ -795,6 +979,13 @@ export class Director {
       repBonus: () => this.meter.repBonus,
       floorOnsetPly: () => this.meter.floorOnsetPly,
       floorRampPlies: () => this.meter.floorRampPlies,
+      heatWindow: () => this.meter.heatWindow,
+      heatGain: () => this.meter.heatGain,
+      relief: () => this.meter.relief,
+      tediumPlies: () => this.meter.tediumPlies,
+      tediumDeadAt: () => this.meter.tediumDeadAt,
+      coldStreak: () => this.meter.coldStreak,
+      tediumFloor: () => this.meter.tediumFloor,
     };
     for (const [k, v] of Object.entries(partial ?? {})) {
       if (!(k in set) || typeof v !== 'number' || Number.isNaN(v)) continue;
@@ -853,14 +1044,16 @@ export class Director {
   }
 
   /**
-   * Rung weights at `pressure` — the ladder, as a pure function. Weaken is
-   * always on the menu and fades as pressure climbs; every other rung is
-   * `bias × (pressure − threshold)`, clamped at zero. `terrain` (from
+   * Rung weights — the ladder, as a pure function of TEDIUM (v4: how long
+   * the board has been dead — meter.mjs `t`; v3 keyed this to pressure,
+   * which a discharging meter rarely reaches). Weaken is always on the
+   * menu and fades as tedium climbs; every other rung is
+   * `bias × (tedium − threshold)`, clamped at zero. `terrain` (from
    * terrainCensus) zeroes rungs with no material to work on and applies the
-   * crate brake. Pure — no RNG, no ffish.
+   * crate brake. Pure — no RNG, no ffish. `ply` is kept for the call shape.
    */
   rungWeights(ply, terrain = null) {
-    const p = this.pressure(ply);
+    const p = this.meter.t;
     // The conservation brake damps BOTH terrain rungs. Breach is the rung
     // that strips; weaken rides along because a cracked wall is an
     // army-capturable crate — it feeds the same pipeline one step removed.
@@ -1064,11 +1257,18 @@ export class Director {
       favor: this.favor,
       held: this._held,
       meter: r6(this.meter.value),
+      meterAfter: null, // v4: the meter after the quake's discharge (quakes only)
+      heat: r6(this.meter.heat), // v4
+      tedium: r6(this.meter.t), // v4: the ladder's input
+      threats: this.lastThreats.length, // v4: new threat keys the last ply created
       staleness: this.lastStaleness ? r6(this.lastStaleness.staleness) : null,
       terrain,
       p: {
         quake: r6(this.pQuake(ply)),
         pressure: r6(this.pressure(ply)),
+        meterP: r6(this.meter.p()), // v4: the three sources of pressure, so
+        floor: r6(this.meter.floor(ply)), //     the lab can tell which one fired
+        dead: r6(this.meter.deadFloor()), //     (the dead-board backstop)
         crumbleForced: this.debt >= this.debtCap,
       },
       weights: null,
@@ -1077,6 +1277,7 @@ export class Director {
       rolls: [],
       path: [],
       census: null,
+      protected: null, // v4: the protected set's census (quakes only)
       chosen: null,
       outcome: 'quiet',
       fellThrough: false,
@@ -1114,11 +1315,39 @@ export class Director {
     // two quakes at identical restlessness do different amounts, and the top
     // of the range stays reachable instead of needing pressure to hit exactly
     // 1.0 for floor() to round up.
+    // v4: the draws roll against TEDIUM (how dead the board has been), not
+    // the discharging meter — a long-dead board earns a bigger quake, a
+    // board that just went quiet a small one. Favor scales it as before.
+    // The draw opens with the displacement rung — below displaceAt a quake is
+    // one action; a full-window shuffle (tedium ≈ 0.9) nearly always spends
+    // its whole budget.
     let budget = 1;
+    const pBudget = Math.min(1, (Math.max(0, this.meter.t - this.displaceAt) / Math.max(0.05, 1 - this.displaceAt)) * this.favor);
     for (let i = 0; i < this.extraActions; i++) {
-      if (this.#draw(`budget-${i}`, this.pQuake(ply))) budget++;
+      if (this.#draw(`budget-${i}`, pBudget)) budget++;
     }
     trace.budget = budget;
+
+    // --- v4: what this quake may not touch --------------------------------
+    // `touched` grows as the budget is spent (no square edited or vacated
+    // twice, no piece moved twice); `pieces`/`squares` are the protected set
+    // — every threat on the board and every forced win's net, both sides
+    // (tactics.mjs). Computed once, on the board the gods are about to edit.
+    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set() };
+    if (this.protect) {
+      const guard = protectedSet(ffish, variant, fen, files, ranks, { depth: this.winDepth, nodeBudget: this.winNodes });
+      blocked.pieces = guard.pieces;
+      blocked.squares = guard.squares;
+      trace.protected = {
+        pieces: guard.pieces.size,
+        squares: guard.squares.size,
+        threats: guard.threats,
+        wins: guard.wins,
+        lines: guard.lines,
+        nodes: guard.nodes,
+        truncated: guard.truncated,
+      };
+    }
 
     const forced = this.debt >= this.debtCap;
     const displacements = [];
@@ -1159,7 +1388,7 @@ export class Director {
       const order = [rung, ...RUNGS.filter((r) => r !== rung && (r !== 'crumble' || canCrumble))];
       let out = null;
       for (const r of order) {
-        out = this.#applyRung(r, trace, ffish, variant, postFen, files, ranks, landed);
+        out = this.#applyRung(r, trace, ffish, variant, postFen, files, ranks, landed, blocked);
         if (out) {
           if (r !== rung) (trace.rungFallback ??= []).push(`${rung}→${r}`);
           break;
@@ -1177,6 +1406,13 @@ export class Director {
       else if (out.terrain?.kind === 'breach') this.godCrates.delete(out.terrain.square);
       if (out.crumble) crumble = out.crumble;
       if (out.landedOn) landed.push(out.landedOn);
+      // v4: nothing is touched twice in one quake.
+      for (const d of out.displacements) {
+        blocked.touched.add(d.from);
+        blocked.touched.add(d.to);
+      }
+      if (out.terrain) blocked.touched.add(out.terrain.square);
+      if (out.crumble) blocked.touched.add(out.crumble.square);
       postFen = out.postFen;
       spent++;
       if (out.endsGame) {
@@ -1189,6 +1425,15 @@ export class Director {
       trace.path.push('starved');
       trace.outcome = 'starved';
       return null; // nothing legal anywhere — extremely late board; try next ply
+    }
+
+    // v4: the gods spent their restlessness, and the ledger is re-based on
+    // the board they left so the next ply's threats are judged against it.
+    trace.meterAfter = r6(this.meter.discharge(ply));
+    if (!endsGame && ffish.validateFen(postFen, variant) === 1) {
+      const b = new ffish.Board(variant, postFen);
+      this.ledger = this.#ledgerOf(ffish, variant, postFen, files, ranks, b, fenGrid(postFen, files, ranks));
+      b.delete();
     }
 
     trace.chosen = {
@@ -1214,18 +1459,18 @@ export class Director {
   /** Apply one rung on the CURRENT board, or return null if it has nothing.
    *  `landed` carries the squares earlier actions put pieces on, so every rung
    *  can honour rule 13's composite safety rule. */
-  #applyRung(rung, trace, ffish, variant, fen, files, ranks, landed) {
-    if (rung === 'weaken') return this.#weakenLeg(trace, fen, files, ranks);
-    if (rung === 'breach') return this.#breachLeg(trace, ffish, variant, fen, files, ranks, landed);
-    if (rung === 'displace') return this.#displaceLeg(trace, ffish, variant, fen, files, ranks, landed);
-    return this.#crumbleLeg(trace, ffish, variant, fen, files, ranks, landed);
+  #applyRung(rung, trace, ffish, variant, fen, files, ranks, landed, blocked) {
+    if (rung === 'weaken') return this.#weakenLeg(trace, fen, files, ranks, blocked);
+    if (rung === 'breach') return this.#breachLeg(trace, ffish, variant, fen, files, ranks, landed, blocked);
+    if (rung === 'displace') return this.#displaceLeg(trace, ffish, variant, fen, files, ranks, landed, blocked);
+    return this.#crumbleLeg(trace, ffish, variant, fen, files, ranks, landed, blocked);
   }
 
   /** Rung 1 — a solid wall cracks into furniture. Safe by construction: the
    *  square keeps blocking, so no line opens and no check can be discovered;
    *  the edit only adds a capture option, to both armies equally. */
-  #weakenLeg(trace, fen, files, ranks) {
-    const cands = weakenCandidates(fen, files, ranks, this.holes);
+  #weakenLeg(trace, fen, files, ranks, blocked) {
+    const cands = weakenCandidates(fen, files, ranks, this.holes, blocked);
     trace.census.weaken = cands.length;
     if (!cands.length) return null;
     const c = this.#pickByImpact('pick-weaken', cands);
@@ -1245,8 +1490,8 @@ export class Director {
 
   /** Rung 2 — furniture is smashed and the line opens for real. Filtered
    *  like a displacement, because opening a ray can discover a check. */
-  #breachLeg(trace, ffish, variant, fen, files, ranks, landed) {
-    const { ok, rejected } = breachCandidates(ffish, variant, fen, files, ranks, this.godCrates);
+  #breachLeg(trace, ffish, variant, fen, files, ranks, landed, blocked) {
+    const { ok, rejected } = breachCandidates(ffish, variant, fen, files, ranks, this.godCrates, blocked);
     trace.census.breach = { ok: ok.length, rejected: countByReason(rejected) };
     // Opening a ray can expose a square an earlier action landed a piece on,
     // so the composite check applies to this rung too.
@@ -1285,8 +1530,8 @@ export class Director {
    * so displacements arrive alone, in twos, on one side, on both — and the
    * COUNT stops being a signature too.
    */
-  #displaceLeg(trace, ffish, variant, fen, files, ranks, landed) {
-    const tiers = displacementCandidates(ffish, variant, fen, files, ranks);
+  #displaceLeg(trace, ffish, variant, fen, files, ranks, landed, blocked) {
+    const tiers = displacementCandidates(ffish, variant, fen, files, ranks, blocked);
     trace.census.displacement = censusOfTiers(tiers);
     // Every candidate must also leave the squares EARLIER actions landed on
     // still safe — rule 13's composite rule, now across the whole budget.
@@ -1312,8 +1557,8 @@ export class Director {
   /** Rung 4 — the closer. A square becomes a permanent HOLE, recorded in
    *  `this.holes` so the gods never crack it open again; that permanence is
    *  what keeps the duel provably finite. */
-  #crumbleLeg(trace, ffish, variant, fen, files, ranks, landed) {
-    const { neutral, terminal, rejected } = crumbleCandidates(ffish, variant, fen, files, ranks);
+  #crumbleLeg(trace, ffish, variant, fen, files, ranks, landed, blocked) {
+    const { neutral, terminal, rejected } = crumbleCandidates(ffish, variant, fen, files, ranks, blocked);
     trace.census.crumble = { neutral: neutral.length, terminal: terminal.length, rejected: countByReason(rejected) };
     // Every candidate is bare floor by definition now — quakes cannot
     // swallow pieces (see crumbleCandidates).

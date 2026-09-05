@@ -241,7 +241,7 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
   // reads — stalenessOf touches no RNG, so the Director's stream is safe);
   // pressure comes from the Director's own roll trace (onDirectorTrace
   // fires every ply, quake or quiet).
-  const trail = { staleness: [], lockedPawns: [], walls: [], crates: [], captures: [], pressure: [] };
+  const trail = { staleness: [], lockedPawns: [], walls: [], crates: [], captures: [], pressure: [], heat: [], threats: [], tedium: [] };
 
   const duel = new DuelController({
     ffish,
@@ -266,6 +266,9 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
       },
       onDirectorTrace(trace) {
         trail.pressure.push(r3(trace.p?.pressure ?? 0));
+        trail.heat.push(r3(trace.heat ?? 0)); // v4
+        trail.threats.push(trace.threats ?? 0); // v4: new threat keys this ply created
+        trail.tedium.push(r3(trace.tedium ?? 0)); // v4: the ladder's input
       },
       onEngineStall: async () => {
         try {
@@ -346,6 +349,13 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
       displacements: q.displacements.map((d) => `${d.piece}${d.from}>${d.to}`),
       crumble: q.crumble ? { sq: q.crumble.square, pieceLost: q.crumble.pieceLost ?? null } : null,
       endedGame: q.endedGame,
+      meterAfter: q.trace?.meterAfter ?? null, // v4: the discharge
+      pressureMeter: q.trace?.p?.meterP ?? null, // v4: which half of the trigger fired
+      pressureFloor: q.trace?.p?.floor ?? null,
+      pressureDead: q.trace?.p?.dead ?? null, // v4: the dead-board backstop
+      protected: q.trace?.protected // v4: the protected set's census
+        ? { pieces: q.trace.protected.pieces, squares: q.trace.protected.squares, wins: q.trace.protected.wins, nodes: q.trace.protected.nodes, truncated: q.trace.protected.truncated }
+        : null,
       evalBefore: null,
       evalAfter: null,
     };

@@ -106,7 +106,66 @@ original clauses below stand only for that interim and as design record.]`
 - **Reserve slot** (single piece in hand, droppable on own back ranks) is a possible high-tier upgrade, not a core mechanic. `[OPEN]`
 - **Gap math:** the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]` `[UNDER RE-INVESTIGATION 2026-08: molded armies are no longer fixed 2-deep, so gap and formation depth decouple; the proving-grounds lab tests gaps 1–6 and whether the ideal gap scales with army size — designer expects a practical trigger band of 2–5. The lint floor for a legal deal is gap ≥ 1.]`
 
-### 4.5 The Board State Director — Earthquakes `[v3 — THE LADDER, designer 2026-08-31; PROVISIONAL in numbers]`
+### 4.5 The Board State Director — Earthquakes `[v4 — MEMORY, HEAT, PROTECTION, designer 2026-09-05, on v3's ladder; PROVISIONAL in numbers]`
+
+**v4 gave the gods a memory `[designer 2026-09-05]`.** v3's ladder and its two
+meters stand; what v4 changed is everything the Director did NOT remember,
+each a defect measured on the corpora (the first ever played on the wave 6
+bed) before the fix — see `phase0/results/godlab/v4-findings.md`:
+
+1. **A quake spends the meter, and the meter has a ceiling.** v3's quake never
+   touched the meter and the meter banked past its ramp, so once pinned the
+   gods fired EVERY ply (wave 6, shipped v3: calm 13.8 quakes/100 plies with
+   53% on the very next ply; wrathful 32.1 and 59%), and a quiet stretch
+   banked a debt no aggression could repay. The late backstop floor now counts
+   plies since the LAST quake. **No hard cooldown** — "too predictable" — the
+   refill is the board's staleness, at random.
+2. **Nothing is touched twice in one quake.** A per-quake touched set: no
+   square edited or vacated twice, no piece moved twice. (21%–55% of v3's
+   multi-action quakes did — including crack-and-smash of one wall in a
+   breath, which deleted the telegraph the ladder was built on.) No
+   cross-quake memory, by design.
+3. **Heat.** The fifty-move list is a list of irreversible moves, not
+   aggressive ones; best-move play drained v3's meter on 20–25% of plies,
+   below break-even on two presets. A ply is now HOT if it captures, checks,
+   promotes, pushes a pawn, OR **creates a new threat** (`tactics.mjs`: a
+   piece won by static exchange, a pin, a skewer, a fork, a mate threat —
+   news once per side per game), and a hot record scales the fill of both
+   meters down. Aggression keeps the gods asleep; passivity wakes them.
+4. **Tedium.** The undischarged twin: the cold share of the recent record —
+   the fraction of the last `tediumPlies` plies with no capture, check,
+   pawn move or promotion (a threat is not progress). Restlessness decides
+   WHEN the gods act; tedium decides WHAT (the rung weights) and HOW MUCH
+   (the budget). Keyed to pressure, a discharging meter fired only weakens
+   and the hole clock stopped. A threat or a check heats the record but
+   does not sate the meter, and a repeated position is cold: the refund is
+   the fifty-move rule's own list — capture, pawn move, promotion — because
+   checks on the list produced 600-ply check farms the meter never woke
+   for. **The dead-board backstop**: when the record has been dead for the
+   whole tedium window and nothing irreversible has happened for a short
+   streak of plies, P(quake) has an undischarged floor — the gods hammer a
+   board on which nothing is happening, escalated, and back off the ply
+   something does. A discharging meter alone could not close a 10×10
+   fortress; this closes it.
+5. **Protection — the gods never un-mate.** On every quake, both sides'
+   threat ledgers and every FORCED WIN's net (win-in-1 exact for either
+   side, the turn-flipped "trap is set" case included; mate-in-2 by a
+   node-budgeted checks-first search — a node budget, never a clock, so
+   seeded replay holds; the mating move's path included) form a protected
+   set, and three vetoes hold on every rung: no displacement of a protected
+   piece, no landing on a protected square, no terrain edit or hole on a
+   protected square. Everything else stays fair game — "they can still
+   displace stuff, just not the specific pieces responsible for the
+   Mate in N." Symmetric: "the gods don't know or care which color is the
+   player." (v3 measured: a third of quakes fired onto a forced mate
+   destroyed or delayed it; the un-protected control in `selftest.html`
+   un-mates 8/8 on the fixtures, the protected Director 0/24.) Known
+   residue: a mate-in-3, or a mate-in-2 whose first move is quiet on a
+   wide-open board, is beyond the search and unprotected.
+
+The v3 text below is retained as the record of the ladder and the trigger,
+both of which v4 keeps.
+
 
 **v3 gutted v2's decision layer.** The lock on §4.5's shape was lifted by the
 design conversation the phase plan required; what follows is its outcome. v2
