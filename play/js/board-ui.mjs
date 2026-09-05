@@ -52,6 +52,15 @@
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
 //   .ck1…ckN   the crack drawing this square's wall would wear
 //              (CRACK_VARIANTS; style.css maps it to --tile-crack).
+//   .sv1…svN   which of a skin's sprite VARIANTS this square shows
+//              (SKIN_VARIANTS; tiles.css maps svN + skin-<role> to
+//              --sprite-<role>-N, the base sprite as the fallback).
+//   .door2-l / .door2-r  a door skin paired with the door skin beside it
+//              in its rank (round 16): the two paint ONE two-wide door —
+//              the west leaf its left half, the east its right
+//              (--sprite-door2-l / -r; a theme or door set without a
+//              double falls back to two leaves). Paired west to east, so
+//              a run of three is a double and a single.
 //   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
 //              chain / banner on an east–west wall face, scattered by a
 //              stable hash of the square — floor litter is packed away
@@ -128,6 +137,12 @@ export const FLOOR_VARIANTS = 6;
  *  ck1…ckN by a stable hash of its square, so neighbouring cracked walls
  *  differ and a repaint never swaps a crack (round 14). */
 export const CRACK_VARIANTS = 4;
+/** Furniture sprite variants (round 16, 2026-09-05: "look at all these
+ *  vase and crate variants"): every cell carries sv1…svN by a stable hash
+ *  of its square, and tiles.css maps svN on a skin to the theme's Nth
+ *  sprite for that role (--sprite-<role>-N, the base as the fallback), so
+ *  a row of urns is not five identical urns and a repaint never swaps one. */
+export const SKIN_VARIANTS = 5;
 
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
@@ -165,6 +180,10 @@ function floorVariant(f, rank) {
 /** Which of the crack drawings a square wears if its wall cracks. */
 function crackVariant(f, rank) {
   return `ck${1 + (squareHash(f, rank, 11) % CRACK_VARIANTS)}`;
+}
+/** Which of a skin's sprite variants a square shows (SKIN_VARIANTS). */
+function skinVariant(f, rank) {
+  return `sv${1 + (squareHash(f, rank, 17) % SKIN_VARIANTS)}`;
 }
 
 function svgEl(tag, attrs) {
@@ -208,7 +227,7 @@ export class BoardUI {
         const sq = String.fromCharCode(97 + f) + rank;
         const cell = document.createElement('div');
         // a1 dark: (file + rankFromBottom) even = dark.
-        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank);
+        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank) + ' ' + skinVariant(f, rank);
         cell.dataset.square = sq;
         cell.addEventListener('click', () => {
           if (this.interactive && this.onSquareTap) this.onSquareTap(sq);
@@ -395,12 +414,29 @@ export class BoardUI {
       const name = String.fromCharCode(97 + ff) + rr;
       return rubble.has(name) || opened.has(name);
     };
+    // DOUBLE DOORS (round 16): two door skins side by side in a rank are
+    // one two-wide door. A god-cracked '^' is stone, not a leaf.
+    const isDoor = (ff, rr) => {
+      const name = String.fromCharCode(97 + ff) + rr;
+      return grid[this.ranks - rr]?.[ff] === FURNITURE && !godCrates.has(name) && skins[name] === 'door';
+    };
+    const leftLeaf = new Set(), rightLeaf = new Set();
+    for (let rr = 1; rr <= this.ranks; rr++) {
+      for (let ff = 0; ff < this.files - 1; ff++) {
+        if (!isDoor(ff, rr) || !isDoor(ff + 1, rr)) continue;
+        leftLeaf.add(String.fromCharCode(97 + ff) + rr);
+        rightLeaf.add(String.fromCharCode(97 + ff + 1) + rr);
+        ff++; // the pair is spoken for
+      }
+    }
     for (const [sq, cell] of this.cells) {
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
       const v = grid[this.ranks - rank]?.[f] ?? null;
       const isWall = v === WALL;
       const isFurniture = v === FURNITURE;
+      cell.classList.toggle('door2-l', leftLeaf.has(sq));
+      cell.classList.toggle('door2-r', rightLeaf.has(sq));
       cell.classList.remove(...FX_CLASSES);
       cell.style.removeProperty('--fx-ms');
       const wallTile = isWall && !holes.has(sq);

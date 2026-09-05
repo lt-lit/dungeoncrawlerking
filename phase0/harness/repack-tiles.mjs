@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
-import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS } from '../../play/js/board-ui.mjs';
+import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS } from '../../play/js/board-ui.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -148,6 +148,12 @@ for (const name of PIECE_SETS) if (!PIECE_SHEETS[name]) throw new Error(`piece s
 const ROLES = {
   wall: '--tile-wall',
   door: '--sprite-door',
+  // DOUBLE DOOR (round 16): the two halves a side-by-side pair of door
+  // skins paints (board-ui door2-l / door2-r). pixel-poem draws one; the
+  // castle's is its portcullis in the pack's two-wide arch, the crypt's a
+  // two-wide barred gate.
+  'door2-l': '--sprite-door2-l',
+  'door2-r': '--sprite-door2-r',
   crate: '--sprite-crate',
   chest: '--sprite-chest',
   barrel: '--sprite-barrel',
@@ -575,14 +581,17 @@ function cropFit(sheets, key, x, y, w, h) {
 // draws a wooden door, so theirs are GATES: the castle's is a portcullis
 // dropped into Dungeon Gathering's own arched doorway tile, the crypt's a
 // barred gate in the theme's stone with Catacombs-dark iron.
-function portcullis(base, bar, shadow, y0 = 6) {
+function portcullis(base, bar, shadow, y0 = 6, xs = [4, 8, 12], rail = [3, 13]) {
   const tile = blank(T, T);
   tile.data.set(base.data);
-  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
-  for (const x of [4, 8, 12]) for (let y = y0; y < T; y++) { put(x, y, bar); put(x + 1, y, shadow); }
-  for (const y of [y0 + 3, y0 + 7]) for (let x = 3; x <= 13; x++) if (x !== 4 && x !== 8 && x !== 12) put(x, y, y === y0 + 3 ? bar : shadow);
+  const put = (x, y, c) => { if (x < 0 || x >= T) return; const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+  for (const x of xs) for (let y = y0; y < T; y++) { put(x, y, bar); put(x + 1, y, shadow); }
+  for (const y of [y0 + 3, y0 + 7]) for (let x = rail[0]; x <= rail[1]; x++) if (!xs.includes(x)) put(x, y, y === y0 + 3 ? bar : shadow);
   return tile;
 }
+// The halves of a two-wide portcullis: bars every 4 px ACROSS the pair
+// (the right half starts one on the seam) and the rails run through it.
+const PORTCULLIS_HALF = { l: { xs: [4, 8, 12], rail: [3, 15] }, r: { xs: [0, 4, 8, 12], rail: [0, 13] } };
 function barredGate(spec) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const tile = blank(T, T);
@@ -590,6 +599,21 @@ function barredGate(spec) {
   for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) put(x, y, y < 2 || x < 2 || x > 13 ? (x === 1 || y === 1 ? lo : x === 14 ? hi : fill) : edge);
   for (let x = 2; x <= 13; x++) put(x, 2, lo);
   return portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3);
+}
+/** The two-wide barred gate (round 16): each half keeps only its outer
+ *  post, the lintel runs across both, and the bars continue through the
+ *  seam (PORTCULLIS_HALF). */
+function barredGate2(spec) {
+  const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
+  const half = (side) => {
+    const tile = blank(T, T);
+    const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+    const post = (x) => (side === 'l' ? x < 2 : x > 13);
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) put(x, y, y < 2 || post(x) ? (y === 1 || (side === 'l' && x === 1) ? lo : side === 'r' && x === 14 ? hi : fill) : edge);
+    for (let x = 0; x < T; x++) if (!post(x)) put(x, 2, lo);
+    return portcullis(tile, [0x7a, 0x72, 0x64], [0x3a, 0x35, 0x2d], 3, PORTCULLIS_HALF[side].xs, PORTCULLIS_HALF[side].rail);
+  };
+  return [half('l'), half('r')];
 }
 // The OPEN DOORWAY an east–west door leaves behind (main.mjs residue →
 // board-ui decor-doorway), GENERATED per theme (round 11: "open doors just
@@ -624,9 +648,11 @@ const THEMES = {
     tiles: {
       door: ['pp', 7, 3],
       crate: ['pp', 0, 8],
-      chest: ['pp', 2, 8],
+      // Several crops for a role = its VARIANTS (board-ui sv1…svN by
+      // square): the first is the role's tile, the rest --sprite-<role>-N.
+      chest: [['pp', 3, 8], ['pp', 2, 8], ['pp', 5, 8]], // the pack's three chests — timber, iron-bound, small
       barrel: ['pp', 8, 3], // the pack's own barrel (the hall had none — its barrels were in-house)
-      table: ['pp', 4, 9], // pedestal table
+      table: [['pp', 4, 9], ['pp', 2, 9]], // pedestal table, small round table
       chair: ['pp', 6, 9], // stool
       shelf: ['pp', 1, 8], // rack
       rubble: ['cat', 20, 22],
@@ -639,6 +665,7 @@ const THEMES = {
       chain: ['pp', 5, 7],
       banner: ['pp', 4, 7],
     },
+    door2: [['pp', 6, 6], ['pp', 7, 6]], // the pack's DOUBLE door — a side-by-side pair of door skins wears it
     doorSet: 'leaf',
     doorPost: { lit: '#bf704d', dark: '#895a45' }, // the leaf's own timber
     // Top band in the pack's cap colours; the face is its own brick rows.
@@ -649,8 +676,8 @@ const THEMES = {
   castle: {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
     tiles: {
-      crate: ['dg', 20, 8], // the pack's stone block
-      chest: ['pp', 2, 8],
+      crate: [['dg', 20, 8], ['dg', 19, 8], ['dg', 21, 8]], // the pack's stone blocks, three shades
+      chest: [['pp', 2, 8], ['pp', 5, 8]], // pixel-poem's iron-bound chests — already in the castle's grey
       barrel: ['dg', 2, 12],
       table: ['pp', 4, 9], // Dungeon Gathering draws no furniture: pixel-poem's, in the pack's stone (tint)
       chair: ['pp', 6, 9],
@@ -667,7 +694,7 @@ const THEMES = {
     // Borrowed furniture recoloured to the wall-top stone (the sprite's
     // fill takes the hue, its outline stays).
     tint: { table: '#92a1b9', chair: '#92a1b9', shelf: '#92a1b9' },
-    gate: { arch: ['dg', 11, 11], bar: '#c7cfdd', shadow: '#5a6787' }, // a portcullis in the pack's arched doorway
+    gate: { arch: ['dg', 11, 11], arch2: [['dg', 12, 8], ['dg', 13, 8]], bar: '#c7cfdd', shadow: '#5a6787' }, // a portcullis in the pack's arched doorway; the double in its two-wide arch
     doorSet: 'portcullis',
     doorPost: { lit: '#c7cfdd', dark: '#5a6787' }, // the pack's pale stone
     // The pack's wall-top blue with its highlight/shade; brick face rows.
@@ -678,9 +705,9 @@ const THEMES = {
   crypt: {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
     tiles: {
-      crate: ['catdeco', 8, 5],
-      chest: ['pp', 2, 8],
-      barrel: ['catdeco', 12, 8],
+      crate: [['catdeco', 8, 5], ['catdeco', 9, 5]], // the pack's crates, narrow and wide
+      chest: [['catdeco', 9, 4], ['catdeco', 8, 4]], // its low boxes (no more pixel-poem's grey chest on the crypt)
+      barrel: [['catdeco', 9, 8], ['catdeco', 10, 8], ['catdeco', 11, 8], ['catdeco', 9, 11], ['catdeco', 10, 11]], // five of its urns, purple and green
       table: ['pp', 4, 9], // the Catacombs draw no table, chair or shelf: pixel-poem's, in the crate's timber (tint)
       chair: ['pp', 6, 9],
       shelf: ['pp', 1, 8],
@@ -726,6 +753,21 @@ for (const [key, [pack, file]] of Object.entries(SHEETS)) {
   sheets[key] = decodePng(readFileSync(p));
 }
 
+// SKIN VARIANTS (round 16, 2026-09-05): a theme may list several crops for
+// a furniture role. The first is the role's own tile, the rest are
+// --sprite-<role>-N; board-ui stamps sv1…svN (SKIN_VARIANTS) on every cell
+// by a stable hash and the rules emitted below map svN on a skin to its
+// Nth sprite, the base as the fallback. A theme with fewer variants than N
+// WRAPS AROUND by alias, so every variant it has is used evenly.
+const SKIN_ROLES = ['crate', 'chest', 'barrel', 'table', 'chair', 'shelf'];
+const variantCount = {};
+for (const t of Object.values(THEMES)) for (const [role, spec] of Object.entries(t.tiles)) if (Array.isArray(spec[0])) variantCount[role] = Math.max(variantCount[role] ?? 1, spec.length);
+for (const [role, k] of Object.entries(variantCount)) {
+  if (!SKIN_ROLES.includes(role)) throw new Error(`${role}: only furniture skins take variants`);
+  if (k > SKIN_VARIANTS) throw new Error(`${role}: ${k} variants, board-ui SKIN_VARIANTS is ${SKIN_VARIANTS}`);
+  for (let n = 2; n <= k; n++) ROLES[`${role}-${n}`] = `${ROLES[role]}-${n}`;
+}
+
 // ---- crop + atlas
 const roleNames = Object.keys(ROLES);
 const themeNames = Object.keys(THEMES);
@@ -747,13 +789,22 @@ themeNames.forEach((theme, row) => {
     if (!prov.composed) provenance.push({ theme, role, ...prov });
   };
   const tiles = {};
-  for (const [role, [sheet, x, y, w, h]] of Object.entries(THEMES[theme].tiles)) {
-    let tile = w ? cropFit(sheets, sheet, x, y, w, h) : crop(sheets[sheet], x * T, y * T, T, T);
-    if (DECOR_ANCHOR[role]) tile = anchorSprite(tile, DECOR_ANCHOR[role]);
-    const tint = THEMES[theme].tint?.[role];
-    if (tint) tile = recolourFill(tile, hex(tint));
-    tiles[role] = tile;
-    emit(role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: tint ? `fill to ${tint}` : undefined });
+  for (const [role, spec] of Object.entries(THEMES[theme].tiles)) {
+    const crops = Array.isArray(spec[0]) ? spec : [spec];
+    crops.forEach(([sheet, x, y, w, h], i) => {
+      let tile = w ? cropFit(sheets, sheet, x, y, w, h) : crop(sheets[sheet], x * T, y * T, T, T);
+      if (DECOR_ANCHOR[role]) tile = anchorSprite(tile, DECOR_ANCHOR[role]);
+      const tint = THEMES[theme].tint?.[role];
+      if (tint) tile = recolourFill(tile, hex(tint));
+      if (!i) tiles[role] = tile;
+      emit(i ? `${role}-${i + 1}` : role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: tint ? `fill to ${tint}` : undefined });
+    });
+    // Fewer variants than SKIN_VARIANTS: wrap around, so sv4 on a role with
+    // three sprites is its first again, sv5 its second.
+    if (crops.length > 1) for (let n = crops.length + 1; n <= SKIN_VARIANTS; n++) {
+      const v = ((n - 1) % crops.length) + 1;
+      decl.push(`  ${ROLES[role]}-${n}: var(${ROLES[role]}${v > 1 ? `-${v}` : ''});`);
+    }
   }
   // The door — also collected as a selectable DOOR SET (Options → Doors,
   // board-ui DOOR_SETS) — and the theme's generated doorway.
@@ -769,7 +820,21 @@ themeNames.forEach((theme, row) => {
   } else {
     door = tiles.door;
   }
-  doorSets[THEMES[theme].doorSet] = { door };
+  // The DOUBLE door (round 16): pixel-poem draws one; the castle's is its
+  // portcullis dropped into the pack's two-wide arch; the crypt's is a
+  // two-wide barred gate. Two door skins side by side wear the halves.
+  let door2 = null;
+  if (gate?.arch2) {
+    door2 = gate.arch2.map(([sheet, x, y], i) => portcullis(crop(sheets[sheet], x * T, y * T, T, T), hex(gate.bar), hex(gate.shadow), 6, PORTCULLIS_HALF[i ? 'r' : 'l'].xs, PORTCULLIS_HALF[i ? 'r' : 'l'].rail));
+    door2.forEach((half, i) => emit(i ? 'door2-r' : 'door2-l', half, { pack: SHEETS[gate.arch2[i][0]][0], sheet: SHEETS[gate.arch2[i][0]][1], x: gate.arch2[i][1], y: gate.arch2[i][2], composed: 'portcullis drawn into the pack’s two-wide arch' }));
+  } else if (gate?.barred) {
+    door2 = barredGate2(THEMES[theme].wall);
+    door2.forEach((half, i) => emit(i ? 'door2-r' : 'door2-l', half, { composed: 'two-wide barred gate in the theme stone' }));
+  } else if (THEMES[theme].door2) {
+    door2 = THEMES[theme].door2.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
+    door2.forEach((half, i) => emit(i ? 'door2-r' : 'door2-l', half, { pack: SHEETS[THEMES[theme].door2[i][0]][0], sheet: SHEETS[THEMES[theme].door2[i][0]][1], x: THEMES[theme].door2[i][1], y: THEMES[theme].door2[i][2] }));
+  }
+  doorSets[THEMES[theme].doorSet] = { door, door2 };
   for (const [role, sides] of [['doorway', 10], ['doorway-8', 8], ['doorway-2', 2]]) emit(role, doorwayTile(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 10 ? 'posts in the door material at both edges, floor between' : `one post in the door material at the ${sides === 8 ? 'west' : 'east'} edge, floor between`, mask: sides });
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
@@ -800,8 +865,17 @@ themeNames.forEach((theme, row) => {
 // (The doorway stays the theme's own: it is drawn in the theme's wall.)
 for (const name of DOOR_SETS) {
   if (!doorSets[name]) throw new Error(`door set ${name} was not produced by any theme`);
-  css.push(`[data-doors="${name}"] {\n  --sprite-door: url("data:image/png;base64,${encodePng(doorSets[name].door).toString('base64')}");\n}`);
+  const decl = [`  --sprite-door: url("data:image/png;base64,${encodePng(doorSets[name].door).toString('base64')}");`];
+  if (doorSets[name].door2) decl.push(...doorSets[name].door2.map((half, i) => `  --sprite-door2-${i ? 'r' : 'l'}: url("data:image/png;base64,${encodePng(half).toString('base64')}");`));
+  css.push(`[data-doors="${name}"] {\n${decl.join('\n')}\n}`);
 }
+// SKIN VARIANTS + DOUBLE DOORS (round 16): svN on a skin → the theme's Nth
+// sprite for that role, the base as the fallback (the in-house set has no
+// variants, so it paints its one sprite); a paired door leaf → its half of
+// the theme's (or the chosen door set's) double, else the leaf.
+for (const role of SKIN_ROLES) for (let n = 2; n <= SKIN_VARIANTS; n++) css.push(`.cell.sv${n}.skin-${role} .piece.neutral { background-image: var(--sprite-${role}-${n}, var(--sprite-${role})); }`);
+css.push('.cell.skin-door.door2-l .piece.neutral { background-image: var(--sprite-door2-l, var(--sprite-door)); }');
+css.push('.cell.skin-door.door2-r .piece.neutral { background-image: var(--sprite-door2-r, var(--sprite-door)); }');
 // The autotile classes → the theme's case, the plain wall as the fallback
 // (so the in-house set, with no per-case tiles, paints its one block).
 for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: var(--tile-wall-${code}, var(--tile-wall)); }`);

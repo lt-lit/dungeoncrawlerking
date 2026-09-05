@@ -894,6 +894,24 @@ async function main() {
     if (!has('a2', 'weak') || mask('a2') !== 'wm-5' || mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4') throw new Error(`masonry is a weak spot continuing the column (${ui.cellClasses('a2')}, ${mask('a1')}, ${mask('a3')})`);
     ui.setPosition('4/4/2^1/4/4 w - - 0 1', { skins: { c3: 'masonry' } });
     if (!has('c3', 'weak') || mask('c3') !== 'wm-0') throw new Error(`masonry alone on the floor is still a weak spot, lone-block case: ${ui.cellClasses('c3')}`);
+    // DOUBLE DOORS (round 16): two door skins side by side in a rank pair
+    // into one two-wide door, west leaf left, east leaf right; a run of
+    // three is a double and a single; a vertical pair is two weak spots.
+    ui.setPosition('*^^*/4/4/4/4 w - - 0 1', { skins: { b5: 'door', c5: 'door' } });
+    if (!has('b5', 'door2-l') || !has('c5', 'door2-r') || has('b5', 'door2-r') || has('c5', 'door2-l')) throw new Error(`b5+c5 doors are one double door: ${ui.cellClasses('b5')} / ${ui.cellClasses('c5')}`);
+    ui.setPosition('^^^1/4/4/4/4 w - - 0 1', { skins: { a5: 'door', b5: 'door', c5: 'door' } });
+    if (!has('a5', 'door2-l') || !has('b5', 'door2-r') || has('c5', 'door2-l') || has('c5', 'door2-r')) throw new Error(`three doors in a row: a double and a single (${ui.cellClasses('c5')})`);
+    ui.setPosition('1***/4/*1*1/^3/^3 w - - 0 1', { skins: { a1: 'door', a2: 'door' } });
+    if (has('a1', 'door2-l') || has('a1', 'door2-r') || has('a2', 'door2-l') || has('a2', 'door2-r') || !has('a2', 'weak')) throw new Error(`doors stacked in a column never pair (${ui.cellClasses('a2')})`);
+    ui.setPosition('*^^*/4/4/4/4 w - - 0 1', { skins: { b5: 'door', c5: 'door' }, godCrates: new Set(['c5']) });
+    if (has('b5', 'door2-l') || !has('c5', 'cracked')) throw new Error('a god-cracked partner is stone, not a leaf: no double');
+    ui.setPosition('4/4/4/4/4 w - - 0 1');
+    if (has('b5', 'door2-l') || has('c5', 'door2-r')) throw new Error('the pair classes clear on repaint');
+    // SKIN VARIANTS: every cell carries exactly one stable sv1…svN class.
+    for (const [sq, cls] of [['a1', ui.cellClasses('a1')], ['d5', ui.cellClasses('d5')]]) {
+      const sv = cls.filter((c) => /^sv\d+$/.test(c));
+      if (sv.length !== 1) throw new Error(`${sq} carries one skin-variant class, got ${sv.join(',') || 'none'}`);
+    }
     // Piece sprites: every piece carries its FEN letter; the set is an attribute.
     ui.setPosition('k3/4/4/4/K2P w - - 0 1');
     const at = (sq) => host.querySelector(`[data-square="${sq}"] .piece`)?.dataset.piece ?? null;

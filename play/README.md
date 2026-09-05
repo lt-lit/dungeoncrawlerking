@@ -451,7 +451,30 @@ paints an in-house sprite under a theme any more; only the hole and the
 crack are drawn in-house. The tool also runs WITHOUT the three chess packs
 on disk: a missing piece pack's fitted sprites are read back from the
 committed `img/pieces.png` (the atlas holds exactly the tiles it wrote), so
-tile work needs only the three tile packs. `phase0/lib/png.mjs`
+tile work needs only the three tile packs. **Round 16 (2026-09-05)**, the
+designer going through the packs himself ("multiple chest options that
+look better than the one you picked… ALL KINDS OF STUFF… an actual double
+door"): a theme may now list SEVERAL crops for a furniture role —
+`chest: [[…], […], […]]` — the first is the role's tile, the rest
+`--sprite-<role>-N`, and every cell carries `sv1…sv5` by a stable hash of
+its square (`SKIN_VARIANTS`, board-ui) with tiles.css mapping `svN` on a
+skin to the theme's Nth sprite, the base as the fallback and a theme with
+fewer wrapping around by alias — so a row of urns is five different urns
+and a repaint never swaps one. The hall's chests are pixel-poem's three
+(timber, iron-bound, small) and its tables two; the castle's crates are
+Dungeon Gathering's three stone blocks; the crypt's crates and chests are
+the Catacombs' own crates and low boxes (pixel-poem's grey chest is off the
+crypt) and its barrels five Catacombs urns, purple and green. And DOUBLE
+DOORS: two door skins side by side in a rank are ONE two-wide door — the
+west leaf wears `door2-l`, the east `door2-r`, paired west to east so a run
+of three is a double and a single, never when either is god-cracked, and a
+vertical pair stays two weak spots — painting `--sprite-door2-l` / `-r`:
+pixel-poem draws the double (6,6)+(7,6); the castle's is its portcullis
+dropped into the pack's two-wide arch (12,8)+(13,8) with the bars
+continuing through the seam; the crypt's a generated two-wide barred gate;
+every door SET carries its double too, and a theme or set without one falls
+back to two leaves. (Capturing one leaf repaints the other as a single
+leaf — the pairing is recomputed every paint.) `phase0/lib/png.mjs`
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.

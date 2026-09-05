@@ -197,7 +197,21 @@ day: a skin audit of all 268 `^` against each stage's notes fixed seven
 "bones", and s89's two UNSKINNED `^` — the bed's only ones), and the lesson
 that bit: **the game loads `play/stages/manifest.json`, not the stage
 files — run `gen-stage-manifest.mjs` after ANY stage edit** or the change
-is invisible (the first commit of that audit shipped stale). Known nits from the
+is invisible (the first commit of that audit shipped stale). **Round 16,
+2026-09-05 — the designer went through the packs himself** ("multiple
+chest options that look better than the one you picked… ALL KINDS OF
+STUFF… an actual double door"): SKIN VARIANTS — a theme lists several
+crops per furniture role, every cell wears `sv1…sv5` by a stable hash
+(`SKIN_VARIANTS`) and tiles.css maps svN + skin to `--sprite-<role>-N`
+(base fallback, wrap-around aliases) — the hall's three chests and two
+tables, the castle's three stone blocks, the crypt's own crates, low boxes
+and FIVE urns; and DOUBLE DOORS — two door skins side by side in a rank
+pair (`door2-l` / `door2-r`, west to east, never a god-cracked leaf, never
+a vertical pair) and paint `--sprite-door2-l/-r`: pixel-poem's own double,
+the castle's portcullis in the pack's two-wide arch, a generated two-wide
+barred gate for the crypt, each door set carrying its double, two leaves
+as the fallback; the pairing is recomputed every paint, so a captured leaf
+leaves a single. Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the

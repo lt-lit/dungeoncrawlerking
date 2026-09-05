@@ -218,6 +218,14 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
 if (STAGE === 's59-hall-corner') {
   const door = await page.evaluate(() => ({ g5: window.__DCK.marks.cell('g5'), d8: window.__DCK.marks.cell('d8'), sprite: !!document.querySelector('#board [data-square="g5"] .piece.neutral') }));
   expect(door.g5?.includes('furniture') && door.g5?.includes('skin-door') && door.sprite, `g5 is the door leaf with its sprite (${door.g5})`);
+  // Round 16: g5+h5, the double doors in the south wall, are ONE two-wide
+  // door — g5 the left half, h5 the right — and each half paints its own
+  // pack sprite (the leaves' data URIs differ).
+  const dbl = await page.evaluate(() => {
+    const bg = (sq) => getComputedStyle(document.querySelector(`#board [data-square="${sq}"] .piece.neutral`)).backgroundImage;
+    return { g5: window.__DCK.marks.cell('g5'), h5: window.__DCK.marks.cell('h5'), same: bg('g5') === bg('h5'), png: bg('g5').includes('data:image/png') };
+  });
+  expect(dbl.g5?.includes('door2-l') && dbl.h5?.includes('door2-r') && dbl.png && !dbl.same, `g5+h5 are one double door: left half + right half, two different pack sprites (${dbl.g5} / ${dbl.h5})`);
   expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('weak'), `d8, the door in the north–south line, is a weak spot (${door.d8})`);
 }
 
