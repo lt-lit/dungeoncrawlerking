@@ -146,3 +146,24 @@ dead floor; no double-touch + discharge on 42 quakes; a forced win survives
 24 seeded quakes while the unprotected control un-mates 8/8);
 `ladder-smoke.mjs` 6/6 terminated on calm and restless, 0 double-touched,
 0 in-check fires; `lib/selftest.mjs` on the overlaid pair ALL PASSED.
+
+## v4.1 — the ladder leans on the crack (same day, `*-v4g.jsonl`)
+
+Designer, after restless on the phone: "feels okay, huge improvement …
+weakens should definitely be weighted higher than breaches." Defaults went
+weakenBias 1.8→3, breachBias 2.2→1.2, breachAt 0.15→0.3, and the crate brake
+now counts only god-minted crates (a crate-heavy stage was braking cracks
+from ply 1). Same 24 deals per arm:
+
+| arm | weaken / breach by action | crates left (of authored) | q/100p | ended | un-mate≤3 |
+|---|---|---|---|---|---|
+| calm | 31/22% → **39/11%** | 12% → 31% | 4.2 → 3.7 | 23/24 → 24/24 | 0/2 → 0/1 |
+| restless | 15/14% → **25/13%** | 15% → 34% | 7.8 → 7.0 | 24/24 | 0/9 → 4/8 |
+| wrathful | 19/17% → **24/11%** | 24% → 43% | 10.7 → 10.6 | 24/24 | 4/19 → 0/9 |
+
+Every un-mated short mate in v4g is `wins found 0` — three mate-in-3s and a
+quiet-move mate-in-2, the search residue. Displacement still leads by
+action (38–49%): the terrain rungs run dry and the budget falls through to
+it, as before. The four biases are live sliders in the debug panel
+(`#gods-ladder`), verified in a real browser: defaults 3 / 1.2 / 1.6 / 3,
+a drag retunes the running Director and persists, `defaults` resets.

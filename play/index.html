@@ -81,6 +81,17 @@
           <span id="godsIntensityVal">1.0</span>
         </label>
       </div>
+      <!-- v4.1: the ladder's rung weights as live sliders (designer,
+           2026-09-05). Orthogonal to temperament; the forecast row shows the
+           shares they produce at the board's current tedium. -->
+      <div id="gods-ladder" class="gods-row gods-ladder" aria-label="ladder rung weights">
+        <span class="gods-ladder-title">ladder</span>
+        <label>weaken <input type="range" id="ladder_weakenBias" min="0" max="6" step="0.1"><span id="ladder_weakenBias_val"></span></label>
+        <label>breach <input type="range" id="ladder_breachBias" min="0" max="6" step="0.1"><span id="ladder_breachBias_val"></span></label>
+        <label>displace <input type="range" id="ladder_displaceBias" min="0" max="6" step="0.1"><span id="ladder_displaceBias_val"></span></label>
+        <label>crumble <input type="range" id="ladder_crumbleBias" min="0" max="6" step="0.1"><span id="ladder_crumbleBias_val"></span></label>
+        <button id="btnLadderReset" title="back to the Director's defaults">defaults</button>
+      </div>
       <div id="gods-meters" class="gods-row"></div>
       <div id="gods-summary" class="gods-row"></div>
       <div id="gods-forecast" class="gods-row"></div>

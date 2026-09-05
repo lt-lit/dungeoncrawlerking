@@ -474,6 +474,26 @@ short-mate un-mating 0/2 · 0/9 · 4/19 (12/43 · 15/55 · 23/57 — the four ar
 mate-in-3s and a quiet-move mate-in-2, beyond the search), terrain remaining
 52 / 43 / 27% (37 / 25 / 17), termination 23/24 · 24/24 · 24/24 at the
 lab's 600-ply cap (the holdout is a fortress that took 37 holes).**
+**v4.1 — THE LADDER, same day, after restless on the phone ("feels okay,
+huge improvement": "weakens should definitely be weighted higher than
+breaches — weakening walls does a better job of opening up new lines, plus
+it's fun to smash thru walls").** A crack hands BOTH players a wall to
+smash; a breach smashes it for them. `DIRECTOR_DEFAULTS`: weakenBias 1.8→3,
+breachBias 2.2→1.2, breachAt 0.15→0.3 (displace/crumble untouched), and the
+CRATE BRAKE now counts only GOD-MINTED crates (`terrainCensus(…, godCrates)`
+→ `godCrates`; authored furniture is the stage, and a crate-heavy stage was
+braking cracks from ply 1). The four biases are LIVE SLIDERS in the debug
+panel (`#gods-ladder`, `options.godLadder`, persisted; `defaults` resets;
+they retune the running Director through the dial path and apply to new
+duels through `godConfig()`); the forecast row shows the shares they
+produce at the board's current tedium. Measured (`*-v4g.jsonl`, same 24
+deals): by ACTION weaken/breach went calm 31/22% → 39/11%, restless 15/14%
+→ 25/13%, wrathful 19/17% → 24/11%; standing crates at the end doubled
+(12→31% / 15→34% / 24→43% of authored); pacing 3.7 / 7.0 / 10.6 q/100p;
+termination 24/24 in every arm; double-touch 0; the un-mated short mates
+(0/1 · 4/8 · 0/9) are all `wins found 0` — the search residue, not the
+ladder. Displacement still leads by action (38–49%) because the terrain
+rungs run dry and the budget falls through to it — structural, as before.
 
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated

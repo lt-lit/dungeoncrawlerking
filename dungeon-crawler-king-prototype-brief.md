@@ -163,6 +163,13 @@ bed) before the fix — see `phase0/results/godlab/v4-findings.md`:
    residue: a mate-in-3, or a mate-in-2 whose first move is quiet on a
    wide-open board, is beyond the search and unprotected.
 
+6. **The ladder leans on the crack `[v4.1, same day]`.** Weaken is weighted
+   well above breach and breach opens later — "weakening walls does a better
+   job of opening up new lines, plus it's fun to smash thru walls": a crack
+   hands both players a wall to smash, a breach smashes it for them. The
+   crate brake counts only the gods' own crates. The four rung weights are
+   sliders in the debug panel.
+
 The v3 text below is retained as the record of the ladder and the trigger,
 both of which v4 keeps.
 

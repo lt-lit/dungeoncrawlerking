@@ -42,7 +42,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
-import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS } from './director.mjs';
+import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -224,17 +224,24 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
 // 2026-09-01 with per-preset staleness knobs). GOD_KNOBS stays the custom
 // dial surface: the classic five, while the staleness knobs ride presets.
 const GOD_KNOBS = ['onsetPly', 'rampPlies', 'sate', 'debtCap', 'extraActions'];
+// The ladder's rung weights (v4.1, designer: "weight sliders in the gods
+// debug menu"): four biases, orthogonal to temperament — a preset says how
+// often the gods act, the ladder says what they reach for. null = the
+// Director's defaults; a set value persists and applies to new duels (and
+// live, through the same dial path as the knobs).
+const GOD_LADDER = ['weakenBias', 'breachBias', 'displaceBias', 'crumbleBias'];
+const LADDER_RANGE = [0, 6];
 
 function godConfig() {
-  if (options.godPreset === 'custom' && options.godCustom) return { ...GOD_PRESETS.restless, ...options.godCustom };
-  return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
+  const base = options.godPreset === 'custom' && options.godCustom ? { ...GOD_PRESETS.restless, ...options.godCustom } : (GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless);
+  return options.godLadder ? { ...base, ...options.godLadder } : base;
 }
 
 // The piece-fit dials' ranges (index.html's sliders carry the same) —
@@ -260,6 +267,12 @@ function loadOptions() {
     options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
     options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
     options.pieceSnap = !!options.pieceSnap;
+    // The ladder override (v4.1): four clamped numbers or nothing.
+    if (options.godLadder && typeof options.godLadder === 'object') {
+      const clean = {};
+      for (const k of GOD_LADDER) if (k in options.godLadder) clean[k] = clampNum(options.godLadder[k], LADDER_RANGE, DIRECTOR_DEFAULTS[k]);
+      options.godLadder = Object.keys(clean).length ? clean : null;
+    } else options.godLadder = null;
   } catch {
     /* defaults */
   }
@@ -296,6 +309,12 @@ function syncOptionsUI() {
     el.disabled = options.godPreset !== 'custom';
   }
   $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
+  for (const k of GOD_LADDER) {
+    const v = options.godLadder?.[k] ?? DIRECTOR_DEFAULTS[k];
+    $(`ladder_${k}`).value = String(v);
+    $(`ladder_${k}_val`).textContent = Number(v).toFixed(1);
+  }
+  $('btnLadderReset').disabled = !options.godLadder;
   $('optGodsDebug').checked = options.godsDebug;
   $('optTheme').value = options.theme;
   $('optPieces').value = options.pieces;
@@ -881,7 +900,7 @@ function renderGodsSummary() {
 
   // The ladder, as it stands right now — rung weights are a pure function of
   // pressure and the terrain census, so showing them costs nothing.
-  const terrain = terrainCensus(duel.fen(), duel.files, duel.ranks, dir.holes);
+  const terrain = terrainCensus(duel.fen(), duel.files, duel.ranks, dir.holes, dir.godCrates);
   const w = dir.rungWeights(nextPly, terrain);
   const total = w.weaken + w.breach + w.displace + w.crumble;
   const share = (x) => (total > 0 ? pctOf(x / total) : '—');
@@ -2026,6 +2045,22 @@ for (const k of GOD_KNOBS) {
     liveTune({ [k]: v });
   });
 }
+// The ladder sliders (v4.1): each moves one rung's bias, live and for the
+// next duel alike; the forecast line above shows the resulting shares at
+// the board's current tedium. Reset returns to the Director's defaults.
+for (const k of GOD_LADDER) {
+  $(`ladder_${k}`).addEventListener('input', (e) => {
+    const v = clampNum(e.target.value, LADDER_RANGE, DIRECTOR_DEFAULTS[k]);
+    options.godLadder = { ...(options.godLadder ?? {}), [k]: v };
+    applyOptions();
+    liveTune({ [k]: v });
+  });
+}
+$('btnLadderReset').addEventListener('click', () => {
+  options.godLadder = null;
+  applyOptions();
+  liveTune(Object.fromEntries(GOD_LADDER.map((k) => [k, DIRECTOR_DEFAULTS[k]])));
+});
 // Intensity (designer rename, 2026-09-01 — was "favor"): a DEBUG dial on the
 // quake-probability multiplier, driving the CURRENT duel only; resets to 1
 // with each new Director. The Director API stays setFavor()/favor because

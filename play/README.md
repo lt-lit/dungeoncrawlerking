@@ -771,6 +771,12 @@ the full record; `phase0/results/godlab/v4-findings.md` the numbers):
   quiet move on a wide-open board, is unprotected — and a WEAKEN can undo
   one (a cracked wall is a crate the mated king may capture to flee).
 
+- **The ladder (v4.1)**: weaken leads (`weakenBias` 3), breach comes later
+  and lighter (`breachBias` 1.2 from tedium 0.3) — a crack hands both
+  players a wall to smash, a breach smashes it for them — and the crate
+  brake counts only god-minted crates. The four rung biases are sliders in
+  the debug panel (below).
+
 `selftest.html` asserts all of it (four `v4` checks, incl. a forced win
 surviving 24 seeded quakes while the unprotected control un-mates 8/8);
 `phase0/harness/godlab/gods-metrics.mjs` scores any corpus on the same
@@ -815,6 +821,12 @@ What the panel shows:
   `fellThrough` means the budget ran out of legal actions before it was
   spent. A `VETOED` marker means the duel layer's
   safety net overrode the Director (also logged to `record.anomalies`).
+- **The ladder sliders** (v4.1) — `weaken` / `breach` / `displace` /
+  `crumble` rung biases (0–6), live on the running Director (logged as a
+  dial) and persisted for new duels (`options.godLadder`; `defaults`
+  clears it). Orthogonal to temperament. The forecast row's `ladder:` shares
+  are the pure `rungWeights` at the board's current tedium, so a slider's
+  effect is visible before the next quake.
 - **The meters line** (v4) — fun, **heat** (with the last move's new threat
   keys), **tedium**, restlessness/ramp → pressure. Quake trace lines carry
   `meter a→b` (the discharge), heat, tedium and the **protected** census

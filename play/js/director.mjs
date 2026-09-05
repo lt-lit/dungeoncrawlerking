@@ -312,20 +312,25 @@ const ORTHO = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 /** Terrain tally for one board — the cheap grid scan the rung weights need
  *  before any candidate is enumerated. `holes` are Director state, so a `*`
- *  is only a weakenable WALL if the gods did not put it there. */
-export function terrainCensus(fen, files, ranks, holes) {
+ *  is only a weakenable WALL if the gods did not put it there; `godCrates`
+ *  (the weaken ledger, optional) splits the crates into the designer's and
+ *  the gods' own — the crate brake reads only the latter (v4.1). */
+export function terrainCensus(fen, files, ranks, holes, godCrates = null) {
   const g = fenGrid(fen, files, ranks);
   let walls = 0;
   let crates = 0;
+  let godMade = 0;
   let holeCount = 0;
   for (let r = 0; r < ranks; r++) {
     for (let f = 0; f < files; f++) {
       const c = g[r][f];
-      if (c === FURNITURE) crates++;
-      else if (c === WALL) (holes.has(SQ(f, r)) ? holeCount++ : walls++);
+      if (c === FURNITURE) {
+        crates++;
+        if (godCrates?.has(SQ(f, r))) godMade++;
+      } else if (c === WALL) (holes.has(SQ(f, r)) ? holeCount++ : walls++);
     }
   }
-  return { walls, crates, holes: holeCount };
+  return { walls, crates, godCrates: godMade, holes: holeCount };
 }
 
 /**
@@ -674,22 +679,34 @@ export const DIRECTOR_DEFAULTS = {
   // seeded weighted pick, so the gods VARY at equal pressure instead of
   // stepping deterministically through a staircase — that variety is most of
   // what sells the mechanic as random.
-  weakenBias: 1.8, // ...at pressure 0; falls to weakenBias×0.4 at pressure 1
-  breachAt: 0.15,
-  breachBias: 2.2,
+  // v4.1 (designer 2026-09-05, after restless on the phone: "weakens should
+  // definitely be weighted higher than breaches — weakening walls does a
+  // better job of opening up new lines, plus it's fun to smash thru walls"):
+  // a crack hands BOTH players a wall to smash; a breach smashes it for
+  // them. So weaken leads the ladder outright and breach comes later and
+  // lighter. v4 shipped 1.8 / 2.2 with breach open from tedium 0.15, which
+  // measured as a near-even split (calm 31% / 22% of actions, restless 15% /
+  // 14%). At the bed's typical tedium (~0.75) these read roughly weaken 57% ·
+  // breach 18% · displace 21% · crumble 4%, and on a dead record (0.9)
+  // 39 / 20 / 25 / 17. All four biases are live sliders in the debug panel.
+  weakenBias: 3, // ...at tedium 0; falls to weakenBias×0.4 at tedium 1
+  breachAt: 0.3,
+  breachBias: 1.2,
   displaceAt: 0.35,
-  displaceBias: 1.6, // held below the terrain rungs on purpose: displacement
-  //                    is the one rung that can still hand out material, and
-  //                    the budget's later actions fall back to it whenever the
-  //                    wall/crate supply on a board runs dry.
+  displaceBias: 1.6, // held below weaken on purpose: displacement is the one
+  //                    rung that can still hand out material, and the budget's
+  //                    later actions fall back to it whenever the wall/crate
+  //                    supply on a board runs dry.
   crumbleAt: 0.7,
   crumbleBias: 3,
   // (No swallow knob: QUAKES CANNOT SWALLOW PIECES is a rule, not a dial —
   // designer-final 2026-09-01, after a wrathful hole ate a knight at ply
   // 13. Occupied squares are not crumble candidates; see
   // crumbleCandidates.)
-  crateBrake: true, // damp weaken as furniture comes to outnumber walls, so a
-  //                   long duel does not dissolve the whole dungeon into crates
+  crateBrake: true, // damp weaken as the gods' OWN crates come to outnumber
+  //                   walls, so a long duel does not dissolve the whole dungeon
+  //                   into crates (v4.1: authored furniture no longer counts —
+  //                   a crate-heavy stage was braking cracks from ply 1)
 
   // --- the conservation brake (designer 2026-09-01) -----------------------
   // "The stage stays the stage": damp BOTH terrain rungs as STANDING terrain
@@ -1002,7 +1019,7 @@ export class Director {
    *  replay is untouched. Idempotent; without an anchor the brake is off. */
   anchorTerrain(fen, files, ranks) {
     if (this.authoredTerrain !== null) return this.authoredTerrain;
-    const t = terrainCensus(fen, files, ranks, this.holes);
+    const t = terrainCensus(fen, files, ranks, this.holes, this.godCrates);
     this.authoredTerrain = t.walls + t.crates;
     return this.authoredTerrain;
   }
@@ -1062,10 +1079,14 @@ export class Director {
     if (terrain) {
       if (!terrain.walls) weaken = 0;
       else if (this.crateBrake) {
-        // As furniture comes to outnumber walls the gods lose interest in
-        // cracking more of it — without this a long duel dissolves the whole
-        // dungeon into crates and the stage stops being the stage.
-        const share = terrain.crates / Math.max(1, terrain.walls + terrain.crates);
+        // As the gods' own crates come to outnumber walls they lose interest
+        // in cracking more — without this a long duel dissolves the whole
+        // dungeon into crates and the stage stops being the stage. Only
+        // god-minted crates count (v4.1): the designer's furniture is the
+        // stage, and a crate-heavy stage was braking cracks from ply 1. A
+        // census without the ledger (older callers) falls back to all crates.
+        const mine = terrain.godCrates ?? terrain.crates;
+        const share = mine / Math.max(1, terrain.walls + mine);
         weaken *= Math.max(0.15, 1 - share);
       }
     }
@@ -1249,7 +1270,7 @@ export class Director {
       this._held = b.isCheck();
       b.delete();
     }
-    const terrain = terrainCensus(fen, files, ranks, this.holes);
+    const terrain = terrainCensus(fen, files, ranks, this.holes, this.godCrates);
     const trace = {
       ply,
       debtBefore: this.debt,
@@ -1367,7 +1388,7 @@ export class Director {
         rung = 'crumble';
         trace.path.push('crumble-forced');
       } else {
-        const terrain = terrainCensus(postFen, files, ranks, this.holes);
+        const terrain = terrainCensus(postFen, files, ranks, this.holes, this.godCrates);
         const weights = this.rungWeights(ply, terrain);
         if (!canCrumble) weights.crumble = 0;
         if (step === 0) {
