@@ -946,8 +946,12 @@ function godsTraceLine(t) {
   // and squares plus every forced win's net (tactics.mjs).
   if (t.protected) {
     const pr = t.protected;
-    const wins = pr.wins ? `wins w${pr.wins.white}/b${pr.wins.black}` : '';
-    bits.push(`protected ${pr.pieces} piece${pr.pieces === 1 ? '' : 's'} / ${pr.squares} sq · ${wins}${pr.truncated ? ' (search cut)' : ''}`);
+    const wins = pr.wins ? `grid wins w${pr.wins.white}/b${pr.wins.black}` : '';
+    const eng = pr.engine
+      ? ` · engine ${pr.engine.mates} mate line${pr.engine.mates === 1 ? '' : 's'}${pr.engine.mates ? ` (${pr.engine.lines.map((l) => `${l.winner} #${l.mateIn} ${l.source}`).join(', ')})` : ''}` +
+        `${pr.engine.probes ? ` from ${pr.engine.probes.ran} probe${pr.engine.probes.ran === 1 ? '' : 's'}${pr.engine.probes.fresh ? ' + the reply search' : ''}${pr.engine.probes.failed ? ` (${pr.engine.probes.failed} FAILED)` : ''}` : ''}`
+      : '';
+    bits.push(`protected ${pr.pieces} piece${pr.pieces === 1 ? '' : 's'} / ${pr.squares} sq · ${wins}${pr.truncated ? ' (search cut)' : ''}${eng}`);
   }
 
   const c = t.census;
@@ -1565,6 +1569,9 @@ async function beginDuel() {
     // small boards still reply in <200 ms because d22 arrives first; big
     // boards get the full think. Lab corpora set their own faster limits.
     go: params.get('go') ?? 'depth 22 movetime 10000',
+    // v4.2: the gods' mate probes when a quake is due (`?mateprobe=off` to
+    // silence them, or a `depth N movetime M` pair to retune).
+    mateGo: params.get('mateprobe') === 'off' ? null : (params.get('mateprobe') ?? undefined),
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
   await app.duel.start();

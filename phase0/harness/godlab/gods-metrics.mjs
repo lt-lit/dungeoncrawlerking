@@ -99,6 +99,8 @@ for (const file of files) {
   const terminations = {};
   let protectedPieces = [];
   let truncated = 0;
+  let engineMates = 0; // v4.2: quakes where the engine handed the gods a mate line
+  let engineHinted = 0;
   let floorFired = 0;
   let deadFired = 0;
   for (const g of games) {
@@ -133,6 +135,10 @@ for (const file of files) {
       if (q.protected) {
         protectedPieces.push(q.protected.pieces);
         if (q.protected.truncated) truncated++;
+        if (q.protected.engine) {
+          engineHinted++;
+          if (q.protected.engine.mates > 0) engineMates++;
+        }
       }
     }
     const t = g.trail ?? {};
@@ -184,6 +190,7 @@ for (const file of files) {
     dead: pct(deadFired, quakes),
     terrain: terrainLeft.length ? pct(mean(terrainLeft), 1) : '—',
     prot: protectedPieces.length ? `${median(protectedPieces)} (${truncated} cut)` : '—',
+    eng: engineHinted ? `${engineMates}/${engineHinted}` : '—',
     terminations: Object.entries(terminations)
       .map(([k, v]) => `${k} ${v}`)
       .join(', '),
@@ -208,6 +215,7 @@ const cols = [
   ['dead', 'dead'],
   ['terrain', 'terrain'],
   ['prot', 'prot pcs'],
+  ['eng', 'eng mates'],
 ];
 const widths = cols.map(([k, h]) => Math.max(h.length, ...rows.map((r) => String(r[k]).length)));
 console.log(cols.map(([, h], i) => h.padEnd(widths[i])).join('  '));

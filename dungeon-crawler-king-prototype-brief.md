@@ -159,10 +159,29 @@ bed) before the fix — see `phase0/results/godlab/v4-findings.md`:
    Mate in N." Symmetric: "the gods don't know or care which color is the
    player." (v3 measured: a third of quakes fired onto a forced mate
    destroyed or delayed it; the un-protected control in `selftest.html`
-   un-mates 8/8 on the fixtures, the protected Director 0/24.) Known
-   residue: a mate-in-3, or a mate-in-2 whose first move is quiet on a
-   wide-open board, is beyond the search and unprotected.
+   un-mates 8/8 on the fixtures, the protected Director 0/24.) The grid
+   search's horizon (mate-in-2) was the known residue until v4.2 handed
+   the gods the engine's lines — item 7 below.
 
+7. **The gods read the engine's mate lines `[v4.2, same day — REPEALS the
+   "never consults the engine" clause for MATE, and only for mate]`.** The
+   first cut of protection found forced wins with a hand-written search on
+   the legality library (win-in-1 exact, mate-in-2 bounded) and missed
+   every mate in 3 and every quiet-move mate in 2 on a wide board.
+   Designer: "we already have both the enemy and the move recommendation
+   probe gathering this data constantly … just getting the game to that
+   mate-in-N scenario is kinda the gods' main goal. Ditch the dumbass rule."
+   So when the quake roll passes, the duel asks the engine for mate lines
+   before the gods edit anything: the enemy's own last reply search when it
+   is fresh, one fixed-depth probe of the board as it stands, and one of the
+   board with the turn flipped ("the trap is set"), all under paired limits.
+   Every mate score's principal variation is replayed on ffish and every
+   mover, destination, path and the loser's king zone join the protected
+   set. The old rule's two reasons still stand where they apply: the gods
+   read a MATE score, never an eval — "who is winning" stays off limits —
+   and the probes are depth-bounded, so a corpus replays unless a probe's
+   movetime binds. The grid search stays as the exact win-in-1 check and
+   the fallback for a probe that fails.
 6. **The ladder leans on the crack `[v4.1, same day]`.** Weaken is weighted
    well above breach and breach opens later — "weakening walls does a better
    job of opening up new lines, plus it's fun to smash thru walls": a crack

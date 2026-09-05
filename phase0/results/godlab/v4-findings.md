@@ -167,3 +167,65 @@ action (38–49%): the terrain rungs run dry and the budget falls through to
 it, as before. The four biases are live sliders in the debug panel
 (`#gods-ladder`), verified in a real browser: defaults 3 / 1.2 / 1.6 / 3,
 a drag retunes the running Director and persists, `defaults` resets.
+
+## v4.2 — the gods read the engine's mate lines (same day, `*-v4h/i/j.jsonl`)
+
+Designer: "Wait we're NOT feeding engine results to The Gods to detect
+Mate in N? … Ditch the dumbass rule." The "never consults the engine"
+clause is repealed for MATE and only for mate. When the quake roll passes,
+the duel gathers mate lines — the enemy's fresh reply search, a fixed-depth
+probe of the board, and one of the turn-flipped "trap is set" board
+(`mateGo` `depth 12 movetime 600`) — and every principal variation is
+replayed on ffish into the protected set: movers, destinations, paths, the
+loser's king zone at the end of the line and now. The grid search stays as
+the exact win-in-1 check and the fallback for a failed probe.
+
+Three rounds on the same 24 deals per arm:
+
+- **v4h** — the probes as first wired. Short-mate moves 2/6 · 0/7 · 0/17
+  (v4g: 0/1 · 4/8 · 0/9). Reading the eleven moved mates across all
+  distances: in four the probe found NO line where the referee saw a mate
+  (in 3, 8, 11 and 13). Replaying those positions uncontended: a depth-12
+  probe finishes in 27–180 ms and finds the mate in 3 every time from a
+  FRESH hash, but run on the transposition table the depth-8 reply search
+  had just left, one trial in three reported +12 instead. The referee,
+  probing after the game with a hindsight-filled table, saw more mates
+  than a fresh search does.
+- **v4i** — the probe clears the hash first. Every remaining moved mate now
+  had the engine's line IN HAND (mates ≥ 1 on all eleven), and three of
+  them were single WEAKENS: a cracked wall next to a net is a capture the
+  defender can spend on an escape — "safe by construction" is false there.
+- **v4j (shipped)** — while a mate line exists, every wall or crate the
+  LOSING side could capture is off limits to the terrain rungs
+  (`tactics.mjs terrainReach`). Moved mates, all distances: **1/9 · 2/10 ·
+  3/29** (baseline 35/96 · 30/98 · 48/110); mate-in-3 or less: **0/4 ·
+  1/6 · 0/17** (baseline 12/43 · 15/55 · 23/57). The six that remain: a
+  mate in 6 delayed to 8 and a mate in 2 delayed to 3 by pawn
+  displacements outside the line, a mate in 9 delayed to 10, and three
+  mates in 4–8 that became +15 to +23 pawns — decided positions, not the
+  "+10 that runs twenty turns longer". Pacing 3.3 / 7.4 / 11.0 q/100p, 24/24
+  terminated in every arm, double-touch 0, the engine handing the gods a
+  line on 7–9% of quakes.
+
+```
+corpus                 games  ended  med plies  q/100p  act/q  gap=1  med gap  dbl-touch  un-mate  un-mate≤3  heat  pinned  floor  dead  terrain  prot pcs   eng mates
+wave6-calm-v3base      24     100%   200.5      13.8    1.57   53%    1        21%        35/96    12/43      —     4%      50%    0%    37%      —          —        
+wave6-restless-v3base  24     100%   182.5      17.2    1.77   32%    2        28%        30/98    15/55      —     0%      37%    0%    25%      —          —        
+wave6-wrathful-v3base  24     100%   171        32.1    2.98   59%    1        55%        48/110   23/57      —     10%     18%    0%    17%      —          —        
+wave6-calm-v4g         24     100%   196.5      3.7     1.72   12%    8        0%         1/4      0/1        43%   0%      0%     42%   53%      0 (0 cut)  —        
+wave6-restless-v4g     24     100%   197.5      7.0     2.33   9%     7        0%         9/16     4/8        44%   0%      0%     34%   39%      0 (0 cut)  —        
+wave6-wrathful-v4g     24     100%   157        10.6    2.79   13%    5        0%         3/16     0/9        49%   0%      0%     22%   27%      0 (0 cut)  —        
+wave6-calm-v4h         24     96%    214.5      4.0     1.63   7%     8        0%         3/11     2/6        42%   0%      0%     39%   50%      2 (0 cut)  50/211   
+wave6-restless-v4h     24     100%   190        7.0     2.36   10%    7        0%         4/16     0/7        44%   0%      0%     32%   36%      0 (0 cut)  22/324   
+wave6-wrathful-v4h     24     100%   173.5      12.5    2.81   18%    4        0%         4/32     0/17       48%   0%      0%     38%   22%      0 (0 cut)  40/584   
+wave6-calm-v4i         24     100%   214        3.4     1.70   12%    11       0%         3/12     1/5        42%   0%      0%     27%   51%      0 (0 cut)  15/167   
+wave6-restless-v4i     24     100%   226        7.9     2.47   13%    6        0%         6/18     1/10       43%   0%      0%     42%   30%      0 (0 cut)  26/440   
+wave6-wrathful-v4i     24     100%   182        11.8    2.84   16%    4        0%         4/29     1/15       46%   0%      0%     33%   19%      2 (0 cut)  41/492   
+wave6-calm-v4j         24     100%   199        3.3     1.69   13%    11.5     0%         1/9      0/4        43%   0%      0%     27%   53%      0 (0 cut)  11/158   
+wave6-restless-v4j     24     100%   214        7.4     2.47   13%    6        0%         2/10     1/6        44%   0%      0%     40%   34%      0 (0 cut)  14/395   
+wave6-wrathful-v4j     24     100%   169.5      11.0    2.80   14%    5        0%         3/29     0/17       47%   0%      0%     28%   20%      2 (0 cut)  37/446
+```
+
+Cost: two probes per quake, 30–340 ms each uncontended at depth 12–14 on
+late 10×10 positions; quakes are 3–11 per 100 plies. Replay: the probes are
+depth-bounded, so a corpus replays unless a probe's movetime binds.

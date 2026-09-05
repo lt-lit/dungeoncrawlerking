@@ -107,6 +107,16 @@ export class UciEngine {
     };
   }
 
+  /** The principal variation of the last "info ... pv ..." line, as UCI
+   *  moves (v4.2: the gods read the engine's mate lines). Empty if none. */
+  lastPv(result) {
+    for (let i = result.infoLines.length - 1; i >= 0; i--) {
+      const m = result.infoLines[i].match(/ pv (.+)$/);
+      if (m) return m[1].trim().split(/\s+/).filter(Boolean);
+    }
+    return [];
+  }
+
   /** Parse the last "info ... score ..." line into { type: 'cp'|'mate', value } from the mover's POV. */
   lastScore(result) {
     for (let i = result.infoLines.length - 1; i >= 0; i--) {

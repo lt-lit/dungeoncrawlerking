@@ -15,7 +15,7 @@ import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { captureLoss } from './threat.mjs';
-import { threatLedger, gridOf, forcedWins, winInOne, newThreats } from './tactics.mjs';
+import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets } from './tactics.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
@@ -940,6 +940,47 @@ async function main() {
     }
     if (!fired) throw new Error('no protected quake fired — the check is vacuous');
     return `${fired} protected quakes kept the win; unprotected control un-mated ${unmatedControl}/${controlFired}`;
+  });
+
+  await check('v4.2: the engine\'s mate line is protected — grid search off', () => {
+    // A search result as the duel hands it to the Director: a mate score and
+    // a principal variation. Replayed on ffish, every mover, destination and
+    // path joins the protected set, and so does the loser's king zone. With
+    // the grid search OFF (winDepth 0) the line is the ONLY protection, so a
+    // kept win proves the engine's data reached the gods.
+    const v8 = catalogVariantName(8, 8);
+    const fen = '6k1/7p/5K2/8/3n4/8/8/R7 w - - 0 1'; // 1.Rb1 (Kf8 / h6) 2.Rb8#
+    const hint = { fen, score: { type: 'mate', value: 2 }, pv: ['a1b1', 'g8f8', 'b1b8'], source: 'test' };
+    const nets = mateNets(ffish, v8, fen, 8, 8, [hint]);
+    if (nets.lines[0]?.played !== 3) throw new Error(`the PV did not replay: ${JSON.stringify(nets.lines)}`);
+    for (const sq of ['a1', 'g8']) if (!nets.pieces.has(sq)) throw new Error(`${sq} should be a protected piece`);
+    for (const sq of ['b1', 'b4', 'b8', 'f8', 'h8']) if (!nets.squares.has(sq)) throw new Error(`${sq} should be a protected square (path / zone)`);
+    const stale = mateNets(ffish, v8, fen, 8, 8, [{ ...hint, pv: ['a1b1', 'g8g7', 'b1b8'] }]); // g8g7 is illegal
+    if (stale.lines[0]?.played !== 1) throw new Error('a stale PV must stop at the first illegal move and keep what it had');
+    const replays = (post) => mateNets(ffish, v8, post, 8, 8, [{ ...hint, fen: post }]).lines[0]?.played === 3;
+    let kept = 0;
+    let fired = 0;
+    let controlBroke = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      for (const mates of [[hint], []]) {
+        const d = new Director({ onsetPly: 0, rampPlies: 1, extraActions: 3, seed, protect: true, winDepth: 0 });
+        d.observePly(ffish, v8, fen, 8, 8, QUIET_PLY);
+        d.meter.value = 1;
+        d.meter.cold = Array(10).fill(true); // a dead record: the budget opens
+        const roll = d.rollQuake(ffish, v8, fen, 8, 8, 5);
+        if (!roll.due) throw new Error('a pinned meter must roll a quake');
+        const q = d.quake(ffish, v8, fen, 8, 8, 5, { rolled: roll, mates });
+        if (!q) continue;
+        if (mates.length) {
+          fired++;
+          if (!d.lastTrace.protected?.engine?.mates) throw new Error('the trace does not show the engine line');
+          if (replays(q.postFen)) kept++;
+          else throw new Error(`seed ${seed}: the line broke — ${JSON.stringify(d.lastTrace.chosen)}`);
+        } else if (!replays(q.postFen)) controlBroke++;
+      }
+    }
+    if (!fired) throw new Error('no protected quake fired');
+    return `${kept}/${fired} kept the engine's line with the grid search off; control broke it ${controlBroke}/6`;
   });
 
   // --- Game-end protocol (rule 4): numberLegalMoves()===0, mover loses ---

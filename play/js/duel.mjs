@@ -22,6 +22,21 @@
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
 import { findSquares } from './fen.mjs';
+import { flipTurn } from './tactics.mjs';
+
+/** The principal variation of a search result's last "info … pv …" line,
+ *  as UCI moves. Parsed here rather than on the engine wrapper because the
+ *  duel runs on two of them (play/js/engine.mjs in the browser, the Node
+ *  UCI wrapper in phase0/lib/load.mjs for the labs) and both hand back
+ *  `infoLines`. */
+function lastPv(result) {
+  const lines = result?.infoLines ?? [];
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].match(/ pv (.+)$/);
+    if (m) return m[1].trim().split(/\s+/).filter(Boolean);
+  }
+  return [];
+}
 
 /**
  * Game-end check per spike 11: numberLegalMoves()===0 is the primary end
@@ -83,6 +98,7 @@ export class DuelController {
    *               weakenBias, breachAt/Bias, displaceAt/Bias, crumbleAt/Bias,
    *               meter: {...}, staleness: {...}, seed },  // DIRECTOR_DEFAULTS
    *   go: 'depth 22 movetime 500',         // paired limits (CLAUDE.md rule 5; 22 is a WASM-stability cap, see main.mjs)
+   *   mateGo: 'depth 12 movetime 600',     // v4.2: the gods' mate probes when a quake is due (null = off)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
    *     onQuake({ displacements, crumble, terrain, endedGame, preFen, postFen, trace }),
@@ -105,6 +121,14 @@ export class DuelController {
     this.files = opts.files;
     this.ranks = opts.ranks;
     this.go = opts.go ?? 'depth 22 movetime 500';
+    // v4.2 (designer 2026-09-05: "give the gods the data they need"): when a
+    // quake is due the duel asks the engine for mate lines — the position as
+    // it stands and, turn flipped, the "trap is set" position — and hands
+    // them to the Director as the protected set's source of record. The
+    // enemy's own last search joins for free when it is fresh. Paired limits
+    // (rule 5); a failed probe is logged and the gods fall back to the grid.
+    this.mateGo = opts.mateGo === undefined ? 'depth 12 movetime 600' : opts.mateGo;
+    this.lastSearch = null; // { fen, score, pv } of the enemy's last reply search
     this.hooks = opts.hooks ?? {};
     this.director = new Director(opts.director ?? {});
     // The conservation brake's reference point (§4.5, designer 2026-09-01):
@@ -207,6 +231,8 @@ export class DuelController {
       return this.#fail(`ply ${this.ply}: engine move ${res.bestmove} illegal per ffish (desync)`);
     }
     const score = this.engine.lastScore(res);
+    // v4.2: keep the search — its mate line, if any, is the gods' business.
+    this.lastSearch = { fen: this.board.fen(), score, pv: lastPv(res) };
     if (score && this.hooks.onEngineInfo) {
       const depth = res.infoLines.length ? (res.infoLines[res.infoLines.length - 1].match(/depth (\d+)/) ?? [])[1] : null;
       this.hooks.onEngineInfo({ score, depth: depth ? parseInt(depth, 10) : null });
@@ -310,7 +336,14 @@ export class DuelController {
     this.director.observePly(this.ffish, this.variantName, fenNow, this.files, this.ranks, moveEv);
 
     // --- quake phase (between plies, after EVERY completed ply) ---
-    const quake = this.director.quake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply);
+    // v4.2: roll first; only a due quake pays for the engine's mate probes.
+    const roll = this.director.rollQuake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply);
+    let quake = null;
+    if (roll.due) {
+      const { hints, probes } = await this.#mateHints(fenNow, mover);
+      if (this.state !== 'playing') return { ended: true }; // destroyed during the probe
+      quake = this.director.quake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply, { rolled: roll, mates: hints, probes });
+    }
 
     // Duel-layer safety net first, so a veto is stamped on the trace BEFORE
     // anyone renders it.
@@ -364,6 +397,63 @@ export class DuelController {
     }
     this.#takeSnapshot();
     return { ended: false };
+  }
+
+  // ---- v4.2: the gods' mate probes -----------------------------------------
+
+  /** The engine's mate lines for the board as it stands: the enemy's last
+   *  reply search when it is fresh (the quake fires right after its move, so
+   *  its PV's first move is the one just played and the rest is the line
+   *  from here), plus one probe for the side to move and one, turn flipped,
+   *  for the side that just moved ("the trap is set"; skipped when the mover
+   *  is in check, where the flip is illegal). Only mate scores are returned.
+   *  A probe that fails is logged and ends the probing — the next reply
+   *  search's recovery ladder owns a dead engine. */
+  async #mateHints(fen, mover) {
+    const hints = [];
+    const probes = { ran: 0, failed: 0, fresh: 0 }; // for the trace: what was asked, not just what came back
+    if (mover === 'engine' && this.lastSearch?.score?.type === 'mate' && this.lastSearch.pv?.length) {
+      hints.push({ ...this.lastSearch, source: 'enemy-search' });
+      probes.fresh = 1;
+    }
+    if (!this.mateGo) return { hints, probes };
+    const targets = [{ fen, side: 'to-move' }];
+    if (!this.board.isCheck()) {
+      const flipped = flipTurn(fen);
+      if (this.ffish.validateFen(flipped, this.variantName) === 1) targets.push({ fen: flipped, side: 'trap' });
+    }
+    for (const p of targets) {
+      let res;
+      try {
+        res = await this.#probe(p.fen);
+      } catch (e) {
+        probes.failed++;
+        this.record.anomalies.push(`ply ${this.ply}: mate probe (${p.side}) failed (${String(e?.message ?? e).split('\n')[0]}) — the gods act on the grid search alone`);
+        break;
+      }
+      if (this.state !== 'playing') break;
+      probes.ran++;
+      const score = this.engine.lastScore(res);
+      if (score?.type === 'mate') hints.push({ fen: p.fen, score, pv: lastPv(res), source: `probe-${p.side}` });
+    }
+    return { hints, probes };
+  }
+
+  /** One bare-position probe with paired limits, tracked like a reply search
+   *  so destroy() and whenQuiet() fence it. The hash is CLEARED first: a
+   *  probe run on the transposition table the shallow reply search just
+   *  left behind reported +12 on a position a fresh search calls mate in 3
+   *  (measured on the v4h corpus — the lab's depth-8 replies misled the
+   *  depth-12 probe in one trial of three). Quakes are rare, so the reply
+   *  search losing its table once in a while costs nothing visible. */
+  #probe(fen) {
+    this.engine.send('setoption name Clear Hash');
+    this.engine.setoption('MultiPV', '1');
+    this.engine.position({ fen });
+    const mt = this.mateGo.match(/movetime (\d+)/);
+    const p = this.engine.go(this.mateGo, { timeout: mt ? parseInt(mt[1], 10) + 4000 : 30000 });
+    this.activeSearch = p.catch(() => {});
+    return p;
   }
 
   // ---- undo (cheat feature) ----------------------------------------------

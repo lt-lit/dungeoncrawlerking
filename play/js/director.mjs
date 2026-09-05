@@ -71,7 +71,10 @@
 // weighted pick over a STRUCTURAL impact score (how much would this unstick?)
 // — never from an evaluation. A structural criterion never references a side,
 // so "feels random" and "never picks a winner" hold by construction instead
-// of needing to be engineered.
+// of needing to be engineered. (v4.2 carve-out: the gods READ the engine's
+// MATE lines — never an eval — to know what they may not touch; see
+// tactics.mjs mateNets and duel.mjs #mateHints. Targeting itself is
+// unchanged.)
 //
 // DROPPED from v2: the pairing rule. Exactly one white piece and one black
 // piece moving on every quake is a signature no player misses, and §4.5 needs
@@ -664,13 +667,16 @@ export const DIRECTOR_DEFAULTS = {
 
   // --- v4: protection (designer 2026-09-05) --------------------------------
   protect: true, // the threat ledger + every forced win's net are untouchable
+  //               (v4.2: the ENGINE's mate lines are the source of record —
+  //               the duel hands them to quake() as `mates`; the grid search
+  //               below is the exact win-in-1 check and the fallback)
   threatMemory: 100000, // a threat key the mover already held within this many plies is not NEW
   //                       again — longer than any duel, so a threat is news ONCE per side per
   //                       game. A 16-ply memory left 25–39% of the plies in 600-ply shuffles
   //                       reading as hot (a slow cycle of threats re-created every 20 plies),
   //                       which held both meters down and stopped the hole clock. Finite and
   //                       JSON-safe on purpose (Infinity would replay as 0 from a record).
-  winDepth: 2, // forced-win search: 1 = win-in-1 only (exact), 2 = + bounded mate-in-2
+  winDepth: 2, // grid forced-win search: 0 = off (engine hints only), 1 = win-in-1 (exact), 2 = + bounded mate-in-2
   winNodes: 12000, // that search's node budget — pushes, never a clock (replay-safe)
 
   // --- the ladder: pressure thresholds and biases -------------------------
@@ -790,7 +796,7 @@ export class Director {
     this.conserveFloor = c.conserveFloor;
     this.protect = c.protect !== false;
     this.threatMemory = Math.max(0, c.threatMemory);
-    this.winDepth = Math.max(1, Math.min(2, c.winDepth));
+    this.winDepth = Math.max(0, Math.min(2, c.winDepth));
     this.winNodes = Math.max(100, c.winNodes);
     this.seed = c.seed ?? 1; // kept for the export — a trace without its seed cannot be replayed
     this.rng = mulberry32(childSeed(this.seed, 'director'));
@@ -987,7 +993,7 @@ export class Director {
       coldStreak: (v) => (this.meter.coldStreak = Math.max(0, Math.round(v))),
       tediumFloor: (v) => (this.meter.tediumFloor = Math.min(1, Math.max(0, v))),
       threatMemory: (v) => (this.threatMemory = Math.max(0, v)),
-      winDepth: (v) => (this.winDepth = Math.max(1, Math.min(2, v))),
+      winDepth: (v) => (this.winDepth = Math.max(0, Math.min(2, v))),
       winNodes: (v) => (this.winNodes = Math.max(100, v)),
     };
     const read = {
@@ -1261,7 +1267,55 @@ export class Director {
    * `rungsSpent` is the full list in order. `fellThrough` means the budget
    * ran out of legal actions before it was spent.
    */
-  quake(ffish, variant, fen, files, ranks, ply) {
+  quake(ffish, variant, fen, files, ranks, ply, opts = {}) {
+    let trace;
+    let terrain;
+    if (opts.rolled) {
+      // v4.2: the host rolled first (rollQuake), fetched the engine's mate
+      // lines while the roll stood, and now hands both back.
+      if (!opts.rolled.due) return null;
+      ({ trace, terrain } = opts.rolled);
+    } else {
+      ({ trace, terrain } = this.#openTrace(ffish, variant, fen, files, ranks, ply));
+      this.lastTrace = trace;
+    }
+    this.#activeTrace = trace;
+    try {
+      return this.#quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain, { rolled: !!opts.rolled, mates: opts.mates ?? null, probes: opts.probes ?? null });
+    } finally {
+      this.#activeTrace = null;
+      this._held = false;
+      trace.debtAfter = this.debt;
+    }
+  }
+
+  /**
+   * v4.2 — the roll alone. The host calls this first; if the quake is due it
+   * fetches the engine's mate lines (an async probe the synchronous Director
+   * cannot make itself) and then calls quake() with `{ rolled, mates }`. The
+   * trace is opened and recorded here exactly as quake() would, so a
+   * not-due ply leaves the same quiet trace on `lastTrace`. Returns
+   * { due, trace, terrain }.
+   */
+  rollQuake(ffish, variant, fen, files, ranks, ply) {
+    const opened = this.#openTrace(ffish, variant, fen, files, ranks, ply);
+    const { trace } = opened;
+    this.lastTrace = trace;
+    this.#activeTrace = trace;
+    let due = false;
+    try {
+      due = this.quakeDue(ply);
+      trace.path.push(due ? 'quake' : this._held ? 'held-in-check' : ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
+    } finally {
+      this.#activeTrace = null;
+      trace.debtAfter = this.debt;
+    }
+    this._held = false;
+    return { due, trace, terrain: opened.terrain };
+  }
+
+  /** The per-ply trace header — everything quake() and rollQuake() share. */
+  #openTrace(ffish, variant, fen, files, ranks, ply) {
     // holdInCheck is stamped BEFORE the trace is built, because both the
     // trace's p.quake and the quakeDue draw read pQuake() — so the recorded
     // probability is the one actually rolled against.
@@ -1303,23 +1357,17 @@ export class Director {
       outcome: 'quiet',
       fellThrough: false,
     };
-    this.lastTrace = trace;
-    this.#activeTrace = trace;
-    try {
-      return this.#quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain);
-    } finally {
-      this.#activeTrace = null;
-      this._held = false;
-      trace.debtAfter = this.debt;
-    }
+    return { trace, terrain };
   }
 
-  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain0) {
-    if (!this.quakeDue(ply)) {
-      trace.path.push(this._held ? 'held-in-check' : ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
-      return null;
+  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain0, { rolled = false, mates = null, probes = null } = {}) {
+    if (!rolled) {
+      if (!this.quakeDue(ply)) {
+        trace.path.push(this._held ? 'held-in-check' : ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
+        return null;
+      }
+      trace.path.push('quake');
     }
-    trace.path.push('quake');
     trace.census = { lockedPawns: lockedPawns(fen, files, ranks).length, displacement: null, weaken: null, breach: null, crumble: null };
 
     // --- the action budget ------------------------------------------------
@@ -1356,7 +1404,7 @@ export class Director {
     // (tactics.mjs). Computed once, on the board the gods are about to edit.
     const blocked = { touched: new Set(), pieces: new Set(), squares: new Set() };
     if (this.protect) {
-      const guard = protectedSet(ffish, variant, fen, files, ranks, { depth: this.winDepth, nodeBudget: this.winNodes });
+      const guard = protectedSet(ffish, variant, fen, files, ranks, { depth: this.winDepth, nodeBudget: this.winNodes, hints: mates });
       blocked.pieces = guard.pieces;
       blocked.squares = guard.squares;
       trace.protected = {
@@ -1367,6 +1415,7 @@ export class Director {
         lines: guard.lines,
         nodes: guard.nodes,
         truncated: guard.truncated,
+        engine: { ...guard.engine, probes }, // v4.2: the engine's mate lines, replayed into the set (+ what the duel asked for)
       };
     }
 

@@ -771,6 +771,20 @@ the full record; `phase0/results/godlab/v4-findings.md` the numbers):
   quiet move on a wide-open board, is unprotected — and a WEAKEN can undo
   one (a cracked wall is a crate the mated king may capture to flee).
 
+- **The engine's mate lines (v4.2)**: the "never consults the engine" rule
+  is repealed for MATE and only for mate. When the quake roll passes the
+  duel gathers mate lines — the enemy's fresh reply search, a fixed-depth
+  probe of the board, and one of the turn-flipped "trap is set" board
+  (`mateGo` `depth 12 movetime 600`; `?mateprobe=depth N movetime M` or
+  `?mateprobe=off`) — and every principal variation is replayed on ffish
+  into the protected set (movers, destinations, paths, the loser's king
+  zone). The grid search stays as the exact win-in-1 check and the fallback
+  for a failed probe (`winDepth` 0 = engine only). Each probe clears the
+  hash first (a warm table from the reply search hid a mate in 3 from the
+  probe), and while a mate line exists every wall or crate the losing side
+  could capture is off limits to weaken, breach and crumble
+  (`terrainReach`: a crack next to a net is a capture the defender spends
+  on an escape). The trace line reads `engine N mate lines from 2 probes`.
 - **The ladder (v4.1)**: weaken leads (`weakenBias` 3), breach comes later
   and lighter (`breachBias` 1.2 from tedium 0.3) — a crack hands both
   players a wall to smash, a breach smashes it for them — and the crate

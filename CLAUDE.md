@@ -495,6 +495,49 @@ termination 24/24 in every arm; double-touch 0; the un-mated short mates
 ladder. Displacement still leads by action (38–49%) because the terrain
 rungs run dry and the budget falls through to it — structural, as before.
 
+**v4.2 — THE GODS READ THE ENGINE'S MATE LINES (designer 2026-09-05, same
+day: "Wait we're NOT feeding engine results to The Gods to detect Mate in
+N? … Ditch the dumbass rule").** The "never consults the engine" clause is
+REPEALED for mate, and only for mate: the gods read a MATE score, never an
+eval. `duel.mjs` now rolls first (`director.rollQuake`) and, only when the
+quake is due, gathers mate lines — the enemy's fresh reply search
+(`lastSearch`, its PV's first move is the one just played), a fixed-depth
+probe of the board as it stands, and one of the turn-flipped "trap is set"
+board (skipped when the mover is in check) — `mateGo` `depth 12 movetime
+600`, paired limits, tracked like a reply search, `?mateprobe=` /
+`?mateprobe=off`, the lab's `cfg.mateGo`; a failed probe is an anomaly and
+the grid falls back. `director.quake(…, { rolled, mates, probes })` hands
+them to `tactics.mjs mateNets`: every PV is replayed on ffish (stopping at
+the first move it will not play), each mover / destination / PATH and the
+LOSER's king zone (at the end of the line AND now) join the protected set;
+`winDepth` 0 turns the grid search off (engine-only arm). Two lessons from
+the first engine-fed corpus (`*-v4h.jsonl`): **the probe CLEARS THE HASH
+first** — run on the transposition table the shallow reply search left
+behind, a depth-12 probe reported +12 on a position a fresh search calls
+mate in 3 (one trial in three; the referee, probing after the game with a
+hindsight-filled table, saw mates the probe missed); and **the loser gets
+no new captures** (`tactics.mjs terrainReach`): while a mate line exists,
+every wall the losing side could take as a crate, every crate it could
+take and every such square is off limits to the terrain rungs — three of
+v4i's eleven moved mates were single WEAKENS with the engine's line in
+hand ("safe by construction" is false next to a net: a cracked wall is a
+capture the defender can spend on an escape). The trace's
+`protected.engine` records hints, mate lines and probes; the overlay's quake
+line reads "engine N mate lines from 2 probes". Gates: selftest 40/40
+(v4.2: an engine line keeps the win with the grid search off, control
+breaks it 6/6), a Node end-to-end on the trap fixture (two probes → black's
+loss in 4 and the trap-set mate in 1, 11 pieces / 28 squares protected, the
+quake dropped its hole outside the net), and a live browser duel where
+every quake line carried two probes and no anomaly. **Measured (v4j, the
+shipped set, same 24 deals): moved mates across ALL distances 1/9 · 2/10 ·
+3/29 (v3 baseline 35/96 · 30/98 · 48/110), mate-in-3-or-less 0/4 · 1/6 ·
+0/17 (12/43 · 15/55 · 23/57); the six that remain are one- or two-move
+delays by pawn displacements outside the line or long mates that became
++15 to +23 pawns; pacing 3.3 / 7.4 / 11.0 q/100p, 24/24 terminated in every
+arm, double-touch 0.** The corpora are `*-v4h.jsonl` (first wiring), `-v4i`
+(hash cleared), `-v4j` (loser's terrain reach — shipped); the digest now
+carries `preFen` so a probe can be replayed offline.
+
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
 matchups × eleven arms) costs ~550 h of serial CPU and answers calibration

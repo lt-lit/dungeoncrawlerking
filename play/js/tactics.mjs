@@ -269,10 +269,23 @@ export function newThreats(prev, now, side) {
   return out;
 }
 
-function flipTurn(fen) {
+export function flipTurn(fen) {
   const f = splitFen(fen);
   f.turn = f.turn === 'w' ? 'b' : 'w';
   return joinFen(f);
+}
+
+/** A move in a winning line protects its mover (FROM: the piece stands
+ *  there now), its destination, and its PATH — the squares a slider crosses
+ *  to get there. The first cut protected a1 and a8 for Ra8# and left a2–a7
+ *  open: a pawn scooted onto a3, a hole opened on a6, and the mate was gone
+ *  (the dev fixture un-mated 22 of 40 seeds until the path joined the net). */
+function absorbMoveInto(out, uci) {
+  const m = UCI_RE.exec(uci);
+  if (!m) return;
+  out.pieces.add(m[1]);
+  out.squares.add(m[2]);
+  for (const sq of between(sqFR(m[1]), sqFR(m[2]))) out.squares.add(sq);
 }
 
 /** Board field of a FEN → cell grid [rankFromBottom][file] (fenGrid's twin;
@@ -317,9 +330,9 @@ export function winInOne(board) {
  * blockers are part of the net — and the line squares from each attacker of
  * the king to the king. Returns { pieces: Set<sq>, squares: Set<sq> }.
  */
-export function netOf(fen, files, ranks) {
+export function netOf(fen, files, ranks, loser = null) {
   const g = gridOf(fen, files, ranks);
-  const loserWhite = fen.split(' ')[1] === 'w';
+  const loserWhite = loser === null ? fen.split(' ')[1] === 'w' : loser;
   const pieces = new Set();
   const squares = new Set();
   let king = null;
@@ -368,24 +381,13 @@ export function netOf(fen, files, ranks) {
  */
 export function forcedWins(ffish, variant, fen, files, ranks, { depth = 2, nodeBudget = 12000, allMovesBelow = 32 } = {}) {
   const out = { pieces: new Set(), squares: new Set(), wins: { white: 0, black: 0 }, lines: [], nodes: 0, truncated: false };
-  if (ffish.validateFen(fen, variant) !== 1) return out;
+  if (depth < 1 || ffish.validateFen(fen, variant) !== 1) return out; // depth 0: the grid search is off (engine hints only)
   const turnWhite = fen.split(' ')[1] === 'w';
   const root = new ffish.Board(variant, fen);
   const inCheck = root.isCheck();
   root.delete();
 
-  // A move in a winning line protects its mover (FROM: the piece stands
-  // there now), its destination, and its PATH — the squares a slider crosses
-  // to get there. The first cut protected a1 and a8 for Ra8# and left a2–a7
-  // open: a pawn scooted onto a3, a hole opened on a6, and the mate was gone
-  // (the dev fixture un-mated 22 of 40 seeds until the path joined the net).
-  const absorbMove = (uci) => {
-    const m = UCI_RE.exec(uci);
-    if (!m) return;
-    out.pieces.add(m[1]);
-    out.squares.add(m[2]);
-    for (const sq of between(sqFR(m[1]), sqFR(m[2]))) out.squares.add(sq);
-  };
+  const absorbMove = (uci) => absorbMoveInto(out, uci);
   const absorb = (line) => {
     absorbMove(line.move);
     for (const net of line.nets) {
@@ -485,17 +487,109 @@ export function forcedWins(ffish, variant, fen, files, ranks, { depth = 2, nodeB
 }
 
 /**
+ * Terrain squares `white`'s pieces could CAPTURE if they were crates: the
+ * first terrain square along each slider ray, a knight's terrain hops, the
+ * king's and pawns' terrain steps. A weaken turns exactly such a wall into
+ * a crate, and near a mate that is a gift to the loser — a defender takes
+ * the crate and the capture opens a line, defends the mating square or
+ * frees a flight square (v4i: three of eleven moved mates were single
+ * cracks with the engine's line in hand). Pure grid arithmetic.
+ */
+export function terrainReach(grid, files, ranks, white) {
+  const out = new Set();
+  for (const p of piecesOn(grid, files, ranks)) {
+    if (isWhite(p.ch) !== white) continue;
+    const t = p.ch.toLowerCase();
+    const dirs = sliderDirs(p.ch);
+    if (dirs) {
+      for (const [df, dr] of dirs) {
+        let f = p.f + df;
+        let r = p.r + dr;
+        while (onBoard(f, r, files, ranks)) {
+          const occ = grid[r][f];
+          if (occ) {
+            if (isTerrain(occ)) out.add(SQ(f, r));
+            break;
+          }
+          f += df;
+          r += dr;
+        }
+      }
+      continue;
+    }
+    const steps = t === 'n' ? KNIGHT_HOPS : t === 'k' ? KING_STEPS : t === 'p' ? [[-1, isWhite(p.ch) ? 1 : -1], [1, isWhite(p.ch) ? 1 : -1]] : [];
+    for (const [df, dr] of steps) {
+      const f = p.f + df;
+      const r = p.r + dr;
+      if (onBoard(f, r, files, ranks) && isTerrain(grid[r][f])) out.add(SQ(f, r));
+    }
+  }
+  return out;
+}
+
+/**
+ * v4.2 — THE ENGINE'S MATE LINES (designer 2026-09-05: "we already have both
+ * the enemy and the move recommendation probe gathering this data
+ * constantly … give the gods the data they need"). `hints` are search
+ * results the duel already holds or probed for when the quake roll passed:
+ * { fen, score: { type, value }, pv: [uci…], source }. Every hint with a mate
+ * score is replayed on ffish from its own fen — each move's mover,
+ * destination and path join the set — and the LOSER's king zone joins twice:
+ * at the end of the line and on the board as it stands now. A positive mate
+ * is for the side to move (the other side loses); a negative one means the
+ * side to move is being mated. The line stops at the first move ffish will
+ * not play (a stale or truncated PV), keeping what it had. Returns
+ * { pieces, squares, lines: [{ winner, mateIn, move, source, played }] }.
+ */
+export function mateNets(ffish, variant, fen, files, ranks, hints) {
+  const out = { pieces: new Set(), squares: new Set(), lines: [] };
+  for (const h of hints ?? []) {
+    if (!h || h.score?.type !== 'mate' || !Array.isArray(h.pv) || !h.pv.length) continue;
+    const startFen = h.fen ?? fen;
+    if (ffish.validateFen(startFen, variant) !== 1) continue;
+    const toMoveWhite = startFen.split(' ')[1] === 'w';
+    const loserWhite = h.score.value > 0 ? !toMoveWhite : toMoveWhite;
+    const b = new ffish.Board(variant, startFen);
+    let played = 0;
+    try {
+      for (const uci of h.pv) {
+        const legal = b.legalMoves().trim().split(/\s+/);
+        if (!legal.includes(uci)) break;
+        absorbMoveInto(out, uci);
+        b.push(uci);
+        played++;
+      }
+      for (const net of [netOf(b.fen(), files, ranks, loserWhite), netOf(fen, files, ranks, loserWhite)]) {
+        for (const sq of net.pieces) out.pieces.add(sq);
+        for (const sq of net.squares) out.squares.add(sq);
+      }
+      // The loser gets no new captures: every wall its pieces could take as
+      // a crate stays a wall (weaken), every crate it could take stays put
+      // (breach), every such square stays whole (crumble).
+      for (const sq of terrainReach(gridOf(fen, files, ranks), files, ranks, loserWhite)) out.squares.add(sq);
+    } finally {
+      b.delete();
+    }
+    out.lines.push({ winner: loserWhite ? 'black' : 'white', mateIn: Math.abs(h.score.value), move: h.pv[0], source: h.source ?? 'engine', played });
+  }
+  return out;
+}
+
+/**
  * Everything a quake may not touch on `fen`: the union of both sides' threat
- * ledgers (pieces + squares) and every forced win's net. Pure of RNG. The
- * Director calls this once per quake that fires and threads the result
- * through every rung.
+ * ledgers (pieces + squares), every mate line the ENGINE reported
+ * (`opts.hints`, v4.2 — the source of record), and every forced win the
+ * grid search finds (`opts.depth`, the exact win-in-1 and the fallback for
+ * a probe that failed; 0 turns it off). Pure of RNG. The Director calls this
+ * once per quake that fires and threads the result through every rung.
  */
 export function protectedSet(ffish, variant, fen, files, ranks, opts = {}) {
   const grid = gridOf(fen, files, ranks);
   const ledger = threatLedger(grid, files, ranks);
   const wins = forcedWins(ffish, variant, fen, files, ranks, opts);
-  const pieces = new Set([...ledger.white.pieces, ...ledger.black.pieces, ...wins.pieces]);
-  const squares = new Set([...ledger.white.squares, ...ledger.black.squares, ...wins.squares]);
+  const engine = mateNets(ffish, variant, fen, files, ranks, opts.hints);
+  const pieces = new Set([...ledger.white.pieces, ...ledger.black.pieces, ...wins.pieces, ...engine.pieces]);
+  const squares = new Set([...ledger.white.squares, ...ledger.black.squares, ...wins.squares, ...engine.squares]);
   return {
     pieces,
     squares,
@@ -504,5 +598,6 @@ export function protectedSet(ffish, variant, fen, files, ranks, opts = {}) {
     lines: wins.lines.map((l) => ({ side: l.side, depth: l.depth, move: l.move })),
     nodes: wins.nodes,
     truncated: wins.truncated,
+    engine: { hints: opts.hints?.length ?? 0, mates: engine.lines.length, lines: engine.lines },
   };
 }
