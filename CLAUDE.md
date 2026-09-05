@@ -224,7 +224,15 @@ leaf + double, slate-stained / dark oak by `recolourHue` (wood takes the
 hue at its brightness, iron and outline stay), `DOOR_SETS` = hall /
 castle / crypt; and TABLE / CHAIR are DROPPED — `T` / `C` stay in the
 files, `SKIN_CHARS` maps them onto crate / chest until the category has
-art. Known nits from the
+art. **Round 18, same day — the designer's X's and O's**: castle crates
+are the Catacombs crates in slate (the stone blocks are out), crypt keeps
+two wide crates + its wide low box + pixel-poem's chests in oak, hall
+barrels are the DG vase + Catacombs urns as terracotta, crypt barrels all
+ten urns (`SKIN_VARIANTS` 10), SHELF is dropped (`S` → crate), a new
+WRECKAGE skin `W` (broken crates + spilled urns) sits on the seven
+"broken / collapsed / spilled" squares, castle doors are a cool walnut
+(#7d6455 — slate was "too blue/grey"), and `tint` accepts `{ to, whole }`
+for sprites the wood-only recolour cannot take whole. Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the

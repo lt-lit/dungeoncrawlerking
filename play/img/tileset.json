@@ -837,7 +837,7 @@
      "sheet": "Dungeon_Tileset.png",
      "x": 7,
      "y": 3,
-     "recoloured": "wood to #6b6f8a"
+     "recoloured": "wood to #7d6455"
     },
     "crate": {
      "col": 4,
@@ -1029,7 +1029,7 @@
      "sheet": "Dungeon_Tileset.png",
      "x": 6,
      "y": 6,
-     "recoloured": "wood to #6b6f8a"
+     "recoloured": "wood to #7d6455"
     },
     "door2-r": {
      "col": 3,
@@ -1037,7 +1037,7 @@
      "sheet": "Dungeon_Tileset.png",
      "x": 7,
      "y": 6,
-     "recoloured": "wood to #6b6f8a"
+     "recoloured": "wood to #7d6455"
     },
     "doorway": {
      "col": 16,

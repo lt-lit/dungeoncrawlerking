@@ -500,7 +500,27 @@ themes' leaves (`DOOR_SETS` hall / castle / crypt); (6) TABLE and CHAIR
 are DROPPED ("no version of them ever has [looked good]") — `T` / `C`
 stay in the stage files as authoring intent and `SKIN_CHARS` maps them
 onto crate / chest until the category has art; the in-house SVGs and CSS
-went with them. `phase0/lib/png.mjs`
+went with them. **Round 18 (2026-09-05)** — the designer marked the
+in-use sheet with X's and the pack sheet with O's: OUT went the castle's
+stone-block crates, the crypt's narrow crates and low boxes, the hall's
+keg and the whole SHELF category (`S` paints as a crate now); IN came the
+Catacombs' broken crates and its small, tiny and spilled urns. So: castle
+crates are the Catacombs crates in slate; crypt keeps its two wide crates
+and its wide low box, with pixel-poem's two chests in dark oak beside it;
+hall barrels are Dungeon Gathering's vase (already the hall's orange) and
+four Catacombs urns as terracotta, castle barrels the vase plus three
+small urns as they are, crypt barrels all ten of its urns
+(`SKIN_VARIANTS` 10); and a new skin, WRECKAGE (`W`) — the two broken
+crates and five spilled urns, native on the crypt, timber / terracotta on
+the hall, slate on the castle — on the seven squares whose notes say
+broken, collapsed or spilled. The castle's doors are a cool WALNUT
+(`#7d6455`; the slate was "too blue/grey"), its crates and wreckage keep
+the slate. A tint may be `{ to, whole: true }`: a WHOLE-sprite tint —
+every pixel but the near-black outline, normalised to the sprite's
+brightest pixel at 1.25× the target — for the urns and shards, whose green
+ones are saturated enough to be half-taken by the wood-only recolour and
+whose broken crates blew their highlights out under dominant-colour
+scaling. `phase0/lib/png.mjs`
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.

@@ -678,7 +678,7 @@ const THEMES = {
   castle: {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
     tiles: {
-      door: ['pp', 7, 3], // pixel-poem's leaf, slate-stained (tint) — round 17: "the doors on Castle and Crypt suck"
+      door: ['pp', 7, 3], // pixel-poem's leaf, walnut-stained (tint) — round 17: "the doors on Castle and Crypt suck"; round 18: "less blue/grey"
       crate: [['catdeco', 8, 5], ['catdeco', 9, 5]], // round 18: the pack's stone blocks were X'd — the Catacombs crates, slate-stained (tint)
       chest: [['pp', 2, 8], ['pp', 5, 8], ['ppbox1', 0, 0], ['ppmini1', 0, 0]], // pixel-poem's iron-bound chests — already in the castle's grey
       barrel: [['dg', 2, 12], ['catdeco', 12, 8], ['catdeco', 13, 8], ['catdeco', 11, 11]], // the pack's vase + the small Catacombs urns as they are (their grey-purple and green sit in the castle's cool palette)
@@ -694,11 +694,14 @@ const THEMES = {
     },
     door2: [['pp', 6, 6], ['pp', 7, 6]],
     // Borrowed timber recoloured (recolourHue: the wood takes the hue at
-    // its own brightness, iron and outline stay) to a slate stain that sits
-    // in the pack's blue-grey; the doorway posts are cut from the same.
-    tint: { door: '#6b6f8a', door2: '#6b6f8a', crate: '#6b6f8a', wreckage: { to: '#6b6f8a', whole: true } },
+    // its own brightness, iron and outline stay). The DOORS are a cool
+    // walnut (round 18: the slate stain was "too blue/grey") — the same
+    // brightness as the slate, warmer, still sitting against the pack's
+    // vase; the crates and wreckage keep the slate. The doorway posts are
+    // cut from the door's walnut.
+    tint: { door: '#7d6455', door2: '#7d6455', crate: '#6b6f8a', wreckage: { to: '#6b6f8a', whole: true } },
     doorSet: 'castle',
-    doorPost: { lit: '#9094b0', dark: '#43465c' },
+    doorPost: { lit: '#a58a76', dark: '#4a3b32' },
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0, face: { sheet: 'dg', x: 6, y: 10, row: 8 } },
     // The Catacombs flagstones in Dungeon Gathering's floor blue-grey.
     floor: { tint: ['dg', 10, 3] },
