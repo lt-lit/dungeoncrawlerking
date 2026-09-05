@@ -53,7 +53,7 @@ the block with a branching black crack and NO crate sprite, hint arrows are
 outlined on shaft and head and carry their eval written into the arrow (paints
 are depth-consistent across ranks), the floor is warm grey, and `^` has
 SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
-crate/rubble; cosmetics only, never grid state) authored over the whole bed
+crate/masonry; cosmetics only, never grid state) authored over the whole bed
 by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
 family by the stage notes, a reviewed override table) with sprites
 generated into `style.css` by `gen-sprites.mjs`; **round 3, 2026-09-03 —
@@ -110,7 +110,7 @@ wall tile at 16 px in the middle of the cell ("shrunk down") — every
 **round 10**: piece boxes are the set's tallest piece high (trimmed
 sprites, one baseline — a 32-px box centred in the square had hung the
 feet below it, "chopped in half") and dials place them; RUIN AUTOTILE — a
-broken wall, cracked wall, weak spot or rubble skin leaves a `.ruin` cell
+broken wall, cracked wall, weak spot or authored masonry leaves a `.ruin` cell
 wearing one of 16 GENERATED cases (`--tile-ruin-<mask>`, the 4-bit
 neighbour mask — solid neighbours then, STANDING walls only since round
 12), a weak-spot door never leaves a doorway, other
@@ -167,7 +167,80 @@ crumble fx ends on the lone-pit case); **round 14**: FOUR crack drawings
 stable hash, so neighbouring cracks differ and never swap) and the gods'
 residue is ONE 3-px light-blue frame for crack, breach and hole alike
 (the breach fill and the hole's rust rim are gone — "all god actions in
-light blue"; the three classes stay for the tests). Known nits from the
+light blue"; the three classes stay for the tests); **round 15,
+2026-09-04 — THE RUBBLE HEAP IS DEAD**: the `R` skin (41 squares across
+22 of wave 6's 36 arenas) painted a heap of loose stones sitting on the
+floor — "shitty… absurdly out of place. Why not just use a cracked
+wall?", the same look rounds 11–12 had already driven out of the ruin
+tile, and inverted: a heap that IS a standing obstacle reads as debris
+already broken. `R` is now the `masonry` skin and paints a WEAK SPOT
+(`weak`, board-ui.mjs) — its wall autotile case wearing THE crack,
+pixel-identical to a god-weakened wall and to the weak-spot door, and it
+counts as STANDING so a wall line runs through it. Nothing in the locked
+stage files moved (the letter is still `R`); the heap sprite survives only
+as the in-house set's ruin fallback, and the options legend lost its
+rubble tile (5 tiles: one "cracked wall" covers both origins). Same day, the
+FURNITURE THEME GAP: the skins' table / chair / shelf had never been in the
+repack tool's ROLES (no pack was asked for them) and hall had no barrel, so
+86 of the bed's 268 `^` painted the in-house SVGs — bright orange on every
+theme ("I don't like the sprites you authored, they look worse than the
+ones from the asset packs. Palette swap some of those"). The designer
+re-supplied the three tile packs: pixel-poem draws a pedestal table, a
+stool, a rack and a barrel, so the hall wears them natively and castle and
+crypt wear the same three palette-swapped into their stone / timber
+(`tint` per theme, `recolourFill` — fill recoloured like the floors,
+outline kept); the tool now runs without the chess packs (a missing piece
+pack's sprites are read back from the committed `img/pieces.png`) and
+reproduced every committed file byte-for-byte before the change. Also that
+day: a skin audit of all 268 `^` against each stage's notes fixed seven
+(three "broken furniture" squares authored as `R` for the old heap, two
+"bones", and s89's two UNSKINNED `^` — the bed's only ones), and the lesson
+that bit: **the game loads `play/stages/manifest.json`, not the stage
+files — run `gen-stage-manifest.mjs` after ANY stage edit** or the change
+is invisible (the first commit of that audit shipped stale). **Round 16,
+2026-09-05 — the designer went through the packs himself** ("multiple
+chest options that look better than the one you picked… ALL KINDS OF
+STUFF… an actual double door"): SKIN VARIANTS — a theme lists several
+crops per furniture role, every cell wears `sv1…sv5` by a stable hash
+(`SKIN_VARIANTS`) and tiles.css maps svN + skin to `--sprite-<role>-N`
+(base fallback, wrap-around aliases) — the hall's three chests and two
+tables, the castle's three stone blocks, the crypt's own crates, low boxes
+and FIVE urns; and DOUBLE DOORS — two door skins side by side in a rank
+pair (`door2-l` / `door2-r`, west to east, never a god-cracked leaf, never
+a vertical pair) and paint `--sprite-door2-l/-r`: pixel-poem's own double,
+the castle's portcullis in the pack's two-wide arch, a generated two-wide
+barred gate for the crypt, each door set carrying its double, two leaves
+as the fallback. **Round 17, same day**, seven designer points: crates
+and chests vary like the urns (pixel-poem's loose `box_1_1` /
+`mini_box_1_1` sprites join the sheet's, all four Catacombs crate columns
+are distinct); every furniture PROP is a 16×32 board box (`placeProp` —
+small props CENTRED in their square, the 20-px urns cropped `tall` and
+standing on the bottom edge, rising into the square north; the sprite
+element spans two cells on the board, the legend shows the lower half);
+the double-door pair is AUTHORED (skin grid, painted on a standing leaf),
+so a leaf keeps its half after its partner goes; the castle's portcullis
+and the crypt's barred gate are GONE — every theme wears pixel-poem's
+leaf + double, slate-stained / dark oak by `recolourHue` (wood takes the
+hue at its brightness, iron and outline stay), `DOOR_SETS` = hall /
+castle / crypt; and TABLE / CHAIR are DROPPED — `T` / `C` stay in the
+files, `SKIN_CHARS` maps them onto crate / chest until the category has
+art. **Round 18, same day — the designer's X's and O's**: castle crates
+are the Catacombs crates in slate (the stone blocks are out), crypt keeps
+two wide crates + its wide low box + pixel-poem's chests in oak, hall
+barrels are the DG vase + Catacombs urns as terracotta, crypt barrels all
+ten urns (`SKIN_VARIANTS` 10), SHELF is dropped (`S` → crate), a new
+WRECKAGE skin `W` (broken crates + spilled urns) sits on the seven
+"broken / collapsed / spilled" squares, castle doors are a cool walnut
+(#7d6455 — slate was "too blue/grey"), and `tint` accepts `{ to, whole }`
+for sprites the wood-only recolour cannot take whole. **Round 19, same
+day — the LID is the line**: a chest has a DOMED lid, a crate is a FLAT
+box; chests are pixel-poem's closed chest + mini chest (sheet (4,8) /
+(5,8)) and their squat frames, crates its two orange boxes + squats + the
+Catacombs' three, NO grey ("looks too much like chests" — castle crates
+are walnut like its door, not slate); every pixel-poem prop is a
+four-frame bounce whose frame 1 LIFTS the lid ("an open animation, or
+the lid is detached") — only the rest pose (frame 3 = the sheet tile) and
+the squat (frame 4) are used. Known nits from the
 round-13 review, accepted for now: an edge-file piece can overlap the
 2-px board border by a hair (the clip-path clips at the border box, where
 overflow:hidden clipped at the padding box); with pixel-perfect on, the

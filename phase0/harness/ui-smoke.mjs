@@ -127,8 +127,9 @@ const themeState = () =>
       door: document.querySelector('#board [data-square="g5"] .piece.neutral') ? bg('#board [data-square="g5"] .piece.neutral') : '',
       doorBg: document.querySelector('#board [data-square="g5"]') ? bg('#board [data-square="g5"]') : '',
       // Every wall's autotile case, re-derived from its neighbours by the
-      // renderer's own rule (a standing wall, a cracked wall or a door is
-      // solid; a hole, floor or loose furniture is not; off-board is not)
+      // renderer's own rule (a standing wall, a cracked wall, a door or
+      // authored masonry is solid; a hole, floor or loose furniture is not;
+      // off-board is not)
       // through the renderer's own canonicalMask — stage-independent, so
       // it runs on any --stage.
       masksBad: await (async () => {
@@ -136,7 +137,7 @@ const themeState = () =>
         const cells = new Map([...document.querySelectorAll('#board .cell[data-square]')].map((c) => [c.dataset.square, c]));
         const solid = (f, r) => {
           const c = cells.get(String.fromCharCode(97 + f) + r);
-          return !!c && !c.classList.contains('hole') && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door'));
+          return !!c && !c.classList.contains('hole') && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door') || c.classList.contains('skin-masonry'));
         };
         const bad = [];
         let n = 0;
@@ -191,8 +192,8 @@ if (!THEME) {
 await setTheme('auto');
 expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
 // Doors: the option overrides the theme's door; auto returns it.
-await page.evaluate(() => { window.__DCK.options.doors = 'portcullis'; window.__DCK.applyOptions(); });
-expect((await page.evaluate(() => window.__DCK.doors)) === 'portcullis', 'Doors option stamps the door set');
+await page.evaluate(() => { window.__DCK.options.doors = 'castle'; window.__DCK.applyOptions(); });
+expect((await page.evaluate(() => window.__DCK.doors)) === 'castle', 'Doors option stamps the door set');
 await page.evaluate(() => { window.__DCK.options.doors = 'auto'; window.__DCK.applyOptions(); });
 expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" is the theme\'s own');
 // Piece sprites: the default set paints the king as a PNG sprite; classic is the glyph.
@@ -217,7 +218,37 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
 if (STAGE === 's59-hall-corner') {
   const door = await page.evaluate(() => ({ g5: window.__DCK.marks.cell('g5'), d8: window.__DCK.marks.cell('d8'), sprite: !!document.querySelector('#board [data-square="g5"] .piece.neutral') }));
   expect(door.g5?.includes('furniture') && door.g5?.includes('skin-door') && door.sprite, `g5 is the door leaf with its sprite (${door.g5})`);
+  // Round 16: g5+h5, the double doors in the south wall, are ONE two-wide
+  // door — g5 the left half, h5 the right — and each half paints its own
+  // pack sprite (the leaves' data URIs differ).
+  const dbl = await page.evaluate(() => {
+    const bg = (sq) => getComputedStyle(document.querySelector(`#board [data-square="${sq}"] .piece.neutral`)).backgroundImage;
+    return { g5: window.__DCK.marks.cell('g5'), h5: window.__DCK.marks.cell('h5'), same: bg('g5') === bg('h5'), png: bg('g5').includes('data:image/png') };
+  });
+  expect(dbl.g5?.includes('door2-l') && dbl.h5?.includes('door2-r') && dbl.png && !dbl.same, `g5+h5 are one double door: left half + right half, two different pack sprites (${dbl.g5} / ${dbl.h5})`);
+  // Round 17: a furniture PROP's sprite box is two cells tall, anchored to
+  // its cell's bottom (small props centred in the square, tall urns rising
+  // north); a door's stays one cell.
+  const boxes = await page.evaluate(() => {
+    const h = (sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const p = c.querySelector('.piece.neutral'); return p ? Math.round(p.getBoundingClientRect().height / c.getBoundingClientRect().height * 100) / 100 : null; };
+    return { crate: h('j1'), door: h('g5') };
+  });
+  expect(boxes.crate === 2 && boxes.door === 1, `a prop's sprite box is 2 cells tall, a door's 1 (j1 crate ${boxes.crate}, g5 door ${boxes.door})`);
   expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('weak'), `d8, the door in the north–south line, is a weak spot (${door.d8})`);
+}
+
+// --- masonry (2026-09-04): an authored 'R' is a WEAK SPOT — the wall block
+// wearing THE crack, never the retired rubble heap. Stage-independent: a
+// no-op on a stage that authors none. ----------------------------------------
+{
+  const masonry = await page.evaluate(() => Object.entries(window.__DCK.skins)
+    .filter(([, skin]) => skin === 'masonry')
+    .map(([sq]) => ({ sq, cls: window.__DCK.marks.cell(sq) })));
+  for (const m of masonry) {
+    expect(m.cls?.includes('weak') && m.cls?.some((c) => c.startsWith('wm-')) && !m.cls?.includes('cracked'),
+      `${m.sq}: authored masonry is a weak spot wearing a wall case (${m.cls})`);
+  }
+  if (masonry.length) console.log(`  (${masonry.length} authored masonry square(s) on ${STAGE})`);
 }
 
 // --- the streaming probe: arrows appear, ranked, with a depth readout --------
@@ -344,7 +375,7 @@ for (let i = 0; i < PLIES; i++) {
         const stub = cells[sq]?.find((c) => c.startsWith('wm-')) ?? null;
         if (residue.rubble.includes(sq)) expect(cells[sq]?.includes('ruin') && stub !== null && dec === null, `${sq}: breached wall keeps its ruin stub (${stub}, ${dec})`);
         else if (residue.opened.includes(sq)) expect(dec === 'decor decor-doorway' && !cells[sq]?.includes('ruin'), `${sq}: breached door keeps its open doorway (${dec})`);
-        else expect(!cells[sq]?.includes('ruin') && dec === null && !['door', 'rubble'].includes(skinsNow[sq] ?? null), `${sq}: a burst crate leaves nothing (${skinsNow[sq]}, ${stub}, ${dec})`);
+        else expect(!cells[sq]?.includes('ruin') && dec === null && !['door', 'masonry'].includes(skinsNow[sq] ?? null), `${sq}: a burst crate leaves nothing (${skinsNow[sq]}, ${stub}, ${dec})`);
       }
       const quakeArrows = await page.evaluate(() => document.querySelectorAll('#board .arrow-layer g.arrow-quake').length);
       expect(quakeArrows >= wantFrom.length, `${quakeArrows} quake arrow(s) on the SVG layer for ${wantFrom.length} displacement(s)`);
@@ -382,7 +413,8 @@ if ((await page.evaluate(() => window.__DCK.app.duel?.state)) === 'playing') {
 /** Both directions: every ledger hole paints as a hole, every painted
  *  cracked wall is a ledger crate, and every ledger crate still standing as
  *  '^' paints cracked — and every RUIN wears the stub case of its STANDING
- *  wall neighbours (a wall, a cracked wall or a door; never another ruin,
+ *  wall neighbours (a wall, a cracked wall, a door or authored masonry;
+ *  never another ruin,
  *  an opened doorway, a hole or a crate — round 12's clumps), every opened
  *  DOORWAY the east/west mask of its standing walls (its posts), and every
  *  HOLE the 4-bit mask of its hole neighbours (round 13's pit autotile).
@@ -397,7 +429,7 @@ function tilesVsLedgers({ holes, godCrates, fen }) {
   }
   const standing = (f, r) => {
     const c = document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"]`);
-    return !!c && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door'));
+    return !!c && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door') || c.classList.contains('skin-masonry'));
   };
   for (const cell of document.querySelectorAll('#board .cell.ruin')) {
     const sq = cell.dataset.square;
@@ -453,7 +485,7 @@ await shot('05-final');
 // button when the random game finished early, and a real click would wait
 // on it forever.
 await page.evaluate(() => document.getElementById('btnOptions').click());
-expect(await page.evaluate(() => !!document.getElementById('optHintCont') && document.querySelectorAll('.legend .cell').length === 6), 'options panel has the Keep-evaluating toggle and a 6-tile legend');
+expect(await page.evaluate(() => !!document.getElementById('optHintCont') && document.querySelectorAll('.legend .cell').length === 5), 'options panel has the Keep-evaluating toggle and a 5-tile legend');
 // Pixel-perfect pieces (round 11): the king's box is a whole device-pixel
 // multiple of the set's native height, then the dial goes back off. Sits
 // here, after the probe checks: every applyOptions re-runs the idle probe.

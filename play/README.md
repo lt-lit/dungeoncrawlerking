@@ -180,7 +180,8 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   the setup preview passes skins only). The in-house tiles and furniture
   SPRITES are pixel-art SVG data URIs generated into `style.css` by
   `phase0/harness/gen-sprites.mjs` (crate, door, barrel, table, chair,
-  shelf, chest, rubble, the stone block, the crack) — and since
+  shelf, chest, the stone block, the crack, and the rubble heap the ruin
+  tile falls back to) — and since
   **2026-09-03 the board wears one of three ART THEMES** repacked from free
   16×16 packs (`tiles.css`, `img/tileset.png`, `CREDITS.md`; see "Art
   themes" below): a theme only overrides those same variables under
@@ -204,11 +205,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   of solid neighbours, N=1 E=2 S=4 W=8 plus the diagonals NE=16 SE=32 SW=64
   NW=128 (a diagonal counts only when both its orthogonals are solid —
   `canonicalMask`, the standard 47-case blob), where solid means stone that
-  is not a hole, a cracked wall, or a DOOR (a door continues a wall line;
-  crates and the rest do not) — painting the theme's case
-  (`--tile-wall-<mask>`, else the plain wall); `weak` on a door skin
-  sitting in a north–south wall line — there is no edge-on door (the
-  designer cut the first attempt), so the cell paints the column's own
+  is not a hole, a cracked wall, a DOOR or authored MASONRY (those continue
+  a wall line; crates and the rest do not) — painting the theme's case
+  (`--tile-wall-<mask>`, else the plain wall); `weak` on an authored WEAK
+  SPOT — the `masonry` skin anywhere, or a door skin
+  sitting in a north–south wall line (there is no edge-on door, the
+  designer cut the first attempt) — so the cell paints its own
   autotile case like a cracked wall does and its sprite is THE crack: one
   overlay for every weakened wall, whoever weakened it (`--tile-crack`,
   gen-sprites.mjs — thin black branching lines on transparency, nothing
@@ -252,8 +254,8 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   whatever door set is chosen); a
   floor square where a WALL, a cracked wall, a weak-spot door
   (the crack in a north–south line — it never leaves a doorway: "cracked
-  walls turning into open doors doesn't make any sense") or a rubble skin
-  broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
+  walls turning into open doors doesn't make any sense") or authored
+  masonry broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
   cases (`--tile-ruin-<mask>`, the cell's `wm-<mask>` is the plain 4-bit
   mask of its STANDING wall neighbours — a wall, a cracked wall or a
   door, never another ruin or an opened doorway: round 12, "broken wall
@@ -413,8 +415,10 @@ lip in the theme's edge colour, the rest floor showing through — the
 pit's far wall in the wall's top colour shaded under a north rim, and
 pit edge to edge toward another hole, so joined pits read as one; the
 in-house set keeps its gradient pit, and the crumble fx ends on the
-lone-pit case), and the door, crate, chest, barrel
-and rubble sprites. The repack tool also builds `img/pieces.png` (32-px
+lone-pit case), and the door, crate, chest and barrel sprites (the packs'
+rubble tile is still repacked, but since round 15 nothing reads it:
+authored masonry paints as a cracked wall, and every theme generates its
+own ruin cases). The repack tool also builds `img/pieces.png` (32-px
 atlas cells, one row per set) and the `[data-pieces=…]` sprite variables
 from the sheets in `assets-src/pixel-chess/`, `assets-src/nulltale/` and
 `assets-src/deja-view/` — each set names the exact crop per piece,
@@ -433,9 +437,110 @@ cropped from its wall tile) hangs under every south edge that ends inside
 the cell, so runs read cap-and-face like the pack's, a column's south end
 shows its face and a block faces south along its bottom.
 Where a pack lacks a role the theme
-borrows from another (every door is pixel-poem's leaf; castle's barrel is
-Dungeon Gathering's vase) and where none has it (table, chair, shelf, the
-hole, the crack) the in-house sprite paints, unchanged. `phase0/lib/png.mjs`
+borrows from another (every chest is pixel-poem's; castle's barrel is
+Dungeon Gathering's vase, the crypt's a Catacombs urn) — and since round
+15 (2026-09-04) that goes for FURNITURE too: pixel-poem is the only pack
+that draws a table, a stool and a rack, so the hall wears them (and its own
+barrel, which it had lacked — its barrels were the in-house sprite) and
+castle and crypt wear the same three PALETTE-SWAPPED into their own stone
+and timber (the theme's `tint` map: the sprite's fill is recoloured like
+the flagstones, its dark outline left alone — `recolourFill`). The
+designer's verdict on the in-house furniture: "I don't like the sprites you
+authored, they look worse than the ones from the asset packs" — so no `^`
+paints an in-house sprite under a theme any more; only the hole and the
+crack are drawn in-house. The tool also runs WITHOUT the three chess packs
+on disk: a missing piece pack's fitted sprites are read back from the
+committed `img/pieces.png` (the atlas holds exactly the tiles it wrote), so
+tile work needs only the three tile packs. **Round 16 (2026-09-05)**, the
+designer going through the packs himself ("multiple chest options that
+look better than the one you picked… ALL KINDS OF STUFF… an actual double
+door"): a theme may now list SEVERAL crops for a furniture role —
+`chest: [[…], […], […]]` — the first is the role's tile, the rest
+`--sprite-<role>-N`, and every cell carries `sv1…sv5` by a stable hash of
+its square (`SKIN_VARIANTS`, board-ui) with tiles.css mapping `svN` on a
+skin to the theme's Nth sprite, the base as the fallback and a theme with
+fewer wrapping around by alias — so a row of urns is five different urns
+and a repaint never swaps one. The hall's chests are pixel-poem's three
+(timber, iron-bound, small) and its tables two; the castle's crates are
+Dungeon Gathering's three stone blocks; the crypt's crates and chests are
+the Catacombs' own crates and low boxes (pixel-poem's grey chest is off the
+crypt) and its barrels five Catacombs urns, purple and green. And DOUBLE
+DOORS: two door skins side by side in a rank are ONE two-wide door — the
+west leaf wears `door2-l`, the east `door2-r`, paired west to east so a run
+of three is a double and a single, never when either is god-cracked, and a
+vertical pair stays two weak spots — painting `--sprite-door2-l` / `-r`:
+pixel-poem draws the double (6,6)+(7,6); the castle's is its portcullis
+dropped into the pack's two-wide arch (12,8)+(13,8) with the bars
+continuing through the seam; the crypt's a generated two-wide barred gate;
+every door SET carries its double too, and a theme or set without one falls
+back to two leaves. **Round 17 (2026-09-05)**, seven points from the
+designer: (1) crates and chests vary like the urns — hall crates are
+pixel-poem's three boxes and its chests five (the sheet's three plus the
+loose `box_1_1` / `mini_box_1_1` sprites, copied flat into `assets-src/
+pixel-poem/`), castle chests four, crypt crates and low boxes four each
+(all four Catacombs crate columns are distinct sprites); (2) + (3) every
+furniture PROP is a 16×32 BOARD BOX (`placeProp`: trimmed to its pixels,
+centred left–right; a prop that fits a cell sits CENTRED in the lower
+cell, a taller one — the big urns are 20 px, cropped 16×32 with `tall` —
+stands on the cell's bottom edge and rises into the cell north, which
+paints behind it by DOM order as a tall piece does), and tiles.css gives
+the sprite element the same 1×2-cell box on the board (`#board[data-
+theme] .cell.furniture:not(.skin-door):not(.weak):not(.cracked)
+.piece.neutral`; the options legend shows a prop's lower half); (4) the
+double-door pair is AUTHORED — paired on the stage's skin grid, painted
+only on a leaf that still stands — so a leaf keeps its half after its
+partner is captured, burst or god-cracked instead of "suddenly becoming a
+normal door"; (5) the castle's portcullis and the crypt's barred gate are
+GONE ("the doors on Castle and Crypt suck"): every theme wears pixel-
+poem's leaf and double, the castle's in a slate stain and the crypt's in
+dark oak by `recolourHue` — the WOOD (saturated, non-dark pixels) takes
+the target hue at its own brightness, the iron bands and the outline stay
+— and the doorway posts follow (`doorPost`); the Doors option is the three
+themes' leaves (`DOOR_SETS` hall / castle / crypt); (6) TABLE and CHAIR
+are DROPPED ("no version of them ever has [looked good]") — `T` / `C`
+stay in the stage files as authoring intent and `SKIN_CHARS` maps them
+onto crate / chest until the category has art; the in-house SVGs and CSS
+went with them. **Round 18 (2026-09-05)** — the designer marked the
+in-use sheet with X's and the pack sheet with O's: OUT went the castle's
+stone-block crates, the crypt's narrow crates and low boxes, the hall's
+keg and the whole SHELF category (`S` paints as a crate now); IN came the
+Catacombs' broken crates and its small, tiny and spilled urns. So: castle
+crates are the Catacombs crates in slate; crypt keeps its two wide crates
+and its wide low box, with pixel-poem's two chests in dark oak beside it;
+hall barrels are Dungeon Gathering's vase (already the hall's orange) and
+four Catacombs urns as terracotta, castle barrels the vase plus three
+small urns as they are, crypt barrels all ten of its urns
+(`SKIN_VARIANTS` 10); and a new skin, WRECKAGE (`W`) — the two broken
+crates and five spilled urns, native on the crypt, timber / terracotta on
+the hall, slate on the castle — on the seven squares whose notes say
+broken, collapsed or spilled. The castle's doors are a cool WALNUT
+(`#7d6455`; the slate was "too blue/grey"), its crates and wreckage kept
+the slate until round 19. A tint may be `{ to, whole: true }`: a WHOLE-sprite tint —
+every pixel but the near-black outline, normalised to the sprite's
+brightest pixel at 1.25× the target — for the urns and shards, whose green
+ones are saturated enough to be half-taken by the wood-only recolour and
+whose broken crates blew their highlights out under dominant-colour
+scaling. **Round 19 (2026-09-05) — the LID is the line.** "Chests need
+to all have rounded tops like hall chest 3. What's even the difference
+between chests and crates?" A CHEST has a domed lid, a CRATE is a flat
+box, and every pack sprite sorted onto one side. Chests are pixel-poem's
+closed domed chest and mini chest — the sheet's (4,8) and (5,8) — plus
+their SQUAT poses (`chest_2` / `mini_chest_2`, copied flat into
+`assets-src/pixel-poem/`), silver-bodied as drawn on the hall and castle,
+dark oak on the crypt. Crates are the sheet's two orange boxes (3,8) and
+(0,8), their squats (`box_2_4` / `mini_box_2_4`) and the Catacombs' three
+slatted crates — timber on the hall, dark oak on the crypt, and WALNUT on
+the castle like its door: the slate stain made a grey crate, and the
+pack's grey boxes are out for the same reason ("let's not use silver/grey
+on crates, looks too much like chests"). The trap that cost two previews:
+every pixel-poem prop is a four-frame idle BOUNCE and only frame 3 is the
+rest pose the static sheet carries ((4,8) / (5,8) are `chest_3` /
+`mini_chest_3` pixel for pixel) — frame 1 LIFTS the lid (a clear row above
+the chest's body, a pinched waist under the box's) and frame 2 stretches
+it, so the loose `chest_1` / `box_2_1` frames the first cut shipped read
+as "an open animation, or the lid is detached"; frame 4, the squat, keeps
+the lid seated on a body a pixel wider and is the one extra silhouette.
+`phase0/lib/png.mjs`
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.
@@ -457,8 +562,11 @@ an ordinary capture in play; `^`→`.` derives the stone-only corpus control
 arm from the same file); rectangular, top rank first; 3–12 files × 5–10
 ranks (the engine's largeboard caps). An optional **`skin`** grid, the same
 shape as the map, says what each `^` LOOKS like — `D` door · `B` barrel ·
-`T` table · `C` chair · `S` shelf · `X` chest · `K` crate · `R` rubble ·
-`.` default (crate). Skins are cosmetics only (the same `^` to the engine,
+`T` table · `C` chair · `S` shelf · `X` chest · `K` crate · `R` cracked
+masonry · `.` default (crate). `R` paints as a WEAK SPOT — the wall block
+wearing the crack, exactly like a god-weakened wall — since round 15
+(2026-09-04: "why not just use a cracked wall?"); the rubble-heap sprite
+it used to wear is retired to residue duty. Skins are cosmetics only (the same `^` to the engine,
 molding, crop, the camp line and the gods); a letter on a non-`^` square is
 a load error. They ride flip, crop and the auto-crop beside the map and
 reach the renderer as `stageSkins()` (a square→skin map). An optional
@@ -501,7 +609,7 @@ with a portcullis pair and a postern (s79), a mess hall defined by its
 tables (s80), a rock-cut dead-end warren (s81), a natural grotto (s82),
 a throne room with a dais (s83), a diagonal fissure (s84), twin parallel
 passages (s85), a crate warehouse (s86), stables (s87), a RUIN whose
-walls decay into stone/rubble/gap runs (s88), an enfilade of rooms
+walls decay into stone/cracked-masonry/gap runs (s88), an enfilade of rooms
 (s89), a true four-way crossing with unequal quadrants (s90), an arcade
 (s91), masonry giving way to cave (s92), a cloister garth (s93) and an
 L-shaped tannery with an alley (s94). Rooms reachable only through a

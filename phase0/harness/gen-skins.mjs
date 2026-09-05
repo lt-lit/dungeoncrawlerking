@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Author the "skin" grid of every stage — what each '^' LOOKS like (door,
-// barrel, table, chair, shelf, chest, crate, rubble; stage.mjs SKIN_CHARS).
+// barrel, table, chair, shelf, chest, crate, masonry; stage.mjs SKIN_CHARS).
 // Skins are cosmetic: the same '^' to the engine, molding, crop, the camp
 // line and the gods. The assignment is RULE-BASED, not random, and reviewed:
 //
@@ -14,7 +14,8 @@
 //      2×2 blocks always read as stacked crates.
 //   3. OVERRIDES below settle what geometry + keywords get wrong (a crate
 //      that caps a stone stub is not a gate; a barricade is not a row of
-//      doors; weak masonry is rubble, not a door) — one line per square, so
+//      doors; weak masonry is 'R', not a door — since 2026-09-04 it paints
+//      as a CRACKED WALL, never the retired rubble heap) — one line per square, so
 //      the review is the diff.
 //
 // THEMES (2026-09-03): the same tool assigns each stage its art theme

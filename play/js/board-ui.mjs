@@ -31,22 +31,37 @@
 //   .furniture stays on a .cracked cell: everything that keys off "this cell
 //   holds a capturable sprite" keeps working, and the cell carries the look.
 //   skin-<name> on a .furniture cell picks the SPRITE (door, barrel, table,
-//   chair, shelf, chest, rubble; the crate is the default) from the stage's
-//   skin grid (stage.mjs stageSkins) — cosmetics only, never grid state.
+//   chair, shelf, chest; the crate is the default) from the stage's skin
+//   grid (stage.mjs stageSkins) — cosmetics only, never grid state. The
+//   masonry skin has no sprite of its own: it is a .weak cell (below).
 //   .wm-<mask> on a wall/cracked cell: its AUTOTILE case — the mask of
 //              solid neighbours (N=1 E=2 S=4 W=8, diagonals NE=16 SE=32
 //              SW=64 NW=128, canonicalMask below; solid = stone that is
-//              not a hole, a cracked wall, or a DOOR skin — a door continues
-//              the wall line; crates and the rest do not). A theme paints
-//              the 47 blob cases (--tile-wall-<mask>, tiles.css), the
-//              in-house set one block for all.
-//   .weak      on a door skin sitting in a north–south wall line: no
-//              edge-on door exists (designer round 6), so the cell paints
-//              its wall case like a cracked wall and the sprite is the
-//              theme's WEAK-SPOT overlay (--sprite-weak) — the same '^'.
+//              not a hole, a cracked wall, a DOOR skin or MASONRY — those
+//              continue the wall line; crates and the rest do not). A
+//              theme paints the 47 blob cases (--tile-wall-<mask>,
+//              tiles.css), the in-house set one block for all.
+//   .weak      an authored WEAK SPOT: the masonry skin anywhere, or a door
+//              skin in a north–south wall line (no edge-on door exists,
+//              designer round 6). The cell paints its wall case and the
+//              sprite is THE crack (--tile-crack), the same overlay a
+//              god-weakened wall wears — the same capturable '^'. Since
+//              2026-09-04 masonry is a weak spot, not a rubble heap
+//              ("they look absurdly out of place. Why not just use a
+//              cracked wall?"); the heap sprite is residue-only.
 //   .f1…fN     the floor's stable texture variant (FLOOR_VARIANTS).
 //   .ck1…ckN   the crack drawing this square's wall would wear
 //              (CRACK_VARIANTS; style.css maps it to --tile-crack).
+//   .sv1…svN   which of a skin's sprite VARIANTS this square shows
+//              (SKIN_VARIANTS; tiles.css maps svN + skin-<role> to
+//              --sprite-<role>-N, the base sprite as the fallback).
+//   .door2-l / .door2-r  a door skin paired with the door skin beside it
+//              in its rank (round 16): the two paint ONE two-wide door —
+//              the west leaf its left half, the east its right
+//              (--sprite-door2-l / -r; a theme or door set without a
+//              double falls back to two leaves). Paired west to east on
+//              the AUTHORED skin grid, so a run of three is a double and a
+//              single, and a leaf keeps its half after its partner goes.
 //   .decor     a cosmetic prop span under the piece (decor-<name>: torch /
 //              chain / banner on an east–west wall face, scattered by a
 //              stable hash of the square — floor litter is packed away
@@ -114,15 +129,22 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
 /** Piece-sprite sets the board can wear (tiles.css [data-pieces=…];
  *  repack-tiles.mjs builds them). null / 'classic' = the Unicode glyphs. */
 export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nulltale-dread', 'deja-view'];
-/** Door sets (tiles.css [data-doors=…]): each theme's door, selectable
- *  over any theme — the leaf, the portcullis, the barred gate. */
-export const DOOR_SETS = ['leaf', 'portcullis', 'gate'];
+/** Door sets (tiles.css [data-doors=…]): each theme's door (and its
+ *  double), selectable over any theme — since round 17 all three are
+ *  pixel-poem's leaf, in the hall's timber, a slate stain, dark oak. */
+export const DOOR_SETS = ['hall', 'castle', 'crypt'];
 /** Floor texture variants a theme may provide (--tile-floor-1..N). */
 export const FLOOR_VARIANTS = 6;
 /** Crack drawings (gen-sprites --tile-crack-1..N): every cell carries
  *  ck1…ckN by a stable hash of its square, so neighbouring cracked walls
  *  differ and a repaint never swaps a crack (round 14). */
 export const CRACK_VARIANTS = 4;
+/** Furniture sprite variants (round 16, 2026-09-05: "look at all these
+ *  vase and crate variants"): every cell carries sv1…svN by a stable hash
+ *  of its square, and tiles.css maps svN on a skin to the theme's Nth
+ *  sprite for that role (--sprite-<role>-N, the base as the fallback), so
+ *  a row of urns is not five identical urns and a repaint never swaps one. */
+export const SKIN_VARIANTS = 10;
 
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
@@ -160,6 +182,10 @@ function floorVariant(f, rank) {
 /** Which of the crack drawings a square wears if its wall cracks. */
 function crackVariant(f, rank) {
   return `ck${1 + (squareHash(f, rank, 11) % CRACK_VARIANTS)}`;
+}
+/** Which of a skin's sprite variants a square shows (SKIN_VARIANTS). */
+function skinVariant(f, rank) {
+  return `sv${1 + (squareHash(f, rank, 17) % SKIN_VARIANTS)}`;
 }
 
 function svgEl(tag, attrs) {
@@ -203,7 +229,7 @@ export class BoardUI {
         const sq = String.fromCharCode(97 + f) + rank;
         const cell = document.createElement('div');
         // a1 dark: (file + rankFromBottom) even = dark.
-        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank);
+        cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank) + ' ' + skinVariant(f, rank);
         cell.dataset.square = sq;
         cell.addEventListener('click', () => {
           if (this.interactive && this.onSquareTap) this.onSquareTap(sq);
@@ -358,7 +384,8 @@ export class BoardUI {
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
     const grid = parseBoard(boardField); // [rankFromTop][file]
-    // STANDING = stone that is not a hole, a cracked wall, or a door — the
+    // STANDING = stone that is not a hole: a wall, a cracked wall, a door,
+    // authored masonry (a weak spot is still stone in the line) — the
     // things that continue a wall line to the eye. SOLID (for the wall
     // autotile) = standing, or the RESIDUE of it: a broken wall's ruin stub
     // and an opened doorway keep the line running through the break (round
@@ -371,7 +398,7 @@ export class BoardUI {
       if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
       const t = grid[this.ranks - rr]?.[ff] ?? null;
       const name = String.fromCharCode(97 + ff) + rr;
-      if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door';
+      if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door' || skins[name] === 'masonry';
       if (t === WALL) return !holes.has(name);
       return false;
     };
@@ -389,6 +416,22 @@ export class BoardUI {
       const name = String.fromCharCode(97 + ff) + rr;
       return rubble.has(name) || opened.has(name);
     };
+    // DOUBLE DOORS (round 16): two door skins side by side in a rank are
+    // one two-wide door. Paired on the AUTHORED skin grid (round 17: "if
+    // one opens or is destroyed, the closed door next to it suddenly
+    // becomes a normal door"), so a leaf keeps its half after its partner
+    // is captured, burst or god-cracked — the half is painted only on a
+    // leaf that still stands (the toggle below).
+    const isDoor = (ff, rr) => skins[String.fromCharCode(97 + ff) + rr] === 'door';
+    const leftLeaf = new Set(), rightLeaf = new Set();
+    for (let rr = 1; rr <= this.ranks; rr++) {
+      for (let ff = 0; ff < this.files - 1; ff++) {
+        if (!isDoor(ff, rr) || !isDoor(ff + 1, rr)) continue;
+        leftLeaf.add(String.fromCharCode(97 + ff) + rr);
+        rightLeaf.add(String.fromCharCode(97 + ff + 1) + rr);
+        ff++; // the pair is spoken for
+      }
+    }
     for (const [sq, cell] of this.cells) {
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
@@ -407,9 +450,15 @@ export class BoardUI {
       const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);
-      // A door in a north–south wall line is a weak spot in the wall.
+      cell.classList.toggle('door2-l', skin === 'door' && leftLeaf.has(sq));
+      cell.classList.toggle('door2-r', skin === 'door' && rightLeaf.has(sq));
+      // WEAK SPOTS wear the crack (2026-09-04): authored masonry anywhere,
+      // and a door in a north–south wall line (there is no edge-on door, so
+      // it reads as the weakened stone it stands in). Both paint the wall
+      // block with THE crack, exactly like a god-weakened wall — the same
+      // capturable '^'.
       const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
-      const weak = skin === 'door' && (N || S) && !(E || W);
+      const weak = skin === 'masonry' || (skin === 'door' && (N || S) && !(E || W));
       cell.classList.toggle('weak', weak);
       // A floor square where a wall broke keeps the broken stub.
       const floor = !isWall && !isFurniture;

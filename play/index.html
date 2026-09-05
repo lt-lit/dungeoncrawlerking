@@ -141,9 +141,9 @@
     <label class="opt">Doors
       <select id="optDoors">
         <option value="auto" selected>The theme's own</option>
-        <option value="leaf">Timber leaf</option>
-        <option value="portcullis">Portcullis</option>
-        <option value="gate">Barred gate</option>
+        <option value="hall">Hall timber</option>
+        <option value="castle">Castle slate</option>
+        <option value="crypt">Crypt oak</option>
       </select>
     </label>
     <label class="opt">Piece size
@@ -177,7 +177,9 @@
       <span><span class="cell hole"></span>hole (forever)</span>
       <span><span class="cell furniture"><span class="piece neutral"></span></span>crate</span>
       <span><span class="cell furniture skin-door"><span class="piece neutral"></span></span>door</span>
-      <span><span class="cell furniture skin-rubble"><span class="piece neutral"></span></span>rubble</span>
+      <!-- One cracked-wall tile for both origins (2026-09-04): a wall the
+           gods weakened and an authored weak spot are the same capturable
+           stone and now paint the same. The rubble-heap tile is gone. -->
       <span><span class="cell furniture cracked"><span class="piece neutral"></span></span>cracked wall</span>
     </div>
     <!-- Temperament + intensity moved to the debug panel head (designer,
