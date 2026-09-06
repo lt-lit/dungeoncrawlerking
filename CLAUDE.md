@@ -7,8 +7,10 @@ summarizes 12 verified spikes and the sweep results. **Phase 1 — the duel
 vertical slice — is built and lives in `play/`** (hand-authored arena →
 playable duel vs engine on a phone; placement UI, win/loss, promotion, live
 Earthquakes; no overworld). See `play/README.md` for its layout and the arena
-JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON, and v3
-GUTTED its decision layer (designer 2026-08-31, brief §4.5).** The gods now
+JSON schema. **The Board State Director (`play/js/director.mjs`) is CANON, v3
+GUTTED its decision layer (designer 2026-08-31, brief §4.5), and v4 GAVE IT A
+MEMORY (designer 2026-09-05 — see "THE GODS v4" below; the v3 text that
+follows still describes the ladder and the meters, which v4 keeps).** The gods now
 trigger on TWO METERS — restlessness (`play/js/meter.mjs`, the game record:
 "nothing has happened") and staleness (`play/js/staleness.mjs`, the position:
 "nothing CAN happen", the fun score, which sets the fill rate) — never on a
@@ -391,6 +393,215 @@ and crates are spent, later budget actions fall back to displacement. That is
 structural, not a tuning miss: the finite supply is what makes the termination
 argument work.
 
+**THE GODS v4 — MEMORY, HEAT, PROTECTION (designer 2026-09-05; built the
+same day, on the first god-lab corpus ever played on the WAVE 6 bed).** The
+designer's five complaints after phone play on wave 6 — back-to-back quakes,
+the same piece or square hit twice in one quake, quakes that turn a mate-in-N
+into a +10 that runs twenty turns longer ("the entire point is to SHORTEN
+games"), no notion of forks/pins/skewers, and every preset but calm rewarding
+passive play — were each measured on the corpora first and every one was
+real. What the code did: a quake NEVER touched the meter and the meter had NO
+CEILING, so once pinned the gods fired every ply (wave 6 baseline, shipped
+v3: calm 13.8 quakes/100 plies with 53% on the very next ply, wrathful 32.1
+and 59%; half of calm's quakes were the late PLY FLOOR, which on 200-ply
+wave 6 games is mid-game); the budget re-enumerated on the post-edit board
+with only the landed squares carried, so 21% (calm) to 55% (wrathful) of
+multi-action quakes moved a piece twice, stepped into a square just
+vacated, or cracked and smashed one wall in a breath; the guards asked only
+whether an edit CREATES a hanging piece, never whether it RELIEVES one, and
+the second displacement tier hunts immobilized pieces — which is what a
+mating net is — so a third of the quakes fired onto a forced mate destroyed
+or delayed it (calm 12/43 on mate-in-3 or less, wrathful 23/57); and the
+meter's "forcing" list was the fifty-move list, so best-move engine play
+drained it on 20–25% of plies, BELOW break-even on restless/wrathful — perfect
+play could not hold the gods off, while a pawn shuffle drained it as much as
+winning a queen. v4, all replay-safe and colour-blind: **a quake DISCHARGES
+the meter** (`relief`, 0 = v3) and **the meter is capped at its ramp**; **the
+backstop floor counts plies SINCE THE LAST QUAKE**; **a per-quake TOUCHED
+set** (no square edited or vacated twice, no piece moved twice — no
+cross-quake memory, designer); **HEAT** (`play/js/tactics.mjs threatLedger`,
+grid-only every ply: a ply is hot if it captures/checks/promotes/pushes a
+pawn OR creates a NEW threat — SEE-won piece, pin, skewer, fork, mate
+threat — news ONCE per side per game via `threatMemory`; a 16-ply memory
+left 25–39% of 600-ply shuffles reading hot; a hot record scales the fill
+down); **TEDIUM** (`meter.t` — the NEVER-discharged twin: the cold share of the
+last `tediumPlies` plies, no fifty-move event, threats blind, nothing sates
+it; restlessness decides WHEN, tedium decides WHAT and HOW MUCH:
+`rungWeights` and the budget draws key to it; without it a discharging meter
+fired only weakens and 4 of 24 calm games hit the ply cap, and as a sated
+accumulator it never rose on calm); **a threat or a CHECK heats but does not SATE, and a repeated position is
+cold** (the refund is the fifty-move rule's own list — capture, pawn move,
+promotion; checks on the list let two games run 600 plies as check farms
+with the meter never above 0.08; replayed offline over the wave 6 records,
+sating made no difference to pacing — the fill and the ramp set it, so the
+ramps came down: calm 26 / restless 14 / wrathful 6); **the DEAD-BOARD
+BACKSTOP** (`meter.deadFloor`: a P floor — calm 0.25 / restless 0.35 /
+wrathful 0.5 — while the record has been dead for the whole tedium window
+AND nothing irreversible has happened for `coldStreak` plies, undischarged,
+gone the ply something happens; a discharging meter's dynamic range is too
+narrow to close a 10×10 fortress — one took 29 holes and was still open at
+the ply cap — so this, not volume, is the closer now); and **PROTECTION** (`tactics.mjs
+protectedSet` on every quake: both ledgers + every FORCED WIN's net —
+win-in-1 exact for either side incl. the turn-flipped "trap is set" case,
+mate-in-2 by a node-budgeted checks-first search (quiet first moves on
+boards ≤32 legal moves, 12k nodes; a mate-in-3 or a quiet-move mate-in-2
+on a wide board is the known unprotected residue — and a WEAKEN can undo
+one, since a cracked wall is a crate the mated king may capture to flee),
+the mating move's PATH included — three vetoes on every rung: no displacement of a protected
+piece, no landing on a protected square, no edit or hole on one; reason
+codes `touched`/`protected`). No hard cooldown (designer: "too
+predictable"); the gods still displace everything outside the net
+(designer: "just not the specific pieces responsible"). Gates: selftest
+39/39 headless (four v4 checks: ledger, meter, no double-touch + discharge,
+and a forced win surviving 24 seeded quakes with the unprotected control
+un-mating 8/8), ladder-smoke reports double-touches (must be 0) and
+next-ply quakes. `phase0/harness/godlab/gods-metrics.mjs` scores any corpus
+on exactly these axes; the wave 6 corpora are `results/godlab/
+godlab-wave6-*-{v3base,v4a,v4b,v4d}.jsonl` and the numbers are in
+`results/godlab/v4-findings.md` (v4a = protection+heat+discharge with the
+old floor; v4b = + floor-since-quake, which broke termination; v4d = +
+tedium as a sated accumulator + game-long threat memory; v4e = tedium as
+a windowed cold share, threats no longer sating, the new ramps; v4f = +
+checks demoted, repetition cold, the dead-board backstop, the wider mate
+search — the shipped set). Presets carry
+`tediumPlies` (the window: calm 60 / restless 40 / wrathful 24), the dead
+backstop (`tediumFloor` 0.25 / 0.35 / 0.5, `coldStreak` 8 / 6 / 4) and the
+new ramps (26 / 14 / 6); sate, onset, debt caps and the staleness knobs are
+untouched pending the phone. **Measured (v4f, the shipped set): 4.2 / 7.8 /
+10.7 quakes per 100 plies (v3 13.8 / 17.2 / 32.1), next-ply quakes 10 / 14 /
+14% (53 / 32 / 59) all on dead records by construction, double-touch 0,
+short-mate un-mating 0/2 · 0/9 · 4/19 (12/43 · 15/55 · 23/57 — the four are
+mate-in-3s and a quiet-move mate-in-2, beyond the search), terrain remaining
+52 / 43 / 27% (37 / 25 / 17), termination 23/24 · 24/24 · 24/24 at the
+lab's 600-ply cap (the holdout is a fortress that took 37 holes).**
+**v4.1 — THE LADDER, same day, after restless on the phone ("feels okay,
+huge improvement": "weakens should definitely be weighted higher than
+breaches — weakening walls does a better job of opening up new lines, plus
+it's fun to smash thru walls").** A crack hands BOTH players a wall to
+smash; a breach smashes it for them. `DIRECTOR_DEFAULTS`: weakenBias 1.8→3,
+breachBias 2.2→1.2, breachAt 0.15→0.3 (displace/crumble untouched), and the
+CRATE BRAKE now counts only GOD-MINTED crates (`terrainCensus(…, godCrates)`
+→ `godCrates`; authored furniture is the stage, and a crate-heavy stage was
+braking cracks from ply 1). The four biases are LIVE SLIDERS in the debug
+panel (`#gods-ladder`, `options.godLadder`, persisted; `defaults` resets;
+they retune the running Director through the dial path and apply to new
+duels through `godConfig()`); the forecast row shows the shares they
+produce at the board's current tedium. Measured (`*-v4g.jsonl`, same 24
+deals): by ACTION weaken/breach went calm 31/22% → 39/11%, restless 15/14%
+→ 25/13%, wrathful 19/17% → 24/11%; standing crates at the end doubled
+(12→31% / 15→34% / 24→43% of authored); pacing 3.7 / 7.0 / 10.6 q/100p;
+termination 24/24 in every arm; double-touch 0; the un-mated short mates
+(0/1 · 4/8 · 0/9) are all `wins found 0` — the search residue, not the
+ladder. Displacement still leads by action (38–49%) because the terrain
+rungs run dry and the budget falls through to it — structural, as before.
+
+**v4.2 — THE GODS READ THE ENGINE'S MATE LINES (designer 2026-09-05, same
+day: "Wait we're NOT feeding engine results to The Gods to detect Mate in
+N? … Ditch the dumbass rule").** The "never consults the engine" clause is
+REPEALED for mate, and only for mate: the gods read a MATE score, never an
+eval. `duel.mjs` now rolls first (`director.rollQuake`) and, only when the
+quake is due, gathers mate lines — the enemy's fresh reply search
+(`lastSearch`, its PV's first move is the one just played), a fixed-depth
+probe of the board as it stands, and one of the turn-flipped "trap is set"
+board (skipped when the mover is in check) — `mateGo` `depth 12 movetime
+600`, paired limits, tracked like a reply search, `?mateprobe=` /
+`?mateprobe=off`, the lab's `cfg.mateGo`; a failed probe is an anomaly and
+the grid falls back. `director.quake(…, { rolled, mates, probes })` hands
+them to `tactics.mjs mateNets`: every PV is replayed on ffish (stopping at
+the first move it will not play), each mover / destination / PATH and the
+LOSER's king zone (at the end of the line AND now) join the protected set;
+`winDepth` 0 turns the grid search off (engine-only arm). Two lessons from
+the first engine-fed corpus (`*-v4h.jsonl`): **the probe CLEARS THE HASH
+first** — run on the transposition table the shallow reply search left
+behind, a depth-12 probe reported +12 on a position a fresh search calls
+mate in 3 (one trial in three; the referee, probing after the game with a
+hindsight-filled table, saw mates the probe missed); and **the loser gets
+no new captures** (`tactics.mjs terrainReach`): while a mate line exists,
+every wall the losing side could take as a crate, every crate it could
+take and every such square is off limits to the terrain rungs — three of
+v4i's eleven moved mates were single WEAKENS with the engine's line in
+hand ("safe by construction" is false next to a net: a cracked wall is a
+capture the defender can spend on an escape). The trace's
+`protected.engine` records hints, mate lines and probes; the overlay's quake
+line reads "engine N mate lines from 2 probes". Gates: selftest 40/40
+(v4.2: an engine line keeps the win with the grid search off, control
+breaks it 6/6), a Node end-to-end on the trap fixture (two probes → black's
+loss in 4 and the trap-set mate in 1, 11 pieces / 28 squares protected, the
+quake dropped its hole outside the net), and a live browser duel where
+every quake line carried two probes and no anomaly. **Measured (v4j, the
+shipped set, same 24 deals): moved mates across ALL distances 1/9 · 2/10 ·
+3/29 (v3 baseline 35/96 · 30/98 · 48/110), mate-in-3-or-less 0/4 · 1/6 ·
+0/17 (12/43 · 15/55 · 23/57); the six that remain are one- or two-move
+delays by pawn displacements outside the line or long mates that became
++15 to +23 pawns; pacing 3.3 / 7.4 / 11.0 q/100p, 24/24 terminated in every
+arm, double-touch 0.** The corpora are `*-v4h.jsonl` (first wiring), `-v4i`
+(hash cleared), `-v4j` (loser's terrain reach — shipped); the digest now
+carries `preFen` so a probe can be replayed offline.
+
+**v4.3 — THE EVAL GATE AND THE FOLLOWED LINE (designer 2026-09-05, same
+day: "a more objective way to measure whether the gods actions are about to
+screw something up"; the TWO-DRAW CAP was the designer's pick over a 1–2 s
+"try many, keep the best" budget, which would put a thumb on the scale —
+hunting for shortening quakes on purpose is a separate conversation if it is
+ever wanted).** The gods still never read an eval to CHOOSE — targets stay
+structural — but every composition is now JUDGED by one before it lands:
+`duel.mjs #composeGated` probes the board a composition would leave (the
+mate probe itself, `mateGo`, hash cleared, same side to move) and compares
+it with the to-move probe taken before the quake (`tactics.mjs
+evalSoftens`): a decided position (|score| ≥ `flipMinCp` 150) may not be
+pulled toward equality by more than `softenCp` 200, may not flip, and a mate
+may not be lost, delayed or flipped; an undecided one may not be handed a
+decision (a swing ≥ `giftCp` 500, or a mate). A rejected draw is ROLLED BACK
+IN FULL (`director.snapshot()` / `restore()` — debt, holes, god crates, the
+meter, the ledger, the threat memory; the RNG deliberately NOT, so the retry
+composes a fresh quake on the roll's pristine header, `attempt` on the trace)
+and a second draw is judged; after `draws` (2) rejections a LONE WEAKEN
+(`only: 'weaken'`) is drawn and judged; if that softens too, nothing lands,
+the trace of record reads outcome `vetoed`, and the meter is still spent
+(`director.vetoed` — a board where every composition softens must not be
+probed every ply). No baseline (probe off or failed) lets the draw stand
+unjudged; a game-ending terminal crumble is never judged. `evalGate` on the
+DuelController (`{ draws: 2, softenCp: 200, flipMinCp: 150, giftCp: 500 }`,
+null = off, `?evalgate=off`, the lab's `cfg.evalGate`); the trace carries
+`evalGate = { attempt, before, after, verdict, rejected, fallback? }`, the
+overlay's quake line reads "eval gate ok (+3.1 → +2.8)" or "… on draw 2 after
+softened", and a vetoed ply gets its own warn line. THE FOLLOWED LINE: when
+the player plays the very reply the enemy's deep search predicted
+(`lastSearch.pv[1]`), the rest of that PV — searched at the enemy's own
+depth, far past the probe's — is handed to `mateNets` as a hint on the
+current board (source `enemy-search-followed`, the mate one move nearer);
+replayed on ffish it can only be cut short by a board change, never mislead.
+Gates: selftest 41/41 (v4.3: 17 `evalSoftens` verdicts; a rejected draw
+rolls back clean and the retry composes on a clean header — the first cut
+let attempt 0's path bleed into attempt 1's trace, caught in the dev test;
+a veto spends the meter), the Node end-to-end on the trap fixture (judged ok
+at mate −4 → −4), a followed-line Node test (probe off: the followed line is
+the gods' only hint, 8 plies replayed, the quake keeps it; the control move
+gives no hint — the LAB never exercises this path, both its seats are reply
+searches) and a live browser duel with a verdict on every quake line and no
+anomaly. **Measured (v4k, same 24 deals; every arm 24/24 terminated,
+double-touch 0): the gate rejected 12 / 20 / 41 draws (calm / restless /
+wrathful — softened 9/4/16, flipped 3/13/16, decided 0/2/6, mate-lost
+0/1/3), 10 / 14 / 31 quakes landed on a retry (2 / 6 / 10 of them the lone
+weaken) and 2 / 13 / 12 plies were vetoed; the REFEREE's own before/after
+verdict — its hindsight-filled table against the gate's fresh probe — fell
+from 3.8 / 3.0 / 4.3% of quakes to 1.0 / 2.7 / 1.9%, and every remaining
+case is one the gate's own pair reads as flat or inside the band: the two
+probes disagree about the position by 2–7 pawns or a mate distance (twice a
+mate — in 4 and in 13 — the fresh depth-12 probe never saw), four sit
+within a pawn of the 200 cp band — the residue is the probe's horizon, and
+`mateGo` is its knob. Pacing 3.9 / 6.5 / 12.4 q/100p (v4j 3.3 / 7.4 / 11.0),
+median plies 196.5 / 179.5 / 183.5 (199 / 214 / 169.5) — a 24-game sample's
+noise, in both directions; un-mated 0/10 · 2/13 · 4/24 (1/9 · 2/10 · 3/29);
+the gate costs one more `mateGo` search per quake (30–340 ms), two or three
+on a retry.** Corpus `*-v4k.jsonl`; the digest carries `gate`, the trail
+`vetoed`, and `gods-metrics.mjs` two new columns (`soften`, `retry`).
+**Phone verdict 2026-09-06 (designer): v4.1–v4.3 "seem to play fine" —
+the extra probes per quake and the silent veto both passed unnoticed; the
+v4 set (memory, heat, protection, the ladder, the engine's mate lines, the
+eval gate) is the SHIPPED Director. Presets were not retuned for v4.3 and
+need not be until the phone says so.**
+
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
 matchups × eleven arms) costs ~550 h of serial CPU and answers calibration
@@ -468,10 +679,12 @@ rate 0.3%/quake — `results/godlab/tuned-ab-findings.md`, incl. the honest
 trades (calm's long tail stretched; wrathful runs hotter under the
 exposure guard via staleness feedback); (d) settle ramp numbers
 from rig + feel together — **phone verdict 2026-09-01: calm is "finally
-suitably chill"; its numbers are settled.** Restless is untested on the
-phone; wrathful reads as crazy, which is its brief — its extra heat under
-the exposure guard (26 q/100p) is the one number still on the table, and
-`rampPlies`/`stalenessGain` are the walk-back knobs for any preset. **Wrathful pass 2026-09-01: quakes can no longer
+suitably chill"; its numbers are settled.** Restless: v4 on the phone
+"feels okay, huge improvement" (2026-09-05) and v4.3 "seems to play fine"
+(2026-09-06); wrathful reads as crazy, which is its brief — its extra heat
+under the exposure guard (26 q/100p, 12.4 under v4.3) is the one number
+still on the table, and `rampPlies`/`stalenessGain` are the walk-back
+knobs for any preset. **Wrathful pass 2026-09-01: quakes can no longer
 swallow pieces at all** (designer-final, after a wrathful hole ate a
 knight at ply 13 — the tuned corpus measured wrathful at 1.96
 swallows/game, median ply 51, so the ply-13 knight was typical, not a
@@ -541,6 +754,7 @@ npm install                    # ffish + fairy-stockfish-nnue.wasm
 node lib/selftest.mjs          # infra cross-check (ffish vs engine perft)
 node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
+node harness/godlab/gods-metrics.mjs results/godlab/godlab-wave6-*.jsonl  # the v4 scorecard: pacing, next-ply share, double-touch, un-mating, heat, floor
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
 node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots)
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)

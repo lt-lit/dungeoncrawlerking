@@ -715,6 +715,107 @@ the instance suspect and it is recycled before the reply search (measured:
 a second `go` sent into an un-stopped search receives the FIRST search's
 bestmove, which would desync the duel).
 
+## The Gods v4 — memory, heat, protection (2026-09-05)
+
+The designer's five complaints, each measured on the v3 corpora before
+anything changed and turned into an invariant (`director.mjs` header has
+the full record; `phase0/results/godlab/v4-findings.md` the numbers):
+
+- **A quake spends the meter** (`meter.discharge`, `relief` knob; 0 = v3)
+  and the meter is **capped at its ramp** — v3 fired every ply once pinned
+  (wrathful's median gap was ONE ply) and banked a debt no aggression could
+  repay. The late backstop floor counts plies **since the last quake**. No
+  hard cooldown (designer: "too predictable").
+- **Nothing is touched twice in one quake** — a `touched` set (every square
+  edited or vacated, every piece moved) threads through the rungs; reason
+  code `touched` in the census. No cross-quake memory, by design.
+- **Heat** (`meter.heat`, `heatWindow`/`heatGain`): a ply is HOT if it
+  captures, checks, promotes, pushes a pawn, OR creates a **new threat**
+  (`tactics.mjs threatLedger` — a piece won by static exchange, a pin, a
+  skewer, a fork, a mate threat; news ONCE per side per game,
+  `threatMemory`). A hot record scales the fill of both meters down, so
+  building an attack keeps the gods asleep and a pawn shuffle no longer
+  outranks a rook lift.
+- **Tedium** (`meter.t`, `tediumPlies`): the never-discharged twin of
+  restlessness — the COLD SHARE of the last `tediumPlies` plies (no
+  capture, check, pawn move or promotion; a threat is not progress), so a
+  shuffle reads ~0.9 and a real fight ~0.5. Restlessness decides WHEN the
+  gods act; tedium decides WHAT (`rungWeights`) and HOW MUCH (the budget
+  draws open with the displacement rung). A discharging meter alone
+  stalled the hole clock; a sated accumulator never rose on calm.
+- **A threat or a check heats but does not sate**: the `sate` refund is
+  reserved for the fifty-move rule's own list — capture, pawn move,
+  promotion — and a repeated position is cold whatever the move was
+  (check farms ran 600 plies with the meter never above 0.08). Ramps came
+  down to match the slower fill (calm 26 / restless 14 / wrathful 6).
+- **The dead-board backstop** (`tediumFloor`/`tediumDeadAt`/`coldStreak`):
+  when the record has been dead for the whole tedium window AND nothing
+  irreversible has happened for `coldStreak` plies, P(quake) has a floor
+  (calm 0.25 / restless 0.35 / wrathful 0.5), undischarged, escalated by
+  tedium — the gods hammer a board on which nothing is happening and back
+  off the ply something does. This, not volume, closes fortresses (one
+  10×10 fortress took 29 holes and was still open at the ply cap on the
+  meter alone). The overlay flags it as `DEAD-BOARD floor`.
+- **Protection** (`tactics.mjs protectedSet`, `protect`/`winDepth`/
+  `winNodes`): on every quake, both sides' threat ledgers plus every
+  **forced win** (win-in-1 exact for either side incl. the turn-flipped
+  "trap is set" case; mate-in-2 by a node-budgeted checks-first search —
+  never a clock, so replay holds) yield a set of pieces and squares the
+  gods may not touch: no displacement of a protected piece, no landing on
+  a protected square, no terrain edit or hole on one (reason code
+  `protected`). The mating piece's PATH is in the set — the first cut
+  protected a1 and a8 for Ra8# and a pawn scooted onto a3. Everything else
+  stays fair game; symmetric, colour never enters. Known limit: the search
+  sees win-in-1 exactly and mate-in-2 (quiet first moves only on boards
+  with ≤32 legal moves, 12k-node budget); a mate-in-3, or a mate-in-2 by a
+  quiet move on a wide-open board, is unprotected — and a WEAKEN can undo
+  one (a cracked wall is a crate the mated king may capture to flee).
+
+- **The engine's mate lines (v4.2)**: the "never consults the engine" rule
+  is repealed for MATE and only for mate. When the quake roll passes the
+  duel gathers mate lines — the enemy's fresh reply search, a fixed-depth
+  probe of the board, and one of the turn-flipped "trap is set" board
+  (`mateGo` `depth 12 movetime 600`; `?mateprobe=depth N movetime M` or
+  `?mateprobe=off`) — and every principal variation is replayed on ffish
+  into the protected set (movers, destinations, paths, the loser's king
+  zone). The grid search stays as the exact win-in-1 check and the fallback
+  for a failed probe (`winDepth` 0 = engine only). Each probe clears the
+  hash first (a warm table from the reply search hid a mate in 3 from the
+  probe), and while a mate line exists every wall or crate the losing side
+  could capture is off limits to weaken, breach and crumble
+  (`terrainReach`: a crack next to a net is a capture the defender spends
+  on an escape). The trace line reads `engine N mate lines from 2 probes`.
+- **The eval gate and the followed line (v4.3)**: the gods still never
+  read an eval to CHOOSE, but every composition is judged by one before it
+  lands — the duel probes the board a composition would leave (`mateGo`,
+  hash cleared, same side to move) against the pre-quake probe
+  (`tactics.mjs evalSoftens`: a decided position, ≥ 150 cp, may not soften
+  by more than 200 cp, flip, or lose / delay / flip a mate; an undecided
+  one may not be handed a ≥ 500 cp swing or a mate). A rejected draw rolls
+  back in full (`director.snapshot()` / `restore()`; the RNG is excluded so
+  the retry differs), a second draw is judged, then a lone weaken; if all
+  three soften nothing lands, the trace reads `vetoed` and the meter is
+  still spent. `evalGate` on the DuelController (`draws` 2, `?evalgate=off`).
+  The trace line reads `eval gate ok (+3.1 → +2.8)` or `… on draw 2 after
+  softened`; a vetoed ply gets its own warn line. And when the player plays
+  the reply the enemy's deep search predicted, the rest of that PV is handed
+  to the protection as `enemy-search-followed` — the enemy's own 22-ply
+  reading of this very position, far past the probe's depth.
+- **The ladder (v4.1)**: weaken leads (`weakenBias` 3), breach comes later
+  and lighter (`breachBias` 1.2 from tedium 0.3) — a crack hands both
+  players a wall to smash, a breach smashes it for them — and the crate
+  brake counts only god-minted crates. The four rung biases are sliders in
+  the debug panel (below).
+
+`selftest.html` asserts all of it (six `v4` checks, incl. a forced win
+surviving 24 seeded quakes while the unprotected control un-mates 8/8, an
+engine line kept with the grid search off, and the eval gate's verdicts
+and rollback);
+`phase0/harness/godlab/gods-metrics.mjs` scores any corpus on the same
+axes; `ladder-smoke.mjs` reports double-touches and next-ply quakes.
+Phone verdicts: v4 on restless "feels okay, huge improvement" (2026-09-05);
+v4.1–v4.3 "seem to play fine" (2026-09-06) — the v4 set is what ships.
+
 ## The Gods debug overlay (Phase 1.2)
 
 The Director's tuning instrument (brief §10): built BEFORE Phase 1.3 changes
@@ -754,6 +855,17 @@ What the panel shows:
   `fellThrough` means the budget ran out of legal actions before it was
   spent. A `VETOED` marker means the duel layer's
   safety net overrode the Director (also logged to `record.anomalies`).
+- **The ladder sliders** (v4.1) — `weaken` / `breach` / `displace` /
+  `crumble` rung biases (0–6), live on the running Director (logged as a
+  dial) and persisted for new duels (`options.godLadder`; `defaults`
+  clears it). Orthogonal to temperament. The forecast row's `ladder:` shares
+  are the pure `rungWeights` at the board's current tedium, so a slider's
+  effect is visible before the next quake.
+- **The meters line** (v4) — fun, **heat** (with the last move's new threat
+  keys), **tedium**, restlessness/ramp → pressure. Quake trace lines carry
+  `meter a→b` (the discharge), heat, tedium and the **protected** census
+  (pieces / squares, forced wins found per side, `search cut` if the
+  node budget bound).
 - **Next-roll readout + forecast** — the getters at ply+1, debt/cap, favor,
   plus median plies for next quake / first crumble / closure from
   `director.forecast()`. The forecast is the NOMINAL model (it prices the
@@ -797,4 +909,6 @@ What the panel shows:
   the same object.
 
 Console/E2E surface: `window.__DCK.gods` — `traces`, `quakes`, `tunes`,
-`probs()`, `forecast()`, `census()`, `tune(partial)`, `export()`.
+`probs()` (v4: also `heat`, `tedium`, `threats`), `forecast()`, `census()`,
+`tune(partial)` (v4 dials: `relief`, `heatWindow`, `heatGain`,
+`tediumPlies`, `threatMemory`, `winDepth`, `winNodes`), `export()`.

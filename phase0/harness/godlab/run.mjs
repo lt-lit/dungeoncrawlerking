@@ -74,6 +74,7 @@ if (!configPath) {
 const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const GO = cfg.go ?? 'depth 22 movetime 500'; // the shipped duel search (rule 11 cap)
+const MATE_GO = cfg.mateGo === undefined ? 'depth 12 movetime 600' : cfg.mateGo; // v4.2: the gods' mate probes (null = off)
 // Favored-seat model (§7): the favored side searches shallow because live
 // play's pathology is a mid-skill human converting SLOWLY into the phase
 // where the gods matter. playerColor null = symmetric (no favored seat).
@@ -241,7 +242,7 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
   // reads — stalenessOf touches no RNG, so the Director's stream is safe);
   // pressure comes from the Director's own roll trace (onDirectorTrace
   // fires every ply, quake or quiet).
-  const trail = { staleness: [], lockedPawns: [], walls: [], crates: [], captures: [], pressure: [] };
+  const trail = { staleness: [], lockedPawns: [], walls: [], crates: [], captures: [], pressure: [], heat: [], threats: [], tedium: [], vetoed: [] };
 
   const duel = new DuelController({
     ffish,
@@ -252,6 +253,8 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
     ranks: deal.ranks,
     director: directorConfig,
     go: GO,
+    mateGo: MATE_GO,
+    evalGate: cfg.evalGate === undefined ? undefined : cfg.evalGate, // v4.3: null in the sweep = gate off
     hooks: {
       onMove() {
         const fen = duel.board.fen();
@@ -266,6 +269,10 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
       },
       onDirectorTrace(trace) {
         trail.pressure.push(r3(trace.p?.pressure ?? 0));
+        trail.heat.push(r3(trace.heat ?? 0)); // v4
+        trail.threats.push(trace.threats ?? 0); // v4: new threat keys this ply created
+        trail.tedium.push(r3(trace.tedium ?? 0)); // v4: the ladder's input
+        trail.vetoed.push(trace.outcome === 'vetoed' ? 1 : 0); // v4.3: the eval gate let nothing land
       },
       onEngineStall: async () => {
         try {
@@ -340,12 +347,32 @@ async function playOne({ ffish, engine, catalogIni, deal, stage, flip, arm, seed
   for (const q of duel.record.quakes) {
     const digest = {
       ply: q.ply,
+      preFen: q.preFen, // v4.2: the exact board the gods edited, for offline probe replays
       rungsSpent: q.trace?.rungsSpent ?? [],
       held: q.trace?.held ?? null,
       terrain: (q.terrain ?? []).map((t) => `${t.kind}@${t.square}`),
       displacements: q.displacements.map((d) => `${d.piece}${d.from}>${d.to}`),
       crumble: q.crumble ? { sq: q.crumble.square, pieceLost: q.crumble.pieceLost ?? null } : null,
       endedGame: q.endedGame,
+      meterAfter: q.trace?.meterAfter ?? null, // v4: the discharge
+      gate: q.trace?.evalGate // v4.3: the eval gate's verdict on the draw that landed, and what it rejected first
+        ? { attempt: q.trace.evalGate.attempt, before: q.trace.evalGate.before, after: q.trace.evalGate.after, verdict: q.trace.evalGate.verdict, fallback: q.trace.evalGate.fallback ?? null, rejected: (q.trace.evalGate.rejected ?? []).map((r) => ({ verdict: r.verdict, after: r.after })) }
+        : null,
+      pressureMeter: q.trace?.p?.meterP ?? null, // v4: which half of the trigger fired
+      pressureFloor: q.trace?.p?.floor ?? null,
+      pressureDead: q.trace?.p?.dead ?? null, // v4: the dead-board backstop
+      protected: q.trace?.protected // v4: the protected set's census
+        ? {
+            pieces: q.trace.protected.pieces,
+            squares: q.trace.protected.squares,
+            wins: q.trace.protected.wins,
+            nodes: q.trace.protected.nodes,
+            truncated: q.trace.protected.truncated,
+            engine: q.trace.protected.engine // v4.2: hints seen, mate lines found, and the lines
+              ? { hints: q.trace.protected.engine.hints, mates: q.trace.protected.engine.mates, lines: q.trace.protected.engine.lines, probes: q.trace.protected.engine.probes ?? null }
+              : null,
+          }
+        : null,
       evalBefore: null,
       evalAfter: null,
     };
@@ -454,7 +481,7 @@ console.log(
   `god lab "${cfg.name}": ${stages.length} stages × ${ORIENTATIONS.length} orientations × ${SEEDS} seeds` +
     ` = ${playable.length} deals (${jobs.length - playable.length} skipped) × ${arms.length} arms = ${totalGames} games`
 );
-console.log(`go "${GO}" playerGo "${PLAYER_GO}" playerColor ${PLAYER_COLOR} edge ${PLAYER_EDGE} referee "${REFEREE_GO}"`);
+console.log(`go "${GO}" playerGo "${PLAYER_GO}" playerColor ${PLAYER_COLOR} edge ${PLAYER_EDGE} referee "${REFEREE_GO}" mateGo "${MATE_GO}"`);
 
 let engine = await freshEngine(catalogIni);
 fs.mkdirSync(OUT_DIR, { recursive: true });

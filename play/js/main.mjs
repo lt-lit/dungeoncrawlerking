@@ -42,7 +42,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
-import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS } from './director.mjs';
+import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -224,17 +224,24 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
 // 2026-09-01 with per-preset staleness knobs). GOD_KNOBS stays the custom
 // dial surface: the classic five, while the staleness knobs ride presets.
 const GOD_KNOBS = ['onsetPly', 'rampPlies', 'sate', 'debtCap', 'extraActions'];
+// The ladder's rung weights (v4.1, designer: "weight sliders in the gods
+// debug menu"): four biases, orthogonal to temperament — a preset says how
+// often the gods act, the ladder says what they reach for. null = the
+// Director's defaults; a set value persists and applies to new duels (and
+// live, through the same dial path as the knobs).
+const GOD_LADDER = ['weakenBias', 'breachBias', 'displaceBias', 'crumbleBias'];
+const LADDER_RANGE = [0, 6];
 
 function godConfig() {
-  if (options.godPreset === 'custom' && options.godCustom) return { ...GOD_PRESETS.restless, ...options.godCustom };
-  return GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless;
+  const base = options.godPreset === 'custom' && options.godCustom ? { ...GOD_PRESETS.restless, ...options.godCustom } : (GOD_PRESETS[options.godPreset] ?? GOD_PRESETS.restless);
+  return options.godLadder ? { ...base, ...options.godLadder } : base;
 }
 
 // The piece-fit dials' ranges (index.html's sliders carry the same) —
@@ -260,6 +267,12 @@ function loadOptions() {
     options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
     options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
     options.pieceSnap = !!options.pieceSnap;
+    // The ladder override (v4.1): four clamped numbers or nothing.
+    if (options.godLadder && typeof options.godLadder === 'object') {
+      const clean = {};
+      for (const k of GOD_LADDER) if (k in options.godLadder) clean[k] = clampNum(options.godLadder[k], LADDER_RANGE, DIRECTOR_DEFAULTS[k]);
+      options.godLadder = Object.keys(clean).length ? clean : null;
+    } else options.godLadder = null;
   } catch {
     /* defaults */
   }
@@ -296,6 +309,12 @@ function syncOptionsUI() {
     el.disabled = options.godPreset !== 'custom';
   }
   $('god-knobs').classList.toggle('disabled', options.godPreset !== 'custom');
+  for (const k of GOD_LADDER) {
+    const v = options.godLadder?.[k] ?? DIRECTOR_DEFAULTS[k];
+    $(`ladder_${k}`).value = String(v);
+    $(`ladder_${k}_val`).textContent = Number(v).toFixed(1);
+  }
+  $('btnLadderReset').disabled = !options.godLadder;
   $('optGodsDebug').checked = options.godsDebug;
   $('optTheme').value = options.theme;
   $('optPieces').value = options.pieces;
@@ -866,19 +885,22 @@ function renderGodsSummary() {
   // is — and it sets how fast restlessness climbs.
   const stale = dir.lastStaleness;
   const funBit = stale ? `fun ${pctOf(stale.fun)} (${stale.moves} moves, ${stale.captures} captures, ${stale.lockedPawns}/${stale.pawns} pawns locked)` : 'fun —';
+  // v4: heat is the record's recent temperature (hot plies over the window)
+  // and scales the fill; the threats are what the last move created.
+  const threats = dir.lastThreats?.length ? ` (${dir.lastThreats.join(' ')})` : '';
   $('gods-meters').textContent =
-    `${funBit} · restlessness ${dir.meter.value.toFixed(1)}/${dir.meter.rampPlies} → ` +
-    `pressure ${pctOf(dir.pressure(nextPly))}${dir.meter.floor(nextPly) > dir.meter.p() ? ' (BACKSTOP floor)' : ''}`;
+    `${funBit} · heat ${pctOf(dir.meter.heat)}${threats} · tedium ${pctOf(dir.meter.t)} · restlessness ${dir.meter.value.toFixed(1)}/${dir.meter.rampPlies} → ` +
+    `pressure ${pctOf(dir.pressure(nextPly))}${dir.meter.deadFloor() > 0 && dir.meter.deadFloor() >= dir.meter.p() && dir.meter.deadFloor() >= dir.meter.floor(nextPly) ? ' (DEAD-BOARD floor)' : dir.meter.floor(nextPly) > dir.meter.p() ? ' (BACKSTOP floor)' : ''}`;
 
   const held = dir.holdInCheck && dir.lastTrace?.held ? ' · HELD (king in check)' : '';
   $('gods-summary').textContent =
     `next roll p${nextPly}: P(quake) ${pctOf(dir.pQuake(nextPly))} · ` +
-    `budget ${1 + Math.floor(dir.pressure(nextPly) * dir.extraActions)} action(s) · ` +
+    `budget ~${1 + Math.floor(dir.meter.t * dir.favor * dir.extraActions)} action(s) · ` +
     `debt ${dir.debt}/${dir.debtCap} · intensity ${dir.favor.toFixed(1)}${held}`;
 
   // The ladder, as it stands right now — rung weights are a pure function of
   // pressure and the terrain census, so showing them costs nothing.
-  const terrain = terrainCensus(duel.fen(), duel.files, duel.ranks, dir.holes);
+  const terrain = terrainCensus(duel.fen(), duel.files, duel.ranks, dir.holes, dir.godCrates);
   const w = dir.rungWeights(nextPly, terrain);
   const total = w.weaken + w.breach + w.displace + w.crumble;
   const share = (x) => (total > 0 ? pctOf(x / total) : '—');
@@ -896,6 +918,7 @@ function renderGodsSummary() {
 
 function godsTraceCls(t) {
   if (t.outcome === 'quiet') return 'quiet';
+  if (t.outcome === 'vetoed') return 'warn';
   if (t.outcome === 'crumble' || t.outcome === 'terminal' || t.vetoed) return 'warn';
   if (t.outcome === 'starved') return 'bad';
   return 'ok'; // weaken / breach / displace
@@ -903,19 +926,43 @@ function godsTraceCls(t) {
 
 /** One compact line per roll trace — the per-ply record, reason codes and all. */
 function godsTraceLine(t) {
-  const meterBit = `meter ${t.meter?.toFixed(1) ?? '?'} · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`;
+  const meterBit =
+    `meter ${t.meter?.toFixed(1) ?? '?'}${typeof t.meterAfter === 'number' ? `→${t.meterAfter.toFixed(1)}` : ''}` +
+    ` · heat ${typeof t.heat === 'number' ? pctOf(t.heat) : '?'}${t.threats ? ` (+${t.threats} threat${t.threats === 1 ? '' : 's'})` : ''}` +
+    `${typeof t.tedium === 'number' ? ` · tedium ${pctOf(t.tedium)}` : ''}` +
+    ` · stale ${t.staleness === null || t.staleness === undefined ? '?' : pctOf(t.staleness)}`;
   if (t.outcome === 'quiet') {
     if (t.held) return `p${t.ply} · HELD — a king is in check, the gods sit it out`;
     const r = t.rolls.find((x) => x.roll === 'quake');
     return `p${t.ply} · ${meterBit} · P(q) ${pctOf(t.p.quake)}${r ? ` roll ${r.value.toFixed(2)} — quiet` : ' — before onset'}`;
   }
+  const fmtScore = (s) => (!s ? '?' : s.type === 'mate' ? `#${s.value}` : `${s.value > 0 ? '+' : ''}${(s.value / 100).toFixed(1)}`);
+  if (t.outcome === 'vetoed') {
+    const g = t.evalGate ?? {};
+    return `p${t.ply} QUAKE VETOED · ${meterBit} · eval gate: ${(g.rejected ?? []).length} draw${(g.rejected ?? []).length === 1 ? '' : 's'} softened the game (${fmtScore(g.before)} → ${(g.rejected ?? []).map((r) => `${fmtScore(r.after)} ${r.verdict}`).join(', ')}) — nothing lands, the meter is spent`;
+  }
   const bits = [`p${t.ply} QUAKE`, meterBit];
+  if (t.evalGate) {
+    const g = t.evalGate;
+    bits.push(`eval gate ${g.verdict} (${fmtScore(g.before)} → ${fmtScore(g.after)})${g.attempt ? ` on draw ${g.attempt + 1}${g.fallback ? ` (${g.fallback} fallback)` : ''} after ${(g.rejected ?? []).map((r) => r.verdict).join(', ')}` : ''}`);
+  }
   if (t.p.crumbleForced) bits.push('crumble FORCED (debt cap)');
   // The budget is the headline now: what makes a quake unreadable is that the
   // number and kind of actions vary, so the trace shows both.
   const spent = t.rungsSpent ?? [];
   bits.push(`budget ${spent.length}/${t.budget ?? '?'} → ${spent.join(' + ') || 'nothing'}`);
   if (t.rungFallback?.length) bits.push(`fell back: ${t.rungFallback.join(', ')}`);
+  // v4: what the gods were forbidden to touch — the threat ledger's pieces
+  // and squares plus every forced win's net (tactics.mjs).
+  if (t.protected) {
+    const pr = t.protected;
+    const wins = pr.wins ? `grid wins w${pr.wins.white}/b${pr.wins.black}` : '';
+    const eng = pr.engine
+      ? ` · engine ${pr.engine.mates} mate line${pr.engine.mates === 1 ? '' : 's'}${pr.engine.mates ? ` (${pr.engine.lines.map((l) => `${l.winner} #${l.mateIn} ${l.source}`).join(', ')})` : ''}` +
+        `${pr.engine.probes ? ` from ${pr.engine.probes.ran} probe${pr.engine.probes.ran === 1 ? '' : 's'}${pr.engine.probes.fresh ? ' + the reply search' : ''}${pr.engine.probes.failed ? ` (${pr.engine.probes.failed} FAILED)` : ''}` : ''}`
+      : '';
+    bits.push(`protected ${pr.pieces} piece${pr.pieces === 1 ? '' : 's'} / ${pr.squares} sq · ${wins}${pr.truncated ? ' (search cut)' : ''}${eng}`);
+  }
 
   const c = t.census;
   if (c?.displacement) {
@@ -1532,6 +1579,11 @@ async function beginDuel() {
     // small boards still reply in <200 ms because d22 arrives first; big
     // boards get the full think. Lab corpora set their own faster limits.
     go: params.get('go') ?? 'depth 22 movetime 10000',
+    // v4.2: the gods' mate probes when a quake is due (`?mateprobe=off` to
+    // silence them, or a `depth N movetime M` pair to retune).
+    mateGo: params.get('mateprobe') === 'off' ? null : (params.get('mateprobe') ?? undefined),
+    // v4.3: the eval gate — `?evalgate=off` to let every composition land.
+    evalGate: params.get('evalgate') === 'off' ? null : undefined,
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
   await app.duel.start();
@@ -2012,6 +2064,22 @@ for (const k of GOD_KNOBS) {
     liveTune({ [k]: v });
   });
 }
+// The ladder sliders (v4.1): each moves one rung's bias, live and for the
+// next duel alike; the forecast line above shows the resulting shares at
+// the board's current tedium. Reset returns to the Director's defaults.
+for (const k of GOD_LADDER) {
+  $(`ladder_${k}`).addEventListener('input', (e) => {
+    const v = clampNum(e.target.value, LADDER_RANGE, DIRECTOR_DEFAULTS[k]);
+    options.godLadder = { ...(options.godLadder ?? {}), [k]: v };
+    applyOptions();
+    liveTune({ [k]: v });
+  });
+}
+$('btnLadderReset').addEventListener('click', () => {
+  options.godLadder = null;
+  applyOptions();
+  liveTune(Object.fromEntries(GOD_LADDER.map((k) => [k, DIRECTOR_DEFAULTS[k]])));
+});
 // Intensity (designer rename, 2026-09-01 — was "favor"): a DEBUG dial on the
 // quake-probability multiplier, driving the CURRENT duel only; resets to 1
 // with each new Director. The Director API stays setFavor()/favor because
@@ -2114,6 +2182,9 @@ window.__DCK = {
         pQuake: dir.pQuake(ply),
         pressure: dir.pressure(ply),
         meter: dir.meter.value,
+        heat: dir.meter.heat,
+        tedium: dir.meter.t,
+        threats: dir.lastThreats ?? [],
         staleness: dir.lastStaleness?.staleness ?? null,
         rungWeights: dir.rungWeights(ply),
         crumbleForced: dir.debt >= dir.debtCap,

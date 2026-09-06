@@ -1,0 +1,16 @@
+{
+  "_comment": "The v3 baseline on the WAVE 6 bed (s59-s94, 36 hand-authored 10x10 crops) — the first god-lab corpus on the arenas the phone actually plays. Shipped v3 rules, the three presets, stratified 12-stage spread x both orientations x 1 seed = 24 games per arm. Run one process per arm (--arms). v4 (2026-09-05) is measured against this.",
+  "name": "wave6",
+  "go": "depth 8 movetime 250",
+  "maxPlies": 600,
+  "seeds": 1,
+  "seedBase": 13000,
+  "stageSpread": 12,
+  "orientations": "both",
+  "refereeGo": "depth 12 movetime 300",
+  "arms": [
+    { "key": "calm", "preset": "calm" },
+    { "key": "restless", "preset": "restless" },
+    { "key": "wrathful", "preset": "wrathful" }
+  ]
+}

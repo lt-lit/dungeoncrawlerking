@@ -106,7 +106,119 @@ original clauses below stand only for that interim and as design record.]`
 - **Reserve slot** (single piece in hand, droppable on own back ranks) is a possible high-tier upgrade, not a core mechanic. `[OPEN]`
 - **Gap math:** the trigger condition enforces **gap ∈ [2, 4]**. Gap 2 = ambush-sharp (the puzzle sweet spot), 3–4 = standard (4 = classic chess spacing). `[REVISED: gaps 5–6 produced 100+-ply grinds at every width in the Phase 0 smoke sweep — the ranged/rider band is cut; the catalog keeps 9/10-rank variants but arenas and the trigger may not use them.]` `[UNDER RE-INVESTIGATION 2026-08: molded armies are no longer fixed 2-deep, so gap and formation depth decouple; the proving-grounds lab tests gaps 1–6 and whether the ideal gap scales with army size — designer expects a practical trigger band of 2–5. The lint floor for a legal deal is gap ≥ 1.]`
 
-### 4.5 The Board State Director — Earthquakes `[v3 — THE LADDER, designer 2026-08-31; PROVISIONAL in numbers]`
+### 4.5 The Board State Director — Earthquakes `[v4 — MEMORY, HEAT, PROTECTION, designer 2026-09-05, on v3's ladder; PROVISIONAL in numbers]`
+
+**v4 gave the gods a memory `[designer 2026-09-05]`.** v3's ladder and its two
+meters stand; what v4 changed is everything the Director did NOT remember,
+each a defect measured on the corpora (the first ever played on the wave 6
+bed) before the fix — see `phase0/results/godlab/v4-findings.md`:
+
+1. **A quake spends the meter, and the meter has a ceiling.** v3's quake never
+   touched the meter and the meter banked past its ramp, so once pinned the
+   gods fired EVERY ply (wave 6, shipped v3: calm 13.8 quakes/100 plies with
+   53% on the very next ply; wrathful 32.1 and 59%), and a quiet stretch
+   banked a debt no aggression could repay. The late backstop floor now counts
+   plies since the LAST quake. **No hard cooldown** — "too predictable" — the
+   refill is the board's staleness, at random.
+2. **Nothing is touched twice in one quake.** A per-quake touched set: no
+   square edited or vacated twice, no piece moved twice. (21%–55% of v3's
+   multi-action quakes did — including crack-and-smash of one wall in a
+   breath, which deleted the telegraph the ladder was built on.) No
+   cross-quake memory, by design.
+3. **Heat.** The fifty-move list is a list of irreversible moves, not
+   aggressive ones; best-move play drained v3's meter on 20–25% of plies,
+   below break-even on two presets. A ply is now HOT if it captures, checks,
+   promotes, pushes a pawn, OR **creates a new threat** (`tactics.mjs`: a
+   piece won by static exchange, a pin, a skewer, a fork, a mate threat —
+   news once per side per game), and a hot record scales the fill of both
+   meters down. Aggression keeps the gods asleep; passivity wakes them.
+4. **Tedium.** The undischarged twin: the cold share of the recent record —
+   the fraction of the last `tediumPlies` plies with no capture, check,
+   pawn move or promotion (a threat is not progress). Restlessness decides
+   WHEN the gods act; tedium decides WHAT (the rung weights) and HOW MUCH
+   (the budget). Keyed to pressure, a discharging meter fired only weakens
+   and the hole clock stopped. A threat or a check heats the record but
+   does not sate the meter, and a repeated position is cold: the refund is
+   the fifty-move rule's own list — capture, pawn move, promotion — because
+   checks on the list produced 600-ply check farms the meter never woke
+   for. **The dead-board backstop**: when the record has been dead for the
+   whole tedium window and nothing irreversible has happened for a short
+   streak of plies, P(quake) has an undischarged floor — the gods hammer a
+   board on which nothing is happening, escalated, and back off the ply
+   something does. A discharging meter alone could not close a 10×10
+   fortress; this closes it.
+5. **Protection — the gods never un-mate.** On every quake, both sides'
+   threat ledgers and every FORCED WIN's net (win-in-1 exact for either
+   side, the turn-flipped "trap is set" case included; mate-in-2 by a
+   node-budgeted checks-first search — a node budget, never a clock, so
+   seeded replay holds; the mating move's path included) form a protected
+   set, and three vetoes hold on every rung: no displacement of a protected
+   piece, no landing on a protected square, no terrain edit or hole on a
+   protected square. Everything else stays fair game — "they can still
+   displace stuff, just not the specific pieces responsible for the
+   Mate in N." Symmetric: "the gods don't know or care which color is the
+   player." (v3 measured: a third of quakes fired onto a forced mate
+   destroyed or delayed it; the un-protected control in `selftest.html`
+   un-mates 8/8 on the fixtures, the protected Director 0/24.) The grid
+   search's horizon (mate-in-2) was the known residue until v4.2 handed
+   the gods the engine's lines — item 7 below.
+
+7. **The gods read the engine's mate lines `[v4.2, same day — REPEALS the
+   "never consults the engine" clause for MATE, and only for mate]`.** The
+   first cut of protection found forced wins with a hand-written search on
+   the legality library (win-in-1 exact, mate-in-2 bounded) and missed
+   every mate in 3 and every quiet-move mate in 2 on a wide board.
+   Designer: "we already have both the enemy and the move recommendation
+   probe gathering this data constantly … just getting the game to that
+   mate-in-N scenario is kinda the gods' main goal. Ditch the dumbass rule."
+   So when the quake roll passes, the duel asks the engine for mate lines
+   before the gods edit anything: the enemy's own last reply search when it
+   is fresh, one fixed-depth probe of the board as it stands, and one of the
+   board with the turn flipped ("the trap is set"), all under paired limits.
+   Every mate score's principal variation is replayed on ffish and every
+   mover, destination, path and the loser's king zone join the protected
+   set. The old rule's two reasons still stand where they apply: the gods
+   read a MATE score, never an eval — "who is winning" stays off limits —
+   and the probes are depth-bounded, so a corpus replays unless a probe's
+   movetime binds. The grid search stays as the exact win-in-1 check and
+   the fallback for a probe that fails.
+8. **The eval gate and the followed line `[v4.3, same day]`.** The gods
+   never read an eval to CHOOSE — targets stay structural, "who is winning"
+   stays off limits to the pick — but every composition is now judged by
+   one before it lands: the duel probes the board the composition would
+   leave (the same depth-bounded probe, hash cleared, same side to move)
+   and compares it with a probe taken before the quake. A decided position
+   may not be pulled toward equality by more than two pawns, flipped, or
+   have its mate lost, delayed or flipped; an undecided one may not be
+   handed a decision. A composition that fails is rolled back whole and a
+   second one drawn; if that fails too, a lone weaken is tried; if even
+   that softens, nothing lands and the meter is still spent. Designer: "a
+   more objective way to measure whether the gods actions are about to
+   screw something up"; the two-draw cap was chosen over a time budget that
+   keeps the best of many — "if we ever want to put our thumb on the scale
+   to shorten games on purpose in a hopefully subtle way, we can talk about
+   having it intentionally hunt for quakes that do just that." And when the
+   player plays the very reply the enemy's deep search predicted, the rest
+   of that line — searched at the enemy's own depth, far past the probe's —
+   is handed to the protection as a line for this position; replayed on the
+   current board it can only be cut short by a change, never mislead.
+   Measured on the wave 6 corpora: the gate rejected 12 / 20 / 41 draws per
+   24-game arm and vetoed 2 / 13 / 12 plies; the referee's own softening
+   verdict fell from 3.8 / 3.0 / 4.3% of quakes to 1.0 / 2.7 / 1.9%, the
+   residue being the probe's horizon (the referee sees a mate in 4 or a
+   five-pawn swing a fresh depth-12 probe does not). Phone verdict
+   2026-09-06: v4.1–v4.3 "seem to play fine" — the v4 set is the shipped
+   Director.
+6. **The ladder leans on the crack `[v4.1, same day]`.** Weaken is weighted
+   well above breach and breach opens later — "weakening walls does a better
+   job of opening up new lines, plus it's fun to smash thru walls": a crack
+   hands both players a wall to smash, a breach smashes it for them. The
+   crate brake counts only the gods' own crates. The four rung weights are
+   sliders in the debug panel.
+
+The v3 text below is retained as the record of the ladder and the trigger,
+both of which v4 keeps.
+
 
 **v3 gutted v2's decision layer.** The lock on §4.5's shape was lifted by the
 design conversation the phase plan required; what follows is its outcome. v2

@@ -97,6 +97,12 @@ function specFor(stage) {
 const tally = { weaken: 0, breach: 0, displace: 0, crumble: 0, terminal: 0 };
 const budgetHist = {};
 let mixedQuakes = 0;
+// v4 invariants (designer 2026-09-05): nothing is touched twice in one
+// quake, and the gods do not fire on the very next ply as a matter of
+// course (a quake discharges the meter and restarts the backstop).
+let doubleTouched = 0;
+let nextPlyQuakes = 0;
+let gaps = 0;
 const rows = [];
 let engine = await loadEngine();
 
@@ -156,6 +162,25 @@ for (let i = 0; i < picks.length; i++) {
     }
   }
   const inCheckFires = duel.record.quakeTraces.filter((t) => t.outcome !== 'quiet' && t.held).length;
+  let prevQuakePly = null;
+  for (const q of duel.record.quakes) {
+    const touched = [];
+    const landed = [];
+    let dbl = false;
+    for (const d of q.displacements) {
+      if (landed.includes(d.from)) dbl = true;
+      landed.push(d.to);
+      touched.push(d.from, d.to);
+    }
+    for (const t of q.terrain ?? []) touched.push(t.square);
+    if (q.crumble) touched.push(q.crumble.square);
+    if (dbl || new Set(touched).size !== touched.length) doubleTouched++;
+    if (prevQuakePly !== null) {
+      gaps++;
+      if (q.ply - prevQuakePly === 1) nextPlyQuakes++;
+    }
+    prevQuakePly = q.ply;
+  }
   rows.push({
     stage: `${stage.id}${flip ? '~f' : ''}`,
     dims: `${deal.files}x${deal.ranks}`,
@@ -198,6 +223,7 @@ const failures = played.filter((r) => r.term === '?' || String(r.term).includes(
 console.log(`TERMINATION FAILURES: ${failures.length}${failures.length ? ' ← ' + failures.map((r) => r.stage).join(', ') : ''}`);
 console.log(`quakes ${totalQuakes} total (${(totalQuakes / Math.max(1, played.length)).toFixed(1)}/game), actions ${totalActions} (${(totalActions / Math.max(1, totalQuakes)).toFixed(2)}/quake)`);
 console.log(`actions per quake: ${JSON.stringify(budgetHist)} — MIXED-rung quakes ${mixedQuakes}/${totalQuakes} (${((100 * mixedQuakes) / Math.max(1, totalQuakes)).toFixed(1)}%)`);
+console.log(`v4: DOUBLE-TOUCHED quakes ${doubleTouched}${doubleTouched ? ' ← INVARIANT BROKEN' : ''} · quakes on the very next ply ${nextPlyQuakes}/${gaps} (${((100 * nextPlyQuakes) / Math.max(1, gaps)).toFixed(0)}%)`);
 const pct = (n) => `${((100 * n) / Math.max(1, totalActions)).toFixed(1)}%`;
 console.log(
   `ladder (by ACTION): weaken ${tally.weaken} (${pct(tally.weaken)}) · breach ${tally.breach} (${pct(tally.breach)}) · ` +
