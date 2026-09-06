@@ -22,6 +22,18 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EVAL_RAIL = 1000; // ±10 pawns; a mate sits on the rail
 const PAD = { l: 4, r: 4, t: 4, b: 4 };
+const LABEL_COL = 14; // the gods panel's right-edge label column (direct labels — four series share the axis)
+
+/** The gods panel's series, in legend order: the key on the data, the
+ *  swatch/label letter, whether it is drawn as an area. `fun` is the
+ *  staleness score's complement (1 − staleness — the fill rate's input). */
+export const GODS_SERIES = [
+  { key: 'pressure', letter: 'P', area: true },
+  { key: 'tedium', letter: 'T' },
+  { key: 'heat', letter: 'H' },
+  { key: 'fun', letter: 'F' },
+];
+export const ALL_SERIES = [...GODS_SERIES.map((s) => s.key), 'eval'];
 
 /** The score of an engine record / probe (mover or white POV) as the PLAYER's POV, in cp, mate on the rail. */
 function playerCp(score, pov, player) {
@@ -48,13 +60,17 @@ export function stripData(line, log) {
   const pressure = [];
   const tedium = [];
   const heat = [];
+  const fun = [];
   const ticks = new Map();
+  const num = (...vs) => vs.find((v) => typeof v === 'number') ?? null;
   for (let p = 0; p <= plies; p++) {
     const t = traces.get(p);
     const m = states.get(p)?.meter;
-    pressure.push(typeof t?.p?.quake === 'number' ? t.p.quake : null);
-    tedium.push(typeof t?.tedium === 'number' ? t.tedium : typeof m?.tedium === 'number' ? m.tedium : null);
-    heat.push(typeof t?.heat === 'number' ? t.heat : typeof m?.heat === 'number' ? m.heat : null);
+    pressure.push(num(t?.p?.quake));
+    tedium.push(num(t?.tedium, m?.tedium));
+    heat.push(num(t?.heat, m?.heat));
+    const stale = num(t?.staleness, m?.staleness);
+    fun.push(stale === null ? null : 1 - stale);
     if (quakes.has(p)) ticks.set(p, 'quake');
     else if (t?.outcome === 'vetoed') ticks.set(p, 'vetoed');
   }
@@ -68,7 +84,7 @@ export function stripData(line, log) {
   }
   const probes = new Map();
   for (const s of line.states ?? []) if (s.probe && !s.ended) probes.set(s.ply, playerCp(s.probe, 'white', player));
-  return { plies, pressure, tedium, heat, evalAt, probes, ticks };
+  return { plies, pressure, tedium, heat, fun, evalAt, probes, ticks };
 }
 
 const el = (tag, attrs = {}) => {
@@ -111,12 +127,19 @@ function areaPath(values, x, y, y0) {
   return d;
 }
 
+/** The last non-null value of a series and its ply. */
+function lastPoint(values) {
+  for (let p = values.length - 1; p >= 0; p--) if (values[p] !== null && values[p] !== undefined) return { p, v: values[p] };
+  return null;
+}
+
 /**
  * Draw both panels into their <svg> hosts. `hosts` = { gods, eval } (svg
- * elements sized by CSS), `data` from stripData, `cursor` the current ply.
+ * elements sized by CSS), `data` from stripData, `cursor` the current ply,
+ * `hidden` a Set of series keys toggled off (the legend's toggles).
  * Returns the geometry the cursor and the hit-test use.
  */
-export function renderStrips(hosts, data, cursor) {
+export function renderStrips(hosts, data, cursor, hidden = new Set()) {
   const out = {};
   for (const [name, svg] of Object.entries(hosts)) {
     svg.textContent = '';
@@ -124,7 +147,7 @@ export function renderStrips(hosts, data, cursor) {
     const H = Math.max(24, svg.clientHeight || 48);
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     const x0 = PAD.l;
-    const x1 = W - PAD.r;
+    const x1 = W - PAD.r - (name === 'gods' ? LABEL_COL : 0);
     const y0 = PAD.t;
     const y1 = H - PAD.b;
     const plies = Math.max(1, data.plies);
@@ -134,13 +157,30 @@ export function renderStrips(hosts, data, cursor) {
       const y = (v) => y1 - (y1 - y0) * Math.max(0, Math.min(1, v));
       // Grid: hairlines at 0.5 and 1 (recessive, one step off the surface).
       for (const v of [0.5, 1]) svg.appendChild(el('line', { x1: x0, x2: x1, y1: y(v), y2: y(v), class: 'st-grid' }));
-      svg.appendChild(el('path', { d: areaPath(data.pressure, x, y, y1), class: 'st-area st-pressure' }));
-      svg.appendChild(el('path', { d: linePath(data.pressure, x, y), class: 'st-line st-pressure' }));
-      svg.appendChild(el('path', { d: linePath(data.tedium, x, y), class: 'st-line st-tedium' }));
-      svg.appendChild(el('path', { d: linePath(data.heat, x, y), class: 'st-line st-heat' }));
+      const shown = GODS_SERIES.filter((s) => !hidden.has(s.key));
+      for (const s of shown) {
+        if (s.area) svg.appendChild(el('path', { d: areaPath(data[s.key], x, y, y1), class: `st-area st-${s.key}` }));
+        svg.appendChild(el('path', { d: linePath(data[s.key], x, y), class: `st-line st-${s.key}` }));
+      }
       for (const [p, kind] of data.ticks) {
         const top = kind === 'quake' ? y0 : (y0 + y1) / 2;
         svg.appendChild(el('line', { x1: x(p), x2: x(p), y1: top, y2: y1, class: `st-tick st-tick-${kind}` }));
+      }
+      // Direct labels at the right edge — four series on one axis need them
+      // (the legend alone is not enough): each visible line's letter in the
+      // label column, pushed apart where they would collide, with a leader
+      // in the series colour from the line's end to its letter.
+      const ends = shown.map((s) => ({ s, end: lastPoint(data[s.key]) })).filter((e) => e.end).map((e) => ({ s: e.s, yl: y(e.end.v), xe: x(e.end.p), yt: y(e.end.v) }));
+      ends.sort((a, b) => a.yl - b.yl);
+      const gap = 9;
+      for (let i = 1; i < ends.length; i++) if (ends[i].yt < ends[i - 1].yt + gap) ends[i].yt = ends[i - 1].yt + gap;
+      const over = ends.length ? ends[ends.length - 1].yt - (H - 2) : 0;
+      if (over > 0) for (const e of ends) e.yt -= over;
+      for (const e of ends) {
+        svg.appendChild(el('line', { x1: e.xe, y1: e.yl, x2: x1 + 5, y2: e.yt, class: `st-leader st-${e.s.key}` }));
+        const t = el('text', { x: x1 + 7, y: e.yt + 3, class: 'st-label' });
+        t.textContent = e.s.letter;
+        svg.appendChild(t);
       }
     } else {
       const y = (cp) => (y0 + y1) / 2 - ((y1 - y0) / 2) * (Math.max(-EVAL_RAIL, Math.min(EVAL_RAIL, cp)) / EVAL_RAIL);
@@ -148,9 +188,9 @@ export function renderStrips(hosts, data, cursor) {
       // Step line: the enemy's verdict holds until its next search.
       const stepped = [];
       data.evalAt.forEach((v, p) => stepped.push(v));
-      svg.appendChild(el('path', { d: linePath(stepped, x, y), class: 'st-line st-eval' }));
+      if (!hidden.has('eval')) svg.appendChild(el('path', { d: linePath(stepped, x, y), class: 'st-line st-eval' }));
       for (const [p, cp] of data.probes) {
-        if (cp === null) continue;
+        if (cp === null || hidden.has('eval')) continue;
         svg.appendChild(el('circle', { cx: x(p), cy: y(cp), r: 4.5, class: 'st-dot-ring' }));
         svg.appendChild(el('circle', { cx: x(p), cy: y(cp), r: 3, class: 'st-dot st-eval' }));
       }
@@ -185,5 +225,5 @@ const f2 = (v) => (typeof v === 'number' ? v.toFixed(2) : '—');
 export function readoutAt(data, ply) {
   const cp = data.probes.has(ply) ? data.probes.get(ply) : data.evalAt[ply];
   const ev = cp === null || cp === undefined ? '—' : Math.abs(cp) >= EVAL_RAIL ? (cp > 0 ? 'M / +10' : 'M / −10') : `${cp >= 0 ? '+' : ''}${(cp / 100).toFixed(1)}`;
-  return { pressure: f2(data.pressure[ply]), tedium: f2(data.tedium[ply]), heat: f2(data.heat[ply]), eval: ev, probed: data.probes.has(ply) };
+  return { pressure: f2(data.pressure[ply]), tedium: f2(data.tedium[ply]), heat: f2(data.heat[ply]), fun: f2(data.fun[ply]), eval: ev, probed: data.probes.has(ply) };
 }

@@ -42,16 +42,21 @@ A stage the current build no longer carries paints without skins and says so.
   line plus the meters.
 - **The strips** (`js/strips.mjs`): two small charts under the slider on one
   x-axis (the ply) with a shared cursor — tap or drag either to scrub. *The
-  gods*: P(quake) as a filled area, tedium and heat as lines, all on one
-  0…1 axis, and a tick at every ply the gods acted (full height = a quake
-  landed, half = the eval gate vetoed every draw); gold notches on the top
-  edge are undo points. *Eval*: the enemy's reply searches from YOUR point of
+  gods*: P(quake) as a filled area, tedium, heat and FUN (1 − staleness,
+  the fill rate's input) as lines, all on one 0…1 axis, each line lettered
+  at the right edge (P / T / H / F, a leader in the line's colour), and a
+  tick at every ply the gods acted (full height = a quake landed, half =
+  the eval gate vetoed every draw); gold notches on the top edge are undo
+  points. Every legend item is a TOGGLE for its series (the swatch hollows
+  out when off; the choice persists on the device). *Eval*: the enemy's reply searches from YOUR point of
   view, clamped to ±10 pawns with a mate on the rail, a zero hairline; a
   probe made here is a ringed dot. The legend row above each is the readout
   at the cursor. Two measures of different scale are two charts, never a
   second y-axis; the series colours are validated on the panel surface
-  (dark lightness band, colour-vision separation) and the readout text
-  never wears them.
+  (dark lightness band, colour-vision separation — no fourth hue clears
+  the deutan floor against the other three, so fun sits in the 6–8 band
+  the validator allows only with secondary encoding, which the letters and
+  the toggles are) and the readout text never wears them.
 - **The gods** (open by default): the report's quake block for this ply —
   the ladder path, the meters, the rolls, the ply's classification, the
   protected set with its members and keys, every rung's pool ranked with
@@ -94,13 +99,13 @@ lands in both; they cannot drift.
 ```sh
 cd phase0
 node harness/test-logreport.mjs          # the shared rendering + lineTree + residue on the sample (Node)
-node harness/replay-smoke.mjs --shots    # this page driven headlessly on the sample (Playwright, 58 checks incl. the strips; screenshots in results/replay-smoke/)
+node harness/replay-smoke.mjs --shots    # this page driven headlessly on the sample (Playwright, 64 checks incl. the strips and their toggles; screenshots in results/replay-smoke/)
 ```
 
 Console / E2E surface: `window.__DCK.replay` — `open(data)`, `openUrl`,
 `openSlot`, `goto`, `next`, `prev`, `nextQuake`, `prevQuake`, `enterBranch(id)`,
 `leaveBranch`, `show('before' | 'protected' | {kind:'pool'|'attempt'|'hint',
 index} | null)`, `probe()`, `deep()`, `export(force)`, `report(sections)`,
-`waitIdle()`, getters `view` (line, ply, fen, marks, godsLine, plyLine,
+`toggleSeries(key)`, `waitIdle()`, getters `view` (line, ply, fen, marks, godsLine, plyLine,
 evalText, stage, stageNote, skins, theme, engine, `strips` (plies, points,
 ticks, the readout at the cursor, the cursor's x), `cell(sq)`), `log`, `tree`.

@@ -70,9 +70,21 @@
       <!-- The strips (2026-09-07): the gods' stats and the eval over the
            plies, one x-axis, a shared cursor; tap or drag to scrub. -->
       <div id="strips">
-        <div class="strip-legend" id="strip-legend-gods"><span class="sw sw-pressure"></span>pressure <b id="ro-pressure">—</b><span class="sw sw-tedium"></span>tedium <b id="ro-tedium">—</b><span class="sw sw-heat"></span>heat <b id="ro-heat">—</b><span class="st-key">│ quake</span></div>
-        <svg id="strip-gods" class="strip" role="img" aria-label="the gods' pressure, tedium and heat over the plies"></svg>
-        <div class="strip-legend" id="strip-legend-eval"><span class="sw sw-eval"></span>eval (you) <b id="ro-eval">—</b><span class="muted" id="ro-eval-src"></span></div>
+        <!-- Each legend item is a TOGGLE for its series (the swatch hollows
+             out when off; the choice persists). The readout is the value
+             at the cursor. -->
+        <div class="strip-legend" id="strip-legend-gods">
+          <button class="sw-btn" data-series="pressure" title="show / hide pressure (P)"><span class="sw sw-pressure"></span>pressure <b id="ro-pressure">—</b></button>
+          <button class="sw-btn" data-series="tedium" title="show / hide tedium (T)"><span class="sw sw-tedium"></span>tedium <b id="ro-tedium">—</b></button>
+          <button class="sw-btn" data-series="heat" title="show / hide heat (H)"><span class="sw sw-heat"></span>heat <b id="ro-heat">—</b></button>
+          <button class="sw-btn" data-series="fun" title="show / hide fun (F) — 1 − staleness"><span class="sw sw-fun"></span>fun <b id="ro-fun">—</b></button>
+          <span class="st-key">│ quake</span>
+        </div>
+        <svg id="strip-gods" class="strip" role="img" aria-label="the gods' pressure, tedium, heat and fun over the plies"></svg>
+        <div class="strip-legend" id="strip-legend-eval">
+          <button class="sw-btn" data-series="eval" title="show / hide the eval line"><span class="sw sw-eval"></span>eval (you) <b id="ro-eval">—</b></button>
+          <span class="muted" id="ro-eval-src"></span>
+        </div>
         <svg id="strip-eval" class="strip strip-eval" role="img" aria-label="the enemy's evaluation over the plies, your point of view"></svg>
       </div>
       <div class="scrub-row jumps">

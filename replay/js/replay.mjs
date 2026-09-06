@@ -51,7 +51,7 @@ import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
 import { parseBoard, WALL, FURNITURE } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
-import { stripData, renderStrips, setCursor, plyAtX, readoutAt } from './strips.mjs';
+import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
 export const REPLAY_BUILD = '2026-09-07 replay-ui.1';
 const params = new URLSearchParams(location.search);
@@ -80,7 +80,15 @@ const app = {
   probe: { busy: false, queue: [], seq: 0 },
   source: null,
   strips: null, // { data, geom } for the current line (strips.mjs)
+  stripHidden: new Set(), // series toggled off on the strips (persisted)
 };
+const STRIPS_KEY = 'dck.replay.strips.v1';
+try {
+  const saved = JSON.parse(localStorage.getItem(STRIPS_KEY) ?? '[]');
+  if (Array.isArray(saved)) app.stripHidden = new Set(saved.filter((k) => ALL_SERIES.includes(k)));
+} catch {
+  /* no storage: every series shows */
+}
 
 // ------------------------------------------------------------------ chrome
 
@@ -489,8 +497,27 @@ function renderLineStrips() {
   if (!line || !app.log) return;
   const data = stripData(line, app.log);
   data.forks = (line.forks ?? []).map((f) => f.forkPly);
-  const geom = renderStrips(stripHosts(), data, app.ply);
+  const geom = renderStrips(stripHosts(), data, app.ply, app.stripHidden);
   app.strips = { data, geom };
+  syncStripToggles();
+}
+
+/** A legend item's on/off look, and the persisted choice. */
+function syncStripToggles() {
+  for (const b of document.querySelectorAll('.sw-btn')) b.classList.toggle('off', app.stripHidden.has(b.dataset.series));
+}
+function toggleSeries(key) {
+  if (!ALL_SERIES.includes(key)) return false;
+  if (app.stripHidden.has(key)) app.stripHidden.delete(key);
+  else app.stripHidden.add(key);
+  try {
+    localStorage.setItem(STRIPS_KEY, JSON.stringify([...app.stripHidden]));
+  } catch {
+    /* fine */
+  }
+  app.strips = null;
+  syncStrips(app.ply);
+  return !app.stripHidden.has(key);
 }
 
 /** Move the cursor and refresh the readout for a ply (cheap, every paint). */
@@ -503,6 +530,7 @@ function syncStrips(ply) {
   say($('ro-pressure'), r.pressure);
   say($('ro-tedium'), r.tedium);
   say($('ro-heat'), r.heat);
+  say($('ro-fun'), r.fun);
   say($('ro-eval'), r.eval);
   say($('ro-eval-src'), r.probed ? 'probe' : r.eval === '—' ? '' : 'enemy\'s search');
 }
@@ -536,7 +564,7 @@ if (typeof ResizeObserver !== 'undefined') {
   // A width change (rotation, a resized window) redraws in the new pixel space.
   const ro = new ResizeObserver(() => {
     if (app.strips) {
-      const geom = renderStrips(stripHosts(), app.strips.data, app.ply);
+      const geom = renderStrips(stripHosts(), app.strips.data, app.ply, app.stripHidden);
       app.strips.geom = geom;
     }
   });
@@ -1066,6 +1094,7 @@ async function copyReport() {
 
 wireStrip($('strip-gods'), 'gods');
 wireStrip($('strip-eval'), 'eval');
+for (const b of document.querySelectorAll('.sw-btn')) b.addEventListener('click', () => toggleSeries(b.dataset.series));
 $('btnFirst').addEventListener('click', () => goto(0));
 $('btnPrev').addEventListener('click', () => step(-1));
 $('btnNext').addEventListener('click', () => step(1));
@@ -1170,6 +1199,8 @@ window.__DCK = {
     },
     probe: () => queueEval(),
     deep: () => queueDeep(idx().quakes.get(app.ply)),
+    /** Toggle a strip series ('pressure' | 'tedium' | 'heat' | 'fun' | 'eval'); returns whether it is now shown. */
+    toggleSeries,
     export: (force = null) => exportLog(force),
     report: (sections) => reportText(sections),
     get log() {
@@ -1205,6 +1236,9 @@ window.__DCK = {
               probes: [...app.strips.data.probes.keys()],
               ticks: Object.fromEntries(app.strips.data.ticks),
               readout: readoutAt(app.strips.data, app.ply),
+              hidden: [...app.stripHidden],
+              drawn: [...document.querySelectorAll('#strips .st-line')].map((e) => [...e.classList].find((c) => c.startsWith('st-') && c !== 'st-line')?.slice(3)),
+              labels: [...document.querySelectorAll('#strip-gods .st-label')].map((e) => e.textContent),
               cursorX: parseFloat($('strip-gods').querySelector('.st-cursor')?.getAttribute('x1') ?? 'NaN'),
               width: app.strips.geom.gods?.W ?? null,
             }

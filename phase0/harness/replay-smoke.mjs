@@ -116,21 +116,42 @@ expect(strips && strips.plies === L.plies && strips.pressure >= L.plies - 2, `th
 expect(strips && Object.entries(strips.ticks).filter(([, k]) => k === 'quake').length === L.quakes.length, `one quake tick per landed quake (${JSON.stringify(strips?.ticks)})`);
 expect(strips && strips.readout.pressure === trace12.p.quake.toFixed(2) && strips.readout.tedium === trace12.tedium.toFixed(2) && strips.readout.heat === trace12.heat.toFixed(2), `the readout at ply ${quake.ply} is the trace's P(quake) / tedium / heat (${JSON.stringify(strips?.readout)})`);
 expect(strips && /^[+−-]\d/.test(strips.readout.eval) && strips.readout.probed === false, `the eval readout reads the enemy's search (${strips?.readout.eval})`);
-expect(strips && Math.abs(strips.cursorX - (4 + ((strips.width - 8) * quake.ply) / L.plies)) < 1, 'the cursor hairline stands on the ply');
+expect(strips && strips.readout.fun === (1 - trace12.staleness).toFixed(2), `fun is 1 − staleness (${strips?.readout.fun})`);
+expect(strips && Math.abs(strips.cursorX - (4 + ((strips.width - 8 - 14) * quake.ply) / L.plies)) < 1, 'the cursor hairline stands on the ply');
+expect(strips && ['pressure', 'tedium', 'heat', 'fun', 'eval'].every((k) => strips.drawn.includes(k)) && strips.labels.join('') .length === 4 && new Set(strips.labels).size === 4, `every series is drawn and the four gods lines carry direct labels (${strips?.labels.join('')})`);
+// The legend toggles: a series hides, its button reads off, the choice survives a reload.
+{
+  const off = await page.evaluate(() => {
+    document.querySelector('.sw-btn[data-series="tedium"]').click();
+    const v = window.__DCK.replay.view.strips;
+    return { drawn: v.drawn, hidden: v.hidden, labels: v.labels, btnOff: document.querySelector('.sw-btn[data-series="tedium"]').classList.contains('off') };
+  });
+  expect(!off.drawn.includes('tedium') && off.hidden.join() === 'tedium' && off.btnOff && off.labels.length === 3, `tapping the legend hides tedium (drawn ${off.drawn.join(',')}, labels ${off.labels.join('')})`);
+  await shot('01a-strip-toggled');
+  await page.reload();
+  await page.evaluate(() => window.__DCK.ready);
+  const kept = await page.evaluate(() => window.__DCK.replay.view.strips.hidden);
+  expect(kept.join() === 'tedium', 'the toggle persists across a reload');
+  const back = await page.evaluate(() => window.__DCK.replay.toggleSeries('tedium') && window.__DCK.replay.view.strips.drawn.includes('tedium'));
+  expect(back, 'and toggles back on');
+  await page.evaluate((p) => window.__DCK.replay.goto(p), quake.ply);
+}
 {
   const box = await page.evaluate(() => {
     const r = document.getElementById('strip-gods').getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   });
+  // The plot spans the SVG less its padding and the label column (4 + 4 + 14 px).
+  const plyAt = (frac) => Math.round(((frac * box.w - 4) / (box.w - 22)) * L.plies);
   await page.mouse.click(box.x + box.w * 0.5, box.y + box.h / 2);
   const tapped = await page.evaluate(() => window.__DCK.replay.view.ply);
-  expect(Math.abs(tapped - L.plies / 2) <= 1, `a tap at the strip's middle scrubs to ply ${tapped}`);
+  expect(Math.abs(tapped - plyAt(0.5)) <= 1, `a tap at the strip's middle scrubs to ply ${tapped} (expected ~${plyAt(0.5)})`);
   await page.mouse.move(box.x + box.w * 0.2, box.y + box.h / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.w * 0.9, box.y + box.h / 2, { steps: 4 });
   await page.mouse.up();
   const dragged = await page.evaluate(() => window.__DCK.replay.view.ply);
-  expect(Math.abs(dragged - L.plies * 0.9) <= 1, `a drag to 90% scrubs to ply ${dragged}`);
+  expect(Math.abs(dragged - plyAt(0.9)) <= 1, `a drag to 90% scrubs to ply ${dragged} (expected ~${plyAt(0.9)})`);
   await page.evaluate((p) => window.__DCK.replay.goto(p), quake.ply);
 }
 // The why panel: the pick is marked, the tools are there.

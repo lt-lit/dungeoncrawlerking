@@ -754,7 +754,13 @@ timeline line + the meters as the ply line; THE STRIPS (`replay/js/
 strips.mjs`, designer same day: "graphs plotting The God's stats like
 pressure under the scrubber. Maybe eval score as well") — two small charts
 under the slider on one x-axis with a shared cursor, tap or drag to scrub:
-the gods' P(quake) as an area + tedium + heat as lines on ONE 0…1 axis with
+the gods' P(quake) as an area + tedium + heat + FUN (1 − staleness; designer:
+"plot fun, and make it so I can toggle each line") as lines on ONE 0…1 axis,
+each lettered at the right edge with a leader (direct labels — four series
+on one axis, and no fourth hue clears the deutan floor against the other
+three, so fun's green sits in the validator's 6–8 band that is legal only
+with secondary encoding), every legend item a persisted TOGGLE
+(`dck.replay.strips.v1`, `__DCK.replay.toggleSeries`), with
 a tick per quake (half-height = vetoed) and gold notches at undo points, and
 the eval from the PLAYER's POV on its own axis (±10 pawns, mate on the rail,
 a probe as a ringed dot) — two measures, two charts, never a second y-axis;
@@ -782,9 +788,11 @@ Old logs load: every read is optional. Gates: `phase0/harness/test-
 logreport.mjs` (Node, 47 checks: the full report, the pick marked, the
 stacked phone layout, `lineTree` on the sample + a synthetic NESTED undo,
 an old-shape log and an empty log render, the residue walk finds f7's ruin
-at ply 32), `phase0/harness/replay-smoke.mjs` (Playwright, 58 checks on
-the sample: load, scrub, marks, ruin, the strips' readout vs the trace +
-a tick per quake + tap/drag scrubbing + the probe's dot, overlays, branch
+at ply 32), `phase0/harness/replay-smoke.mjs` (Playwright, 64 checks on
+the sample: load, scrub, marks, ruin, the strips' readout vs the trace
+(fun = 1 − staleness) + a tick per quake + the four direct labels + a
+legend toggle that hides a line and survives a reload + tap/drag
+scrubbing + the probe's dot, overlays, branch
 in/out, eval + deep Δ on a shallow `--go`, PV arrows, report, annotated
 export, old-shape log via the object path with synthetic tune rows on the
 right lines, paste, the ring, `?latest=1`; `--shots` →

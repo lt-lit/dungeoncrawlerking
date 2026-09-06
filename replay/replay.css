@@ -63,13 +63,14 @@
   --s-pressure: #3d8fd6;
   --s-tedium: #c4679a;
   --s-heat: #c9772e;
+  --s-fun: #4f9f5a;
   --s-eval: #b08b3b;
 }
 #strips { display: flex; flex-direction: column; gap: .15rem; margin-top: .2rem; }
 .strip {
   display: block;
   width: 100%;
-  height: 52px;
+  height: 60px;
   background: var(--panel);
   border: 1px solid #2c2d36;
   border-radius: .35rem;
@@ -87,12 +88,29 @@
   color: var(--muted);
   padding: 0 .1rem;
 }
-.strip-legend b { color: var(--text); font-weight: 600; margin-right: .5rem; font-variant-numeric: tabular-nums; }
+.strip-legend b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: .3rem;
+  padding: .1rem .3rem;
+  cursor: pointer;
+}
+.sw-btn:hover { background: var(--panel-2); }
+.sw-btn.off { opacity: .55; }
+.sw-btn.off .sw { background: transparent; box-shadow: inset 0 0 0 2px var(--sw, var(--muted)); }
+.sw-btn.off b { text-decoration: line-through; }
 .strip-legend .sw { display: inline-block; width: .75rem; height: .5rem; border-radius: 2px; }
-.sw-pressure { background: var(--s-pressure); }
-.sw-tedium { background: var(--s-tedium); }
-.sw-heat { background: var(--s-heat); }
-.sw-eval { background: var(--s-eval); }
+.sw-pressure { --sw: var(--s-pressure); background: var(--sw); }
+.sw-tedium { --sw: var(--s-tedium); background: var(--sw); }
+.sw-heat { --sw: var(--s-heat); background: var(--sw); }
+.sw-fun { --sw: var(--s-fun); background: var(--sw); }
+.sw-eval { --sw: var(--s-eval); background: var(--sw); }
 .strip-legend .st-key { margin-left: auto; color: var(--muted); }
 .st-grid { stroke: #2f3039; stroke-width: 1; }
 .st-zero { stroke: #3a3b46; }
@@ -100,7 +118,14 @@
 .st-line.st-pressure { stroke: var(--s-pressure); }
 .st-line.st-tedium { stroke: var(--s-tedium); }
 .st-line.st-heat { stroke: var(--s-heat); }
+.st-line.st-fun { stroke: var(--s-fun); }
 .st-line.st-eval { stroke: var(--s-eval); }
+.st-leader { stroke-width: 1; stroke-opacity: .8; }
+.st-leader.st-pressure { stroke: var(--s-pressure); }
+.st-leader.st-tedium { stroke: var(--s-tedium); }
+.st-leader.st-heat { stroke: var(--s-heat); }
+.st-leader.st-fun { stroke: var(--s-fun); }
+.st-label { fill: var(--muted); font-family: ui-monospace, monospace; font-size: 8px; }
 .st-area.st-pressure { fill: var(--s-pressure); fill-opacity: .22; stroke: none; }
 .st-tick { stroke: var(--text); stroke-width: 2; stroke-opacity: .75; }
 .st-tick-vetoed { stroke-opacity: .4; }
