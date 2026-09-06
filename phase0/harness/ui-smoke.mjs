@@ -540,8 +540,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     };
   });
   expect(pre.buttons.length === 0, `replay-log buttons present${pre.buttons.length ? ` — missing ${pre.buttons.join(',')}` : ''}`);
-  expect(pre.schema === 'dck-log/1' && pre.states === pre.plies + 1 + (pre.ended ? 1 : 0) && pre.statesAligned, `export: ${pre.states} states for ${pre.plies} plies${pre.ended ? ' + the final position' : ''}, aligned`);
-  expect(pre.engine > 0 && pre.engineOk && pre.traces === pre.plies && pre.timed, `export: ${pre.engine} engine searches with score/depth/pv/ms, ${pre.traces} timed roll traces`);
+  // states[0] is the start and every ply adds one; on a finished game the
+  // last ply's state IS the `ended` entry (no undo snapshot after a game-
+  // ending move), so the count is plies + 1 either way. A game-ending MOVE
+  // never reaches the quake phase, so an ended game has one trace fewer.
+  expect(pre.schema === 'dck-log/1' && pre.states === pre.plies + 1 && pre.statesAligned, `export: ${pre.states} states for ${pre.plies} plies${pre.ended ? ' (the last is the final position)' : ''}, aligned`);
+  expect(pre.engine > 0 && pre.engineOk && (pre.traces === pre.plies || (pre.ended && pre.traces === pre.plies - 1)) && pre.timed, `export: ${pre.engine} engine searches with score/depth/pv/ms, ${pre.traces} timed roll traces`);
   expect(pre.due > 0 && pre.inputs === pre.due, `export: ${pre.inputs}/${pre.due} due rolls carry the engine inputs verbatim (${pre.quakes} quakes landed, ${pre.attempts} draws rejected)`);
   expect(pre.logLines > 0 && !!pre.app && !!pre.eng && pre.ua, `export: ${pre.logLines} mirrored log lines, build "${pre.app}", engine "${pre.eng}"`);
   expect(pre.saved.length >= 1 && pre.saved[0].plies === pre.plies, `autosave ring holds this duel (${pre.saved.length} saved, ${pre.saved[0]?.plies} plies, ${(pre.size / 1024).toFixed(0)} KB export)`);

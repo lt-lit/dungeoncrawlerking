@@ -1107,7 +1107,9 @@ async function main() {
       const b = r.branches[0];
       if (r.branches.length !== 1 || b.fromPly !== plyBefore || b.toPly !== duel.ply || b.from.fen !== fenBefore || b.from.state !== stateBefore) throw new Error(`branch header wrong: ${JSON.stringify({ n: r.branches.length, from: b?.fromPly, to: b?.toPly, fen: b?.from?.fen === fenBefore })}`);
       if (b.tail.moves.join() !== movesBefore.slice(duel.ply).join()) throw new Error('branch tail must hold exactly the abandoned moves');
-      if (b.tail.states.length !== b.tail.moves.length + (stateBefore === 'playing' ? 0 : 1) || b.tail.states[0]?.ply !== duel.ply + 1) throw new Error(`branch tail states wrong (${b.tail.states.length} for ${b.tail.moves.length} moves)`);
+      // One state per abandoned ply either way: on a finished game the losing
+      // ply's state is the `ended` entry (no undo snapshot follows it).
+      if (b.tail.states.length !== b.tail.moves.length || b.tail.states[0]?.ply !== duel.ply + 1) throw new Error(`branch tail states wrong (${b.tail.states.length} for ${b.tail.moves.length} moves)`);
       if (b.tail.flags.length !== 1 || r.flags.length !== 0) throw new Error('the flag must travel with the abandoned tail');
       for (const k of RECORD_ARRAYS) if (!Array.isArray(b.tail[k]) || r[k].length !== (k === 'states' ? duel.ply + 1 : k === 'moves' || k === 'sans' ? duel.ply : r[k].length)) throw new Error(`RECORD_ARRAYS key ${k} not captured/truncated consistently`);
       const marker = r.tunes.find((t) => t.undo);
