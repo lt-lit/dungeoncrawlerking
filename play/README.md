@@ -899,16 +899,161 @@ What the panel shows:
   recorded on `record.tunes` with their ply, so an exported trace explains
   itself. Without the overlay they keep their shipped meaning (next duel).
   Config changes never touch the RNG stream, debt, or favor.
-- **Export** (`copy trace`) — the full ledger as JSON to the clipboard:
-  the deal provenance (stage id, flip, crop, army specs, master setup
-  seed — everything a replay re-deals from), the Director seed,
-  `config0` (the starting config a replay constructs with),
-  the live config, tunes (undo drops a `{ply, undo: true}` marker on the
-  ledger, since an undo forks the RNG stream and ends replayability),
-  moves, quakes + deltas, every roll trace. `__DCK.gods.export()` returns
-  the same object.
+- **before / after** (2026-09-06, the replay log's in-game half) — paints
+  the board as it stood BEFORE the last quake (the record's `preFen` with
+  the previous ply's ledgers), non-interactive while it shows the past;
+  `after` returns to now, as does any move, quake or undo. Player's turn only.
+- **deep Δ** — probes the last quake's three boards (before the ply's
+  move, before the quake, after it) at the ENEMY'S OWN limits (`duel.go`,
+  up to 10 s each on the phone), hash cleared, in the idle window ahead of
+  the shallow delta and the hint probe; the verdict lands on the
+  `record.quakes` entry (`deepDelta`) and the trace panel in words — "the
+  move LOST white's mate-in-10; the quake kept it" — the s75 lesson (a
+  mate the depth-12 probe cannot see is settled only at the enemy's depth,
+  and it was the player's move that lost it). One per quake, on demand;
+  "Keep evaluating" holds the engine all turn, so the job then runs on the
+  next one.
+- **Export** (`copy log`, was `copy trace`) — the full REPLAY LOG as JSON
+  to the clipboard: the deal provenance (stage id, flip, crop, army specs,
+  master setup seed — everything a replay re-deals from), the Director
+  seed, `config0` (the starting config a replay constructs with), the live
+  config, tunes (undo drops a `{ply, undo: true, branch}` marker on the
+  ledger, pointing at the branch that holds the abandoned line — see "The
+  replay log" below), moves, per-ply states, the engine record, quakes +
+  deltas, every roll trace, the rejected draws, undo branches, flags.
+  `__DCK.gods.export()` and `__DCK.log.build()` return the same object; the
+  Export buttons on the end overlay and in Options deliver it as a FILE.
 
 Console/E2E surface: `window.__DCK.gods` — `traces`, `quakes`, `tunes`,
 `probs()` (v4: also `heat`, `tedium`, `threats`), `forecast()`, `census()`,
 `tune(partial)` (v4 dials: `relief`, `heatWindow`, `heatGain`,
 `tediumPlies`, `threatMemory`, `winDepth`, `winNodes`), `export()`.
+
+## The replay log (2026-09-06)
+
+The instrument for "why did the gods do that?" — and for everything else a
+post-mortem needs. Designer brief: a button to export a detailed replay/debug
+log; **undos must be recorded**, with the exact board state right before each
+one; and capture the whole board state every turn (it costs ~300 bytes a
+ply). Every duel records itself, always; nothing here is gated on Cheater
+Mode or the debug overlay.
+
+**What is recorded** (`js/duel.mjs` `record`; every entry stamped `seq`, a
+counter that never resets or rewinds — wall-clock order across undos, which
+is also the Director's RNG order — and `at`, epoch ms):
+
+- `moves` / `sans` — one per ply.
+- `states` — the exact board after EVERY completed pipeline step
+  (post-quake): fen, side to move, holes, god-minted crates, debt, the meters'
+  readout. `states[0]` is the start position; a finished game adds an
+  `ended` entry on the final board. A reader needs no chess library.
+- `engine` — every reply search: mover-POV score, depth/seldepth/nodes, the
+  pv, wall ms, the `go` used, and `recovered` when the stall ladder retried.
+  The eval trajectory of the game.
+- `quakeTraces` — the Director's roll trace every ply (Phase 1.2), now with
+  `timing` (roll / mate probes / compose / gate probes / total, ms) and, on
+  every due roll, `inputs`: the engine's mate hints VERBATIM (fen, score, pv,
+  source), the probe census and the eval gate's baseline. The Director's
+  decisions replay from the seed; the time-limited probes that fed them do
+  not, so they are recorded rather than re-run. **The "why" layer
+  (designer 2026-09-06: "trace their every action and why they did it")**:
+  every trace carries the meters' INPUTS — `moveEv` (how the record meter
+  classified the ply: capture / check / pawn push / promotion / repetition /
+  threat), `threatKeys` (the new threat keys that made it hot) and `stale`
+  (the staleness score's ingredients: legal moves, captures available,
+  locked pawns, pieces, pawns); every rung a quake walked appends to
+  `candidates` its whole POOL with scores (`weaken`: square, impact, open
+  sides, locked file; `breach`: + pawns freed; `displace`: every tier's
+  candidates, the tier drawn from, the pool; `crumble`: the bare-floor
+  squares, the terminal squares), `chosen` (the pick's index into the pool)
+  and `rejected` (every candidate passed over WITH its reason — `protected`,
+  `touched`, `hangs_piece`, `unsafe_landing`, `exposes_king`, `walled_in`,
+  `composite_landing`, …); and `protected` names its members (`pieceList`,
+  `squareList`), the threat `keys` per side (`hang:e4`, `pin:…`, `fork:d5`,
+  `win1`) and `by` source (ledger / grid wins / engine lines). The report
+  prints each action as a ranked pool with the pick marked and the rejects
+  grouped by reason.
+- `quakes` — what landed, pre/post FEN, the overlay's `evalDelta`.
+- `attempts` — every composition the v4.3 eval gate REJECTED, in full: its
+  own trace, the board it would have left, its verdict. "What did the gods
+  try first, and why not."
+- `anomalies`, `log` (the duel-log lines the player saw, mirrored), `flags`
+  (the ⚑ topbar button: ply, board, an optional note — "look at this").
+- **`branches` — the undo history.** An undo MOVES the tail it cuts off into a
+  branch instead of dropping it: every per-ply array's slice past the
+  snapshot's lens (`RECORD_ARRAYS` is the ONE list the lens and the branch
+  capture both read), plus `from`, the exact state the instant before the
+  undo — board, ledgers, meters, and how the game had ended if it had.
+  Branches are never truncated; an undo past an earlier fork keeps that
+  fork's branch, and sorting by `seq` recovers the true order. The tunes
+  ledger's `{ply, undo: true, fromPly, branch}` marker points at its branch.
+- `tunes` — config history (dials, favor, undo markers), never truncated.
+
+**The export** (`js/replaylog.mjs` `buildLog`, schema `dck-log/1`): the
+record plus the deal provenance (stage, flip, crop, armies, master seed,
+`variantIni`), the Director seed and `config0`, the engine limits (`go`,
+`mateGo`, `evalGate`) and `meta` — the build stamp (`APP_BUILD` in
+main.mjs, bumped by hand), UA, the engine's `id name`, the hint probe's
+limits, the gods options in force. `deliverLog` gets it off the device: Web
+Share as a FILE on a coarse-pointer device (Files, AirDrop, a message to
+yourself), else a download, else the clipboard, else the console. The last
+THREE duels are kept in a localStorage ring (`LogStore`), rewritten after
+every ply, undo, flag, end and back-to-setup — a reload or a dead tab loses
+nothing; the stage picker's **Saved replay logs** row exports them.
+
+**Buttons:** ⚑ in the top bar (flag, in-duel); **Export log** on the
+end-of-game overlay; Options → Replay log → **Export this duel's log** /
+**Copy as text**; the debug panel's `copy log` (clipboard). Console/E2E:
+`__DCK.log` — `build()`, `flag(note)`, `autosave()`, `saved()`,
+`load(slot)`, `export(force)`.
+
+**Reading one:** `cd phase0 && node harness/log-report.mjs <dck-log_*.json>
+[header|timeline|quakes|branches|flags|anomalies|engine|log|all] [--ply N]
+[--probe [go]] [--json path]` — a timeline with engine evals and quake
+summaries, every quake's board before/after (`#` wall, `O` hole, `x`
+god-cracked wall, `^` crate) with its ladder path, protected census, inputs,
+gate verdict, rejected draws and timing, every undo with the pre-undo board
+and the abandoned line, flags, anomalies. No engine, no ffish — except
+`--probe`, which re-searches each quake's three boards (before the ply's
+move, before the quake, after it) with the real engine (default `depth 22
+movetime 20000`, hash cleared, the vendored pair overlaid into node_modules)
+and says what the move and what the quake did: "the move LOST white's
+mate-in-10; the quake kept it".
+
+**The first false alarm, and the marks that catch it (s75, 2026-09-06):** a
+mate-in-10 the enemy's own search had conceded was thrown away by the
+player's next move, one ply before a quake that then got the blame — human
+players cannot see a mate-in-11 and will throw them away all the time. So
+every ply's state now carries `move` / `san` / `mover` and, for the player,
+`predicted` (the enemy's predicted reply, pv[1] of a search whose pv[0] it
+then played, no quake in between), `followed`, and `engineSaw` (that search's
+score, enemy POV); the report marks `⚠ left the engine's mate-in-N line` on
+the timeline and counts them in the header. The in-game half is the debug
+panel's **before / after** and **deep Δ** (see the overlay section above).
+
+**Gates:** `selftest.html` "replay log" (a live 5x6 duel against the real
+engine: states, the engine record, inputs on every due roll, one undo → one
+branch with the pre-undo fen and the abandoned tail, `seq` unique, the export
+round-trips through JSON, the store rotates); `ui-smoke.mjs` asserts the
+export on the live board and an undo through the real button path.
+
+**Status (2026-09-06):** three logs in (s75 and s77 from Firefox/Windows,
+s79 from the phone — Android Firefox, a flipped + cropped stage), all clean
+on every structural check, no gods misbehaviour found; the one suspicion
+was the player's own move (see above). The replay log is DONE for this
+phase.
+
+**Next session — the in-game log/replay analyzer suite** (designer
+2026-09-06). The Node report is the reference rendering; the suite is that
+report on the phone, on the real board: a replay screen that loads a log
+(autosave ring, file picker, pasted JSON) and scrubs `states` — every ply's
+board with its own holes and crates, that ply's quake residue, the engine's
+eval, the gods line — steps into undo branches, opens a per-quake WHY panel
+(the ranked pools with the pick marked, the rejects by reason, the
+protected members and keys, the inputs, the gate verdict, timing), and
+probes any board on demand on the idle engine (the log's `variantIni`
+registers the deal variant). Its own module (`js/replay-ui.mjs`), a
+`replay` phase, old logs must load, every surface smoke-checked. The full
+brief is in `CLAUDE.md` § "NEXT SESSION". Still deferred after that: the
+offline replayer that feeds the recorded inputs back into the Director and
+diffs, and `gods-metrics.mjs` reading browser logs directly.

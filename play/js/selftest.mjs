@@ -14,6 +14,8 @@ import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from '
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
+import { DuelController, RECORD_ARRAYS } from './duel.mjs';
+import { buildLog, LogStore, logFileName } from './replaylog.mjs';
 import { captureLoss } from './threat.mjs';
 import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalSoftens } from './tactics.mjs';
 import { RestlessnessMeter } from './meter.mjs';
@@ -1050,6 +1052,120 @@ async function main() {
     }
     if (tested < 2) throw new Error(`only ${tested} due rolls to test on the fixture`);
     return `${cases.length} verdicts as specified; ${tested} rejected draws rolled back clean, retries on a clean header, vetoes spend the meter`;
+  });
+
+  // --- The replay log (2026-09-06): per-ply states, the engine record, the
+  // engine's inputs on every due roll, BRANCHES on undo (the exact state
+  // right before the undo + the abandoned tail), a monotonic seq, and an
+  // export that round-trips through JSON. Drives the canon DuelController
+  // on the 5x6 fixture with the real engine at a shallow depth.
+  await check('replay log: states, engine record, undo branches, export round-trip', async () => {
+    const dir = { ...dirCfg, seed: 11 };
+    const duel = new DuelController({
+      ffish,
+      engine,
+      variantName: dirVariant,
+      startFen: dirFen,
+      files: 5,
+      ranks: 6,
+      director: dir,
+      go: 'depth 4 movetime 100',
+      mateGo: 'depth 4 movetime 80',
+      hooks: { onMove: ({ san, ply }) => duel.note(`${ply}. ${san}`) },
+    });
+    try {
+      await duel.start();
+      const r = duel.record;
+      if (r.states.length !== 1 || r.states[0].ply !== 0 || r.states[0].fen !== dirFen || !(r.states[0].seq > 0)) throw new Error('states[0] must be the stamped start position');
+      // The player: the first legal non-capture (a capture if nothing else).
+      const quietMove = () => {
+        const fen = duel.fen();
+        const legal = duel.legalMoves();
+        return legal.find((m) => { const to = m.match(/^[a-l](?:10|[1-9])([a-l](?:10|[1-9]))/)?.[1]; return to && getSquare(fen, to) === null; }) ?? legal[0];
+      };
+      const play = async (n) => {
+        for (let i = 0; i < n && duel.state === 'playing'; i++) {
+          if (duel.turnColor() === 'white') await duel.playerMove(quietMove());
+          else await duel.engineMove();
+        }
+      };
+      await play(6);
+      if (duel.ply < 2) throw new Error(`fixture ended after ${duel.ply} plies — cannot exercise undo`);
+      // Every ply's state carries the move that produced it; the player's
+      // states carry the enemy's predicted reply and whether it was followed
+      // (null when no fresh line existed — a quake in between, or ply 1).
+      const plyStates = r.states.filter((s) => s.ply > 0);
+      if (!plyStates.every((s) => s.move === r.moves[s.ply - 1] && s.san === r.sans[s.ply - 1] && (s.mover === 'player' || s.mover === 'engine'))) throw new Error('every ply state must carry its move, san and mover');
+      if (!plyStates.filter((s) => s.mover === 'player').every((s) => 'predicted' in s && 'followed' in s && 'engineSaw' in s)) throw new Error("player states must carry predicted / followed / engineSaw");
+      if (plyStates.some((s) => s.predicted && typeof s.followed !== 'boolean')) throw new Error('a predicted reply must come with a followed verdict');
+      const predictedN = plyStates.filter((s) => s.predicted).length;
+      const plyBefore = duel.ply;
+      const fenBefore = duel.fen();
+      const stateBefore = duel.state;
+      const movesBefore = r.moves.slice();
+      const flag = duel.flag('selftest');
+      if (r.flags.length !== 1 || flag.fen !== fenBefore || flag.note !== 'selftest') throw new Error('flag must carry the fen and the note');
+      if (!r.engine.length || !r.engine.every((e) => e.score && Number.isInteger(e.depth) && Array.isArray(e.pv) && e.ms >= 0 && e.fen && e.seq > 0)) throw new Error(`engine record incomplete (${JSON.stringify(r.engine[0] ?? null)})`);
+      if (r.states.length !== duel.ply + 1 || !r.states.every((s, i) => s.ply === i)) throw new Error(`states misaligned: ${r.states.length} for ${duel.ply} plies`);
+      if (!r.quakeTraces.length || !r.quakeTraces.every((t) => t.seq > 0 && t.timing && Number.isInteger(t.timing.total))) throw new Error('every roll trace must carry seq + timing');
+      const due = r.quakeTraces.filter((t) => t.path.includes('quake'));
+      if (due.some((t) => !t.inputs || !Array.isArray(t.inputs.hints) || !t.inputs.probes)) throw new Error("a due roll's trace lacks the engine inputs");
+      // The "why" layer: every trace carries the meters' inputs; every rung a
+      // quake walked carries its pool, the pick's index into it, and the
+      // rejects with reasons; the protected set names its members.
+      if (!r.quakeTraces.every((t) => t.moveEv && Array.isArray(t.threatKeys) && t.stale && Number.isInteger(t.stale.moves) && Array.isArray(t.candidates))) throw new Error("a trace lacks moveEv / threatKeys / stale / candidates");
+      const legs = due.flatMap((t) => t.candidates);
+      if (!legs.every((c) => ['weaken', 'breach', 'displace', 'crumble'].includes(c.rung) && Array.isArray(c.pool) && Array.isArray(c.rejected))) throw new Error('a candidates entry is malformed');
+      const picked = legs.filter((c) => c.chosen !== null && c.chosen !== undefined);
+      if (picked.some((c) => !(c.chosen >= 0 && c.chosen < c.pool.length))) throw new Error("a pick's index is outside its pool");
+      for (const t of due) {
+        for (const e of t.chosen?.terrain ?? []) {
+          const leg = t.candidates.find((c) => c.rung === e.kind && c.chosen !== null && c.pool[c.chosen]?.sq === e.square);
+          if (!leg) throw new Error(`ply ${t.ply}: the chosen ${e.kind} at ${e.square} is not the pick of any recorded pool`);
+        }
+        if (t.protected && !(Array.isArray(t.protected.pieceList) && Array.isArray(t.protected.squareList) && t.protected.keys && t.protected.by && t.protected.pieceList.length === t.protected.pieces)) throw new Error(`ply ${t.ply}: the protected set is not listed`);
+      }
+      // UNDO: the tail becomes a branch, the live arrays truncate.
+      if (!duel.undoToTurn('w')) throw new Error('undo refused');
+      const b = r.branches[0];
+      if (r.branches.length !== 1 || b.fromPly !== plyBefore || b.toPly !== duel.ply || b.from.fen !== fenBefore || b.from.state !== stateBefore) throw new Error(`branch header wrong: ${JSON.stringify({ n: r.branches.length, from: b?.fromPly, to: b?.toPly, fen: b?.from?.fen === fenBefore })}`);
+      if (b.tail.moves.join() !== movesBefore.slice(duel.ply).join()) throw new Error('branch tail must hold exactly the abandoned moves');
+      // One state per abandoned ply either way: on a finished game the losing
+      // ply's state is the `ended` entry (no undo snapshot follows it).
+      if (b.tail.states.length !== b.tail.moves.length || b.tail.states[0]?.ply !== duel.ply + 1) throw new Error(`branch tail states wrong (${b.tail.states.length} for ${b.tail.moves.length} moves)`);
+      if (b.tail.flags.length !== 1 || r.flags.length !== 0) throw new Error('the flag must travel with the abandoned tail');
+      for (const k of RECORD_ARRAYS) if (!Array.isArray(b.tail[k]) || r[k].length !== (k === 'states' ? duel.ply + 1 : k === 'moves' || k === 'sans' ? duel.ply : r[k].length)) throw new Error(`RECORD_ARRAYS key ${k} not captured/truncated consistently`);
+      const marker = r.tunes.find((t) => t.undo);
+      if (!marker || marker.branch !== b.seq || marker.fromPly !== plyBefore) throw new Error('tunes must carry an undo marker pointing at the branch');
+      // Play on: the record grows past the branch, seq stays monotonic.
+      await play(2);
+      const objs = RECORD_ARRAYS.filter((k) => k !== 'moves' && k !== 'sans');
+      const seqs = [];
+      for (const k of objs) for (const e of r[k]) seqs.push(e.seq);
+      for (const br of r.branches) { seqs.push(br.seq, br.from.seq); for (const k of objs) for (const e of br.tail[k]) seqs.push(e.seq); }
+      for (const t of r.tunes) seqs.push(t.seq);
+      if (!seqs.every((s) => Number.isInteger(s) && s > 0) || new Set(seqs).size !== seqs.length || Math.max(...seqs) > duel.seq) throw new Error('seq must be a unique positive counter over every recorded event');
+      if (r.states.length && r.states[r.states.length - 1].seq <= b.seq && duel.state === 'playing') throw new Error('post-undo events must be stamped after the branch');
+      // The export: one object, JSON-clean, traces carried once.
+      const data = buildLog({ duel, session: null, meta: { app: 'selftest' } });
+      const back = JSON.parse(JSON.stringify(data));
+      if (back.schema !== 'dck-log/1' || back.branches.length !== 1 || back.states.length !== r.states.length || back.plies !== duel.ply || back.seq !== duel.seq || back.meta.app !== 'selftest') throw new Error('export shape wrong');
+      if (back.quakes.some((q) => 'trace' in q) || back.branches[0].tail.quakes.some((q) => 'trace' in q)) throw new Error('quake events must not duplicate their trace');
+      if (back.branches[0].from.fen !== fenBefore || back.branches[0].tail.moves.length !== b.tail.moves.length) throw new Error('branch did not survive the export');
+      if (!/^dck-log_duel_\d{8}-\d{4}\.json$/.test(logFileName(back))) throw new Error(`file name ${logFileName(back)}`);
+      // The autosave ring on a fake storage: slots rotate, a game keeps its own.
+      const mem = new Map();
+      const store = new LogStore({ getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) }, { slots: 2 });
+      const s0 = store.claim('a');
+      if (!store.save(s0, data, { id: 'a' })) throw new Error('store.save failed');
+      const s1 = store.claim('b');
+      store.save(s1, data, { id: 'b' });
+      if (s0 === s1 || store.claim('c') !== s0 || store.claim('b') !== s1 || store.index().length !== 2 || store.load(s1)?.schema !== 'dck-log/1') throw new Error('store slots must rotate and a game must keep its own slot');
+      return `${duel.ply} plies live + ${b.tail.moves.length} abandoned; ${r.engine.length} searches, ${predictedN} predicted replies on the states, ${due.length} due rolls with inputs, ${r.quakes.length} quakes, ${r.attempts.length} rejected draws; export ${(JSON.stringify(data).length / 1024).toFixed(0)} KB round-trips`;
+    } finally {
+      duel.destroy();
+      engine.setoption('MultiPV', '1');
+    }
   });
 
   // --- Game-end protocol (rule 4): numberLegalMoves()===0, mover loses ---

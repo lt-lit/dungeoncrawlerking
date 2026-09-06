@@ -45,7 +45,11 @@ export class UciEngine {
   }
 
   async uci() {
-    return this.sendUntil('uci', (l) => l === 'uciok');
+    const lines = await this.sendUntil('uci', (l) => l === 'uciok');
+    // The build's own name ('id name Fairy-Stockfish …') — the replay log's
+    // export stamps it, so a log says which engine played.
+    this.id = lines.find((l) => l.startsWith('id name '))?.slice(8) ?? null;
+    return lines;
   }
 
   async isready() {

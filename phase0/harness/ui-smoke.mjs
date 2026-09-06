@@ -501,6 +501,122 @@ const snap = await page.evaluate(() => {
 });
 expect(snap.fit > 0 && snap.k >= 1 && Math.abs(snap.k - Math.round(snap.k)) < 1e-3 && snap.on.snap && snap.on.box?.h && !snap.off.snap && !snap.off.box, `pixel-perfect pieces: king box ${snap.h}px = ${snap.k}× the set's ${snap.fit}-px height, off again after`);
 if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT, '06-options.png') });
+// --- The replay log (2026-09-06): the export builds from the live duel and
+// is complete (states per ply, the engine record, inputs on every due roll,
+// the mirrored duel log, the build + engine stamp), the autosave ring holds
+// it, the buttons exist, and an UNDO leaves a branch holding the exact
+// pre-undo board with the abandoned tail.
+{
+  const pre = await page.evaluate(() => {
+    const d = window.__DCK.app.duel;
+    const L = window.__DCK.log.build();
+    const due = L.quakeTraces.filter((t) => t.path.includes('quake'));
+    return {
+      ply: d.ply,
+      fen: d.fen(),
+      state: d.state,
+      saved: window.__DCK.log.saved(),
+      buttons: ['btnFlag', 'btnOverlayExport', 'btnOptionsExport', 'btnOptionsCopy', 'btnSavedExport', 'btnGodsExport'].filter((id) => !document.getElementById(id)),
+      schema: L.schema,
+      states: L.states.length,
+      plies: L.plies,
+      ended: L.states[L.states.length - 1]?.ended === true,
+      statesAligned: L.states.every((s, i) => s.ply === i || (s.ended && s.ply === L.plies)),
+      engine: L.engine.length,
+      engineOk: L.engine.every((e) => e.score && Number.isInteger(e.depth) && e.ms >= 0 && Array.isArray(e.pv)),
+      traces: L.quakeTraces.length,
+      due: due.length,
+      inputs: due.filter((t) => t.inputs && Array.isArray(t.inputs.hints) && t.inputs.probes).length,
+      // the "why" layer: pools + rejects per rung on every due roll that acted, the meters' inputs on every ply
+      why: due.filter((t) => t.outcome === 'quiet' || t.outcome === 'vetoed' || (t.candidates?.length && t.candidates.every((c) => Array.isArray(c.pool) && Array.isArray(c.rejected)))).length,
+      whyPlies: L.quakeTraces.filter((t) => t.moveEv && t.stale && Array.isArray(t.threatKeys)).length,
+      protectedListed: due.filter((t) => t.protected && Array.isArray(t.protected.pieceList) && t.protected.keys).length,
+      timed: L.quakeTraces.every((t) => t.timing && Number.isInteger(t.timing.total) && t.seq > 0),
+      quakes: L.quakes.length,
+      attempts: L.attempts.length,
+      branches: L.branches.length, // the residue check above already undid once
+      logLines: L.log.length,
+      app: L.meta.app,
+      eng: L.meta.engine,
+      ua: !!L.meta.ua,
+      seq: L.seq,
+      size: JSON.stringify(L).length,
+    };
+  });
+  expect(pre.buttons.length === 0, `replay-log buttons present${pre.buttons.length ? ` — missing ${pre.buttons.join(',')}` : ''}`);
+  // states[0] is the start and every ply adds one; on a finished game the
+  // last ply's state IS the `ended` entry (no undo snapshot after a game-
+  // ending move), so the count is plies + 1 either way. A game-ending MOVE
+  // never reaches the quake phase, so an ended game has one trace fewer.
+  expect(pre.schema === 'dck-log/1' && pre.states === pre.plies + 1 && pre.statesAligned, `export: ${pre.states} states for ${pre.plies} plies${pre.ended ? ' (the last is the final position)' : ''}, aligned`);
+  expect(pre.engine > 0 && pre.engineOk && (pre.traces === pre.plies || (pre.ended && pre.traces === pre.plies - 1)) && pre.timed, `export: ${pre.engine} engine searches with score/depth/pv/ms, ${pre.traces} timed roll traces`);
+  expect(pre.due > 0 && pre.inputs === pre.due, `export: ${pre.inputs}/${pre.due} due rolls carry the engine inputs verbatim (${pre.quakes} quakes landed, ${pre.attempts} draws rejected)`);
+  expect(pre.why === pre.due && pre.whyPlies === pre.traces && pre.protectedListed === pre.due, `export: the "why" layer — pools + rejects on ${pre.why}/${pre.due} due rolls, the protected set listed on ${pre.protectedListed}, meter inputs on ${pre.whyPlies}/${pre.traces} plies`);
+  expect(pre.logLines > 0 && !!pre.app && !!pre.eng && pre.ua, `export: ${pre.logLines} mirrored log lines, build "${pre.app}", engine "${pre.eng}"`);
+  expect(pre.saved.length >= 1 && pre.saved[0].plies === pre.plies, `autosave ring holds this duel (${pre.saved.length} saved, ${pre.saved[0]?.plies} plies, ${(pre.size / 1024).toFixed(0)} KB export)`);
+  // Undo through the real button path (Cheater Mode + Allow undo), then
+  // read the branch back from the export.
+  await page.evaluate(() => { window.__DCK.options.undo = true; window.__DCK.applyOptions(); });
+  const und = await page.evaluate(async () => {
+    await window.__DCK.undo();
+    await window.__DCK.waitIdle();
+    const L = window.__DCK.log.build();
+    const b = L.branches[L.branches.length - 1];
+    return { n: L.branches.length, ply: L.plies, from: b?.from?.fen ?? null, fromPly: b?.fromPly, toPly: b?.toPly, fromState: b?.from?.state, tail: b?.tail?.moves?.length ?? -1, tailStates: b?.tail?.states?.length ?? -1, marker: L.tunes.some((t) => t.undo && t.branch === b?.seq), saved: window.__DCK.log.saved()[0], logLine: [...document.querySelectorAll('#duel-log div')].some((d) => d.textContent.includes('took back')) };
+  });
+  expect(und.n === pre.branches + 1 && und.from === pre.fen && und.fromPly === pre.ply && und.toPly === und.ply && und.fromState === pre.state, `undo → branch #${und.n}: ply ${und.fromPly} → ${und.toPly}, pre-undo board kept verbatim (game was ${und.fromState}; ${pre.branches} earlier undo${pre.branches === 1 ? '' : 's'} kept)`);
+  expect(und.tail === pre.ply - und.ply && und.tailStates >= und.tail && und.marker && und.logLine, `branch tail holds the ${und.tail} abandoned plies (+${und.tailStates} states), tunes marker points at it, the log says so`);
+  expect(und.saved?.branches === und.n && und.saved?.plies === und.ply, `autosave rewritten after the undo (${und.saved?.plies} plies, ${und.saved?.branches} branches)`);
+  await page.evaluate(() => { window.__DCK.options.undo = false; window.__DCK.applyOptions(); });
+}
+// --- The replay log's in-game half (2026-09-06): the debug panel's
+// "before" paints the last quake's pre-quake board and "after" restores the
+// live one; "deep Δ" probes that quake's three boards at the enemy's own
+// limits (the smoke's are fast) and lands the verdict on the record.
+{
+  await page.evaluate(() => { window.__DCK.options.godsDebug = true; window.__DCK.applyOptions(); });
+  await page.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state === 'playing', null, { timeout: 60000 });
+  const ba = await page.evaluate(() => {
+    const d = window.__DCK.app.duel;
+    const q = d.record.quakes[d.record.quakes.length - 1];
+    const live = d.fen();
+    const cells = () => Object.fromEntries([...document.querySelectorAll('#board .cell[data-square]')].map((c) => [c.dataset.square, `${[...c.classList].filter((k) => !k.startsWith('f') || k.length > 2).sort().join(' ')}|${c.querySelector('.piece')?.dataset.piece ?? ''}`]));
+    const before = cells();
+    const btn = document.getElementById('btnGodsBefore');
+    const wasDisabled = btn.disabled;
+    btn.click();
+    const showing = window.__DCK.gods.showingBefore?.ply ?? null;
+    const during = cells();
+    const label = btn.textContent;
+    btn.click();
+    const after = cells();
+    return {
+      hasQuake: !!q,
+      quakePly: q?.ply ?? null,
+      wasDisabled,
+      showing,
+      label,
+      differ: Object.keys(before).filter((k) => before[k] !== during[k]).length,
+      restored: Object.keys(before).every((k) => before[k] === after[k]),
+      off: window.__DCK.gods.showingBefore,
+      liveFen: d.fen() === live,
+      preFen: q?.preFen,
+    };
+  });
+  expect(ba.hasQuake && !ba.wasDisabled && ba.showing === ba.quakePly && ba.label.startsWith('after') && ba.off === null && ba.restored && ba.liveFen, `before/after: painted the pre-quake board of ply ${ba.showing} (${ba.differ} cells differ) and restored the live board`);
+  const deep = await page.evaluate(async () => {
+    const d = window.__DCK.app.duel;
+    const q = d.record.quakes[d.record.quakes.length - 1];
+    const queued = window.__DCK.gods.deep();
+    const t0 = Date.now();
+    while (!q.deepDelta && Date.now() - t0 < 60000) await new Promise((r) => setTimeout(r, 100));
+    const btn = document.getElementById('btnGodsDeep');
+    return { queued, dd: q.deepDelta ?? null, line: [...document.querySelectorAll('#gods-trace div')].some((x) => x.textContent.includes('DEEP Δ')), btnDisabled: btn.disabled, exported: window.__DCK.log.build().quakes.find((x) => x.ply === q.ply)?.deepDelta ?? null };
+  });
+  const s = (x) => (x ? `${x.type === 'mate' ? 'M' : ''}${x.value}` : '—');
+  expect(deep.queued && deep.dd?.pre && deep.dd?.post && deep.dd.go && deep.line && deep.btnDisabled && deep.exported, `deep Δ landed on the last quake (${deep.dd?.go}: ${s(deep.dd?.beforeMove)} → ${s(deep.dd?.pre)} → ${s(deep.dd?.post)}), the panel says so, the export carries it`);
+  await page.evaluate(() => { window.__DCK.options.godsDebug = false; window.__DCK.applyOptions(); });
+}
 await browser.close();
 server.close();
 
