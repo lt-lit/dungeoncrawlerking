@@ -67,6 +67,14 @@
         <button id="btnLast" title="the end">&#9654;|</button>
       </div>
       <input type="range" id="plySlider" min="0" max="0" value="0" aria-label="ply">
+      <!-- The strips (2026-09-07): the gods' stats and the eval over the
+           plies, one x-axis, a shared cursor; tap or drag to scrub. -->
+      <div id="strips">
+        <div class="strip-legend" id="strip-legend-gods"><span class="sw sw-pressure"></span>pressure <b id="ro-pressure">—</b><span class="sw sw-tedium"></span>tedium <b id="ro-tedium">—</b><span class="sw sw-heat"></span>heat <b id="ro-heat">—</b><span class="st-key">│ quake</span></div>
+        <svg id="strip-gods" class="strip" role="img" aria-label="the gods' pressure, tedium and heat over the plies"></svg>
+        <div class="strip-legend" id="strip-legend-eval"><span class="sw sw-eval"></span>eval (you) <b id="ro-eval">—</b><span class="muted" id="ro-eval-src"></span></div>
+        <svg id="strip-eval" class="strip strip-eval" role="img" aria-label="the enemy's evaluation over the plies, your point of view"></svg>
+      </div>
       <div class="scrub-row jumps">
         <button id="btnPrevQuake" title="previous quake (shift-q)">&#9889;&#9664;</button>
         <button id="btnNextQuake" title="next quake (q)">&#9889;&#9654;</button>

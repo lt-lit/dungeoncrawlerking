@@ -750,8 +750,20 @@ it by matching the stage's terrain against `startFen`; a stage missing from
 the manifest paints without skins and says so), the ply's move as an arrow
 (gold = the player, red = the enemy), the quake's marks, the eval bar (the
 enemy's last search, player POV, or the probe), the gods line, the report's
-timeline line + the meters as the ply line; sections under the board in the
-report's order (the gods = the quake block with the pick marked; probe;
+timeline line + the meters as the ply line; THE STRIPS (`replay/js/
+strips.mjs`, designer same day: "graphs plotting The God's stats like
+pressure under the scrubber. Maybe eval score as well") — two small charts
+under the slider on one x-axis with a shared cursor, tap or drag to scrub:
+the gods' P(quake) as an area + tedium + heat as lines on ONE 0…1 axis with
+a tick per quake (half-height = vetoed) and gold notches at undo points, and
+the eval from the PLAYER's POV on its own axis (±10 pawns, mate on the rail,
+a probe as a ringed dot) — two measures, two charts, never a second y-axis;
+series colours validated on the panel surface (dark lightness band, CVD
+separation: `--s-pressure/-tedium/-heat/-eval` in replay.css), the readout
+row wears the text tokens; ⚙ TUNE ROWS on the timeline (a tune belongs to
+the line whose events surround its seq — `tunesFor`; `logreport.mjs
+tuneWords` is the one wording, header and rows); sections under the board
+in the report's order (the gods = the quake block with the pick marked; probe;
 timeline with tap-to-jump and fork rows that step INTO a branch; undos;
 engine; anomalies; duel log; header). THE WHY PANEL ON THE BOARD: before/
 after, the protected set (pieces gold, squares blue), each rung's pool (the
@@ -770,10 +782,12 @@ Old logs load: every read is optional. Gates: `phase0/harness/test-
 logreport.mjs` (Node, 47 checks: the full report, the pick marked, the
 stacked phone layout, `lineTree` on the sample + a synthetic NESTED undo,
 an old-shape log and an empty log render, the residue walk finds f7's ruin
-at ply 32), `phase0/harness/replay-smoke.mjs` (Playwright, 48 checks on
-the sample: load, scrub, marks, ruin, overlays, branch in/out, eval + deep
-Δ on a shallow `--go`, PV arrows, report, annotated export, old-shape log
-via the object path, paste, the ring, `?latest=1`; `--shots` →
+at ply 32), `phase0/harness/replay-smoke.mjs` (Playwright, 58 checks on
+the sample: load, scrub, marks, ruin, the strips' readout vs the trace +
+a tick per quake + tap/drag scrubbing + the probe's dot, overlays, branch
+in/out, eval + deep Δ on a shallow `--go`, PV arrows, report, annotated
+export, old-shape log via the object path with synthetic tune rows on the
+right lines, paste, the ring, `?latest=1`; `--shots` →
 `phase0/results/replay-smoke/`), and the existing gates re-run green on the
 renderer refactor (selftest 42/42 headless, ui-smoke 145 ok). Surface:
 `window.__DCK.replay` — `open / openUrl / openSlot / goto / next / prev /

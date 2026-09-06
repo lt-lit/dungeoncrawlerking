@@ -257,6 +257,9 @@ export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(),
 
 // ------------------------------------------------------------- sections
 
+/** One tunes-ledger entry in words: "UNDO(from 40)" or "rampPlies=14 sate=4". */
+export const tuneWords = (t) => (t.undo ? `UNDO(from ${t.fromPly})` : Object.entries(t).filter(([k]) => !['ply', 'seq', 'at'].includes(k)).map(([k, v]) => `${k}=${v}`).join(' '));
+
 /** The header block: the deal, the build, the engine limits, the verdict. */
 export function headerLines(L) {
   const files = L.files ?? 10;
@@ -269,7 +272,7 @@ export function headerLines(L) {
   s.push(`engine ${L.meta?.engine ?? '?'}  go "${L.go}"  mate probe "${L.mateGo}"  eval gate ${L.evalGate ? JSON.stringify(L.evalGate) : 'off'}  hint probe "${L.meta?.probeGo ?? '?'}"`);
   s.push(`gods preset ${L.meta?.options?.godPreset ?? '?'}${L.meta?.options?.godLadder ? `  ladder ${JSON.stringify(L.meta.options.godLadder)}` : ''}  favor ${L.favor}`);
   s.push(`config0 ${JSON.stringify(L.config0)}`);
-  if (L.tunes?.length) s.push(`tunes ${L.tunes.map((t) => `@p${t.ply} ${t.undo ? `UNDO(from ${t.fromPly})` : Object.entries(t).filter(([k]) => !['ply', 'seq', 'at'].includes(k)).map(([k, v]) => `${k}=${v}`).join(' ')}`).join(' · ')}`);
+  if (L.tunes?.length) s.push(`tunes ${L.tunes.map((t) => `@p${t.ply} ${tuneWords(t)}`).join(' · ')}`);
   s.push(`RESULT ${L.result ?? '(unfinished)'}  ${L.termination ?? ''}  winner ${L.winner ?? '—'}${L.error ? `  ERROR ${L.error}` : ''}`);
   s.push(`plies ${L.plies}  quakes ${L.quakes?.length ?? 0}  rejected draws ${L.attempts?.length ?? 0}  undos ${L.branches?.length ?? 0}  flags ${L.flags?.length ?? 0}  anomalies ${L.anomalies?.length ?? 0}  events ${L.seq}`);
   // A mate the enemy's own search saw against itself, and the player then

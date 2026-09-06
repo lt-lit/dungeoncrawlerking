@@ -108,6 +108,31 @@ if (crack) expect(c[crack]?.includes('cracked') && c[crack]?.includes('fresh-cra
 if (breach) expect(c[breach]?.includes('fresh-breach') && !c[breach]?.includes('wall') && !c[breach]?.includes('furniture'), `${breach} paints as floor with the breach frame (${c[breach]?.join(' ')})`);
 expect(/\+\d|−M|M\d/.test(v.evalText), `the eval bar reads the enemy's search (${v.evalText})`);
 await shot(`01-quake-p${quake.ply}`);
+// The strips under the scrubber: the gods' stats + eval on one x-axis, a
+// tick per quake, the readout at the cursor, tap and drag to scrub.
+const trace12 = L.quakeTraces.find((t) => t.ply === quake.ply);
+const strips = v.strips;
+expect(strips && strips.plies === L.plies && strips.pressure >= L.plies - 2, `the strips cover ${strips?.pressure} of ${L.plies} plies with a pressure value`);
+expect(strips && Object.entries(strips.ticks).filter(([, k]) => k === 'quake').length === L.quakes.length, `one quake tick per landed quake (${JSON.stringify(strips?.ticks)})`);
+expect(strips && strips.readout.pressure === trace12.p.quake.toFixed(2) && strips.readout.tedium === trace12.tedium.toFixed(2) && strips.readout.heat === trace12.heat.toFixed(2), `the readout at ply ${quake.ply} is the trace's P(quake) / tedium / heat (${JSON.stringify(strips?.readout)})`);
+expect(strips && /^[+−-]\d/.test(strips.readout.eval) && strips.readout.probed === false, `the eval readout reads the enemy's search (${strips?.readout.eval})`);
+expect(strips && Math.abs(strips.cursorX - (4 + ((strips.width - 8) * quake.ply) / L.plies)) < 1, 'the cursor hairline stands on the ply');
+{
+  const box = await page.evaluate(() => {
+    const r = document.getElementById('strip-gods').getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  });
+  await page.mouse.click(box.x + box.w * 0.5, box.y + box.h / 2);
+  const tapped = await page.evaluate(() => window.__DCK.replay.view.ply);
+  expect(Math.abs(tapped - L.plies / 2) <= 1, `a tap at the strip's middle scrubs to ply ${tapped}`);
+  await page.mouse.move(box.x + box.w * 0.2, box.y + box.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.w * 0.9, box.y + box.h / 2, { steps: 4 });
+  await page.mouse.up();
+  const dragged = await page.evaluate(() => window.__DCK.replay.view.ply);
+  expect(Math.abs(dragged - L.plies * 0.9) <= 1, `a drag to 90% scrubs to ply ${dragged}`);
+  await page.evaluate((p) => window.__DCK.replay.goto(p), quake.ply);
+}
 // The why panel: the pick is marked, the tools are there.
 const why = await page.evaluate(() => ({ text: document.getElementById('sec-quake-body').textContent, buttons: [...document.querySelectorAll('#sec-quake-body .tools button')].map((b) => b.textContent) }));
 expect(why.text.includes('◀ CHOSEN') && why.text.includes('path '), 'the why panel prints the ladder path and marks the pick');
@@ -223,6 +248,8 @@ const stProbe = await page.evaluate((p) => window.__DCK.replay.log.states.find((
 expect(stProbe && ['cp', 'mate'].includes(stProbe.type) && stProbe.depth > 0 && stProbe.go === GO, `the probe attaches to the state (${JSON.stringify(stProbe)?.slice(0, 80)})`);
 expect(v.plyLine.includes('probe (') && v.engine.includes('ready'), `the ply line shows the probe and the engine is ready (${v.engine})`);
 expect(v.evalText.includes('probe'), `the eval bar switched to the probe (${v.evalText})`);
+expect(v.strips?.probes.includes(quake.ply) && v.strips.readout.probed === true, `the probe is a dot on the eval strip and the readout reads it (${v.strips?.readout.eval})`);
+await shot('07a-strips-probed');
 const deepQ = await page.evaluate(() => window.__DCK.replay.deep());
 expect(deepQ, 'a deep Δ probe queues');
 await page.evaluate(() => window.__DCK.replay.waitIdle());
@@ -256,6 +283,11 @@ for (const t of old.quakeTraces) for (const k of ['candidates', 'moveEv', 'threa
 delete old.autoCrop;
 delete old.attempts;
 old.stage = 's01-nowhere'; // a stage this build does not carry
+// Synthetic tunes: one on the line of record (seq outside every branch), one
+// inside undo #1's tail (seq between its first tail entry and the branch).
+const b1 = L.branches[0];
+const tailSeq = b1.tail.states[0].seq + 1;
+old.tunes = [...(old.tunes ?? []), { ply: 5, seq: 20, rampPlies: 14, sate: 4 }, { ply: b1.toPly + 1, seq: tailSeq, favor: 2 }];
 const oldRes = await page.evaluate(async (data) => {
   await window.__DCK.replay.open(data, 'old-shape');
   window.__DCK.replay.goto(12);
@@ -265,6 +297,16 @@ const oldRes = await page.evaluate(async (data) => {
 expect(oldRes.ply === 12 && oldRes.fen === L.states.find((s) => s.ply === 12).fen, 'an old-shape log (no why layer, no state annotations) scrubs');
 expect(oldRes.note.includes('not in this build') && oldRes.skins === 0, `a missing stage is said and paints without skins ("${oldRes.note}")`);
 expect(oldRes.godsLine.includes('the gods'), 'its quake still reads on the gods line');
+const tuneRows = await page.evaluate(() => {
+  const rows = (sel) => [...document.querySelectorAll(sel)].map((d) => d.textContent.trim());
+  const main = rows('#sec-timeline-body .tl-row.tune');
+  window.__DCK.replay.enterBranch('branch-1');
+  const branch = rows('#sec-timeline-body .tl-row.tune');
+  window.__DCK.replay.leaveBranch();
+  return { main, branch };
+});
+expect(tuneRows.main.length === 1 && tuneRows.main[0].includes('@p5: rampPlies=14 sate=4'), `a tune on the line of record is a timeline row (${JSON.stringify(tuneRows.main)})`);
+expect(tuneRows.branch.length === 1 && tuneRows.branch[0].includes('favor=2'), `a tune made inside an abandoned line shows on that branch only (${JSON.stringify(tuneRows.branch)})`);
 
 // ------------------------------------------------------------- the load panel: saved ring + paste
 const pasted = await page.evaluate(async (json) => {

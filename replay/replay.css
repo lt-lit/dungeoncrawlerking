@@ -55,6 +55,60 @@
 #ply-readout { font-family: ui-monospace, monospace; font-size: .9rem; min-width: 6ch; text-align: center; color: var(--gold); }
 #plySlider { width: 100%; accent-color: var(--gold); }
 
+/* ---------- the strips (the gods' stats + eval over the plies) ---------- */
+/* Series colours: validated on the panel surface (dark lightness band,
+   colour-vision separation) — see dataviz; the readout text stays in the
+   text tokens, only the swatch and the mark carry the colour. */
+:root {
+  --s-pressure: #3d8fd6;
+  --s-tedium: #c4679a;
+  --s-heat: #c9772e;
+  --s-eval: #b08b3b;
+}
+#strips { display: flex; flex-direction: column; gap: .15rem; margin-top: .2rem; }
+.strip {
+  display: block;
+  width: 100%;
+  height: 52px;
+  background: var(--panel);
+  border: 1px solid #2c2d36;
+  border-radius: .35rem;
+  touch-action: pan-y; /* a horizontal drag scrubs; the page still scrolls vertically */
+  cursor: crosshair;
+}
+.strip-eval { height: 40px; }
+.strip-legend {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, monospace;
+  font-size: .68rem;
+  color: var(--muted);
+  padding: 0 .1rem;
+}
+.strip-legend b { color: var(--text); font-weight: 600; margin-right: .5rem; font-variant-numeric: tabular-nums; }
+.strip-legend .sw { display: inline-block; width: .75rem; height: .5rem; border-radius: 2px; }
+.sw-pressure { background: var(--s-pressure); }
+.sw-tedium { background: var(--s-tedium); }
+.sw-heat { background: var(--s-heat); }
+.sw-eval { background: var(--s-eval); }
+.strip-legend .st-key { margin-left: auto; color: var(--muted); }
+.st-grid { stroke: #2f3039; stroke-width: 1; }
+.st-zero { stroke: #3a3b46; }
+.st-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.st-line.st-pressure { stroke: var(--s-pressure); }
+.st-line.st-tedium { stroke: var(--s-tedium); }
+.st-line.st-heat { stroke: var(--s-heat); }
+.st-line.st-eval { stroke: var(--s-eval); }
+.st-area.st-pressure { fill: var(--s-pressure); fill-opacity: .22; stroke: none; }
+.st-tick { stroke: var(--text); stroke-width: 2; stroke-opacity: .75; }
+.st-tick-vetoed { stroke-opacity: .4; }
+.st-fork { stroke: var(--gold); stroke-width: 2; }
+.st-dot.st-eval { fill: var(--s-eval); }
+.st-dot-ring { fill: var(--panel); }
+.st-cursor { stroke: var(--gold); stroke-width: 1.5; stroke-opacity: .9; }
+
 /* ---------- report blocks ---------- */
 
 pre.rep {
@@ -105,6 +159,7 @@ pre.rep {
 .tl-row.current { background: var(--accent); color: var(--text); }
 .tl-row.quake { color: var(--gods); }
 .tl-row.fork { color: var(--gold); }
+.tl-row.tune { color: var(--s-heat); }
 .tl-row.prefix { opacity: .55; }
 
 .undo-row { margin-bottom: .5rem; }

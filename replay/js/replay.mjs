@@ -51,6 +51,7 @@ import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
 import { parseBoard, WALL, FURNITURE } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
+import { stripData, renderStrips, setCursor, plyAtX, readoutAt } from './strips.mjs';
 
 export const REPLAY_BUILD = '2026-09-07 replay-ui.1';
 const params = new URLSearchParams(location.search);
@@ -78,6 +79,7 @@ const app = {
   variantInis: new Set(),
   probe: { busy: false, queue: [], seq: 0 },
   source: null,
+  strips: null, // { data, geom } for the current line (strips.mjs)
 };
 
 // ------------------------------------------------------------------ chrome
@@ -371,6 +373,7 @@ function paint() {
   say($('player-bar-text'), `${L.player === 'black' ? 'you · black' : 'you · white'}${line.id !== 'main' ? ` · ${line.name}` : ''}`);
   say($('enemy-bar'), `enemy · ${L.player === 'black' ? 'white' : 'black'} · ${L.stage ?? '?'}${L.title ? ` "${L.title}"` : ''}`);
   updateEvalBar(line, ply);
+  syncStrips(ply);
   renderQuakeSection(q, t);
   highlightTimeline(ply);
   $('btnLineUp').hidden = !line.parent;
@@ -476,6 +479,70 @@ function updateEvalBar(line, ply) {
   $('eval-text').textContent = `${text} (${src})`;
 }
 
+// ------------------------------------------------------------- the strips
+
+const stripHosts = () => ({ gods: $('strip-gods'), eval: $('strip-eval') });
+
+/** Rebuild the strips for the current line (a new log, a branch, a probe). */
+function renderLineStrips() {
+  const line = app.line;
+  if (!line || !app.log) return;
+  const data = stripData(line, app.log);
+  data.forks = (line.forks ?? []).map((f) => f.forkPly);
+  const geom = renderStrips(stripHosts(), data, app.ply);
+  app.strips = { data, geom };
+}
+
+/** Move the cursor and refresh the readout for a ply (cheap, every paint). */
+function syncStrips(ply) {
+  if (!app.strips) renderLineStrips();
+  const st = app.strips;
+  if (!st) return;
+  setCursor(stripHosts(), st.geom, ply);
+  const r = readoutAt(st.data, ply);
+  say($('ro-pressure'), r.pressure);
+  say($('ro-tedium'), r.tedium);
+  say($('ro-heat'), r.heat);
+  say($('ro-eval'), r.eval);
+  say($('ro-eval-src'), r.probed ? 'probe' : r.eval === '—' ? '' : 'enemy\'s search');
+}
+
+/** Tap or drag on a strip scrubs to the ply under the pointer. */
+function wireStrip(svg, name) {
+  let down = false;
+  const to = (e) => {
+    const g = app.strips?.geom?.[name];
+    if (!g) return;
+    const rect = svg.getBoundingClientRect();
+    const xPx = ((e.clientX - rect.left) / rect.width) * g.W;
+    const p = plyAtX(g, xPx);
+    if (p !== app.ply) goto(p);
+  };
+  svg.addEventListener('pointerdown', (e) => {
+    down = true;
+    svg.setPointerCapture?.(e.pointerId);
+    to(e);
+  });
+  svg.addEventListener('pointermove', (e) => {
+    if (down) to(e);
+  });
+  const up = () => {
+    down = false;
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up);
+}
+if (typeof ResizeObserver !== 'undefined') {
+  // A width change (rotation, a resized window) redraws in the new pixel space.
+  const ro = new ResizeObserver(() => {
+    if (app.strips) {
+      const geom = renderStrips(stripHosts(), app.strips.data, app.ply);
+      app.strips.geom = geom;
+    }
+  });
+  ro.observe($('strip-gods'));
+}
+
 // --------------------------------------------------------- the sections
 
 function renderQuakeSection(q, t) {
@@ -533,6 +600,21 @@ function renderQuakeSection(q, t) {
   }
 }
 
+/** The tunes (dial / preset / favor changes, not undo markers) that happened
+ *  on a line: by seq — inside a branch's tail range for a branch, outside
+ *  every branch's range for the line of record. */
+function tunesFor(line) {
+  const L = app.log;
+  const tunes = (L.tunes ?? []).filter((t) => !t.undo);
+  const ranges = (L.branches ?? []).map((b) => {
+    const seqs = [];
+    for (const k of ['states', 'quakeTraces', 'engine', 'log', 'flags', 'quakes', 'attempts']) for (const e of b.tail?.[k] ?? []) if (typeof e?.seq === 'number') seqs.push(e.seq);
+    return { id: `branch-${L.branches.indexOf(b) + 1}`, lo: seqs.length ? Math.min(...seqs) : b.seq, hi: b.seq };
+  });
+  const owner = (seq) => ranges.find((r) => seq >= r.lo && seq <= r.hi)?.id ?? 'main';
+  return tunes.filter((t) => (typeof t.seq === 'number' ? owner(t.seq) : 'main') === line.id);
+}
+
 function renderTimeline() {
   const box = $('sec-timeline-body');
   box.textContent = '';
@@ -558,7 +640,23 @@ function renderTimeline() {
       box.appendChild(d);
     }
   };
+  // Tune markers (a preset / dial / favor change mid-duel): the tunes ledger
+  // is one list for the whole record, so a tune belongs to the line whose
+  // events surround its seq (a branch's tail, else the line of record).
+  const tunesAt = new Map();
+  for (const t of tunesFor(line)) tunesAt.set(t.ply, [...(tunesAt.get(t.ply) ?? []), t]);
+  const tuneRows = (ply) => {
+    for (const t of tunesAt.get(ply) ?? []) {
+      const d = document.createElement('div');
+      d.className = 'tl-row tune';
+      d.dataset.ply = String(ply);
+      d.textContent = `      ⚙ tune @p${ply}: ${R.tuneWords(t)}`;
+      d.addEventListener('click', () => goto(ply));
+      box.appendChild(d);
+    }
+  };
   row(0, 'p  0  start');
+  tuneRows(0);
   forkRows(0);
   for (let i = 0; i < (line.moves?.length ?? 0); i++) {
     const ply = i + 1;
@@ -566,6 +664,7 @@ function renderTimeline() {
     const inTail = !line.parent || ply > line.forkPly;
     const text = R.timelineLine(ply, san, { ...ix, states: line.states });
     row(ply, text, `${ix.quakes.has(ply) ? 'quake' : ''} ${inTail ? '' : 'prefix'} ${line.states?.some((s) => s.ply === ply && s.mover === 'player') ? 'player' : ''}`);
+    tuneRows(ply);
     forkRows(ply);
   }
   if (line.parent) {
@@ -632,6 +731,7 @@ function renderStatic() {
 
 function renderLineStatic() {
   const line = app.line;
+  app.strips = null; // a new line: the strips are rebuilt on the next paint
   $('sec-engine-body').textContent = '';
   $('sec-engine-body').appendChild(pre((line.engine ?? []).map(R.engineLine)));
   $('sec-engine-sum').textContent = `engine · ${line.engine?.length ?? 0} reply searches`;
@@ -817,7 +917,10 @@ async function drainProbes() {
         }
       }
       // The job's ply may be on screen: refresh readouts (no repaint of the board).
-      if (job.line === app.line) paint();
+      if (job.line === app.line) {
+        app.strips = null; // a probe is a new dot on the eval strip
+        paint();
+      }
     }
   } finally {
     app.probe.busy = false;
@@ -961,6 +1064,8 @@ async function copyReport() {
 
 // ------------------------------------------------------------------ wiring
 
+wireStrip($('strip-gods'), 'gods');
+wireStrip($('strip-eval'), 'eval');
 $('btnFirst').addEventListener('click', () => goto(0));
 $('btnPrev').addEventListener('click', () => step(-1));
 $('btnNext').addEventListener('click', () => step(1));
@@ -1092,6 +1197,18 @@ window.__DCK = {
         engine: $('engine-status').textContent,
         probeBusy: app.probe.busy,
         queued: app.probe.queue.length,
+        strips: app.strips
+          ? {
+              plies: app.strips.data.plies,
+              pressure: app.strips.data.pressure.filter((v) => v !== null).length,
+              evalPoints: app.strips.data.evalAt.filter((v) => v !== null).length,
+              probes: [...app.strips.data.probes.keys()],
+              ticks: Object.fromEntries(app.strips.data.ticks),
+              readout: readoutAt(app.strips.data, app.ply),
+              cursorX: parseFloat($('strip-gods').querySelector('.st-cursor')?.getAttribute('x1') ?? 'NaN'),
+              width: app.strips.geom.gods?.W ?? null,
+            }
+          : null,
         cell: (sq) => app.boardUI?.cellClasses(sq) ?? null,
       };
     },
