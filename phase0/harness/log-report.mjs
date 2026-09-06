@@ -205,11 +205,38 @@ function traceDetail(t, indent = '  ') {
   if (t.p) s.push(`${indent}p: quake ${t.p.quake} pressure ${t.p.pressure} meterP ${t.p.meterP} floor ${t.p.floor} dead ${t.p.dead}${t.p.crumbleForced ? ' CRUMBLE FORCED' : ''}`);
   if (t.weights) s.push(`${indent}weights ${JSON.stringify(t.weights)}${t.conserve !== undefined ? `  conserve ${JSON.stringify(t.conserve)}` : ''}`);
   if (t.rolls?.length) s.push(`${indent}rolls ${t.rolls.map((r) => (r.p === undefined ? `${r.roll}=${JSON.stringify(Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'roll')))}` : `${r.roll}:${r.value}<${r.p}${r.pass ? '✓' : '✗'}`)).join(' ')}`);
+  if (t.moveEv || t.stale) {
+    const ev = t.moveEv ? Object.entries(t.moveEv).filter(([, v]) => v).map(([k]) => k).join(',') || 'quiet' : '?';
+    s.push(`${indent}the ply: ${ev}${t.threatKeys?.length ? `  new threats ${t.threatKeys.join(' ')}` : ''}${t.stale ? `  staleness inputs: ${t.stale.moves} legal, ${t.stale.captures} captures, ${t.stale.lockedPawns} locked pawns, ${t.stale.pieces} pieces` : ''}`);
+  }
   if (t.census) s.push(`${indent}census ${JSON.stringify(t.census)}`);
   if (t.protected) {
     const p = t.protected;
     s.push(`${indent}protected ${p.pieces} pieces / ${p.squares} squares  threats ${JSON.stringify(p.threats)}  wins ${JSON.stringify(p.wins)}  nodes ${p.nodes}${p.truncated ? ' (search cut)' : ''}`);
+    if (p.pieceList) s.push(`${indent}  pieces ${p.pieceList.join(' ') || '—'}  squares ${p.squareList.join(' ') || '—'}`);
+    if (p.keys) s.push(`${indent}  threat keys  white: ${p.keys.white.join(' ') || '—'}  black: ${p.keys.black.join(' ') || '—'}`);
+    if (p.by) s.push(`${indent}  by source  ledger: ${p.by.ledger.join(' ') || '—'}  grid wins: ${p.by.wins.join(' ') || '—'}  engine lines: ${p.by.engine.join(' ') || '—'}`);
     if (p.engine) s.push(`${indent}  engine: ${p.engine.hints} hints → ${p.engine.mates} mate lines ${JSON.stringify(p.engine.lines ?? [])}  probes ${JSON.stringify(p.engine.probes ?? null)}`);
+  }
+  // Every rung's pool, ranked, the pick marked, and the rejects by reason —
+  // "why this square" from the log alone.
+  for (const [i, c] of (t.candidates ?? []).entries()) {
+    const mark = (j) => (j === c.chosen ? ' ◀ CHOSEN' : '');
+    const byReason = {};
+    for (const r of c.rejected ?? []) (byReason[r.reason] ??= []).push(r.sq ?? `${r.piece}${r.from}→${r.to}`);
+    const rej = Object.entries(byReason).map(([k, v]) => `${k}: ${v.join(' ')}`).join(' | ') || 'none';
+    if (c.rung === 'weaken' || c.rung === 'breach') {
+      const ranked = c.pool.map((x, j) => ({ x, j })).sort((a, b) => b.x.impact - a.x.impact);
+      s.push(`${indent}action ${i + 1} ${c.rung}: ${c.pool.length} candidates${c.pool.length ? ' — ' + ranked.map(({ x, j }) => `${x.sq}(${x.impact}${x.lockedFile ? '·locked file' : ''}${x.freed ? `·frees ${x.freed}` : ''})${mark(j)}`).join(' ') : ''}`);
+    } else if (c.rung === 'displace') {
+      const tierLine = ['A', 'B', 'C'].map((k) => `${k}: ${c.tiers?.[k]?.map((x) => `${x.piece}${x.from}→${x.to}`).join(' ') || '—'}`).join('  ');
+      s.push(`${indent}action ${i + 1} displace from tier ${c.tier ?? 'none'}: ${c.pool.map((x, j) => `${x.piece}${x.from}→${x.to}${mark(j)}`).join(' ') || 'nothing eligible'}`);
+      s.push(`${indent}  tiers  ${tierLine}`);
+    } else if (c.rung === 'crumble') {
+      s.push(`${indent}action ${i + 1} crumble: ${c.pool.length} bare-floor squares${c.chosen !== null && c.chosen !== undefined ? ` — chose ${c.pool[c.chosen]}` : ''}${c.terminal?.length ? `  terminal ${c.terminal.map((x) => `${x.sq}(${x.reason})`).join(' ')}${c.chosenTerminal !== undefined ? ` ◀ ${c.terminal[c.chosenTerminal]?.sq}` : ''}` : ''}`);
+      if (c.pool.length) s.push(`${indent}  pool ${c.pool.join(' ')}`);
+    }
+    s.push(`${indent}  rejected — ${rej}`);
   }
   if (t.inputs) {
     s.push(`${indent}inputs: before ${fmtScore(t.inputs.before)}  probes ${JSON.stringify(t.inputs.probes)}`);

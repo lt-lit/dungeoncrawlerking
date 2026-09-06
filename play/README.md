@@ -955,7 +955,24 @@ is also the Director's RNG order — and `at`, epoch ms):
   every due roll, `inputs`: the engine's mate hints VERBATIM (fen, score, pv,
   source), the probe census and the eval gate's baseline. The Director's
   decisions replay from the seed; the time-limited probes that fed them do
-  not, so they are recorded rather than re-run.
+  not, so they are recorded rather than re-run. **The "why" layer
+  (designer 2026-09-06: "trace their every action and why they did it")**:
+  every trace carries the meters' INPUTS — `moveEv` (how the record meter
+  classified the ply: capture / check / pawn push / promotion / repetition /
+  threat), `threatKeys` (the new threat keys that made it hot) and `stale`
+  (the staleness score's ingredients: legal moves, captures available,
+  locked pawns, pieces, pawns); every rung a quake walked appends to
+  `candidates` its whole POOL with scores (`weaken`: square, impact, open
+  sides, locked file; `breach`: + pawns freed; `displace`: every tier's
+  candidates, the tier drawn from, the pool; `crumble`: the bare-floor
+  squares, the terminal squares), `chosen` (the pick's index into the pool)
+  and `rejected` (every candidate passed over WITH its reason — `protected`,
+  `touched`, `hangs_piece`, `unsafe_landing`, `exposes_king`, `walled_in`,
+  `composite_landing`, …); and `protected` names its members (`pieceList`,
+  `squareList`), the threat `keys` per side (`hang:e4`, `pin:…`, `fork:d5`,
+  `win1`) and `by` source (ledger / grid wins / engine lines). The report
+  prints each action as a ranked pool with the pick marked and the rejects
+  grouped by reason.
 - `quakes` — what landed, pre/post FEN, the overlay's `evalDelta`.
 - `attempts` — every composition the v4.3 eval gate REJECTED, in full: its
   own trace, the board it would have left, its verdict. "What did the gods

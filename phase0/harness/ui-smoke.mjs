@@ -527,6 +527,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       traces: L.quakeTraces.length,
       due: due.length,
       inputs: due.filter((t) => t.inputs && Array.isArray(t.inputs.hints) && t.inputs.probes).length,
+      // the "why" layer: pools + rejects per rung on every due roll that acted, the meters' inputs on every ply
+      why: due.filter((t) => t.outcome === 'quiet' || t.outcome === 'vetoed' || (t.candidates?.length && t.candidates.every((c) => Array.isArray(c.pool) && Array.isArray(c.rejected)))).length,
+      whyPlies: L.quakeTraces.filter((t) => t.moveEv && t.stale && Array.isArray(t.threatKeys)).length,
+      protectedListed: due.filter((t) => t.protected && Array.isArray(t.protected.pieceList) && t.protected.keys).length,
       timed: L.quakeTraces.every((t) => t.timing && Number.isInteger(t.timing.total) && t.seq > 0),
       quakes: L.quakes.length,
       attempts: L.attempts.length,
@@ -547,6 +551,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(pre.schema === 'dck-log/1' && pre.states === pre.plies + 1 && pre.statesAligned, `export: ${pre.states} states for ${pre.plies} plies${pre.ended ? ' (the last is the final position)' : ''}, aligned`);
   expect(pre.engine > 0 && pre.engineOk && (pre.traces === pre.plies || (pre.ended && pre.traces === pre.plies - 1)) && pre.timed, `export: ${pre.engine} engine searches with score/depth/pv/ms, ${pre.traces} timed roll traces`);
   expect(pre.due > 0 && pre.inputs === pre.due, `export: ${pre.inputs}/${pre.due} due rolls carry the engine inputs verbatim (${pre.quakes} quakes landed, ${pre.attempts} draws rejected)`);
+  expect(pre.why === pre.due && pre.whyPlies === pre.traces && pre.protectedListed === pre.due, `export: the "why" layer — pools + rejects on ${pre.why}/${pre.due} due rolls, the protected set listed on ${pre.protectedListed}, meter inputs on ${pre.whyPlies}/${pre.traces} plies`);
   expect(pre.logLines > 0 && !!pre.app && !!pre.eng && pre.ua, `export: ${pre.logLines} mirrored log lines, build "${pre.app}", engine "${pre.eng}"`);
   expect(pre.saved.length >= 1 && pre.saved[0].plies === pre.plies, `autosave ring holds this duel (${pre.saved.length} saved, ${pre.saved[0]?.plies} plies, ${(pre.size / 1024).toFixed(0)} KB export)`);
   // Undo through the real button path (Cheater Mode + Allow undo), then

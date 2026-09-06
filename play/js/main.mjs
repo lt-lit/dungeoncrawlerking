@@ -48,7 +48,7 @@ import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylo
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
 // that alters what the log records or how the gods decide.
-const APP_BUILD = '2026-09-06 replay-log.1';
+const APP_BUILD = '2026-09-06 replay-log.2';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)

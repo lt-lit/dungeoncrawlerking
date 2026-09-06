@@ -628,6 +628,7 @@ export function protectedSet(ffish, variant, fen, files, ranks, opts = {}) {
   const engine = mateNets(ffish, variant, fen, files, ranks, opts.hints);
   const pieces = new Set([...ledger.white.pieces, ...ledger.black.pieces, ...wins.pieces, ...engine.pieces]);
   const squares = new Set([...ledger.white.squares, ...ledger.black.squares, ...wins.squares, ...engine.squares]);
+  const sorted = (...sets) => [...new Set(sets.flatMap((s) => [...s]))].sort();
   return {
     pieces,
     squares,
@@ -637,5 +638,14 @@ export function protectedSet(ffish, variant, fen, files, ranks, opts = {}) {
     nodes: wins.nodes,
     truncated: wins.truncated,
     engine: { hints: opts.hints?.length ?? 0, mates: engine.lines.length, lines: engine.lines },
+    // The replay log (2026-09-06): WHY each square is in the set — the
+    // threat keys per side (hang:e4, pin:…, fork:d5, win1) and the squares
+    // each source contributed. Sorted, so a log diff is stable.
+    keys: { white: [...ledger.white.keys].sort(), black: [...ledger.black.keys].sort() },
+    by: {
+      ledger: sorted(ledger.white.pieces, ledger.black.pieces, ledger.white.squares, ledger.black.squares),
+      wins: sorted(wins.pieces, wins.squares),
+      engine: sorted(engine.pieces, engine.squares),
+    },
   };
 }

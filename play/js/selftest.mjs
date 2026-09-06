@@ -1110,6 +1110,21 @@ async function main() {
       if (!r.quakeTraces.length || !r.quakeTraces.every((t) => t.seq > 0 && t.timing && Number.isInteger(t.timing.total))) throw new Error('every roll trace must carry seq + timing');
       const due = r.quakeTraces.filter((t) => t.path.includes('quake'));
       if (due.some((t) => !t.inputs || !Array.isArray(t.inputs.hints) || !t.inputs.probes)) throw new Error("a due roll's trace lacks the engine inputs");
+      // The "why" layer: every trace carries the meters' inputs; every rung a
+      // quake walked carries its pool, the pick's index into it, and the
+      // rejects with reasons; the protected set names its members.
+      if (!r.quakeTraces.every((t) => t.moveEv && Array.isArray(t.threatKeys) && t.stale && Number.isInteger(t.stale.moves) && Array.isArray(t.candidates))) throw new Error("a trace lacks moveEv / threatKeys / stale / candidates");
+      const legs = due.flatMap((t) => t.candidates);
+      if (!legs.every((c) => ['weaken', 'breach', 'displace', 'crumble'].includes(c.rung) && Array.isArray(c.pool) && Array.isArray(c.rejected))) throw new Error('a candidates entry is malformed');
+      const picked = legs.filter((c) => c.chosen !== null && c.chosen !== undefined);
+      if (picked.some((c) => !(c.chosen >= 0 && c.chosen < c.pool.length))) throw new Error("a pick's index is outside its pool");
+      for (const t of due) {
+        for (const e of t.chosen?.terrain ?? []) {
+          const leg = t.candidates.find((c) => c.rung === e.kind && c.chosen !== null && c.pool[c.chosen]?.sq === e.square);
+          if (!leg) throw new Error(`ply ${t.ply}: the chosen ${e.kind} at ${e.square} is not the pick of any recorded pool`);
+        }
+        if (t.protected && !(Array.isArray(t.protected.pieceList) && Array.isArray(t.protected.squareList) && t.protected.keys && t.protected.by && t.protected.pieceList.length === t.protected.pieces)) throw new Error(`ply ${t.ply}: the protected set is not listed`);
+      }
       // UNDO: the tail becomes a branch, the live arrays truncate.
       if (!duel.undoToTurn('w')) throw new Error('undo refused');
       const b = r.branches[0];

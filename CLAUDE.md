@@ -677,7 +677,31 @@ window, a flight already in the air is re-kicked when it lands; the verdict
 lands on `record.quakes[].deepDelta` + the trace panel + the export;
 `__DCK.gods.deep()`). Gates: selftest 42/42 (the replay-log check now
 asserts the state annotations), ui-smoke exercises before/after and a deep
-Δ through the real buttons. NOT built (designer-deferred 2026-09-06, after
+Δ through the real buttons. **THE "WHY" LAYER (designer, same day: "I want
+to be able to trace their every action and why they did it")** — the audit
+found the trigger and the outcome fully traced and the reasoning traced
+only down to the roll: a pick was "index 3 of weights 4,2,2,5,3,3" with the
+squares behind the indices unrecorded, rejections were counts by reason,
+the protected set was a number, and the meters' inputs were thin. Now every
+trace carries `moveEv` (the record meter's classification of the ply),
+`threatKeys` (the new keys that made it hot) and `stale` (legal moves,
+captures, locked pawns, pieces, pawns); every rung a quake walks appends to
+`trace.candidates` its whole pool with scores (weaken: impact + open sides +
+locked file; breach: + freed; displace: every tier's candidates, the tier
+drawn from, the pool; crumble: the bare-floor and terminal squares),
+`chosen` (the pick's index) and `rejected` (each candidate passed over with
+its reason — `weakenCandidates` gained an optional `rejected` out-param and
+the `walled_in` reason; the composite landing check is `composite_landing`);
+`trace.protected` names `pieceList` / `squareList`, the threat `keys` per
+side and `by` source (`tactics.mjs protectedSet` returns `keys` + `by`);
+`#cloneHeader` resets `candidates` on a retry. All bookkeeping on data the
+quake already had in hand — no new ffish or grid work (rule 14). Cost: a
+quiet ply +~150 B, a quake +2–5 KB (a 200-ply game runs ~350–450 KB).
+`log-report.mjs` prints each action as a ranked pool with the pick marked
+and the rejects grouped by reason, the protected members and keys, and
+each ply's classification. Gates: selftest 42/42 (every chosen terrain edit
+must be the pick of a recorded pool; the protected set must be listed),
+ui-smoke asserts pools on every due roll and inputs on every ply. NOT built (designer-deferred 2026-09-06, after
 the offline loop answered the question in minutes): a full in-game replay
 scrubber, an offline replayer that feeds the recorded inputs back into the
 Director and diffs, and `gods-metrics.mjs` reading browser logs (the lab's

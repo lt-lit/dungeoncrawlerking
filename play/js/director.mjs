@@ -353,7 +353,7 @@ export function terrainCensus(fen, files, ranks, holes, godCrates = null) {
  * no line opens, no check can be discovered and no side can be stalemated;
  * the edit only ADDS a capture option, symmetrically, to both armies.
  */
-export function weakenCandidates(fen, files, ranks, holes, blocked = null) {
+export function weakenCandidates(fen, files, ranks, holes, blocked = null, rejected = null) {
   const g = fenGrid(fen, files, ranks);
   const lockedFiles = new Set(lockedPawns(fen, files, ranks).map((p) => p.f));
   const out = [];
@@ -362,7 +362,11 @@ export function weakenCandidates(fen, files, ranks, holes, blocked = null) {
       if (g[r][f] !== WALL) continue;
       const sq = SQ(f, r);
       if (holes.has(sq)) continue;
-      if (blockedReason(blocked, sq, sq)) continue; // v4: touched this quake, or inside a net
+      const block = blockedReason(blocked, sq, sq); // v4: touched this quake, or inside a net
+      if (block) {
+        rejected?.push({ sq, reason: block }); // the replay log: why not this wall
+        continue;
+      }
       let open = 0;
       for (const [df, dr] of ORTHO) {
         const nf = f + df;
@@ -370,8 +374,11 @@ export function weakenCandidates(fen, files, ranks, holes, blocked = null) {
         if (nf < 0 || nf >= files || nr < 0 || nr >= ranks) continue;
         if (!isTerrain(g[nr][nf])) open++;
       }
-      if (open < 2) continue; // walled in on all sides — cracking it opens nothing
-      out.push({ sq, impact: open + (lockedFiles.has(f) ? 3 : 0) });
+      if (open < 2) {
+        rejected?.push({ sq, reason: 'walled_in' }); // cracking it opens nothing
+        continue;
+      }
+      out.push({ sq, impact: open + (lockedFiles.has(f) ? 3 : 0), open, lockedFile: lockedFiles.has(f) });
     }
   }
   return out;
@@ -823,6 +830,7 @@ export class Director {
     // can hold the reference (duel.mjs).
     this.ledger = null;
     this.lastThreats = []; // the mover's new threat keys on the last ply
+    this.lastMoveEv = null; // the meter's classification of the last ply (the replay log's trace.moveEv)
     // v4 threat memory: key → the last ply each side held it. A key seen
     // within threatMemory plies is not new again, so shuffling a piece
     // between two threats reads as the shuffle it is.
@@ -890,6 +898,7 @@ export class Director {
       b.delete();
     }
     this.lastStaleness = stale;
+    this.lastMoveEv = ev; // the replay log: the meter's classification of the ply (trace.moveEv)
     // v4: a ply that CREATES a threat is hot. The mover is the side not to
     // move in `fen`; its new keys are whatever it holds now that it did not
     // hold on the previous position. No previous ledger (the first ply, or
@@ -1381,6 +1390,7 @@ export class Director {
       census: null,
       protected: null,
       chosen: null,
+      candidates: [],
       outcome: 'quiet',
       fellThrough: false,
       meterAfter: null,
@@ -1431,6 +1441,16 @@ export class Director {
       chosen: null,
       outcome: 'quiet',
       fellThrough: false,
+      // The replay log (2026-09-06): the meters' INPUTS this ply — how the
+      // record meter classified the move, the new threat keys that made it
+      // hot, the staleness score's ingredients — and, on a quake, every
+      // rung's candidate pool with its scores and every rejection with its
+      // reason (`candidates`, filled by the legs), so "why this square"
+      // reads from the log alone.
+      moveEv: this.lastMoveEv ? { ...this.lastMoveEv } : null,
+      threatKeys: [...this.lastThreats],
+      stale: this.lastStaleness ? { moves: this.lastStaleness.moves ?? null, captures: this.lastStaleness.captures ?? null, lockedPawns: this.lastStaleness.lockedPawns ?? null, pieces: this.lastStaleness.pieces ?? null, pawns: this.lastStaleness.pawns ?? null } : null,
+      candidates: [],
     };
     return { trace, terrain };
   }
@@ -1491,6 +1511,13 @@ export class Director {
       trace.protected = {
         pieces: guard.pieces.size,
         squares: guard.squares.size,
+        // The replay log: WHICH pieces and squares, and why — the threat
+        // keys per side and the squares each source (ledger / grid wins /
+        // engine lines) contributed.
+        pieceList: [...guard.pieces].sort(),
+        squareList: [...guard.squares].sort(),
+        keys: guard.keys ?? null,
+        by: guard.by ?? null,
         threats: guard.threats,
         wins: guard.wins,
         lines: guard.lines,
@@ -1623,11 +1650,18 @@ export class Director {
    *  square keeps blocking, so no line opens and no check can be discovered;
    *  the edit only adds a capture option, to both armies equally. */
   #weakenLeg(trace, fen, files, ranks, blocked) {
-    const cands = weakenCandidates(fen, files, ranks, this.holes, blocked);
+    const rejected = [];
+    const cands = weakenCandidates(fen, files, ranks, this.holes, blocked, rejected);
     trace.census.weaken = cands.length;
+    // The replay log: the whole pool with its scores and every wall passed
+    // over, so "why f7" reads as "f7 scored 5 (3 open sides + a locked file)
+    // against these six; those eleven sat in a net or were touched".
+    const entry = { rung: 'weaken', pool: cands.map((x) => ({ sq: x.sq, impact: x.impact, open: x.open, lockedFile: x.lockedFile })), chosen: null, rejected };
+    trace.candidates.push(entry);
     if (!cands.length) return null;
     const c = this.#pickByImpact('pick-weaken', cands);
     if (!c) return null;
+    entry.chosen = cands.indexOf(c);
     this.debt++;
     trace.path.push('weaken');
     return {
@@ -1649,9 +1683,17 @@ export class Director {
     // Opening a ray can expose a square an earlier action landed a piece on,
     // so the composite check applies to this rung too.
     const safe = ok.filter((c) => landingsStillSafe(c.fen, landed, files, ranks));
+    const entry = {
+      rung: 'breach',
+      pool: safe.map((x) => ({ sq: x.sq, impact: x.impact, freed: x.freed })),
+      chosen: null,
+      rejected: [...rejected, ...ok.filter((x) => !safe.includes(x)).map((x) => ({ sq: x.sq, reason: 'composite_landing' }))],
+    };
+    trace.candidates.push(entry);
     if (!safe.length) return null;
     const c = this.#pickByImpact('pick-breach', safe);
     if (!c) return null;
+    entry.chosen = safe.indexOf(c);
     this.debt++;
     trace.path.push('breach');
     return {
@@ -1688,12 +1730,26 @@ export class Director {
     trace.census.displacement = censusOfTiers(tiers);
     // Every candidate must also leave the squares EARLIER actions landed on
     // still safe — rule 13's composite rule, now across the whole budget.
-    const best = bestTier(tiers, (c) => landingsStillSafe(c.fen, landed, files, ranks));
+    const composite = (c) => landingsStillSafe(c.fen, landed, files, ranks);
+    const best = bestTier(tiers, composite);
+    // The replay log: every tier's candidates, the tier the pick drew from,
+    // and every rejection with its reason (the composite check included).
+    const brief = (x) => ({ from: x.from, to: x.to, piece: x.piece });
+    const entry = {
+      rung: 'displace',
+      tiers: { A: tiers.A.map(brief), B: tiers.B.map(brief), C: tiers.C.map(brief) },
+      tier: best?.tier ?? null,
+      pool: best ? best.pool.map(brief) : [],
+      chosen: null,
+      rejected: [...tiers.rejected.map((x) => ({ from: x.from, to: x.to, piece: x.piece, reason: x.reason })), ...[...tiers.A, ...tiers.B, ...tiers.C].filter((x) => !composite(x)).map((x) => ({ ...brief(x), reason: 'composite_landing' }))],
+    };
+    trace.candidates.push(entry);
     if (!best) {
       trace.path.push('no-displacement');
       return null;
     }
     const c = this.#pickTraced('pick-displace', best.pool, best.tier);
+    entry.chosen = best.pool.indexOf(c);
     this.debt++;
     trace.path.push('displace');
     return {
@@ -1716,8 +1772,17 @@ export class Director {
     // Every candidate is bare floor by definition now — quakes cannot
     // swallow pieces (see crumbleCandidates).
     const safe = neutral.filter((c) => landingsStillSafe(c.fen, landed, files, ranks));
+    const entry = {
+      rung: 'crumble',
+      pool: safe.map((x) => x.sq), // a uniform pick over bare floor — no scores
+      terminal: terminal.map((x) => ({ sq: x.sq, reason: x.reason })),
+      chosen: null,
+      rejected: [...rejected, ...neutral.filter((x) => !safe.includes(x)).map((x) => ({ sq: x.sq, reason: 'composite_landing' }))],
+    };
+    trace.candidates.push(entry);
     if (safe.length) {
       const c = this.#pickTraced('pick-crumble', safe);
+      entry.chosen = safe.indexOf(c);
       this.debt = 0;
       this.holes.add(c.sq);
       trace.path.push('crumble-neutral');
@@ -1736,6 +1801,7 @@ export class Director {
       // The arena finishes it — the floor gives way (§4.4), termination
       // 'earthquake' at the duel layer.
       const t = this.#pickTraced('pick-terminal', terminal);
+      entry.chosenTerminal = terminal.indexOf(t);
       this.debt = 0;
       this.holes.add(t.sq);
       trace.path.push('crumble-terminal');
