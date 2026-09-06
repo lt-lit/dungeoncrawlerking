@@ -602,6 +602,59 @@ v4 set (memory, heat, protection, the ladder, the engine's mate lines, the
 eval gate) is the SHIPPED Director. Presets were not retuned for v4.3 and
 need not be until the phone says so.**
 
+**THE REPLAY LOG ✅ built 2026-09-06 (designer: "a button to export a
+detailed replay/debug log… to diagnose some possibly weird The Gods
+behavior"; "we absolutely need a record of the exact board state right
+before an undo happened"; "capture the entire board state every single
+turn").** The duel's `record` (duel.mjs, `RECORD_ARRAYS` — the ONE list the
+undo lens and the branch capture both read, so a new per-ply array cannot be
+kept by one and lost by the other) now holds, every entry stamped `seq` (a
+counter that never resets or rewinds — wall-clock order across undos, which
+is also the Director's RNG order) and `at`: `states` (the exact board after
+EVERY completed ply, post-quake — fen, holes, god crates, debt, the meters;
+`states[0]` the start, an `ended` entry on the final position), `engine`
+(every reply search: score, depth, seldepth, nodes, pv, ms, the `go` used,
+`recovered`), `quakeTraces` with `timing` (roll / probes / compose / gate /
+total ms) and `inputs` (the engine's mate hints VERBATIM — fen, score, pv,
+source — the probe census and the gate's baseline: the Director's decisions
+replay from the seed, the time-limited probes that fed them do not, so they
+are recorded, never re-run), `attempts` (every composition the v4.3 gate
+REJECTED, in full — its trace, its board, its verdict), `log` (the duel-log
+lines the player saw, mirrored by main.mjs `log()`), `flags` (the ⚑ topbar
+button: ply, board, optional note), and **`branches` — UNDO HISTORY**: an
+undo MOVES the tail it cuts off into a branch (every RECORD_ARRAYS slice past
+the snapshot's lens) with `from`, the exact state the instant before the undo
+(board, ledgers, meters, how the game had ended if it had); branches are
+never truncated, nested undos sort by `seq`, and the tunes ledger's undo
+marker now points at its branch. `play/js/replaylog.mjs` builds the ONE
+export object (`buildLog`, schema `dck-log/1`, deal provenance + variantIni +
+`meta`: build stamp `APP_BUILD`, UA, engine `id name`, go/mateGo/evalGate/
+probeGo, the gods options), delivers it (`deliverLog`: Web Share as a FILE
+on a coarse-pointer device → `<a download>` → clipboard → console; the
+share call runs inside the click's user activation) and keeps the last THREE
+duels in a localStorage ring (`LogStore`, rewritten after every ply, on
+undo, flag, end and back-to-setup — a reload or a dead tab loses nothing;
+the stage picker's "Saved replay logs" row exports them). Buttons: ⚑ flag
+in the topbar (in-duel), "Export log" on the end overlay and in Options →
+Replay log (+ "Copy as text"), the debug panel's `copy trace` is now `copy
+log` (same object, clipboard). `__DCK.log` = `build / flag / autosave /
+saved / load / export`. Reader: `phase0/harness/log-report.mjs` prints a log
+as a post-mortem — timeline with engine evals and quake summaries, every
+quake's board before/after (`#` wall, `O` hole, `x` god-cracked, `^` crate)
+with its ladder path, protected census, inputs, gate verdict, rejected
+draws and timing, every undo with the pre-undo board and the abandoned line,
+flags, anomalies; no engine, no ffish. Cost: a 10×10 state is ~300 B, so a
+200-ply game logs well under 100 KB of states; a whole log runs 100–300 KB.
+Gates: selftest 42/42 (a live 5x6 duel: states, engine record, inputs on
+every due roll, one undo → one branch with the pre-undo fen and the
+abandoned tail, seq unique, export round-trips, the store rotates), ui-smoke
+asserts the export on the live board and an undo through the real button
+path, and a Node smoke on s59 with three nested undos. NOT in this pass (a
+future session, designer-deferred): the in-game replay analyzer/viewer, an
+offline replayer that feeds the recorded inputs back into the Director and
+diffs, and `gods-metrics.mjs` reading browser logs (the lab's line shape and
+the export are still two shapes of one thing).
+
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
 matchups × eleven arms) costs ~550 h of serial CPU and answers calibration
@@ -756,7 +809,8 @@ node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 node harness/godlab/gods-metrics.mjs results/godlab/godlab-wave6-*.jsonl  # the v4 scorecard: pacing, next-ply share, double-touch, un-mating, heat, floor
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
-node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots)
+node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots) + the replay log's export/undo branch
+node harness/log-report.mjs <dck-log_*.json> [quakes|branches|engine|all] [--ply N]  # a phone's exported replay log as a readable post-mortem (no engine needed)
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor

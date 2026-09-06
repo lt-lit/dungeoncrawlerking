@@ -85,7 +85,7 @@ body {
   text-overflow: ellipsis;
 }
 
-#btnBack, #btnUndo, #btnOptions {
+#btnBack, #btnUndo, #btnFlag, #btnOptions {
   font-size: 1.1rem;
   padding: .2rem .6rem;
 }
@@ -968,3 +968,23 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 
 #gods-trace { margin-top: .4rem; max-height: 11rem; }
 #gods-trace .quiet { color: #565963; }
+
+/* ---------- the replay log (2026-09-06) ---------- */
+
+/* The stage picker's saved-logs row: the autosave ring, newest first. */
+#saved-logs {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .35rem .6rem;
+  align-items: center;
+  margin: .2rem 0 .8rem;
+  font-size: .8rem;
+  color: var(--muted);
+}
+#saved-logs .saved-title { white-space: nowrap; }
+#saved-logs select { grid-column: 1 / -1; width: 100%; min-width: 0; font-size: .8rem; }
+#saved-logs button { font-size: .8rem; padding: .3rem .7rem; }
+
+/* Options → Replay log: the two buttons side by side. */
+.opt-row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .2rem 0 .6rem; }
+.opt-row button { font-size: .85rem; padding: .4rem .8rem; }

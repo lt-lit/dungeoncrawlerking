@@ -43,6 +43,12 @@ import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from './board-ui.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
+import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylog.mjs';
+
+// Stamped into every exported replay log (`meta.app`) so a log says which
+// build played it. Pages has no build step: bump it by hand with a change
+// that alters what the log records or how the gods decide.
+const APP_BUILD = '2026-09-06 replay-log';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -90,7 +96,9 @@ const app = {
   godsCensus: null, // last on-demand candidate census {ply, tiers, crumbles, locked, ms}
   godsHeat: null, // {square: tier} heat marks painted from the census
   godsHeatOn: false, // user wants heat; turns itself off when the board changes
+  logSlot: null, // the replay log's autosave slot for the live duel (replaylog.mjs LogStore)
 };
+const logStore = new LogStore();
 
 // ---------------------------------------------------------------- utilities
 
@@ -119,6 +127,9 @@ function log(el, msg, cls) {
   if (cls) line.className = cls;
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
+  // The replay log mirrors the duel log: what the player was told, next to
+  // what happened (duel.mjs record.log).
+  if (el.id === 'duel-log' && app.duel) app.duel.note(msg, cls ?? null);
 }
 
 // -------------------------------------------------- setup model (generator)
@@ -387,6 +398,8 @@ function refreshCheatUI() {
   $('btnUndo').disabled =
     app.busy || !app.duel || !app.session || (app.duel.state === 'playing' && app.duel.turnColor() !== app.session.playerColor);
   $('eval-bar').hidden = !(cheatEval() && inDuel);
+  // The replay log's flag: not a cheat, so it rides the duel alone.
+  $('btnFlag').hidden = !inDuel;
 }
 
 function applyOptions() {
@@ -843,6 +856,7 @@ async function doUndo() {
   paintBoard(duel.fen());
   renderPlayMarks();
   log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'warn');
+  autosaveLog(); // the branch is on the record now
   await driveTurn();
 }
 
@@ -1102,64 +1116,142 @@ function godsCensusNow() {
   }, 30);
 }
 
-/** JSON.stringify turns Infinity into null, which silently corrupts an
- *  exported config (the 'off' preset is onsetPly: Infinity — a replay
- *  built from null ramps quakes from ply 0 in a duel that had the gods
- *  OFF). Export non-finite numbers as strings; Number('Infinity') revives
- *  them exactly, so consumers map values through Number() and lose
- *  nothing. */
-function jsonSafeNumbers(v) {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : String(v);
-  if (Array.isArray(v)) return v.map(jsonSafeNumbers);
-  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, jsonSafeNumbers(x)]));
-  return v;
+// ------------------------------------------------------ the replay log (2026-09-06)
+// The duel records everything (duel.mjs `record`); replaylog.mjs builds the
+// one export object, delivers it and keeps the last few games. This block is
+// the host's half: what the duel cannot know (build, device, engine build,
+// the options in force), when to autosave, and the buttons.
+
+/** What the duel does not know about itself. */
+function logMeta() {
+  return {
+    app: APP_BUILD,
+    ua: navigator.userAgent,
+    url: location.origin + location.pathname,
+    query: location.search || null,
+    engine: app.engine?.id ?? null,
+    probeGo: probeGo(),
+    fx: FX_SCALE,
+    options: {
+      cheat: options.cheat,
+      hints: options.hints,
+      hintN: options.hintN,
+      hintCont: !!options.hintCont,
+      undo: options.undo,
+      evalBar: options.evalBar,
+      godPreset: options.godPreset,
+      godCustom: options.godCustom,
+      godLadder: options.godLadder,
+      godsDebug: options.godsDebug,
+    },
+    godConfig: godConfig(),
+  };
 }
 
-/** Everything a replay or offline analysis needs, from the one ledger. */
+/** Everything a replay or offline analysis needs, from the one ledger —
+ *  the debug overlay's copy button, the Export buttons, the autosave and
+ *  `__DCK.log.build()` all return this same object. */
 function godsExportData() {
+  if (!app.duel) return null;
+  return buildLog({ duel: app.duel, session: app.session, meta: logMeta() });
+}
+
+/** The live duel's id for the autosave ring: one slot per game, rewritten
+ *  after every ply (the record survives a reload or a dead tab). */
+function logId() {
+  const d = app.duel;
+  return d ? `${app.session?.id ?? 'duel'}:${app.session?.deal?.seed ?? 0}:${d.record.startedAt}` : null;
+}
+
+let autosaveWarned = false;
+function autosaveLog() {
+  const d = app.duel;
+  if (!d) return false;
+  const data = godsExportData();
+  if (!data) return false;
+  if (app.logSlot === null) app.logSlot = logStore.claim(logId());
+  const ok = logStore.save(app.logSlot, data, {
+    id: logId(),
+    stage: data.stage,
+    title: data.title,
+    seed: data.setupSeed,
+    plies: data.plies,
+    result: data.result,
+    termination: data.termination,
+    quakes: data.quakes.length,
+    branches: data.branches.length,
+    flags: data.flags.length,
+  });
+  if (!ok && !autosaveWarned) {
+    autosaveWarned = true;
+    log($('duel-log'), '⚠ replay log autosave unavailable (storage full or blocked) — export before leaving', 'warn');
+  }
+  return ok;
+}
+
+/** Get the live duel's log off the device (share → download → clipboard). */
+async function exportCurrentLog(force = null) {
+  const data = godsExportData();
+  if (!data) {
+    setStatus('no duel to export');
+    return null;
+  }
+  const json = JSON.stringify(data);
+  const how = await deliverLog(json, { force, filename: logFileName(data), doc: document, nav: navigator });
+  const said = { shared: 'log shared', downloaded: 'log downloaded', copied: 'log copied to clipboard', console: 'log dumped to console (nothing else worked)', cancelled: 'export cancelled' }[how] ?? how;
+  const line = `${said} (${logSize(json)})`;
+  log($('duel-log'), `⎙ ${line}`, how === 'console' ? 'bad' : 'ok');
+  if (godsDebug()) log($('gods-trace'), line, how === 'console' ? 'bad' : 'ok');
+  setStatus(line);
+  return how;
+}
+
+/** The player's own "look at this" mark on the record, with an optional note. */
+function flagMoment() {
   const d = app.duel;
   if (!d) return null;
-  const dir = d.director;
-  const deal = app.session?.deal;
-  return {
-    // Full deal provenance: (stage, flip, crop, specs, setupSeed) + the
-    // Director seed below reconstruct the entire session, quakes included.
-    stage: deal?.stageId ?? null,
-    stageTransformed: app.session?.id ?? null,
-    flip: deal?.flip ?? false,
-    crop: deal ? { top: deal.cropTop, bottom: deal.cropBottom } : null,
-    turn: deal?.turn ?? 'w',
-    setupSeed: deal?.seed ?? null,
-    dealAttempt: deal?.attempt ?? null,
-    armies: deal
-      ? {
-          white: { ...deal.white.army, archetype: app.session.specs.white.archetype, anchor: app.session.specs.white.anchor },
-          black: { ...deal.black.army, archetype: app.session.specs.black.archetype, anchor: app.session.specs.black.anchor },
-        }
-      : null,
-    variant: d.variantName,
-    startFen: d.startFen,
-    seed: dir.seed,
-    config0: jsonSafeNumbers(dir.config0), // starting config — what a replay constructs with
-    config: jsonSafeNumbers({
-      // live config at export time (tunes applied); the tunes ledger maps
-      // one to the other, undo markers included
-      onsetPly: dir.onsetPly,
-      rampPlies: dir.meter.rampPlies,
-      sate: dir.meter.sate,
-      debtCap: dir.debtCap,
-      extraActions: dir.extraActions,
-    }),
-    favor: dir.favor,
-    tunes: jsonSafeNumbers(d.record.tunes),
-    moves: d.record.moves,
-    sans: d.record.sans,
-    quakes: d.record.quakes.map(({ trace, ...rest }) => rest), // traces carried once, below
-    quakeTraces: d.record.quakeTraces,
-    anomalies: d.record.anomalies,
-    result: d.record.result,
-    termination: d.record.termination,
-  };
+  const note = prompt('Flag this moment for the replay log — a note (optional):', '');
+  if (note === null) return null; // cancelled
+  const f = d.flag(note);
+  log($('duel-log'), `⚑ flagged ply ${f.ply}${note ? ` — ${note}` : ''}`, 'warn');
+  autosaveLog();
+  return f;
+}
+
+/** The setup screen's saved-logs row: the autosave ring, newest first. */
+function refreshSavedLogs() {
+  const idx = logStore.index();
+  const box = $('saved-logs');
+  const sel = $('savedLogSel');
+  sel.textContent = '';
+  for (const e of idx) {
+    const opt = document.createElement('option');
+    opt.value = String(e.slot);
+    const when = e.at ? new Date(e.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '?';
+    const outcome = e.result ? `${e.result} ${e.termination ?? ''}`.trim() : 'unfinished';
+    opt.textContent = `${when} · ${e.title ?? e.stage ?? 'duel'} · ${e.plies ?? 0} plies · ${outcome}${e.branches ? ` · ${e.branches} undo${e.branches === 1 ? '' : 's'}` : ''}${e.flags ? ` · ${e.flags} flag${e.flags === 1 ? '' : 's'}` : ''}`;
+    sel.appendChild(opt);
+  }
+  box.hidden = idx.length === 0;
+}
+
+async function exportSavedLog(force = null) {
+  const slot = parseInt($('savedLogSel').value, 10);
+  const json = Number.isInteger(slot) ? logStore.loadJson(slot) : null;
+  if (!json) {
+    setStatus('no saved log');
+    return null;
+  }
+  let data = null;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    /* deliver the raw text anyway */
+  }
+  const how = await deliverLog(json, { force, filename: logFileName(data ?? {}), doc: document, nav: navigator });
+  const said = { shared: 'log shared', downloaded: 'log downloaded', copied: 'log copied to clipboard', console: 'log dumped to console', cancelled: 'export cancelled' }[how] ?? how;
+  setStatus(`${said} (${logSize(json)})`);
+  return how;
 }
 
 /** Per-ply hook from the duel (fire-and-forget): every Director roll lands
@@ -1563,6 +1655,7 @@ async function beginDuel() {
   $('godsIntensity').value = '1';
   $('godsIntensityVal').textContent = '1.0';
   if (app.duel) app.duel.destroy();
+  app.logSlot = null; // a fresh duel claims its own autosave slot
   app.duel = new DuelController({
     ffish: app.ffish,
     engine: app.engine,
@@ -1591,6 +1684,8 @@ async function beginDuel() {
   applyTheme();
   app.boardUI.setMarks({});
   refreshGodsUI();
+  refreshCheatUI(); // the flag button rides the duel
+  autosaveLog(); // the start position, before anyone moves
   if (app.duel.state === 'playing') await driveTurn();
 }
 
@@ -1599,6 +1694,7 @@ async function beginDuel() {
 async function driveTurn() {
   const duel = app.duel;
   if (!duel || duel.state !== 'playing') return;
+  autosaveLog(); // every completed ply lands in the autosave ring
   if (duel.turnColor() === app.session.playerColor) {
     app.busy = false;
     app.boardUI.setInteractive(true);
@@ -1932,6 +2028,7 @@ async function onEnd({ result, winner, termination }) {
   refreshCheatUI();
   refreshGodsUI(); // the panel survives the end screen — post-mortems welcome
   setStatus(result ? `${result} · ${termination}` : 'error');
+  autosaveLog(); // the final position and the verdict
 }
 
 // ------------------------------------------------------------------- wiring
@@ -1970,6 +2067,8 @@ $('supSeed').addEventListener('change', (e) => {
 $('btnBack').addEventListener('click', () => {
   const probesQuiet = cancelIdleProbes(); // cheat + eval probes are in-flight searches too
   evalProbe.queue.length = 0;
+  autosaveLog(); // an abandoned duel is still a saved log
+  refreshSavedLogs();
   const d = app.duel;
   app.duel = null;
   if (d) d.destroy(); // sends 'stop' to any in-flight search
@@ -2112,18 +2211,15 @@ $('btnGodsHeat').addEventListener('click', () => {
     godsCensusNow(); // applies heat when the census lands (godsHeatOn is set)
   }
 });
-$('btnGodsExport').addEventListener('click', async () => {
-  const data = godsExportData();
-  if (!data) return;
-  const json = JSON.stringify(data);
-  try {
-    await navigator.clipboard.writeText(json);
-    log($('gods-trace'), `trace copied (${(json.length / 1024).toFixed(1)} KB)`, 'ok');
-  } catch {
-    console.log('[DCK gods trace]', json); // clipboard blocked — console fallback
-    log($('gods-trace'), 'clipboard unavailable — trace dumped to console', 'bad');
-  }
-});
+// The replay log's buttons (2026-09-06). The overlay's copy button keeps its
+// clipboard channel (the console-paste workflow); every Export button walks
+// the delivery ladder — share a file on a phone, download on a desktop.
+$('btnGodsExport').addEventListener('click', () => void exportCurrentLog('clipboard'));
+$('btnOverlayExport').addEventListener('click', () => void exportCurrentLog());
+$('btnOptionsExport').addEventListener('click', () => void exportCurrentLog());
+$('btnOptionsCopy').addEventListener('click', () => void exportCurrentLog('clipboard'));
+$('btnFlag').addEventListener('click', () => void flagMoment());
+$('btnSavedExport').addEventListener('click', () => void exportSavedLog());
 // Rematch: the SAME deal and the SAME Director seed — the identical duel,
 // for "let me try that again". Re-deal: back to the live preview on a
 // fresh seed.
@@ -2267,6 +2363,21 @@ window.__DCK = {
   options,
   applyOptions,
   undo: doUndo,
+  // The replay log (2026-09-06): the export object, the flag, the autosave
+  // ring. `build()` is the same object every Export button delivers.
+  log: {
+    build: () => godsExportData(),
+    flag: (note = '') => {
+      const f = app.duel?.flag(note) ?? null;
+      if (f) autosaveLog();
+      return f;
+    },
+    autosave: () => autosaveLog(),
+    saved: () => logStore.index(),
+    load: (slot) => logStore.load(slot),
+    store: logStore,
+    export: (force = null) => exportCurrentLog(force),
+  },
   waitIdle: async () => {
     while (app.busy) await new Promise((res) => setTimeout(res, 50));
     return app.duel?.state ?? app.phase;
@@ -2277,4 +2388,5 @@ loadOptions();
 loadSetup();
 if (params.get('godsdebug')) options.godsDebug = true; // E2E/dev override (not persisted until the user touches options)
 syncOptionsUI();
+refreshSavedLogs(); // the autosave ring from earlier sessions, on the setup screen
 window.__DCK.ready = boot();

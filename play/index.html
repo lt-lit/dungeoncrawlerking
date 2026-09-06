@@ -16,6 +16,9 @@
   <button id="btnBack" hidden aria-label="Back to setup">&#8592;</button>
   <h1 id="title">Dungeon Crawler King</h1>
   <button id="btnUndo" hidden aria-label="Undo">&#8630;</button>
+  <!-- The replay log's flag (2026-09-06): one tap marks this ply in the
+       record ("look at this"), with an optional note. Not a cheat. -->
+  <button id="btnFlag" hidden aria-label="Flag this moment" title="Flag this moment in the replay log">&#9873;</button>
   <button id="btnOptions" aria-label="Options">&#9881;</button>
   <div id="status" aria-live="polite">loading&#8230;</div>
 </header>
@@ -23,6 +26,15 @@
 <main id="app">
   <section id="screen-setup" class="screen">
     <p id="menu-intro">Proving grounds &#8212; pick a stage. The armies are shaped on the next screen, live.</p>
+    <!-- The replay log's autosave ring (2026-09-06): the last three duels,
+         rewritten after every ply, so a game that ended in a reload or a
+         dead tab is still exportable from here. Above the stage list: the
+         list is 36 stages long on a phone. -->
+    <div id="saved-logs" hidden>
+      <span class="saved-title">Saved replay logs</span>
+      <button id="btnSavedExport">Export</button>
+      <select id="savedLogSel" aria-label="saved replay logs"></select>
+    </div>
     <div id="stage-list"></div>
     <div id="boot-log" class="log"></div>
   </section>
@@ -98,7 +110,7 @@
       <div class="gods-actions">
         <button id="btnGodsCensus">census now</button>
         <button id="btnGodsHeat">heat: off</button>
-        <button id="btnGodsExport">copy trace</button>
+        <button id="btnGodsExport" title="the full replay log as JSON text on the clipboard">copy log</button>
       </div>
       <div id="gods-census" class="gods-row"></div>
       <div id="gods-trace" class="log"></div>
@@ -113,6 +125,7 @@
     <button id="btnOverlayUndo" hidden>&#8630; Undo last move</button>
     <button id="btnAgain" class="primary">Rematch</button>
     <button id="btnOverlayRedeal">Re-deal</button>
+    <button id="btnOverlayExport" title="share or download this duel's replay log">&#9873; Export log</button>
     <button id="btnMenu">Back to setup</button>
   </div>
 </div>
@@ -205,6 +218,17 @@
       <label class="opt sub">Extra actions at full pressure <input type="number" id="god_extraActions" min="0" step="1"></label>
     </div>
     <label class="opt"><input type="checkbox" id="optGodsDebug"> Debug overlay (roll trace, census, forecast)</label>
+    <h2>Replay log</h2>
+    <p class="opt-hint">Every duel records its moves, the board after every
+      ply, the enemy's evaluations, the gods' rolls, probes and rejected
+      draws, every undo (with the board right before it) and your flags
+      (&#9873; in the top bar). Export shares the file on a phone and downloads
+      it on a desktop; the last three duels are kept on this device and can be
+      exported from the stage picker.</p>
+    <div class="opt-row">
+      <button id="btnOptionsExport">&#9873; Export this duel's log</button>
+      <button id="btnOptionsCopy" title="the log as JSON text on the clipboard">Copy as text</button>
+    </div>
     <button id="btnOptionsClose" class="primary">Done</button>
   </div>
 </div>
