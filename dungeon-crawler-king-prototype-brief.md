@@ -182,6 +182,31 @@ bed) before the fix — see `phase0/results/godlab/v4-findings.md`:
    and the probes are depth-bounded, so a corpus replays unless a probe's
    movetime binds. The grid search stays as the exact win-in-1 check and
    the fallback for a probe that fails.
+8. **The eval gate and the followed line `[v4.3, same day]`.** The gods
+   never read an eval to CHOOSE — targets stay structural, "who is winning"
+   stays off limits to the pick — but every composition is now judged by
+   one before it lands: the duel probes the board the composition would
+   leave (the same depth-bounded probe, hash cleared, same side to move)
+   and compares it with a probe taken before the quake. A decided position
+   may not be pulled toward equality by more than two pawns, flipped, or
+   have its mate lost, delayed or flipped; an undecided one may not be
+   handed a decision. A composition that fails is rolled back whole and a
+   second one drawn; if that fails too, a lone weaken is tried; if even
+   that softens, nothing lands and the meter is still spent. Designer: "a
+   more objective way to measure whether the gods actions are about to
+   screw something up"; the two-draw cap was chosen over a time budget that
+   keeps the best of many — "if we ever want to put our thumb on the scale
+   to shorten games on purpose in a hopefully subtle way, we can talk about
+   having it intentionally hunt for quakes that do just that." And when the
+   player plays the very reply the enemy's deep search predicted, the rest
+   of that line — searched at the enemy's own depth, far past the probe's —
+   is handed to the protection as a line for this position; replayed on the
+   current board it can only be cut short by a change, never mislead.
+   Measured on the wave 6 corpora: the gate rejected 12 / 20 / 41 draws per
+   24-game arm and vetoed 2 / 13 / 12 plies; the referee's own softening
+   verdict fell from 3.8 / 3.0 / 4.3% of quakes to 1.0 / 2.7 / 1.9%, the
+   residue being the probe's horizon (the referee sees a mate in 4 or a
+   five-pawn swing a fresh depth-12 probe does not).
 6. **The ladder leans on the crack `[v4.1, same day]`.** Weaken is weighted
    well above breach and breach opens later — "weakening walls does a better
    job of opening up new lines, plus it's fun to smash thru walls": a crack

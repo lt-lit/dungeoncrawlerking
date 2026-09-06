@@ -15,7 +15,7 @@ import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { captureLoss } from './threat.mjs';
-import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets } from './tactics.mjs';
+import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalSoftens } from './tactics.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
@@ -981,6 +981,75 @@ async function main() {
     }
     if (!fired) throw new Error('no protected quake fired');
     return `${kept}/${fired} kept the engine's line with the grid search off; control broke it ${controlBroke}/6`;
+  });
+
+  await check('v4.3: the eval gate — the softening verdicts, and a rejected draw rolls back clean', () => {
+    // evalSoftens is the gate's whole judgement (tactics.mjs): both scores
+    // from the same side to move, before and after a composition. A decided
+    // game (≥ flipMinCp) may not be pulled toward equality by more than
+    // softenCp, flipped, or lose / delay / flip a mate; an undecided one may
+    // not be handed a decision (a ≥ giftCp swing or a mate). Tightening a
+    // win, or drifting inside the band, is never a reason.
+    const cp = (v) => ({ type: 'cp', value: v });
+    const mate = (v) => ({ type: 'mate', value: v });
+    const cases = [
+      [cp(400), cp(150), 'softened'],
+      [cp(-400), cp(-100), 'softened'],
+      [cp(300), cp(-200), 'flipped'],
+      [cp(200), mate(-3), 'flipped-to-mate'],
+      [mate(3), mate(5), 'mate-delayed'],
+      [mate(-3), mate(-5), 'mate-delayed'],
+      [mate(3), cp(900), 'mate-lost'],
+      [mate(3), mate(-2), 'mate-flipped'],
+      [cp(20), cp(600), 'decided'],
+      [cp(20), mate(2), 'decided'],
+      [cp(400), cp(900), null], // a bigger win is not softer
+      [cp(400), cp(250), null], // inside the band
+      [cp(-400), cp(-350), null],
+      [cp(200), mate(3), null], // the winner's win became a mate
+      [mate(3), mate(2), null], // a shorter mate
+      [cp(50), cp(-50), null], // undecided stays undecided
+      [null, cp(50), null], // no baseline: no judgement
+    ];
+    for (const [b, a, want] of cases) {
+      const got = evalSoftens(b, a);
+      if (got !== want) throw new Error(`evalSoftens(${JSON.stringify(b)}, ${JSON.stringify(a)}) = ${got}, want ${want}`);
+    }
+    // The rollback: everything a composition mutates comes back, and the
+    // retry composes on the roll's clean header (the rejected attempt's path
+    // and choices must not bleed into the draw that lands).
+    const d = new Director({ ...dirCfg, extraActions: 3, seed: 7 });
+    let fen = dirFen;
+    let tested = 0;
+    for (let ply = 1; ply <= 24 && tested < 2; ply++) {
+      d.observePly(ffish, dirVariant, fen, 5, 6, QUIET_PLY);
+      const roll = d.rollQuake(ffish, dirVariant, fen, 5, 6, ply);
+      if (!roll.due) continue;
+      const snap = d.snapshot();
+      const was = { debt: d.debt, meter: d.meter.value, holes: [...d.holes].join(), crates: [...d.godCrates].join(), path: roll.trace.path.join() };
+      const q0 = d.quake(ffish, dirVariant, fen, 5, 6, ply, { rolled: roll, attempt: 0 });
+      if (!q0) continue;
+      if (d.meter.value !== 0) throw new Error(`ply ${ply}: the first draw did not spend the meter`);
+      d.restore(snap);
+      const now = { debt: d.debt, meter: d.meter.value, holes: [...d.holes].join(), crates: [...d.godCrates].join() };
+      for (const k of Object.keys(now)) if (now[k] !== was[k]) throw new Error(`ply ${ply}: ${k} did not roll back (${was[k]} → ${now[k]})`);
+      const q1 = d.quake(ffish, dirVariant, fen, 5, 6, ply, { rolled: roll, attempt: 1 });
+      if (!q1) throw new Error(`ply ${ply}: the retry starved`);
+      const t = d.lastTrace;
+      if (t.attempt !== 1) throw new Error(`ply ${ply}: the retry's trace is not marked attempt 1`);
+      if (t.path.slice(0, roll.header.path.length).join() !== was.path) throw new Error(`ply ${ply}: the retry's path does not start from the roll's header (${t.path.join(' ')})`);
+      if (t.path.filter((c) => c === 'quake').length !== 1) throw new Error(`ply ${ply}: the rejected attempt bled into the retry's path (${t.path.join(' ')})`);
+      if (ffish.validateFen(q1.postFen, dirVariant) !== 1) throw new Error(`ply ${ply}: the retry produced an invalid board`);
+      // The veto: nothing lands, the trace says so, the meter is still spent.
+      d.restore(snap);
+      d.vetoed(ply, { before: cp(300), rejected: [{ attempt: 0, after: cp(40), verdict: 'softened' }], draws: 2 });
+      if (d.lastTrace.outcome !== 'vetoed' || d.lastTrace.evalGate?.verdict !== 'vetoed') throw new Error(`ply ${ply}: the veto is not on the trace`);
+      if (d.meter.value !== 0) throw new Error(`ply ${ply}: a vetoed quake must still spend the meter`);
+      tested++;
+      fen = q1.postFen;
+    }
+    if (tested < 2) throw new Error(`only ${tested} due rolls to test on the fixture`);
+    return `${cases.length} verdicts as specified; ${tested} rejected draws rolled back clean, retries on a clean header, vetoes spend the meter`;
   });
 
   // --- Game-end protocol (rule 4): numberLegalMoves()===0, mover loses ---

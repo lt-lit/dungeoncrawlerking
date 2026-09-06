@@ -918,6 +918,7 @@ function renderGodsSummary() {
 
 function godsTraceCls(t) {
   if (t.outcome === 'quiet') return 'quiet';
+  if (t.outcome === 'vetoed') return 'warn';
   if (t.outcome === 'crumble' || t.outcome === 'terminal' || t.vetoed) return 'warn';
   if (t.outcome === 'starved') return 'bad';
   return 'ok'; // weaken / breach / displace
@@ -935,7 +936,16 @@ function godsTraceLine(t) {
     const r = t.rolls.find((x) => x.roll === 'quake');
     return `p${t.ply} · ${meterBit} · P(q) ${pctOf(t.p.quake)}${r ? ` roll ${r.value.toFixed(2)} — quiet` : ' — before onset'}`;
   }
+  const fmtScore = (s) => (!s ? '?' : s.type === 'mate' ? `#${s.value}` : `${s.value > 0 ? '+' : ''}${(s.value / 100).toFixed(1)}`);
+  if (t.outcome === 'vetoed') {
+    const g = t.evalGate ?? {};
+    return `p${t.ply} QUAKE VETOED · ${meterBit} · eval gate: ${(g.rejected ?? []).length} draw${(g.rejected ?? []).length === 1 ? '' : 's'} softened the game (${fmtScore(g.before)} → ${(g.rejected ?? []).map((r) => `${fmtScore(r.after)} ${r.verdict}`).join(', ')}) — nothing lands, the meter is spent`;
+  }
   const bits = [`p${t.ply} QUAKE`, meterBit];
+  if (t.evalGate) {
+    const g = t.evalGate;
+    bits.push(`eval gate ${g.verdict} (${fmtScore(g.before)} → ${fmtScore(g.after)})${g.attempt ? ` on draw ${g.attempt + 1}${g.fallback ? ` (${g.fallback} fallback)` : ''} after ${(g.rejected ?? []).map((r) => r.verdict).join(', ')}` : ''}`);
+  }
   if (t.p.crumbleForced) bits.push('crumble FORCED (debt cap)');
   // The budget is the headline now: what makes a quake unreadable is that the
   // number and kind of actions vary, so the trace shows both.
@@ -1572,6 +1582,8 @@ async function beginDuel() {
     // v4.2: the gods' mate probes when a quake is due (`?mateprobe=off` to
     // silence them, or a `depth N movetime M` pair to retune).
     mateGo: params.get('mateprobe') === 'off' ? null : (params.get('mateprobe') ?? undefined),
+    // v4.3: the eval gate — `?evalgate=off` to let every composition land.
+    evalGate: params.get('evalgate') === 'off' ? null : undefined,
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
   await app.duel.start();

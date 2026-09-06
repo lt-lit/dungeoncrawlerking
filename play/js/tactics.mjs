@@ -576,6 +576,44 @@ export function mateNets(ffish, variant, fen, files, ranks, hints) {
 }
 
 /**
+ * v4.3 — THE EVAL GATE (designer 2026-09-05: "a more objective way to
+ * measure whether the gods' actions are about to screw something up").
+ * `before` and `after` are engine scores of the board before and after a
+ * composed quake, from the SAME side to move ({ type: 'cp'|'mate', value }).
+ * Returns null when the composition may stand, or the reason it may not:
+ *   mate-lost / mate-flipped / mate-delayed   a forced mate is gone, changed
+ *                                            hands, or got longer
+ *   flipped / flipped-to-mate                 who is ahead changed, once
+ *                                            someone was ahead by flipMinCp
+ *   softened                                  a decided position moved toward
+ *                                            equality by more than softenCp
+ *   decided                                   an EQUAL position jumped by
+ *                                            giftCp or to a mate — the gods
+ *                                            never decide an undecided game
+ * Sharpening a decided position is allowed: opening a line is supposed to
+ * change the game, only never in the loser's favour. Colour never enters —
+ * every test is about distance from equality and who holds it.
+ */
+export function evalSoftens(before, after, { softenCp = 200, flipMinCp = 150, giftCp = 500 } = {}) {
+  if (!before || !after) return null;
+  const signed = (s) => (s.type === 'mate' ? Math.sign(s.value) * (100000 - Math.min(99999, Math.abs(s.value))) : s.value);
+  const b = signed(before);
+  const a = signed(after);
+  if (before.type === 'mate') {
+    if (after.type !== 'mate') return 'mate-lost';
+    if (Math.sign(a) !== Math.sign(b)) return 'mate-flipped';
+    if (Math.abs(after.value) > Math.abs(before.value)) return 'mate-delayed';
+    return null;
+  }
+  const decided = Math.abs(b) >= flipMinCp;
+  if (!decided) return after.type === 'mate' || Math.abs(a - b) >= giftCp ? 'decided' : null;
+  if (after.type === 'mate') return Math.sign(a) !== Math.sign(b) ? 'flipped-to-mate' : null;
+  if (Math.sign(a) !== Math.sign(b) && a !== 0) return 'flipped';
+  if (Math.abs(a) < Math.abs(b) - softenCp) return 'softened';
+  return null;
+}
+
+/**
  * Everything a quake may not touch on `fen`: the union of both sides' threat
  * ledgers (pieces + squares), every mate line the ENGINE reported
  * (`opts.hints`, v4.2 — the source of record), and every forced win the

@@ -18,6 +18,13 @@
 //              was the binding pressure (the meter alone would not have)
 //   dead       share of quakes fired by the DEAD-BOARD backstop (v4: the
 //              tedium floor on a record with nothing irreversible in it)
+//   soften     referee-judged (white POV, before/after): quakes that pulled
+//              a decided position (≥150cp) toward equality by >200cp or
+//              flipped it, or lost/flipped/delayed a mate — the v4.3 gate's
+//              target, judged by the independent referee
+//   retry      v4.3: quakes whose landed draw was not the first (the gate
+//              rejected one or more before it) — and vetoed plies, where
+//              nothing landed at all
 //   terrain    standing walls+crates at the end as a share of the start
 //              (holes read as '*' in the trail, so the game's hole count is
 //              taken back out)
@@ -101,6 +108,10 @@ for (const file of files) {
   let truncated = 0;
   let engineMates = 0; // v4.2: quakes where the engine handed the gods a mate line
   let engineHinted = 0;
+  let softened = 0; // referee-judged softening (the v4.3 target)
+  let retried = 0; // v4.3: the landed draw was a retry
+  let gated = 0;
+  let vetoedPlies = 0;
   let floorFired = 0;
   let deadFired = 0;
   for (const g of games) {
@@ -131,6 +142,19 @@ for (const file of files) {
           withMate3++;
           if (mateWorse(eb, q.evalAfter)) unmated3++;
         }
+      }
+      if (eb && q.evalAfter) {
+        const signed = (s) => (s.type === 'mate' ? Math.sign(s.value) * (100000 - Math.min(99999, Math.abs(s.value))) : s.value);
+        const b = signed(eb);
+        const a = signed(q.evalAfter);
+        let soft = false;
+        if (eb.type === 'mate') soft = mateWorse(eb, q.evalAfter) || Math.sign(a) !== Math.sign(b);
+        else if (Math.abs(b) >= 150) soft = (Math.sign(a) !== Math.sign(b) && a !== 0) || Math.abs(a) < Math.abs(b) - 200;
+        if (soft) softened++;
+      }
+      if (q.gate) {
+        gated++;
+        if (q.gate.attempt > 0) retried++;
       }
       if (q.protected) {
         protectedPieces.push(q.protected.pieces);
@@ -166,6 +190,7 @@ for (const file of files) {
       if (pr[i] >= 0.95) pinned++;
     }
     if (t.heat?.length) heat.push(mean(t.heat));
+    if (t.vetoed?.length) vetoedPlies += t.vetoed.reduce((s, v) => s + v, 0);
     if (t.walls?.length) {
       const start = (t.walls[0] ?? 0) + (t.crates[0] ?? 0);
       const end = (t.walls.at(-1) ?? 0) + (t.crates.at(-1) ?? 0) - (g.holesEnd ?? 0);
@@ -191,6 +216,8 @@ for (const file of files) {
     terrain: terrainLeft.length ? pct(mean(terrainLeft), 1) : '—',
     prot: protectedPieces.length ? `${median(protectedPieces)} (${truncated} cut)` : '—',
     eng: engineHinted ? `${engineMates}/${engineHinted}` : '—',
+    soften: `${softened}/${quakes}`,
+    retry: gated ? `${retried}/${gated} +${vetoedPlies} vetoed` : '—',
     terminations: Object.entries(terminations)
       .map(([k, v]) => `${k} ${v}`)
       .join(', '),
@@ -216,6 +243,8 @@ const cols = [
   ['terrain', 'terrain'],
   ['prot', 'prot pcs'],
   ['eng', 'eng mates'],
+  ['soften', 'soften'],
+  ['retry', 'retry'],
 ];
 const widths = cols.map(([k, h]) => Math.max(h.length, ...rows.map((r) => String(r[k]).length)));
 console.log(cols.map(([, h], i) => h.padEnd(widths[i])).join('  '));

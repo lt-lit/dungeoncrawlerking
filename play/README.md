@@ -785,14 +785,32 @@ the full record; `phase0/results/godlab/v4-findings.md` the numbers):
   could capture is off limits to weaken, breach and crumble
   (`terrainReach`: a crack next to a net is a capture the defender spends
   on an escape). The trace line reads `engine N mate lines from 2 probes`.
+- **The eval gate and the followed line (v4.3)**: the gods still never
+  read an eval to CHOOSE, but every composition is judged by one before it
+  lands — the duel probes the board a composition would leave (`mateGo`,
+  hash cleared, same side to move) against the pre-quake probe
+  (`tactics.mjs evalSoftens`: a decided position, ≥ 150 cp, may not soften
+  by more than 200 cp, flip, or lose / delay / flip a mate; an undecided
+  one may not be handed a ≥ 500 cp swing or a mate). A rejected draw rolls
+  back in full (`director.snapshot()` / `restore()`; the RNG is excluded so
+  the retry differs), a second draw is judged, then a lone weaken; if all
+  three soften nothing lands, the trace reads `vetoed` and the meter is
+  still spent. `evalGate` on the DuelController (`draws` 2, `?evalgate=off`).
+  The trace line reads `eval gate ok (+3.1 → +2.8)` or `… on draw 2 after
+  softened`; a vetoed ply gets its own warn line. And when the player plays
+  the reply the enemy's deep search predicted, the rest of that PV is handed
+  to the protection as `enemy-search-followed` — the enemy's own 22-ply
+  reading of this very position, far past the probe's depth.
 - **The ladder (v4.1)**: weaken leads (`weakenBias` 3), breach comes later
   and lighter (`breachBias` 1.2 from tedium 0.3) — a crack hands both
   players a wall to smash, a breach smashes it for them — and the crate
   brake counts only god-minted crates. The four rung biases are sliders in
   the debug panel (below).
 
-`selftest.html` asserts all of it (four `v4` checks, incl. a forced win
-surviving 24 seeded quakes while the unprotected control un-mates 8/8);
+`selftest.html` asserts all of it (six `v4` checks, incl. a forced win
+surviving 24 seeded quakes while the unprotected control un-mates 8/8, an
+engine line kept with the grid search off, and the eval gate's verdicts
+and rollback);
 `phase0/harness/godlab/gods-metrics.mjs` scores any corpus on the same
 axes; `ladder-smoke.mjs` reports double-touches and next-ply quakes.
 

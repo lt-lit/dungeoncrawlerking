@@ -538,6 +538,65 @@ arm, double-touch 0.** The corpora are `*-v4h.jsonl` (first wiring), `-v4i`
 (hash cleared), `-v4j` (loser's terrain reach — shipped); the digest now
 carries `preFen` so a probe can be replayed offline.
 
+**v4.3 — THE EVAL GATE AND THE FOLLOWED LINE (designer 2026-09-05, same
+day: "a more objective way to measure whether the gods actions are about to
+screw something up"; the TWO-DRAW CAP was the designer's pick over a 1–2 s
+"try many, keep the best" budget, which would put a thumb on the scale —
+hunting for shortening quakes on purpose is a separate conversation if it is
+ever wanted).** The gods still never read an eval to CHOOSE — targets stay
+structural — but every composition is now JUDGED by one before it lands:
+`duel.mjs #composeGated` probes the board a composition would leave (the
+mate probe itself, `mateGo`, hash cleared, same side to move) and compares
+it with the to-move probe taken before the quake (`tactics.mjs
+evalSoftens`): a decided position (|score| ≥ `flipMinCp` 150) may not be
+pulled toward equality by more than `softenCp` 200, may not flip, and a mate
+may not be lost, delayed or flipped; an undecided one may not be handed a
+decision (a swing ≥ `giftCp` 500, or a mate). A rejected draw is ROLLED BACK
+IN FULL (`director.snapshot()` / `restore()` — debt, holes, god crates, the
+meter, the ledger, the threat memory; the RNG deliberately NOT, so the retry
+composes a fresh quake on the roll's pristine header, `attempt` on the trace)
+and a second draw is judged; after `draws` (2) rejections a LONE WEAKEN
+(`only: 'weaken'`) is drawn and judged; if that softens too, nothing lands,
+the trace of record reads outcome `vetoed`, and the meter is still spent
+(`director.vetoed` — a board where every composition softens must not be
+probed every ply). No baseline (probe off or failed) lets the draw stand
+unjudged; a game-ending terminal crumble is never judged. `evalGate` on the
+DuelController (`{ draws: 2, softenCp: 200, flipMinCp: 150, giftCp: 500 }`,
+null = off, `?evalgate=off`, the lab's `cfg.evalGate`); the trace carries
+`evalGate = { attempt, before, after, verdict, rejected, fallback? }`, the
+overlay's quake line reads "eval gate ok (+3.1 → +2.8)" or "… on draw 2 after
+softened", and a vetoed ply gets its own warn line. THE FOLLOWED LINE: when
+the player plays the very reply the enemy's deep search predicted
+(`lastSearch.pv[1]`), the rest of that PV — searched at the enemy's own
+depth, far past the probe's — is handed to `mateNets` as a hint on the
+current board (source `enemy-search-followed`, the mate one move nearer);
+replayed on ffish it can only be cut short by a board change, never mislead.
+Gates: selftest 41/41 (v4.3: 17 `evalSoftens` verdicts; a rejected draw
+rolls back clean and the retry composes on a clean header — the first cut
+let attempt 0's path bleed into attempt 1's trace, caught in the dev test;
+a veto spends the meter), the Node end-to-end on the trap fixture (judged ok
+at mate −4 → −4), a followed-line Node test (probe off: the followed line is
+the gods' only hint, 8 plies replayed, the quake keeps it; the control move
+gives no hint — the LAB never exercises this path, both its seats are reply
+searches) and a live browser duel with a verdict on every quake line and no
+anomaly. **Measured (v4k, same 24 deals; every arm 24/24 terminated,
+double-touch 0): the gate rejected 12 / 20 / 41 draws (calm / restless /
+wrathful — softened 9/4/16, flipped 3/13/16, decided 0/2/6, mate-lost
+0/1/3), 10 / 14 / 31 quakes landed on a retry (2 / 6 / 10 of them the lone
+weaken) and 2 / 13 / 12 plies were vetoed; the REFEREE's own before/after
+verdict — its hindsight-filled table against the gate's fresh probe — fell
+from 3.8 / 3.0 / 4.3% of quakes to 1.0 / 2.7 / 1.9%, and every remaining
+case is one the gate's own pair reads as flat or inside the band: the two
+probes disagree about the position by 2–7 pawns or a mate distance (twice a
+mate — in 4 and in 13 — the fresh depth-12 probe never saw), four sit
+within a pawn of the 200 cp band — the residue is the probe's horizon, and
+`mateGo` is its knob. Pacing 3.9 / 6.5 / 12.4 q/100p (v4j 3.3 / 7.4 / 11.0),
+median plies 196.5 / 179.5 / 183.5 (199 / 214 / 169.5) — a 24-game sample's
+noise, in both directions; un-mated 0/10 · 2/13 · 4/24 (1/9 · 2/10 · 3/29);
+the gate costs one more `mateGo` search per quake (30–340 ms), two or three
+on a retry.** Corpus `*-v4k.jsonl`; the digest carries `gate`, the trail
+`vetoed`, and `gods-metrics.mjs` two new columns (`soften`, `retry`).
+
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
 matchups × eleven arms) costs ~550 h of serial CPU and answers calibration

@@ -22,7 +22,7 @@
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
 import { findSquares } from './fen.mjs';
-import { flipTurn } from './tactics.mjs';
+import { flipTurn, evalSoftens } from './tactics.mjs';
 
 /** The principal variation of a search result's last "info … pv …" line,
  *  as UCI moves. Parsed here rather than on the engine wrapper because the
@@ -99,6 +99,7 @@ export class DuelController {
    *               meter: {...}, staleness: {...}, seed },  // DIRECTOR_DEFAULTS
    *   go: 'depth 22 movetime 500',         // paired limits (CLAUDE.md rule 5; 22 is a WASM-stability cap, see main.mjs)
    *   mateGo: 'depth 12 movetime 600',     // v4.2: the gods' mate probes when a quake is due (null = off)
+   *   evalGate: { draws: 2, softenCp: 200, flipMinCp: 150, giftCp: 500 }, // v4.3: probe each composition, reject softening (null = off)
    *   hooks: {                             // all optional, awaited where async matters
    *     onMove({ uci, san, mover, ply }),
    *     onQuake({ displacements, crumble, terrain, endedGame, preFen, postFen, trace }),
@@ -129,6 +130,14 @@ export class DuelController {
     // (rule 5); a failed probe is logged and the gods fall back to the grid.
     this.mateGo = opts.mateGo === undefined ? 'depth 12 movetime 600' : opts.mateGo;
     this.lastSearch = null; // { fen, score, pv } of the enemy's last reply search
+    // v4.3 (designer 2026-09-05): every composed quake is probed on the board
+    // it produces and rejected if it softens the game — a decided position
+    // pulled toward equality, a flip of who is ahead, a mate lost, changed
+    // hands or delayed, or an equal position decided by the gods. A rejected
+    // composition is rolled back and a fresh one drawn, `draws` times; then
+    // a lone weaken is tried; then nothing lands and the meter is spent
+    // anyway. Requires the mate probe (the before-eval is its score).
+    this.evalGate = opts.evalGate === undefined ? { draws: 2, softenCp: 200, flipMinCp: 150, giftCp: 500 } : opts.evalGate;
     this.hooks = opts.hooks ?? {};
     this.director = new Director(opts.director ?? {});
     // The conservation brake's reference point (§4.5, designer 2026-09-01):
@@ -340,9 +349,10 @@ export class DuelController {
     const roll = this.director.rollQuake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply);
     let quake = null;
     if (roll.due) {
-      const { hints, probes } = await this.#mateHints(fenNow, mover);
+      const { hints, probes, before } = await this.#mateHints(fenNow, mover, uci);
       if (this.state !== 'playing') return { ended: true }; // destroyed during the probe
-      quake = this.director.quake(this.ffish, this.variantName, fenNow, this.files, this.ranks, this.ply, { rolled: roll, mates: hints, probes });
+      quake = await this.#composeGated(roll, fenNow, hints, probes, before);
+      if (this.state !== 'playing') return { ended: true }; // destroyed during a gate probe
     }
 
     // Duel-layer safety net first, so a veto is stamped on the trace BEFORE
@@ -409,14 +419,28 @@ export class DuelController {
    *  is in check, where the flip is illegal). Only mate scores are returned.
    *  A probe that fails is logged and ends the probing — the next reply
    *  search's recovery ladder owns a dead engine. */
-  async #mateHints(fen, mover) {
+  async #mateHints(fen, mover, uci) {
     const hints = [];
     const probes = { ran: 0, failed: 0, fresh: 0 }; // for the trace: what was asked, not just what came back
-    if (mover === 'engine' && this.lastSearch?.score?.type === 'mate' && this.lastSearch.pv?.length) {
-      hints.push({ ...this.lastSearch, source: 'enemy-search' });
-      probes.fresh = 1;
+    let before = null; // the to-move probe's score, whatever its type — the eval gate's baseline
+    const last = this.lastSearch;
+    if (last?.score?.type === 'mate' && last.pv?.length) {
+      if (mover === 'engine' && last.pv[0] === uci) {
+        // The enemy just played the first move of its own line.
+        hints.push({ ...last, source: 'enemy-search' });
+        probes.fresh = 1;
+      } else if (mover === 'player' && last.pv.length >= 3 && last.pv[1] === uci) {
+        // v4.3: the player played the reply the enemy's deep search predicted,
+        // so the rest of that line — 22 plies deep on the phone, far past the
+        // probe — is the engine's own reading of THIS position, two plies on.
+        // Replayed on the current board by mateNets, so a quake in between
+        // can only shorten it, never mislead it; the mate is one move nearer.
+        const v = last.score.value;
+        hints.push({ fen, score: { type: 'mate', value: Math.sign(v) * Math.max(1, Math.abs(v) - 1) }, pv: last.pv.slice(2), source: 'enemy-search-followed' });
+        probes.fresh = 1;
+      }
     }
-    if (!this.mateGo) return { hints, probes };
+    if (!this.mateGo) return { hints, probes, before };
     const targets = [{ fen, side: 'to-move' }];
     if (!this.board.isCheck()) {
       const flipped = flipTurn(fen);
@@ -434,9 +458,63 @@ export class DuelController {
       if (this.state !== 'playing') break;
       probes.ran++;
       const score = this.engine.lastScore(res);
+      if (p.side === 'to-move' && score) before = score;
       if (score?.type === 'mate') hints.push({ fen: p.fen, score, pv: lastPv(res), source: `probe-${p.side}` });
     }
-    return { hints, probes };
+    return { hints, probes, before };
+  }
+
+  /**
+   * v4.3 — compose, probe, accept or roll back. Each draw is a fresh seeded
+   * composition on the same roll; the board it produces is probed from the
+   * same side to move and compared with `before` (tactics.mjs evalSoftens).
+   * A rejected draw is rolled back in full (director.restore) and the next
+   * one drawn; after `draws` rejections a lone weaken is tried, itself
+   * gated; if that softens too, nothing lands and the meter is spent. A
+   * missing baseline or a failed probe lets the draw stand — the gate is a
+   * guard, not a gate on the gods acting at all.
+   */
+  async #composeGated(roll, fen, hints, probes, before) {
+    const gate = this.evalGate && this.mateGo && before ? this.evalGate : null;
+    const draws = gate ? Math.max(1, gate.draws | 0) : 1;
+    const rejected = [];
+    const judge = async (cand, attempt, extra = {}) => {
+      if (!gate || cand.endsGame) {
+        cand.trace.evalGate = gate ? { attempt, before, after: null, verdict: 'terminal', rejected: rejected.slice(), ...extra } : null;
+        return true;
+      }
+      let after = null;
+      try {
+        after = this.engine.lastScore(await this.#probe(cand.postFen));
+      } catch (e) {
+        this.record.anomalies.push(`ply ${this.ply}: eval-gate probe failed (${String(e?.message ?? e).split('\n')[0]}) — the draw stands unjudged`);
+      }
+      if (this.state !== 'playing') return false;
+      const why = after ? evalSoftens(before, after, gate) : null;
+      cand.trace.evalGate = { attempt, before, after, verdict: why ?? (after ? 'ok' : 'unjudged'), rejected: rejected.slice(), ...extra };
+      if (!why) return true;
+      rejected.push({ attempt, after, verdict: why, chosen: cand.trace.chosen, ...extra });
+      return false;
+    };
+    for (let attempt = 0; attempt < draws; attempt++) {
+      const snap = this.director.snapshot();
+      const cand = this.director.quake(this.ffish, this.variantName, fen, this.files, this.ranks, this.ply, { rolled: roll, mates: hints, probes, attempt });
+      if (!cand) return null; // starved — nothing to gate
+      if (await judge(cand, attempt)) return cand;
+      if (this.state !== 'playing') return null;
+      this.director.restore(snap);
+    }
+    // Every full draw softened the game: a lone weaken, the one rung that
+    // moves nothing, gated once.
+    const snap = this.director.snapshot();
+    const weak = this.director.quake(this.ffish, this.variantName, fen, this.files, this.ranks, this.ply, { rolled: roll, mates: hints, probes, attempt: draws, only: 'weaken' });
+    if (weak) {
+      if (await judge(weak, draws, { fallback: 'weaken' })) return weak;
+      if (this.state !== 'playing') return null;
+      this.director.restore(snap);
+    }
+    this.director.vetoed(this.ply, { before, rejected, draws });
+    return null;
   }
 
   /** One bare-position probe with paired limits, tracked like a reply search

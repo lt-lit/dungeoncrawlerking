@@ -916,6 +916,49 @@ export class Director {
     return { meter, staleness: stale, heat: this.meter.heat, tedium: this.meter.t, threats: created };
   }
 
+  /** v4.3: everything a composition mutates — debt, holes, god crates, the
+   *  meter, the ledger, the threat memory — so the host can roll a rejected
+   *  composition back (the eval gate, duel.mjs). The RNG is deliberately NOT
+   *  in it: a retry must draw fresh, or it would compose the same quake. */
+  snapshot() {
+    return {
+      debt: this.debt,
+      holes: new Set(this.holes),
+      godCrates: new Set(this.godCrates),
+      meter: this.meter.snapshot(),
+      ledger: this.ledger,
+      threats: this.snapshotThreats(),
+      lastThreats: this.lastThreats,
+    };
+  }
+
+  restore(s) {
+    this.debt = s.debt;
+    this.holes = new Set(s.holes);
+    this.godCrates = new Set(s.godCrates);
+    this.meter.restore(s.meter);
+    this.ledger = s.ledger;
+    this.restoreThreats(s.threats);
+    this.lastThreats = s.lastThreats;
+  }
+
+  /** v4.3: every draw the eval gate offered softened the game, so nothing
+   *  lands — but the gods still spent their restlessness on the attempt
+   *  (otherwise a board where every composition softens would be probed
+   *  every ply). Stamps the trace of record. */
+  vetoed(ply, info) {
+    const t = this.lastTrace;
+    if (t) {
+      t.outcome = 'vetoed';
+      t.path.push('eval-vetoed');
+      t.evalGate = { ...(t.evalGate ?? {}), ...info, verdict: 'vetoed' };
+      t.meterAfter = r6(this.meter.discharge(ply));
+      t.debtAfter = this.debt;
+    } else {
+      this.meter.discharge(ply);
+    }
+  }
+
   /** v4 threat-memory state for the duel's undo stack (duel.mjs). */
   snapshotThreats() {
     return { ply: this.plyObserved, white: [...this.threatSeen.white], black: [...this.threatSeen.black] };
@@ -1272,16 +1315,21 @@ export class Director {
     let terrain;
     if (opts.rolled) {
       // v4.2: the host rolled first (rollQuake), fetched the engine's mate
-      // lines while the roll stood, and now hands both back.
+      // lines while the roll stood, and now hands both back. v4.3: a retry
+      // (`attempt` > 0, after the eval gate rejected a composition) composes
+      // on a fresh copy of the roll's trace header, so the rejected attempt's
+      // rolls and choices do not bleed into the one that lands.
       if (!opts.rolled.due) return null;
-      ({ trace, terrain } = opts.rolled);
+      terrain = opts.rolled.terrain;
+      trace = opts.attempt ? this.#cloneHeader(opts.rolled.header ?? opts.rolled.trace, opts.attempt) : opts.rolled.trace;
+      this.lastTrace = trace;
     } else {
       ({ trace, terrain } = this.#openTrace(ffish, variant, fen, files, ranks, ply));
       this.lastTrace = trace;
     }
     this.#activeTrace = trace;
     try {
-      return this.#quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain, { rolled: !!opts.rolled, mates: opts.mates ?? null, probes: opts.probes ?? null });
+      return this.#quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain, { rolled: !!opts.rolled, mates: opts.mates ?? null, probes: opts.probes ?? null, only: opts.only ?? null });
     } finally {
       this.#activeTrace = null;
       this._held = false;
@@ -1311,7 +1359,34 @@ export class Director {
       trace.debtAfter = this.debt;
     }
     this._held = false;
-    return { due, trace, terrain: opened.terrain };
+    // v4.3: a pristine copy of the header for retries — the live `trace` is
+    // what attempt 0 composes on, and its path and rolls fill as it goes.
+    const header = { ...trace, rolls: [...trace.rolls], path: [...trace.path] };
+    return { due, trace, terrain: opened.terrain, header };
+  }
+
+  /** A fresh trace for a retry: the roll's header (the quake roll included,
+   *  since it stood) with everything a composition writes cleared. */
+  #cloneHeader(t, attempt) {
+    return {
+      ...t,
+      rolls: [...t.rolls],
+      path: [...t.path],
+      weights: null,
+      rung: null,
+      rungFallback: null,
+      rungsSpent: undefined,
+      budget: undefined,
+      conserve: undefined,
+      census: null,
+      protected: null,
+      chosen: null,
+      outcome: 'quiet',
+      fellThrough: false,
+      meterAfter: null,
+      evalGate: null,
+      attempt,
+    };
   }
 
   /** The per-ply trace header — everything quake() and rollQuake() share. */
@@ -1360,7 +1435,7 @@ export class Director {
     return { trace, terrain };
   }
 
-  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain0, { rolled = false, mates = null, probes = null } = {}) {
+  #quakeTraced(trace, ffish, variant, fen, files, ranks, ply, terrain0, { rolled = false, mates = null, probes = null, only = null } = {}) {
     if (!rolled) {
       if (!this.quakeDue(ply)) {
         trace.path.push(this._held ? 'held-in-check' : ply < this.onsetPly ? 'pre-onset' : 'quake-roll-failed');
@@ -1392,10 +1467,16 @@ export class Director {
     // its whole budget.
     let budget = 1;
     const pBudget = Math.min(1, (Math.max(0, this.meter.t - this.displaceAt) / Math.max(0.05, 1 - this.displaceAt)) * this.favor);
-    for (let i = 0; i < this.extraActions; i++) {
-      if (this.#draw(`budget-${i}`, pBudget)) budget++;
+    // v4.3: `only` is the eval gate's fallback — one action on one rung, no
+    // budget draws, no ladder walk (a lone weaken after every full draw
+    // softened the game).
+    if (!only) {
+      for (let i = 0; i < this.extraActions; i++) {
+        if (this.#draw(`budget-${i}`, pBudget)) budget++;
+      }
     }
     trace.budget = budget;
+    if (only) trace.only = only;
 
     // --- v4: what this quake may not touch --------------------------------
     // `touched` grows as the budget is spent (no square edited or vacated
@@ -1433,7 +1514,9 @@ export class Director {
       // do, and two in a breath is a different mechanic.
       const canCrumble = crumble === null;
       let rung;
-      if (forced && canCrumble && step === 0) {
+      if (only) {
+        rung = only;
+      } else if (forced && canCrumble && step === 0) {
         rung = 'crumble';
         trace.path.push('crumble-forced');
       } else {
@@ -1455,7 +1538,7 @@ export class Director {
 
       // Walk the ladder from the rolled rung: if it has nothing to work with,
       // try the others in escalation order rather than wasting the action.
-      const order = [rung, ...RUNGS.filter((r) => r !== rung && (r !== 'crumble' || canCrumble))];
+      const order = only ? [only] : [rung, ...RUNGS.filter((r) => r !== rung && (r !== 'crumble' || canCrumble))];
       let out = null;
       for (const r of order) {
         out = this.#applyRung(r, trace, ffish, variant, postFen, files, ranks, landed, blocked);

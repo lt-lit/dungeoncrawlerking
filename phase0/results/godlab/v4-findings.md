@@ -229,3 +229,64 @@ wave6-wrathful-v4j     24     100%   169.5      11.0    2.80   14%    5        0
 Cost: two probes per quake, 30–340 ms each uncontended at depth 12–14 on
 late 10×10 positions; quakes are 3–11 per 100 plies. Replay: the probes are
 depth-bounded, so a corpus replays unless a probe's movetime binds.
+
+## v4.3 — the eval gate and the followed line (same day, `*-v4k.jsonl`)
+
+The designer's next question after the engine's mate lines: "a more
+objective way to measure whether the gods actions are about to screw
+something up." The gods still never read an eval to choose a target, but
+every composition is now judged by one before it lands (`duel.mjs
+#composeGated`): the board the composition would leave is probed with the
+mate probe itself (`mateGo`, hash cleared, same side to move) and compared
+with the to-move probe taken before the quake — `tactics.mjs evalSoftens`:
+a decided position (≥ 150 cp) may not soften by more than 200 cp, flip, or
+lose / delay / flip a mate; an undecided one may not be handed a ≥ 500 cp
+swing or a mate. A rejected draw rolls back in full (`director.snapshot()`
+/ `restore()`, RNG excluded) and a second is drawn; after two rejections a
+lone weaken is tried; if that softens too nothing lands (`vetoed`) and the
+meter is still spent. The two-draw cap was the designer's choice over a
+1–2 s "try many, keep the best" budget — that is a thumb on the scale, and
+hunting for shortening quakes on purpose is a separate conversation. The
+followed line: when the player plays the reply the enemy's deep search
+predicted, the rest of that PV (the enemy's own depth, far past the probe's)
+joins the protection as `enemy-search-followed`; the lab never exercises it
+(both seats are reply searches), so it has its own Node test.
+
+```
+corpus              games  ended  med plies  q/100p  act/q  gap=1  med gap  dbl-touch  un-mate  un-mate≤3  heat  pinned  floor  dead  terrain  prot pcs   eng mates  soften  retry            
+wave6-calm-v4j      24     100%   199        3.3     1.69   13%    11.5     0%         1/9      0/4        43%   0%      0%     27%   53%      0 (0 cut)  11/158     6/158   —                
+wave6-calm-v4k      24     100%   196.5      3.9     1.73   9%     10.5     0%         0/10     0/8        42%   0%      0%     39%   49%      2 (0 cut)  11/194     2/194   10/194 +2 vetoed 
+wave6-restless-v4j  24     100%   214        7.4     2.47   13%    6        0%         2/10     1/6        44%   0%      0%     40%   34%      0 (0 cut)  14/395     12/395  —                
+wave6-restless-v4k  24     100%   179.5      6.5     2.27   7%     7        0%         2/13     1/9        46%   0%      0%     25%   40%      2 (0 cut)  22/292     8/292   14/292 +13 vetoed
+wave6-wrathful-v4j  24     100%   169.5      11.0    2.80   14%    5        0%         3/29     0/17       47%   0%      0%     28%   20%      2 (0 cut)  37/446     19/446  —                
+wave6-wrathful-v4k  24     100%   183.5      12.4    2.81   19%    4        0%         4/24     0/12       48%   0%      0%     33%   17%      0 (0 cut)  28/582     11/582  31/582 +12 vetoed
+```
+
+- The gate rejected **12 / 20 / 41** draws (calm / restless / wrathful):
+  softened 9 / 4 / 16, flipped 3 / 13 / 16, decided 0 / 2 / 6, mate-lost
+  0 / 1 / 3. **10 / 14 / 31** quakes landed on a retry — 2 / 6 / 10 of them
+  the lone weaken — and **2 / 13 / 12** plies were vetoed outright.
+- The referee's own before/after verdict (`soften`, its hindsight-filled
+  table at `depth 12 movetime 300`, white POV) fell from 3.8 / 3.0 / 4.3%
+  of quakes to **1.0 / 2.7 / 1.9%**. Reading every one of the 21 that
+  remain against the gate's record: the gate's own pair judged each one
+  flat or inside the band, and the two probes simply disagree about the
+  position — by 2–7 pawns before the quake (s87 p257: referee −14.1, gate
+  −8.4 on the same board; s69 p49: the referee saw white soften from +10.6,
+  the gate saw white IMPROVE from +6.6), by a mate distance (s70 p168:
+  referee mate in 5 → 6, gate mate in 10 → 6), or by a mate the fresh
+  depth-12 probe never saw (s62 p155: a mate in 4 that became +28; s69
+  p100: a mate in 13 that became +15); four sit within a pawn of the
+  200 cp band. The residue is the probe's horizon and `mateGo` is its knob
+  — the referee, probing after the game with a warm table, sees deeper
+  than a fresh 600 ms search can.
+- Un-mated: 0/10 · 2/13 · 4/24 (v4j 1/9 · 2/10 · 3/29) — the same
+  order, the same cause (the probe's own mate horizon, above).
+- Pacing 3.9 / 6.5 / 12.4 q/100p (v4j 3.3 / 7.4 / 11.0), median plies
+  196.5 / 179.5 / 183.5 (199 / 214 / 169.5): a 24-game sample's noise,
+  moving both ways — the gate changes which composition lands, so every
+  game diverges from its v4j twin within a few plies. 24/24 terminated in
+  every arm (one wrathful game by a terminal crumble), double-touch 0,
+  no anomalies (no probe failed).
+- Cost: one more `mateGo` search per quake (30–340 ms uncontended), two or
+  three on a retry; the lab arms took roughly twice as long as v4j's.
