@@ -1037,9 +1037,23 @@ branch with the pre-undo fen and the abandoned tail, `seq` unique, the export
 round-trips through JSON, the store rotates); `ui-smoke.mjs` asserts the
 export on the live board and an undo through the real button path.
 
-**Not yet** (a future session, designer-deferred 2026-09-06 after two
-logs showed no gods misbehaviour and the offline loop answered the question
-in minutes): a full in-game replay scrubber (step every ply and branch on
-the real board), an offline replayer that feeds the recorded inputs back
-into the Director and diffs against the recorded traces, and
-`gods-metrics.mjs` reading browser logs directly.
+**Status (2026-09-06):** three logs in (s75 and s77 from Firefox/Windows,
+s79 from the phone — Android Firefox, a flipped + cropped stage), all clean
+on every structural check, no gods misbehaviour found; the one suspicion
+was the player's own move (see above). The replay log is DONE for this
+phase.
+
+**Next session — the in-game log/replay analyzer suite** (designer
+2026-09-06). The Node report is the reference rendering; the suite is that
+report on the phone, on the real board: a replay screen that loads a log
+(autosave ring, file picker, pasted JSON) and scrubs `states` — every ply's
+board with its own holes and crates, that ply's quake residue, the engine's
+eval, the gods line — steps into undo branches, opens a per-quake WHY panel
+(the ranked pools with the pick marked, the rejects by reason, the
+protected members and keys, the inputs, the gate verdict, timing), and
+probes any board on demand on the idle engine (the log's `variantIni`
+registers the deal variant). Its own module (`js/replay-ui.mjs`), a
+`replay` phase, old logs must load, every surface smoke-checked. The full
+brief is in `CLAUDE.md` § "NEXT SESSION". Still deferred after that: the
+offline replayer that feeds the recorded inputs back into the Director and
+diffs, and `gods-metrics.mjs` reading browser logs directly.

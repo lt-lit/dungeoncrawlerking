@@ -701,11 +701,50 @@ quiet ply +~150 B, a quake +2–5 KB (a 200-ply game runs ~350–450 KB).
 and the rejects grouped by reason, the protected members and keys, and
 each ply's classification. Gates: selftest 42/42 (every chosen terrain edit
 must be the pick of a recorded pool; the protected set must be listed),
-ui-smoke asserts pools on every due roll and inputs on every ply. NOT built (designer-deferred 2026-09-06, after
-the offline loop answered the question in minutes): a full in-game replay
-scrubber, an offline replayer that feeds the recorded inputs back into the
-Director and diffs, and `gods-metrics.mjs` reading browser logs (the lab's
-line shape and the export are still two shapes of one thing).
+ui-smoke asserts pools on every due roll and inputs on every ply. The
+third log (s77 The Smithy, 77 plies, 3 quakes, 3 undos — the first on the
+why-layer build) was clean on every check: 150 KB, every chosen edit the
+pick of its recorded pool, and one undo that abandoned a quake whose
+replayed ply drew a DIFFERENT quake (the dice do not rewind — both are in
+the log, the first in its branch), which is the branches doing their job.
+**Designer verdict 2026-09-06: three logs, no gods misbehaviour found; the
+replay log is DONE for this phase.**
+
+**NEXT SESSION — THE IN-GAME LOG/REPLAY ANALYZER SUITE (designer
+2026-09-06: "Next session we'll build the in-game log/replay analyzer
+suite").** Everything it needs already exists: the export object
+(`replaylog.mjs buildLog`, schema `dck-log/1`), the autosave ring
+(`LogStore`, the stage picker's Saved replay logs row), the in-game seed
+(the debug panel's `before` / `deep Δ`, `app.godsBefore`, `probeEval` with
+`go` + `clearHash`), `__DCK.log` / `__DCK.gods`, and the Node report tool
+(`phase0/harness/log-report.mjs`) as the REFERENCE RENDERING of every
+section — the suite is that report on the phone, on the real board. Scope
+to settle with the designer first, then build: (1) a REPLAY SCREEN — load a
+log from the autosave ring, a file picker (`<input type=file>` works on the
+phone) or pasted JSON; a scrubber over `states` (prev / next / jump to
+quake, flag, undo), painting each state's fen with ITS holes and god crates
+via `boardUI.setPosition` (bypass `paintBoard`'s residue diff, or rebuild
+the residue by walking states from 0), that ply's quake residue as marks
+(the same `quakeMarks` builder), the engine's eval line, the gods line;
+(2) BRANCHES as a fork you can step into (each branch's `tail.states`, with
+`from` as its last board); (3) a WHY PANEL per quake — the report's quake
+block (path, meters, the ranked pools with the pick marked, the rejects by
+reason, the protected members and keys, the inputs, the gate verdict,
+timing) as a collapsible list under the board; (4) PROBE ON DEMAND from the
+replay screen — the deep three-board probe on any quake and a plain eval on
+any state, on the shared engine while no duel is live (the log's
+`variantIni` registers the deal variant: `loadVariantsIni(app.catalog +
+variantIni)`, cumulative — rule 7); (5) OLD LOGS must load (fields missing
+before `replay-log.1`/`.2` — `mover`, `candidates`, `pieceList` — degrade,
+never throw). Constraints: `main.mjs` is ~2,500 lines — the suite goes in
+its own module (`play/js/replay-ui.mjs`) with `main.mjs` owning only the
+screen switch; the phase machine gains a `replay` phase (setup | preview |
+playing | ended | replay) and `btnBack` must return to setup from it; no
+engine work while a duel is live (the idle-probe rules stand); every new
+surface gets an ui-smoke check (`__DCK.replay.*`) and a screenshot. Still
+deferred after that: the offline replayer that feeds the recorded inputs
+back into the Director and diffs, and `gods-metrics.mjs` reading browser
+logs (the lab's line shape and the export are two shapes of one thing).
 
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
