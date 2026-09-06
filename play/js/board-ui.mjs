@@ -194,6 +194,143 @@ function svgEl(tag, attrs) {
   return el;
 }
 
+/**
+ * What every square IS, from the FEN and the Director's ledgers — the ONE
+ * terrain rule of the renderer (2026-09-07: lifted out of setPosition so the
+ * replay analyzer can rebuild a board's residue from a log without a DOM;
+ * setPosition paints exactly this). Returns Map(square → {
+ *   v            the FEN cell: a piece letter, '*', '^' or null
+ *   wallTile     '*' that is not a hole (standing stone)
+ *   hole         '*' the gods crumbled (the `holes` ledger)
+ *   furniture    '^'
+ *   cracked      '^' the gods weakened (the `godCrates` ledger ANDed with the FEN)
+ *   skin         the authored skin on an un-cracked '^', else null
+ *   door2        'l' / 'r' for the leaves of an authored double door, else null
+ *   weak         a weak spot: authored masonry, or a door in a north–south line
+ *   ruin         floor where a wall broke (the `rubble` residue)
+ *   doorway      floor where a door opened (the `opened` residue)
+ *   mask         the autotile case (wm-<mask>), −1 for plain floor
+ * }).
+ *
+ * STANDING = stone that is not a hole: a wall, a cracked wall, a door,
+ * authored masonry (a weak spot is still stone in the line) — the things
+ * that continue a wall line to the eye. SOLID (for the wall autotile) =
+ * standing, or the RESIDUE of it: a broken wall's ruin stub and an opened
+ * doorway keep the line running through the break (round 10). A RUIN's own
+ * stub case counts STANDING neighbours only (round 12: two broken squares
+ * side by side each drew a stub at the other — a clump of wall floating
+ * between two floor squares — and a stub grew against an open doorway's
+ * post): its stubs are the broken ends of walls that still stand, and
+ * residue has no end to show. A HOLE's autotile case joins only other holes
+ * (round 13): joined pits are one pit, and the ragged rim runs only where
+ * floor meets them. An opened DOORWAY's posts stand only beside STANDING
+ * walls (round 12): the cell wears the east/west standing mask.
+ */
+export function classifyTerrain(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}, files, ranks) {
+  const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
+  const grid = parseBoard(boardField); // [rankFromTop][file]
+  const name = (ff, rr) => String.fromCharCode(97 + ff) + rr;
+  const at = (ff, rr) => (ff < 0 || ff >= files || rr < 1 || rr > ranks ? undefined : grid[ranks - rr]?.[ff] ?? null);
+  const standing = (ff, rr) => {
+    const t = at(ff, rr);
+    if (t === undefined) return false;
+    if (t === FURNITURE) return godCrates.has(name(ff, rr)) || skins[name(ff, rr)] === 'door' || skins[name(ff, rr)] === 'masonry';
+    if (t === WALL) return !holes.has(name(ff, rr));
+    return false;
+  };
+  const isHole = (ff, rr) => at(ff, rr) === WALL && holes.has(name(ff, rr));
+  const solid = (ff, rr) => {
+    if (standing(ff, rr)) return true;
+    const t = at(ff, rr);
+    if (t === undefined || t === FURNITURE || t === WALL) return false;
+    return rubble.has(name(ff, rr)) || opened.has(name(ff, rr));
+  };
+  // DOUBLE DOORS (round 16): two door skins side by side in a rank are one
+  // two-wide door. Paired on the AUTHORED skin grid (round 17: "if one
+  // opens or is destroyed, the closed door next to it suddenly becomes a
+  // normal door"), so a leaf keeps its half after its partner is captured,
+  // burst or god-cracked — the half is painted only on a leaf that still
+  // stands.
+  const isDoor = (ff, rr) => skins[name(ff, rr)] === 'door';
+  const leftLeaf = new Set(), rightLeaf = new Set();
+  for (let rr = 1; rr <= ranks; rr++) {
+    for (let ff = 0; ff < files - 1; ff++) {
+      if (!isDoor(ff, rr) || !isDoor(ff + 1, rr)) continue;
+      leftLeaf.add(name(ff, rr));
+      rightLeaf.add(name(ff + 1, rr));
+      ff++; // the pair is spoken for
+    }
+  }
+  const out = new Map();
+  for (let rank = 1; rank <= ranks; rank++) {
+    for (let f = 0; f < files; f++) {
+      const sq = name(f, rank);
+      const v = grid[ranks - rank]?.[f] ?? null;
+      const isWall = v === WALL;
+      const furniture = v === FURNITURE;
+      const wallTile = isWall && !holes.has(sq);
+      const hole = isWall && holes.has(sq);
+      const cracked = furniture && godCrates.has(sq);
+      const skin = furniture && !cracked ? skins[sq] ?? null : null;
+      const door2 = skin === 'door' ? (leftLeaf.has(sq) ? 'l' : rightLeaf.has(sq) ? 'r' : null) : null;
+      // WEAK SPOTS wear the crack (2026-09-04): authored masonry anywhere,
+      // and a door in a north–south wall line (there is no edge-on door, so
+      // it reads as the weakened stone it stands in). Both paint the wall
+      // block with THE crack, exactly like a god-weakened wall — the same
+      // capturable '^'.
+      const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
+      const weak = skin === 'masonry' || (skin === 'door' && (N || S) && !(E || W));
+      const floor = !isWall && !furniture;
+      const ruin = floor && rubble.has(sq);
+      const doorway = floor && !ruin && opened.has(sq);
+      const mask = wallTile || cracked || weak
+        ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
+        : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
+        : doorway ? (standing(f + 1, rank) ? 2 : 0) | (standing(f - 1, rank) ? 8 : 0)
+        : hole ? (isHole(f, rank + 1) ? 1 : 0) | (isHole(f + 1, rank) ? 2 : 0) | (isHole(f, rank - 1) ? 4 : 0) | (isHole(f - 1, rank) ? 8 : 0)
+        : -1;
+      out.set(sq, { v, wallTile, hole, furniture, cracked, skin, door2, weak, ruin, doorway, mask });
+    }
+  }
+  return out;
+}
+
+/**
+ * The RESIDUE a board change leaves (main.mjs paintBoard's rule, on data):
+ * terrain that stood on `prev` and is gone on `next` leaves the theme's
+ * OPEN DOORWAY where a door in an east–west line was captured or burst,
+ * and the RUIN stub where a wall, a cracked wall, authored masonry or a
+ * weak-spot door broke (round 10: "cracked walls turning into open doors
+ * doesn't make any sense"); any other furniture (a crate, a barrel…) leaves
+ * nothing — it never continued a wall line. Terrain that is back (an undo)
+ * clears its residue. `prev` = { fen, holes, godCrates, opened, rubble },
+ * `next` = { fen, holes }; returns the next { opened, rubble } (new Sets).
+ */
+export function residueStep(prev, next, skins = {}, files, ranks) {
+  const opened = new Set(prev.opened ?? []);
+  const rubble = new Set(prev.rubble ?? []);
+  if (!prev.fen || !next.fen || prev.fen === next.fen) return { opened, rubble };
+  const was = classifyTerrain(prev.fen, { holes: prev.holes ?? EMPTY, godCrates: prev.godCrates ?? EMPTY, skins, opened, rubble }, files, ranks);
+  const nextGrid = parseBoard((next.fen.includes(' ') ? splitFen(next.fen).board : next.fen));
+  const nextHoles = next.holes ?? EMPTY;
+  const terrainNext = (sq) => {
+    const f = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq.slice(1), 10);
+    const t = nextGrid[ranks - rank]?.[f] ?? null;
+    return t === WALL || t === FURNITURE;
+  };
+  for (const [sq, k] of was) {
+    const stood = k.wallTile || k.furniture;
+    if (!stood) continue;
+    if (terrainNext(sq) || nextHoles.has(sq)) continue;
+    const wasDoor = k.skin === 'door';
+    if (wasDoor && !k.weak) opened.add(sq);
+    else if (wasDoor || k.wallTile || k.cracked || k.skin === 'masonry') rubble.add(sq);
+  }
+  for (const sq of [...opened, ...rubble]) if (terrainNext(sq)) { opened.delete(sq); rubble.delete(sq); }
+  return { opened, rubble };
+}
+
 export class BoardUI {
   constructor(container, { files, ranks, flipped = false, onSquareTap = null } = {}) {
     this.container = container;
@@ -382,112 +519,36 @@ export class BoardUI {
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
-    const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
-    const grid = parseBoard(boardField); // [rankFromTop][file]
-    // STANDING = stone that is not a hole: a wall, a cracked wall, a door,
-    // authored masonry (a weak spot is still stone in the line) — the
-    // things that continue a wall line to the eye. SOLID (for the wall
-    // autotile) = standing, or the RESIDUE of it: a broken wall's ruin stub
-    // and an opened doorway keep the line running through the break (round
-    // 10). A RUIN's own stub case counts STANDING neighbours only (round 12:
-    // two broken squares side by side each drew a stub at the other — a
-    // clump of wall floating between two floor squares — and a stub grew
-    // against an open doorway's post): its stubs are the broken ends of
-    // walls that still stand, and residue has no end to show.
-    const standing = (ff, rr) => {
-      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
-      const t = grid[this.ranks - rr]?.[ff] ?? null;
-      const name = String.fromCharCode(97 + ff) + rr;
-      if (t === FURNITURE) return godCrates.has(name) || skins[name] === 'door' || skins[name] === 'masonry';
-      if (t === WALL) return !holes.has(name);
-      return false;
-    };
-    // A HOLE's autotile case joins only other holes (round 13): joined pits
-    // are one pit, and the ragged rim runs only where floor meets them.
-    const isHole = (ff, rr) => {
-      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
-      return grid[this.ranks - rr]?.[ff] === WALL && holes.has(String.fromCharCode(97 + ff) + rr);
-    };
-    const solid = (ff, rr) => {
-      if (standing(ff, rr)) return true;
-      if (ff < 0 || ff >= this.files || rr < 1 || rr > this.ranks) return false;
-      const t = grid[this.ranks - rr]?.[ff] ?? null;
-      if (t === FURNITURE || t === WALL) return false;
-      const name = String.fromCharCode(97 + ff) + rr;
-      return rubble.has(name) || opened.has(name);
-    };
-    // DOUBLE DOORS (round 16): two door skins side by side in a rank are
-    // one two-wide door. Paired on the AUTHORED skin grid (round 17: "if
-    // one opens or is destroyed, the closed door next to it suddenly
-    // becomes a normal door"), so a leaf keeps its half after its partner
-    // is captured, burst or god-cracked — the half is painted only on a
-    // leaf that still stands (the toggle below).
-    const isDoor = (ff, rr) => skins[String.fromCharCode(97 + ff) + rr] === 'door';
-    const leftLeaf = new Set(), rightLeaf = new Set();
-    for (let rr = 1; rr <= this.ranks; rr++) {
-      for (let ff = 0; ff < this.files - 1; ff++) {
-        if (!isDoor(ff, rr) || !isDoor(ff + 1, rr)) continue;
-        leftLeaf.add(String.fromCharCode(97 + ff) + rr);
-        rightLeaf.add(String.fromCharCode(97 + ff + 1) + rr);
-        ff++; // the pair is spoken for
-      }
-    }
+    // What every square IS — the one terrain rule (classifyTerrain, pure,
+    // shared with the replay analyzer's residue walk); this method only
+    // paints it.
+    const kinds = classifyTerrain(fen, { holes, godCrates, skins, opened, rubble }, this.files, this.ranks);
     for (const [sq, cell] of this.cells) {
+      const k = kinds.get(sq);
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
-      const v = grid[this.ranks - rank]?.[f] ?? null;
-      const isWall = v === WALL;
-      const isFurniture = v === FURNITURE;
+      const v = k.v;
+      const isFurniture = k.furniture;
       cell.classList.remove(...FX_CLASSES);
       cell.style.removeProperty('--fx-ms');
-      const wallTile = isWall && !holes.has(sq);
-      const hole = isWall && holes.has(sq);
-      cell.classList.toggle('wall', wallTile);
-      cell.classList.toggle('hole', hole);
+      cell.classList.toggle('wall', k.wallTile);
+      cell.classList.toggle('hole', k.hole);
       cell.classList.toggle('furniture', isFurniture);
-      const cracked = isFurniture && godCrates.has(sq);
-      cell.classList.toggle('cracked', cracked);
-      const skin = isFurniture && !cracked ? skins[sq] ?? null : null;
+      cell.classList.toggle('cracked', k.cracked);
+      const skin = k.skin;
       for (const cls of [...cell.classList]) if (cls.startsWith('skin-') && cls !== `skin-${skin}`) cell.classList.remove(cls);
       if (skin) cell.classList.add(`skin-${skin}`);
-      cell.classList.toggle('door2-l', skin === 'door' && leftLeaf.has(sq));
-      cell.classList.toggle('door2-r', skin === 'door' && rightLeaf.has(sq));
-      // WEAK SPOTS wear the crack (2026-09-04): authored masonry anywhere,
-      // and a door in a north–south wall line (there is no edge-on door, so
-      // it reads as the weakened stone it stands in). Both paint the wall
-      // block with THE crack, exactly like a god-weakened wall — the same
-      // capturable '^'.
-      const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
-      const weak = skin === 'masonry' || (skin === 'door' && (N || S) && !(E || W));
-      cell.classList.toggle('weak', weak);
-      // A floor square where a wall broke keeps the broken stub.
-      const floor = !isWall && !isFurniture;
-      const ruin = floor && rubble.has(sq);
-      cell.classList.toggle('ruin', ruin);
-      // The autotile case of a wall, cracked wall or weak spot: which
-      // neighbours it joins (the 47-case blob); a ruin's is the plain
-      // 4-bit mask of its STANDING neighbours (the 16 stub cases — a
-      // neighbouring ruin or doorway is no wall end); a hole's is the plain
-      // 4-bit mask of its HOLE neighbours (a diagonal floor square touches a
-      // pit only at a corner point, so 16 cases cover it). One wm-<mask> class,
-      // replaced on every paint.
-      // An opened doorway's posts stand only beside STANDING walls too
-      // (round 12: "awkward looking vertical door frames between empty
-      // spaces" — a frame's post falls with the wall it framed): the cell
-      // wears the east/west standing mask, and tiles.css picks the frame,
-      // one post, or nothing.
-      const doorway = floor && !ruin && opened.has(sq);
-      const mask = wallTile || cracked || weak
-        ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
-        : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
-        : doorway ? (standing(f + 1, rank) ? 2 : 0) | (standing(f - 1, rank) ? 8 : 0)
-        : hole ? (isHole(f, rank + 1) ? 1 : 0) | (isHole(f + 1, rank) ? 2 : 0) | (isHole(f, rank - 1) ? 4 : 0) | (isHole(f - 1, rank) ? 8 : 0)
-        : -1;
+      cell.classList.toggle('door2-l', k.door2 === 'l');
+      cell.classList.toggle('door2-r', k.door2 === 'r');
+      cell.classList.toggle('weak', k.weak);
+      cell.classList.toggle('ruin', k.ruin);
+      // One wm-<mask> class, replaced on every paint.
+      const mask = k.mask;
       for (const cls of [...cell.classList]) if (cls.startsWith('wm-') && cls !== `wm-${mask}`) cell.classList.remove(cls);
       if (mask >= 0) cell.classList.add(`wm-${mask}`);
       // Cosmetic props (one span under the piece; removed when the square
       // changes kind — a breached wall drops its torch).
-      const decor = decorFor({ wallTile, cracked, mask, f, rank, earned: doorway ? 'doorway' : null });
+      const decor = decorFor({ wallTile: k.wallTile, cracked: k.cracked, mask, f, rank, earned: k.doorway ? 'doorway' : null });
       let span = cell.querySelector(':scope > .decor');
       if (decor) {
         if (!span) {

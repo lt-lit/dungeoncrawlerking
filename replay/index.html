@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dungeon Crawler King — Replay</title>
+<link rel="icon" href="data:,">
+<!-- coi-serviceworker MUST load first and sit NEXT TO this file (service
+     worker scope): the probe engine is the game's pthread build and needs
+     SharedArrayBuffer, so this page must be cross-origin isolated too.
+     Self-reloads once on first visit. -->
+<script src="coi-serviceworker.min.js"></script>
+<!-- The game's own stylesheets: the board, the tiles, the chrome. Relative
+     url()s inside them resolve against play/, so the tileset loads. -->
+<link rel="stylesheet" href="../play/style.css">
+<link rel="stylesheet" href="../play/tiles.css">
+<link rel="stylesheet" href="replay.css">
+</head>
+<body>
+<header id="topbar">
+  <a id="btnPlay" class="topbtn" href="../play/" aria-label="Back to the game" title="back to the game">&#8592;</a>
+  <h1 id="title">Replay</h1>
+  <button id="btnLoadToggle" aria-label="Load a log" title="load a log">&#8681;</button>
+  <button id="btnCopyReport" hidden aria-label="Copy the report as text" title="copy the whole post-mortem as text">&#9112;</button>
+  <button id="btnExport" hidden aria-label="Export the log" title="share / download this log (with any probes made here)">&#9873;</button>
+  <div id="status" aria-live="polite">loading&#8230;</div>
+</header>
+
+<main id="app">
+  <!-- Where a log comes from: the game's autosave ring (same origin, same
+       localStorage), a file, pasted JSON, the committed sample, or a drop. -->
+  <section id="load-panel">
+    <p class="muted">A replay log on the real board. Load one of the game's saved logs, a file it exported, or paste its JSON.</p>
+    <div id="saved-row" class="load-row" hidden>
+      <span class="load-title">Saved replay logs</span>
+      <button id="btnSavedOpen">Open</button>
+      <select id="savedLogSel" aria-label="saved replay logs"></select>
+    </div>
+    <p id="saved-none" class="muted" hidden>No saved logs on this device yet &#8212; the game keeps its last three duels here.</p>
+    <div class="load-row">
+      <span class="load-title">A log file</span>
+      <input type="file" id="fileInput" accept=".json,application/json">
+    </div>
+    <div class="load-row">
+      <span class="load-title">Pasted JSON</span>
+      <button id="btnPasteOpen">Open</button>
+      <textarea id="pasteBox" rows="3" placeholder='{"schema":"dck-log/1", …}'></textarea>
+    </div>
+    <div class="load-row">
+      <span class="load-title">The sample</span>
+      <button id="btnSampleOpen">s77 The Smithy &#8212; 77 plies, 3 quakes, 3 undos</button>
+    </div>
+  </section>
+
+  <section id="screen-replay" class="screen" hidden>
+    <div id="enemy-bar" class="side-bar"></div>
+    <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
+    <div id="board"></div>
+    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><span id="gods-line" aria-live="polite"></span></div>
+
+    <div id="scrub">
+      <div class="scrub-row">
+        <button id="btnFirst" title="the start">|&#9664;</button>
+        <button id="btnPrev" title="previous ply (&#8592;)">&#9664;</button>
+        <span id="ply-readout">p0 / 0</span>
+        <button id="btnNext" title="next ply (&#8594;)">&#9654;</button>
+        <button id="btnLast" title="the end">&#9654;|</button>
+      </div>
+      <input type="range" id="plySlider" min="0" max="0" value="0" aria-label="ply">
+      <div class="scrub-row jumps">
+        <button id="btnPrevQuake" title="previous quake (shift-q)">&#9889;&#9664;</button>
+        <button id="btnNextQuake" title="next quake (q)">&#9889;&#9654;</button>
+        <button id="btnNextFlag" title="next flag">&#9873;&#9654;</button>
+        <button id="btnNextUndo" title="next undo point">&#8630;&#9654;</button>
+        <button id="btnLineUp" hidden title="step out of this branch">&#8624; back to the line</button>
+      </div>
+    </div>
+    <pre id="ply-line" class="rep"></pre>
+
+    <div id="sections">
+      <details id="sec-quake" open>
+        <summary id="sec-quake-sum">the gods</summary>
+        <div id="sec-quake-body" class="sec-body"></div>
+      </details>
+      <details id="sec-probe">
+        <summary id="sec-probe-sum">probe on demand</summary>
+        <div class="sec-body">
+          <div class="tools">
+            <button id="btnProbe" title="search the shown board at the limits below (hash cleared, white POV)">eval this board</button>
+            <button id="btnDeep" title="search the three boards of this ply's quake: before the move, before the quake, after it">deep &#916; this quake</button>
+            <button id="btnProbePv" title="the probe's line as arrows">line as arrows</button>
+            <span id="probe-queue" class="muted"></span>
+          </div>
+          <label class="probe-go">limits <input type="text" id="probeGo" value="depth 22 movetime 10000" spellcheck="false"></label>
+          <div id="engine-status" class="muted">engine not started &#8212; it boots on the first probe</div>
+        </div>
+      </details>
+      <details id="sec-timeline">
+        <summary id="sec-timeline-sum">timeline</summary>
+        <div id="sec-timeline-body" class="sec-body tl"></div>
+      </details>
+      <details id="sec-undos">
+        <summary id="sec-undos-sum">undos</summary>
+        <div id="sec-undos-body" class="sec-body"></div>
+      </details>
+      <details id="sec-engine">
+        <summary id="sec-engine-sum">engine</summary>
+        <div id="sec-engine-body" class="sec-body"></div>
+      </details>
+      <details id="sec-anomalies">
+        <summary id="sec-anomalies-sum">anomalies</summary>
+        <div id="sec-anomalies-body" class="sec-body"></div>
+      </details>
+      <details id="sec-log">
+        <summary id="sec-log-sum">duel log</summary>
+        <div id="sec-log-body" class="sec-body"></div>
+      </details>
+      <details id="sec-header">
+        <summary id="sec-header-sum">header</summary>
+        <div id="sec-header-body" class="sec-body"></div>
+      </details>
+    </div>
+  </section>
+
+  <div id="replay-log" class="log"></div>
+</main>
+
+<!-- stockfish.js is MODULARIZE: exposes the global Stockfish() factory only.
+     It finds stockfish.wasm and stockfish.worker.js next to itself. -->
+<script src="../play/vendor/stockfish.js"></script>
+<script type="module" src="js/replay.mjs"></script>
+</body>
+</html>

@@ -1043,17 +1043,16 @@ on every structural check, no gods misbehaviour found; the one suspicion
 was the player's own move (see above). The replay log is DONE for this
 phase.
 
-**Next session — the in-game log/replay analyzer suite** (designer
-2026-09-06). The Node report is the reference rendering; the suite is that
-report on the phone, on the real board: a replay screen that loads a log
-(autosave ring, file picker, pasted JSON) and scrubs `states` — every ply's
-board with its own holes and crates, that ply's quake residue, the engine's
-eval, the gods line — steps into undo branches, opens a per-quake WHY panel
-(the ranked pools with the pick marked, the rejects by reason, the
-protected members and keys, the inputs, the gate verdict, timing), and
-probes any board on demand on the idle engine (the log's `variantIni`
-registers the deal variant). Its own module (`js/replay-ui.mjs`), a
-`replay` phase, old logs must load, every surface smoke-checked. The full
-brief is in `CLAUDE.md` § "NEXT SESSION". Still deferred after that: the
-offline replayer that feeds the recorded inputs back into the Director and
-diffs, and `gods-metrics.mjs` reading browser logs directly.
+**The replay analyzer (2026-09-07)** — the log on the real board, on the
+phone: `../replay/` (its own page next to this one; designer: "separate
+from the play mode"). See `replay/README.md`. From here: **▶ Review** on
+the end-of-game overlay opens the duel you just played there
+(`../replay/?latest=1`), and **Open** on the setup screen's saved-logs row
+opens a saved one (`?slot=N`); both just navigate — the analyzer reads
+this page's autosave ring (same origin). The report's rendering now lives
+in `js/logreport.mjs` and both the Node tool and the analyzer print it;
+`board-ui.mjs` exports `classifyTerrain` (the one terrain rule setPosition
+paints) and `residueStep` (paintBoard's doorway/rubble rule on data) for
+it; `buildLog` records `autoCrop`. Still deferred: the offline replayer
+that feeds the recorded inputs back into the Director and diffs, and
+`gods-metrics.mjs` reading browser logs directly.

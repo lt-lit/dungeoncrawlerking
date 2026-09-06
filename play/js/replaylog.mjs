@@ -56,6 +56,7 @@ export function buildLog({ duel, session = null, meta = {} }) {
     title: session?.title ?? null,
     flip: deal?.flip ?? false,
     crop: deal ? { top: deal.cropTop, bottom: deal.cropBottom } : null,
+    autoCrop: deal?.autoCrop ?? null, // the king-anchored auto-crop on top of `crop` (2026-09-07; older logs: the analyzer recovers it from startFen)
     turn: deal?.turn ?? 'w',
     setupSeed: deal?.seed ?? null,
     dealAttempt: deal?.attempt ?? null,

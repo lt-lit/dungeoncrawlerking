@@ -710,41 +710,81 @@ the log, the first in its branch), which is the branches doing their job.
 **Designer verdict 2026-09-06: three logs, no gods misbehaviour found; the
 replay log is DONE for this phase.**
 
-**NEXT SESSION — THE IN-GAME LOG/REPLAY ANALYZER SUITE (designer
-2026-09-06: "Next session we'll build the in-game log/replay analyzer
-suite").** Everything it needs already exists: the export object
-(`replaylog.mjs buildLog`, schema `dck-log/1`), the autosave ring
-(`LogStore`, the stage picker's Saved replay logs row), the in-game seed
-(the debug panel's `before` / `deep Δ`, `app.godsBefore`, `probeEval` with
-`go` + `clearHash`), `__DCK.log` / `__DCK.gods`, and the Node report tool
-(`phase0/harness/log-report.mjs`) as the REFERENCE RENDERING of every
-section — the suite is that report on the phone, on the real board. Scope
-to settle with the designer first, then build: (1) a REPLAY SCREEN — load a
-log from the autosave ring, a file picker (`<input type=file>` works on the
-phone) or pasted JSON; a scrubber over `states` (prev / next / jump to
-quake, flag, undo), painting each state's fen with ITS holes and god crates
-via `boardUI.setPosition` (bypass `paintBoard`'s residue diff, or rebuild
-the residue by walking states from 0), that ply's quake residue as marks
-(the same `quakeMarks` builder), the engine's eval line, the gods line;
-(2) BRANCHES as a fork you can step into (each branch's `tail.states`, with
-`from` as its last board); (3) a WHY PANEL per quake — the report's quake
-block (path, meters, the ranked pools with the pick marked, the rejects by
-reason, the protected members and keys, the inputs, the gate verdict,
-timing) as a collapsible list under the board; (4) PROBE ON DEMAND from the
-replay screen — the deep three-board probe on any quake and a plain eval on
-any state, on the shared engine while no duel is live (the log's
-`variantIni` registers the deal variant: `loadVariantsIni(app.catalog +
-variantIni)`, cumulative — rule 7); (5) OLD LOGS must load (fields missing
-before `replay-log.1`/`.2` — `mover`, `candidates`, `pieceList` — degrade,
-never throw). Constraints: `main.mjs` is ~2,500 lines — the suite goes in
-its own module (`play/js/replay-ui.mjs`) with `main.mjs` owning only the
-screen switch; the phase machine gains a `replay` phase (setup | preview |
-playing | ended | replay) and `btnBack` must return to setup from it; no
-engine work while a duel is live (the idle-probe rules stand); every new
-surface gets an ui-smoke check (`__DCK.replay.*`) and a screenshot. Still
-deferred after that: the offline replayer that feeds the recorded inputs
-back into the Director and diffs, and `gods-metrics.mjs` reading browser
-logs (the lab's line shape and the export are two shapes of one thing).
+**THE REPLAY ANALYZER ✅ built 2026-09-07 (designer 2026-09-06: "Next
+session we'll build the in-game log/replay analyzer suite"; 2026-09-07:
+"just do whatever you recommend. In my mind it's separate from the play
+mode on something like lt-lit.github.io/dungeoncrawlerking/replay/").** It
+is a SEPARATE PAGE — `replay/index.html` + `replay/js/replay.mjs` +
+`replay/replay.css`, a sibling of `play/` on Pages (its own copy of
+`coi-serviceworker.min.js` — rule 10, scope; `../play/vendor/stockfish.js`
+finds its wasm and worker next to itself; `../play/style.css` + `tiles.css`
+for the look) — so the game's phase machine and main.mjs are untouched
+beyond two entry buttons (`▶ Review` on the end overlay → `../replay/
+?latest=1`; `Open` on the setup screen's saved-logs row → `?slot=N`; both
+just navigate — same origin, same localStorage, so the analyzer reads the
+game's autosave ring directly). THE ONE RENDERING: the Node report's
+rendering moved into `play/js/logreport.mjs` (pure; every function takes
+the log explicitly; `renderReport` is the CLI's whole output, verified
+byte-identical on the s77 log across `all` / default / `--ply` / `--json`),
+and BOTH readers import it — `phase0/harness/log-report.mjs` is now the CLI
+(args, `--json`, `--probe`) and the page prints the same lines on the real
+board; main.mjs imports `deltaWords` from it too. `lineTree(L)` turns the
+undo history into a TREE from `seq` alone (a branch's parent is the
+EARLIEST later undo that rewound BELOW its fork ply, else the line of
+record; each line carries full per-ply arrays from ply 0, the parent's
+prefix + the tail). THE RENDERER'S ONE RULE: `board-ui.mjs classifyTerrain
+(fen, ledgers, files, ranks)` — what every square IS (wall / hole / cracked
+/ skin / weak spot / ruin / doorway / autotile mask) — was lifted out of
+`setPosition`, which now only paints it, and `residueStep(prev, next,
+skins)` is main.mjs paintBoard's doorway/rubble rule on DATA (the page
+rebuilds a line's residue with one forward walk over its states; the game
+still reads the last paint's classes — equivalent, adopt later if wanted).
+The page: load (ring / `<input type=file>` / pasted JSON / `?url=` / a drop
+/ `?sample=1` = the committed `replay/samples/dck-log_s77-the-smithy_
+s1818861954.json`, the designer's third log), scrub (first/prev/next/last,
+a slider, jump to quake / flag / undo, `←` `→` `q`), every state painted
+with ITS holes + god crates + the stage's skins (re-derived from the
+manifest by id + flip + crop + the king-anchored AUTO-CROP, which the log
+never recorded — `buildLog` now exports `autoCrop`, and older logs recover
+it by matching the stage's terrain against `startFen`; a stage missing from
+the manifest paints without skins and says so), the ply's move as an arrow
+(gold = the player, red = the enemy), the quake's marks, the eval bar (the
+enemy's last search, player POV, or the probe), the gods line, the report's
+timeline line + the meters as the ply line; sections under the board in the
+report's order (the gods = the quake block with the pick marked; probe;
+timeline with tap-to-jump and fork rows that step INTO a branch; undos;
+engine; anomalies; duel log; header). THE WHY PANEL ON THE BOARD: before/
+after, the protected set (pieces gold, squares blue), each rung's pool (the
+pick gold, the rest blue, rejects dim; displacement pools as arrows), each
+rejected draw's board (its residue via residueStep), each engine hint's PV
+and the probe's PV as numbered arrows. PROBE ON DEMAND: the page's OWN
+engine, booted on the first probe (no duel is ever live here), the log's
+`variantIni` appended to the catalog (rule 7, cumulative across logs),
+hash cleared; an eval of the shown board (`state.probe`) or the three-board
+deep Δ of a quake (`quake.deepDelta`, `replay: true`), one job at a time,
+visible failure + a fresh instance, three strikes and it stops (rule 12);
+limits default to the log's own `go` (`?go=` / the field). Results attach
+to the loaded log and export with it (`meta.analyzed`), plus "copy the
+report as text" (the whole post-mortem on the clipboard — paste it to me).
+Old logs load: every read is optional. Gates: `phase0/harness/test-
+logreport.mjs` (Node, 47 checks: the full report, the pick marked, the
+stacked phone layout, `lineTree` on the sample + a synthetic NESTED undo,
+an old-shape log and an empty log render, the residue walk finds f7's ruin
+at ply 32), `phase0/harness/replay-smoke.mjs` (Playwright, 48 checks on
+the sample: load, scrub, marks, ruin, overlays, branch in/out, eval + deep
+Δ on a shallow `--go`, PV arrows, report, annotated export, old-shape log
+via the object path, paste, the ring, `?latest=1`; `--shots` →
+`phase0/results/replay-smoke/`), and the existing gates re-run green on the
+renderer refactor (selftest 42/42 headless, ui-smoke 145 ok). Surface:
+`window.__DCK.replay` — `open / openUrl / openSlot / goto / next / prev /
+nextQuake / prevQuake / enterBranch / leaveBranch / show / probe / deep /
+export / report / waitIdle`, getters `view` (line, ply, fen, marks,
+godsLine, plyLine, evalText, stage, skins, theme, engine, `cell(sq)`),
+`log`, `tree`. Still deferred: the offline replayer that feeds the recorded
+inputs back into the Director and diffs, and `gods-metrics.mjs` reading
+browser logs (the lab's line shape and the export are two shapes of one
+thing); mid-duel review (the in-game `before` / `deep Δ` cover the last
+quake).
 
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
@@ -857,6 +897,9 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 
 ## Layout
 
+- `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
+  board, its own page next to `play/` (imports `../play/js/*`, its own
+  `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
 - `play/` — the Phase 1 game (vanilla-JS ES modules, GitHub Pages). Phase 0
   modules are ported verbatim into `play/js/`; `play/vendor/` carries its own
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
@@ -901,7 +944,9 @@ node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 node harness/godlab/gods-metrics.mjs results/godlab/godlab-wave6-*.jsonl  # the v4 scorecard: pacing, next-ply share, double-touch, un-mating, heat, floor
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
 node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots) + the replay log's export/undo branch
-node harness/log-report.mjs <dck-log_*.json> [quakes|branches|engine|all] [--ply N]  # a phone's exported replay log as a readable post-mortem (no engine needed)
+node harness/log-report.mjs <dck-log_*.json> [quakes|branches|engine|all] [--ply N]  # a phone's exported replay log as a readable post-mortem (no engine needed; the rendering is play/js/logreport.mjs, shared with replay/)
+node harness/test-logreport.mjs      # the shared report module's Node gate on the committed sample log (replay/samples/)
+node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
