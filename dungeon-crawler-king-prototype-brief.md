@@ -206,7 +206,9 @@ bed) before the fix — see `phase0/results/godlab/v4-findings.md`:
    24-game arm and vetoed 2 / 13 / 12 plies; the referee's own softening
    verdict fell from 3.8 / 3.0 / 4.3% of quakes to 1.0 / 2.7 / 1.9%, the
    residue being the probe's horizon (the referee sees a mate in 4 or a
-   five-pawn swing a fresh depth-12 probe does not).
+   five-pawn swing a fresh depth-12 probe does not). Phone verdict
+   2026-09-06: v4.1–v4.3 "seem to play fine" — the v4 set is the shipped
+   Director.
 6. **The ladder leans on the crack `[v4.1, same day]`.** Weaken is weighted
    well above breach and breach opens later — "weakening walls does a better
    job of opening up new lines, plus it's fun to smash thru walls": a crack

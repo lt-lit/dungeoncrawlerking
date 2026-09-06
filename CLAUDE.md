@@ -596,6 +596,11 @@ noise, in both directions; un-mated 0/10 · 2/13 · 4/24 (1/9 · 2/10 · 3/29);
 the gate costs one more `mateGo` search per quake (30–340 ms), two or three
 on a retry.** Corpus `*-v4k.jsonl`; the digest carries `gate`, the trail
 `vetoed`, and `gods-metrics.mjs` two new columns (`soften`, `retry`).
+**Phone verdict 2026-09-06 (designer): v4.1–v4.3 "seem to play fine" —
+the extra probes per quake and the silent veto both passed unnoticed; the
+v4 set (memory, heat, protection, the ladder, the engine's mate lines, the
+eval gate) is the SHIPPED Director. Presets were not retuned for v4.3 and
+need not be until the phone says so.**
 
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
@@ -674,10 +679,12 @@ rate 0.3%/quake — `results/godlab/tuned-ab-findings.md`, incl. the honest
 trades (calm's long tail stretched; wrathful runs hotter under the
 exposure guard via staleness feedback); (d) settle ramp numbers
 from rig + feel together — **phone verdict 2026-09-01: calm is "finally
-suitably chill"; its numbers are settled.** Restless is untested on the
-phone; wrathful reads as crazy, which is its brief — its extra heat under
-the exposure guard (26 q/100p) is the one number still on the table, and
-`rampPlies`/`stalenessGain` are the walk-back knobs for any preset. **Wrathful pass 2026-09-01: quakes can no longer
+suitably chill"; its numbers are settled.** Restless: v4 on the phone
+"feels okay, huge improvement" (2026-09-05) and v4.3 "seems to play fine"
+(2026-09-06); wrathful reads as crazy, which is its brief — its extra heat
+under the exposure guard (26 q/100p, 12.4 under v4.3) is the one number
+still on the table, and `rampPlies`/`stalenessGain` are the walk-back
+knobs for any preset. **Wrathful pass 2026-09-01: quakes can no longer
 swallow pieces at all** (designer-final, after a wrathful hole ate a
 knight at ply 13 — the tuned corpus measured wrathful at 1.96
 swallows/game, median ply 51, so the ply-13 knight was typical, not a

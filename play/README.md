@@ -813,6 +813,8 @@ engine line kept with the grid search off, and the eval gate's verdicts
 and rollback);
 `phase0/harness/godlab/gods-metrics.mjs` scores any corpus on the same
 axes; `ladder-smoke.mjs` reports double-touches and next-ply quakes.
+Phone verdicts: v4 on restless "feels okay, huge improvement" (2026-09-05);
+v4.1–v4.3 "seem to play fine" (2026-09-06) — the v4 set is what ships.
 
 ## The Gods debug overlay (Phase 1.2)
 

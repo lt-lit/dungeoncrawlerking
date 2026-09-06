@@ -290,3 +290,6 @@ wave6-wrathful-v4k  24     100%   183.5      12.4    2.81   19%    4        0%  
   no anomalies (no probe failed).
 - Cost: one more `mateGo` search per quake (30–340 ms uncontended), two or
   three on a retry; the lab arms took roughly twice as long as v4j's.
+- Phone verdict 2026-09-06 (designer): v4.1–v4.3 "seem to play fine" — the
+  probe cost and the silent veto both passed unnoticed on the device. v4k
+  is the shipped set.
