@@ -339,6 +339,7 @@ export class DuelController {
       holes: [...this.director.holes],
       godCrates: [...this.director.godCrates],
       meter: this.#meterReadout(),
+      ...(this.lastMove ?? {}), // the move that produced this state (+ predicted / followed / engineSaw, see #push)
       ...extra,
     });
   }
@@ -426,6 +427,26 @@ export class DuelController {
   async #push(uci, mover) {
     const san = this.board.sanMove(uci);
     const fenBefore = this.board.fen(); // the meter classifies the move against it
+    // The replay log: the move this ply's state will carry and, for the
+    // player, whether it was the reply the enemy's last search PREDICTED —
+    // pv[1] of a search whose pv[0] the enemy then played, with no quake in
+    // between (a quake makes the line stale). `engineSaw` is that search's
+    // score, enemy POV: a mate the engine saw against itself that the player
+    // then walked away from is the commonest "the gods delayed my mate"
+    // false alarm (s75, 2026-09-06 — a mate-in-10 thrown away one ply
+    // before a quake that was blamed for it).
+    let predicted = null;
+    let engineSaw = null;
+    if (mover === 'player' && this.lastSearch?.pv?.length >= 2) {
+      const last = this.lastSearch;
+      const enemyPlayedPv = this.record.moves.length > 0 && this.record.moves[this.record.moves.length - 1] === last.pv[0];
+      const quakeSince = this.record.quakes.length > 0 && this.record.quakes[this.record.quakes.length - 1].ply === this.ply;
+      if (enemyPlayedPv && !quakeSince) {
+        predicted = last.pv[1];
+        engineSaw = last.score;
+      }
+    }
+    this.lastMove = { move: uci, san, mover, predicted, followed: predicted ? uci === predicted : null, engineSaw };
     this.board.push(uci);
     this.movesSinceBase.push(uci);
     this.ply++;

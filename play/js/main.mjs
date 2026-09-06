@@ -48,7 +48,7 @@ import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylo
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
 // that alters what the log records or how the gods decide.
-const APP_BUILD = '2026-09-06 replay-log';
+const APP_BUILD = '2026-09-06 replay-log.1';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -97,6 +97,7 @@ const app = {
   godsHeat: null, // {square: tier} heat marks painted from the census
   godsHeatOn: false, // user wants heat; turns itself off when the board changes
   logSlot: null, // the replay log's autosave slot for the live duel (replaylog.mjs LogStore)
+  godsBefore: null, // {ply} while the board shows the last quake's PRE-quake position (debug panel "before")
 };
 const logStore = new LogStore();
 
@@ -697,13 +698,21 @@ function runIdleProbes() {
   return idleProbesFlight;
 }
 
-/** One WHITE-POV eval of a bare FEN (mover-POV score negated for black). */
-async function probeEval(engine, fen) {
+/** One WHITE-POV eval of a bare FEN (mover-POV score negated for black).
+ *  `go` defaults to the shallow delta readout; the deep probe passes the
+ *  enemy's own limits and CLEARS THE HASH first (a probe on the table the
+ *  reply search left behind misreads mates — the v4.2 lesson). */
+async function probeEval(engine, fen, go = EVAL_PROBE_GO, { clearHash = false } = {}) {
+  if (clearHash) engine.send('setoption name Clear Hash');
   engine.position({ fen });
-  const res = await engine.go(EVAL_PROBE_GO, { timeout: EVAL_PROBE_TIMEOUT });
+  const mt = go.match(/movetime (\d+)/);
+  const res = await engine.go(go, { timeout: mt ? parseInt(mt[1], 10) + 4000 : 60000 });
   const score = engine.lastScore(res);
   if (!score) throw new Error('eval probe returned no score');
-  return fen.split(' ')[1] === 'w' ? score : { type: score.type, value: -score.value };
+  const depth = (res.infoLines[res.infoLines.length - 1]?.match(/ depth (\d+)/) ?? [])[1];
+  const pov = fen.split(' ')[1] === 'w' ? score : { type: score.type, value: -score.value };
+  if (depth) pov.depth = parseInt(depth, 10);
+  return pov;
 }
 
 const scoreSign = (s) => (s.value > 0 ? 1 : s.value < 0 ? -1 : 0);
@@ -742,7 +751,22 @@ async function runEvalProbes() {
     }
     let before;
     let after;
+    const deep = {}; // the deep job's three verdicts, white POV
     const run = (async () => {
+      if (job.kind === 'deep') {
+        // The deep probe (2026-09-06): the board before the ply's move, the
+        // board the gods edited, the board they left — at the enemy's own
+        // limits, hash cleared — so a lost mate is pinned on the move or on
+        // the quake. Up to three long searches; the seq check between them
+        // lets the player's move cancel cleanly (the job stays queued).
+        for (const [k, fen] of Object.entries(job.fens)) {
+          if (!fen) continue;
+          if (mySeq !== evalProbe.seq) return;
+          syncDeepButton(`deep Δ ${Object.keys(deep).length + 1}/${Object.values(job.fens).filter(Boolean).length}…`);
+          deep[k] = await probeEval(engine, fen, job.go, { clearHash: true });
+        }
+        return;
+      }
       before = await probeEval(engine, job.preFen);
       if (mySeq !== evalProbe.seq) return;
       after = await probeEval(engine, job.postFen);
@@ -754,13 +778,27 @@ async function runEvalProbes() {
       if (mySeq === evalProbe.seq) {
         evalProbe.active = null;
         evalProbe.engine = null;
+        syncDeepButton();
         await evalProbeFailed(engine, e);
       }
       return;
     }
-    if (mySeq !== evalProbe.seq) return; // cancelled mid-probe; the job stays queued
+    if (mySeq !== evalProbe.seq) {
+      syncDeepButton();
+      return; // cancelled mid-probe; the job stays queued
+    }
     evalProbe.active = null;
     evalProbe.engine = null;
+    if (job.kind === 'deep') {
+      evalProbe.failures = 0;
+      evalProbe.queue.shift();
+      job.ev.deepDelta = { go: job.go, pov: 'white', ...deep };
+      appendGodsDeep(job.ev);
+      renderGodsSummary();
+      syncDeepButton();
+      autosaveLog();
+      continue;
+    }
     if (!after) return;
     evalProbe.failures = 0;
     evalProbe.queue.shift();
@@ -834,6 +872,7 @@ async function doUndo() {
   const duel = app.duel;
   if (duel.state === 'playing' && duel.turnColor() !== app.session.playerColor) return;
   app.busy = true;
+  godsBeforeOff({ repaint: false }); // the undo repaints the present itself
   await cancelIdleProbes();
   evalProbe.queue.length = 0; // queued jobs belong to the abandoned timeline
   const did = duel.undoToTurn(app.session.playerColor === 'white' ? 'w' : 'b');
@@ -880,7 +919,11 @@ function refreshGodsUI() {
   const inDuel = !!app.duel && (app.phase === 'playing' || app.phase === 'ended');
   const show = godsDebug() && inDuel;
   $('gods-debug').hidden = !show;
-  if (show) renderGodsSummary();
+  if (show) {
+    renderGodsSummary();
+    syncBeforeButton();
+    syncDeepButton();
+  }
 }
 
 function countFreeSquares(fen, files, ranks) {
@@ -1021,17 +1064,51 @@ function appendGodsDelta(ev) {
   );
 }
 
+/** What one step did to a white-POV score, in words: a mate lost, gained,
+ *  shortened, lengthened or flipped, else the swing in pawns. `actor` is
+ *  "the move" or "the quake". Shared with the report tool's wording. */
+function deltaWords(a, b, actor) {
+  if (!a || !b) return `${actor}: —`;
+  const mate = (s) => (s.type === 'mate' ? { side: s.value > 0 ? 'white' : 'black', n: Math.abs(s.value) } : null);
+  const ma = mate(a);
+  const mb = mate(b);
+  if (ma && !mb) return `${actor} LOST ${ma.side}'s mate-in-${ma.n}`;
+  if (!ma && mb) return `${actor} created a mate-in-${mb.n} for ${mb.side}`;
+  if (ma && mb) {
+    if (ma.side !== mb.side) return `${actor} FLIPPED the mate (${ma.side} M${ma.n} → ${mb.side} M${mb.n})`;
+    if (mb.n === ma.n) return `${actor} kept ${ma.side}'s mate-in-${ma.n}`;
+    return `${actor} ${mb.n > ma.n ? 'LENGTHENED' : 'shortened'} ${ma.side}'s mate (M${ma.n} → M${mb.n})`;
+  }
+  const swing = b.value - a.value;
+  if (Math.abs(swing) < 50) return `${actor} kept it (${swing >= 0 ? '+' : ''}${(swing / 100).toFixed(1)})`;
+  return `${actor} moved it ${swing >= 0 ? '+' : ''}${(swing / 100).toFixed(1)} for white`;
+}
+
+function appendGodsDeep(ev) {
+  if (!godsDebug() || !ev.deepDelta) return;
+  const d = ev.deepDelta;
+  const bad = /LOST|LENGTHENED|FLIPPED/.test(deltaWords(d.pre, d.post, 'q'));
+  log(
+    $('gods-trace'),
+    `p${ev.ply} DEEP Δ (${d.go}, white POV): before the move ${fmtScore(d.beforeMove)} → before the quake ${fmtScore(d.pre)} → after ${fmtScore(d.post)} — ${d.beforeMove ? deltaWords(d.beforeMove, d.pre, 'the move') + '; ' : ''}${deltaWords(d.pre, d.post, 'the quake')}`,
+    bad ? 'bad' : 'ok'
+  );
+}
+
 /** Rebuild the whole trace log from the record — undo truncates the ledger,
  *  so the DOM re-derives from it rather than trying to unpick lines. */
 function rerenderGodsTrace() {
   const el = $('gods-trace');
   el.textContent = '';
   if (!app.duel) return;
-  const deltaByPly = new Map();
-  for (const ev of app.duel.record.quakes) if (ev.evalDelta) deltaByPly.set(ev.ply, ev);
+  const byPly = new Map();
+  for (const ev of app.duel.record.quakes) if (ev.evalDelta || ev.deepDelta) byPly.set(ev.ply, ev);
   for (const t of app.duel.record.quakeTraces) {
     log(el, godsTraceLine(t), godsTraceCls(t));
-    if (deltaByPly.has(t.ply)) appendGodsDelta(deltaByPly.get(t.ply));
+    if (byPly.has(t.ply)) {
+      appendGodsDelta(byPly.get(t.ply));
+      appendGodsDeep(byPly.get(t.ply));
+    }
   }
 }
 
@@ -1089,6 +1166,103 @@ function godsHeatOff() {
   app.godsHeatOn = false;
   app.godsHeat = null;
   syncHeatButton();
+}
+
+// ---- the replay log's in-game half (2026-09-06): before/after + deep Δ ----
+// "Did the gods just wreck my position?" answered in the moment, from the
+// record: the last quake's pre-quake board painted on the real board, and
+// a probe of that quake's boards at the enemy's own depth. Both read the
+// record.quakes entry the duel already keeps; nothing is re-derived.
+
+function lastQuakeEv() {
+  const q = app.duel?.record.quakes;
+  return q && q.length ? q[q.length - 1] : null;
+}
+
+/** The ledgers as they stood before a quake: the state of the previous
+ *  ply (post-quake of ITS ply; a quake fires after its ply's move, so the
+ *  previous state is exactly the pre-quake ledgers). */
+function preQuakeLedgers(ev) {
+  const st = app.duel?.record.states.find((s) => s.ply === ev.ply - 1 && !s.ended) ?? null;
+  return { holes: new Set(st?.holes ?? []), godCrates: new Set(st?.godCrates ?? []) };
+}
+
+function canGodsBefore() {
+  const duel = app.duel;
+  return !!duel && duel.state === 'playing' && !app.busy && duel.turnColor() === app.session?.playerColor && !!lastQuakeEv();
+}
+
+/** Paint the board as it stood before the last quake. Player's turn only;
+ *  the board is non-interactive while it shows the past, and any move,
+ *  quake or undo paints the present again (godsBeforeOff). */
+function godsBeforeOn() {
+  if (!canGodsBefore()) return false;
+  const ev = lastQuakeEv();
+  app.godsBefore = { ply: ev.ply };
+  app.selectedSquare = null;
+  app.boardUI.setInteractive(false);
+  app.boardUI.setPosition(ev.preFen, { ...preQuakeLedgers(ev), skins: stageSkins(app.session?.deal?.stage), opened: app.residue.opened, rubble: app.residue.rubble });
+  app.boardUI.setMarks({});
+  setStatus(`the board before the gods' quake at ply ${ev.ply} — "after" returns to now`);
+  syncBeforeButton();
+  return true;
+}
+
+function godsBeforeOff({ repaint = true } = {}) {
+  if (!app.godsBefore) return;
+  app.godsBefore = null;
+  syncBeforeButton();
+  if (!repaint || !app.duel?.board) return;
+  paintBoard(app.duel.fen()); // residue: the live fen never changed under the past, so no diff
+  renderPlayMarks();
+  if (canGodsBefore()) {
+    app.boardUI.setInteractive(true);
+    setStatus('your move');
+  }
+}
+
+function syncBeforeButton() {
+  const b = $('btnGodsBefore');
+  if (!b) return;
+  b.textContent = app.godsBefore ? `after (p${app.godsBefore.ply})` : 'before';
+  b.classList.toggle('on', !!app.godsBefore);
+  b.disabled = !app.godsBefore && !canGodsBefore();
+}
+
+function syncDeepButton(label = null) {
+  const b = $('btnGodsDeep');
+  if (!b) return;
+  const ev = lastQuakeEv();
+  const queued = evalProbe.queue.some((j) => j.kind === 'deep');
+  b.textContent = label ?? (queued ? 'deep Δ queued' : 'deep Δ');
+  b.classList.toggle('on', !!label || queued);
+  b.disabled = !ev || !!ev.deepDelta || queued || !!label || app.duel?.state !== 'playing';
+}
+
+/** Queue the deep probe of the last quake: the board before the ply's
+ *  move, the board the gods edited, the board they left — at the enemy's
+ *  own limits (`duel.go`, up to 10 s each on the phone), in the player's
+ *  idle window, ahead of the shallow delta and the hint probe. The verdict
+ *  lands on the record.quakes entry (`deepDelta`) and the trace panel. */
+function godsDeepNow() {
+  const duel = app.duel;
+  const ev = lastQuakeEv();
+  if (!duel || !ev || duel.state !== 'playing' || ev.deepDelta) return false;
+  if (evalProbe.queue.some((j) => j.kind === 'deep' && j.ev === ev)) return false;
+  const st = duel.record.states.find((s) => s.ply === ev.ply - 1 && !s.ended) ?? null;
+  evalProbe.queue.unshift({ kind: 'deep', duel, ev, go: duel.go, fens: { beforeMove: st?.fen ?? null, pre: ev.preFen, post: ev.postFen } });
+  log($('gods-trace'), `deep Δ @p${ev.ply} queued — ${duel.go} × ${st ? 3 : 2}, runs while you think`, 'ok');
+  syncDeepButton();
+  // A flight already in the air (the hint probe, usually) returns itself
+  // from runIdleProbes and would never reach the new job this turn: kick
+  // again once it lands. ("Keep evaluating" holds the engine all turn — the
+  // job then runs on the next one.)
+  const kick = () => {
+    if (canGodsBefore()) void runIdleProbes();
+  };
+  if (idleProbesFlight) idleProbesFlight.then(kick, kick);
+  else kick();
+  return true;
 }
 
 let censusPending = false;
@@ -1656,6 +1830,7 @@ async function beginDuel() {
   $('godsIntensityVal').textContent = '1.0';
   if (app.duel) app.duel.destroy();
   app.logSlot = null; // a fresh duel claims its own autosave slot
+  app.godsBefore = null;
   app.duel = new DuelController({
     ffish: app.ffish,
     engine: app.engine,
@@ -1836,6 +2011,7 @@ let lastEngineInfo = null;
 
 async function onMove({ uci, san, mover, ply }) {
   const duel = app.duel;
+  godsBeforeOff({ repaint: false }); // the past leaves the board before the present moves on it
   clearHints(); // stale the moment the position changes
   // duel.#push mutates its own board but renders nothing, so the DOM still
   // holds the PRE-move position here — which is exactly what the FLIP clone
@@ -2215,6 +2391,11 @@ $('btnGodsHeat').addEventListener('click', () => {
 // clipboard channel (the console-paste workflow); every Export button walks
 // the delivery ladder — share a file on a phone, download on a desktop.
 $('btnGodsExport').addEventListener('click', () => void exportCurrentLog('clipboard'));
+$('btnGodsBefore').addEventListener('click', () => {
+  if (app.godsBefore) godsBeforeOff();
+  else godsBeforeOn();
+});
+$('btnGodsDeep').addEventListener('click', () => void godsDeepNow());
 $('btnOverlayExport').addEventListener('click', () => void exportCurrentLog());
 $('btnOptionsExport').addEventListener('click', () => void exportCurrentLog());
 $('btnOptionsCopy').addEventListener('click', () => void exportCurrentLog('clipboard'));
@@ -2299,6 +2480,13 @@ window.__DCK = {
     census: () => computeGodsCensus(),
     tune: (partial) => app.duel?.tuneDirector(partial) ?? null,
     export: () => godsExportData(),
+    // 2026-09-06: the replay log's in-game half — paint the last quake's
+    // pre-quake board (true/false), and queue the deep before/after probe.
+    before: (on = true) => (on ? godsBeforeOn() : (godsBeforeOff(), true)),
+    get showingBefore() {
+      return app.godsBefore;
+    },
+    deep: () => godsDeepNow(),
   },
   // UI test surface (2026-09-02 refresh). The renderer has no other
   // regression net: selftest.html never loads the game board.
@@ -2355,6 +2543,7 @@ window.__DCK = {
     return legal[Math.floor(Math.random() * legal.length)];
   },
   playerMove: async (uci) => {
+    godsBeforeOff(); // a driver can move while the past is painted; the tap path cannot
     await cancelIdleProbes();
     const r = await app.duel.playerMove(uci);
     if (!r.ended) await driveTurn();

@@ -110,6 +110,11 @@
       <div class="gods-actions">
         <button id="btnGodsCensus">census now</button>
         <button id="btnGodsHeat">heat: off</button>
+        <!-- The replay log's in-game half (2026-09-06): paint the board as it
+             stood before the last quake, and probe that quake's boards at
+             the enemy's own depth (slow; runs while you think). -->
+        <button id="btnGodsBefore" title="paint the board as it was before the last quake (your turn only)">before</button>
+        <button id="btnGodsDeep" title="probe the last quake before/after at the enemy's own depth — slow, runs while you think">deep &#916;</button>
         <button id="btnGodsExport" title="the full replay log as JSON text on the clipboard">copy log</button>
       </div>
       <div id="gods-census" class="gods-row"></div>

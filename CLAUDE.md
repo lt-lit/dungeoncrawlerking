@@ -649,11 +649,39 @@ Gates: selftest 42/42 (a live 5x6 duel: states, engine record, inputs on
 every due roll, one undo → one branch with the pre-undo fen and the
 abandoned tail, seq unique, export round-trips, the store rotates), ui-smoke
 asserts the export on the live board and an undo through the real button
-path, and a Node smoke on s59 with three nested undos. NOT in this pass (a
-future session, designer-deferred): the in-game replay analyzer/viewer, an
-offline replayer that feeds the recorded inputs back into the Director and
-diffs, and `gods-metrics.mjs` reading browser logs (the lab's line shape and
-the export are still two shapes of one thing).
+path, and a Node smoke on s59 with three nested undos. **The first two logs
+(s75 from Firefox/Windows, s79 from the phone — Android Firefox, flipped +
+cropped stage, two undos, a mid-duel preset change on the tunes ledger) were
+clean, and the first "gods delayed my mate" suspicion was a FALSE ALARM the
+log itself settled**: a mate-in-10 the enemy's own search had conceded was
+thrown away by the player's Qxe6 one ply before a quake (a depth-22 probe
+of the recorded boards: M10 before the move, no mate after it, M12 after
+the quake) — designer: "my human brain naturally has a hard time spotting a
+M11, we can expect players to throw those away all the time". So (same
+day): every ply's state carries `move` / `san` / `mover` and, for the
+player, `predicted` (the enemy's predicted reply — pv[1] of a search whose
+pv[0] it then played, no quake between), `followed` and `engineSaw` (that
+search's score, enemy POV); `log-report.mjs` marks `⚠ left the engine's
+mate-in-N line` on the timeline, counts them in the header, and `--probe
+[go]` re-searches each quake's three boards (before the ply's move, before
+the quake, after it) with the real engine (default `depth 22 movetime
+20000`, hash cleared) and says in words what the move and what the quake
+did (`deltaWords`: LOST / created / shortened / LENGTHENED / FLIPPED a
+mate, else the swing); and the debug panel has the IN-GAME HALF — `before`
+paints the last quake's `preFen` with the previous ply's ledgers on the
+real board (player's turn only, non-interactive, any move/quake/undo
+restores the present; `app.godsBefore`, `__DCK.gods.before()`) and `deep Δ`
+queues a probe of that quake's three boards at the enemy's own `duel.go`
+(hash cleared, ahead of the shallow delta and the hint probe in the idle
+window, a flight already in the air is re-kicked when it lands; the verdict
+lands on `record.quakes[].deepDelta` + the trace panel + the export;
+`__DCK.gods.deep()`). Gates: selftest 42/42 (the replay-log check now
+asserts the state annotations), ui-smoke exercises before/after and a deep
+Δ through the real buttons. NOT built (designer-deferred 2026-09-06, after
+the offline loop answered the question in minutes): a full in-game replay
+scrubber, an offline replayer that feeds the recorded inputs back into the
+Director and diffs, and `gods-metrics.mjs` reading browser logs (the lab's
+line shape and the export are still two shapes of one thing).
 
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated

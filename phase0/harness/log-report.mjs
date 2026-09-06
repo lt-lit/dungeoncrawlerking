@@ -20,15 +20,30 @@
 //     all        everything
 //   --ply N      restrict quakes/attempts/traces to one ply (adds the ply's
 //                full roll trace as JSON)
+//   --probe [go] re-search each quake's three boards (before the ply's move,
+//                before the quake, after it) with the real engine at `go`
+//                (default "depth 22 movetime 20000") and say what the move
+//                and what the quake did to the position — needs the
+//                vendored pair overlaid into node_modules (engine/README.md)
 //   --json a.b   print one field of the log as JSON and exit
 import fs from 'fs';
 import { parseBoard } from '../../play/js/fen.mjs';
 
 const argv = process.argv.slice(2);
 const SECTION_NAMES = new Set(['header', 'timeline', 'quakes', 'branches', 'flags', 'anomalies', 'engine', 'log', 'all']);
-const file = argv.find((a) => !a.startsWith('--') && !SECTION_NAMES.has(a) && argv[argv.indexOf(a) - 1] !== '--ply' && argv[argv.indexOf(a) - 1] !== '--json');
+// --probe [go]: re-search every quake's three boards (before the ply's move,
+// before the quake, after it) with the REAL engine at the given limits
+// (default: the enemy's own depth cap, 20 s) — the s75 lesson: a mate the
+// depth-12 probe cannot see is settled only by a search at the enemy's
+// depth, and the log carries the exact boards. Needs the vendored pair
+// overlaid into node_modules (engine/README.md); slow by design.
+const GO_RE = /^(depth|movetime|nodes)\b/;
+const probeIdx = argv.indexOf('--probe');
+const PROBE = probeIdx >= 0 ? (argv[probeIdx + 1] && GO_RE.test(argv[probeIdx + 1]) ? argv[probeIdx + 1] : 'depth 22 movetime 20000') : null;
+const consumed = (i) => i > 0 && (['--ply', '--json'].includes(argv[i - 1]) || (argv[i - 1] === '--probe' && GO_RE.test(argv[i])));
+const file = argv.find((a, i) => !a.startsWith('--') && !SECTION_NAMES.has(a) && !consumed(i));
 if (!file) {
-  console.error('usage: node harness/log-report.mjs <log.json> [header|timeline|quakes|branches|flags|anomalies|engine|log|all] [--ply N] [--json path]');
+  console.error('usage: node harness/log-report.mjs <log.json> [header|timeline|quakes|branches|flags|anomalies|engine|log|all] [--ply N] [--probe [go]] [--json path]');
   process.exit(2);
 }
 const opt = (name) => {
@@ -127,6 +142,10 @@ if (wanted.has('header')) {
   if (L.tunes?.length) say(`tunes ${L.tunes.map((t) => `@p${t.ply} ${t.undo ? `UNDO(from ${t.fromPly})` : Object.entries(t).filter(([k]) => !['ply', 'seq', 'at'].includes(k)).map(([k, v]) => `${k}=${v}`).join(' ')}`).join(' · ')}`);
   say(`RESULT ${L.result ?? '(unfinished)'}  ${L.termination ?? ''}  winner ${L.winner ?? '—'}${L.error ? `  ERROR ${L.error}` : ''}`);
   say(`plies ${L.plies}  quakes ${L.quakes?.length ?? 0}  rejected draws ${L.attempts?.length ?? 0}  undos ${L.branches?.length ?? 0}  flags ${L.flags?.length ?? 0}  anomalies ${L.anomalies?.length ?? 0}  events ${L.seq}`);
+  // A mate the enemy's own search saw against itself, and the player then
+  // walked away from: the commonest "the gods delayed my mate" false alarm.
+  const leftMate = (L.states ?? []).filter((s) => s.mover === 'player' && s.followed === false && s.engineSaw?.type === 'mate' && s.engineSaw.value < 0);
+  if (leftMate.length) say(`the player left the engine's mate line ${leftMate.length}× (ply ${leftMate.map((s) => s.ply).join(', ')}) — ⚠ marks on the timeline; a quake right after is not what lost it`);
   say(`device ${L.meta?.ua ?? '?'}`);
   say(`url ${L.meta?.url ?? '?'}${L.meta?.query ?? ''}`);
 }
@@ -142,7 +161,7 @@ const resumedAt = new Map();
 (L.branches ?? []).forEach((b, i) => resumedAt.set(b.toPly, [...(resumedAt.get(b.toPly) ?? []), i + 1]));
 const vetoedPlies = new Set((L.quakeTraces ?? []).filter((t) => t.outcome === 'vetoed').map((t) => t.ply));
 
-function timelineLines(moves, sans, { engine = engineByPly, quakes = quakeByPly, traces = traceByPly, flags = flagsByPly, startPly = 0 } = {}) {
+function timelineLines(moves, sans, { engine = engineByPly, quakes = quakeByPly, traces = traceByPly, flags = flagsByPly, states = L.states ?? [], startPly = 0 } = {}) {
   const lines = [];
   for (let i = 0; i < moves.length; i++) {
     const ply = startPly + i + 1;
@@ -151,8 +170,11 @@ function timelineLines(moves, sans, { engine = engineByPly, quakes = quakeByPly,
     const e = engine.get(ply);
     const q = quakes.get(ply);
     const t = traces.get(ply);
+    const st = states.find((s) => s.ply === ply && !s.ended) ?? states.find((s) => s.ply === ply) ?? null;
     let line = `p${String(ply).padStart(3)}  ${String(n).padStart(3)}${white ? '. ' : '… '}${(sans?.[i] ?? moves[i]).padEnd(8)}`;
     line += e ? ` e:d${e.depth ?? '?'} ${fmtScore(e.score).padStart(6)} ${String(e.ms ?? '?').padStart(5)}ms${e.recovered ? ' RECOVERED' : ''}` : ' '.repeat(23);
+    // The player walked away from a mate the enemy's own search had conceded.
+    if (st?.mover === 'player' && st.followed === false && st.engineSaw?.type === 'mate' && st.engineSaw.value < 0) line += `  ⚠ left the engine's mate-in-${-st.engineSaw.value} line (it expected ${st.predicted})`;
     if (t && t.outcome !== 'quiet' && t.outcome !== 'vetoed') line += `  ⚡ ${q ? quakeSummary(q) : t.outcome}${t.evalGate?.attempt ? ` [draw ${t.evalGate.attempt + 1}]` : ''}`;
     else if (t?.outcome === 'vetoed') line += `  ⚡ VETOED (every draw softened)`;
     else if (t?.vetoed) line += `  ⚡ ${t.vetoed} (duel-layer veto)`;
@@ -203,13 +225,79 @@ function traceDetail(t, indent = '  ') {
   return s;
 }
 
-function quakeBlock(q, t, { states = L.states, attempts = L.attempts ?? [] } = {}) {
+/** What one step did to a white-POV score, in words (main.mjs deltaWords,
+ *  same wording): a mate lost, gained, shortened, lengthened or flipped,
+ *  else the swing in pawns. `actor` is "the move" or "the quake". */
+function deltaWords(a, b, actor) {
+  if (!a || !b) return `${actor}: —`;
+  const mate = (s) => (s.type === 'mate' ? { side: s.value > 0 ? 'white' : 'black', n: Math.abs(s.value) } : null);
+  const ma = mate(a);
+  const mb = mate(b);
+  if (ma && !mb) return `${actor} LOST ${ma.side}'s mate-in-${ma.n}`;
+  if (!ma && mb) return `${actor} created a mate-in-${mb.n} for ${mb.side}`;
+  if (ma && mb) {
+    if (ma.side !== mb.side) return `${actor} FLIPPED the mate (${ma.side} M${ma.n} → ${mb.side} M${mb.n})`;
+    if (mb.n === ma.n) return `${actor} kept ${ma.side}'s mate-in-${ma.n}`;
+    return `${actor} ${mb.n > ma.n ? 'LENGTHENED' : 'shortened'} ${ma.side}'s mate (M${ma.n} → M${mb.n})`;
+  }
+  const swing = b.value - a.value;
+  if (Math.abs(swing) < 50) return `${actor} kept it (${swing >= 0 ? '+' : ''}${(swing / 100).toFixed(1)})`;
+  return `${actor} moved it ${swing >= 0 ? '+' : ''}${(swing / 100).toFixed(1)} for white`;
+}
+const threeWay = (d, label) => `  ${label}: before the move ${fmtScore(d.beforeMove)}${d.beforeMove?.depth ? ` (d${d.beforeMove.depth})` : ''} → before the quake ${fmtScore(d.pre)}${d.pre?.depth ? ` (d${d.pre.depth})` : ''} → after ${fmtScore(d.post)}${d.post?.depth ? ` (d${d.post.depth})` : ''} — ${d.beforeMove ? deltaWords(d.beforeMove, d.pre, 'the move') + '; ' : ''}${deltaWords(d.pre, d.post, 'the quake')}`;
+
+/** --probe: the three boards of each quake, searched now. Engine chatter is
+ *  muted while it runs (the wasm module prints straight to console.log). */
+async function probeQuakes(quakes) {
+  const results = new Map();
+  if (!quakes.length) return results;
+  const { loadEngine } = await import('../lib/load.mjs');
+  const { makeCatalogIni } = await import('../../play/js/variant.mjs');
+  const origLog = console.log;
+  console.log = (...a) => {
+    if (!/^(info |bestmove|id |option |uciok|readyok|Fairy-Stockfish)/.test(String(a[0] ?? ''))) origLog(...a);
+  };
+  try {
+    const engine = await loadEngine();
+    await engine.uci();
+    engine.setoption('Use NNUE', 'false'); // rule 1
+    engine.setoption('Threads', '1');
+    await engine.loadVariantsIni(makeCatalogIni() + (L.variantIni ? '\n' + L.variantIni : ''));
+    engine.setoption('UCI_Variant', L.variant);
+    await engine.isready();
+    const mt = PROBE.match(/movetime (\d+)/);
+    const timeout = (mt ? parseInt(mt[1], 10) : 60000) + 8000;
+    const one = async (fen) => {
+      if (!fen) return null;
+      engine.send('setoption name Clear Hash'); // the v4.2 lesson: never probe on a stale table
+      engine.position({ fen });
+      const t0 = Date.now();
+      const res = await engine.go(PROBE, { timeout });
+      const s = engine.lastScore(res);
+      if (!s) return null;
+      const depth = parseInt((res.infoLines[res.infoLines.length - 1]?.match(/ depth (\d+)/) ?? [])[1] ?? '0', 10);
+      const pov = fen.split(' ')[1] === 'w' ? s : { type: s.type, value: -s.value };
+      return { ...pov, depth, ms: Date.now() - t0 };
+    };
+    for (const q of quakes) {
+      process.stderr.write(`probing ply ${q.ply} (${PROBE})…\n`);
+      results.set(q.ply, { beforeMove: await one(stateAt(q.ply - 1)?.fen ?? null), pre: await one(q.preFen), post: await one(q.postFen) });
+    }
+  } finally {
+    console.log = origLog;
+  }
+  return results;
+}
+
+function quakeBlock(q, t, { states = L.states, attempts = L.attempts ?? [], probe = null } = {}) {
   const s = [];
   s.push(`⚡ ply ${q.ply}  ${quakeSummary(q)}  (seq ${q.seq}, ${when(q.at)})`);
   const pre = boardRows(q.preFen, ledgersAt(q.ply - 1, states));
   const post = boardRows(q.postFen, ledgersAt(q.ply, states));
   for (const r of sideBySide(pre, post)) s.push('  ' + r);
   if (q.evalDelta) s.push(`  eval delta (white POV): ${fmtScore(q.evalDelta.before)} → ${fmtScore(q.evalDelta.after)}${q.evalDelta.flipped ? '  FLIPPED' : ''}`);
+  if (q.deepDelta) s.push(threeWay(q.deepDelta, `deep Δ in game (${q.deepDelta.go}, white POV)`));
+  if (probe) s.push(threeWay(probe, `probe now (${PROBE}, white POV)`));
   if (t) s.push(...traceDetail(t));
   for (const a of attempts.filter((a) => a.ply === q.ply)) {
     s.push(`  ✗ rejected draw #${a.attempt}${a.fallback ? ` (${a.fallback})` : ''}: ${a.verdict}  ${fmtScore(a.before)} → ${fmtScore(a.after)}  would have: ${quakeSummary(a)}`);
@@ -220,10 +308,11 @@ function quakeBlock(q, t, { states = L.states, attempts = L.attempts ?? [] } = {
 }
 
 if (wanted.has('quakes')) {
-  rule(`QUAKES (${L.quakes?.length ?? 0} landed, ${vetoedPlies.size} vetoed plies, ${L.attempts?.length ?? 0} rejected draws)`);
+  rule(`QUAKES (${L.quakes?.length ?? 0} landed, ${vetoedPlies.size} vetoed plies, ${L.attempts?.length ?? 0} rejected draws)${PROBE ? ` — probed now at "${PROBE}"` : ''}`);
   const quakes = (L.quakes ?? []).filter((q) => onlyPly === null || q.ply === onlyPly);
+  const probes = PROBE ? await probeQuakes(quakes) : new Map();
   for (const q of quakes) {
-    for (const l of quakeBlock(q, traceByPly.get(q.ply))) say(l);
+    for (const l of quakeBlock(q, traceByPly.get(q.ply), { probe: probes.get(q.ply) ?? null })) say(l);
     say('');
   }
   for (const ply of [...vetoedPlies].filter((p) => onlyPly === null || p === onlyPly)) {
@@ -265,7 +354,7 @@ if (wanted.has('branches')) {
       const ts = new Map((tail.quakeTraces ?? []).map((t) => [t.ply, t]));
       const fl = new Map();
       for (const x of tail.flags ?? []) fl.set(x.ply, [...(fl.get(x.ply) ?? []), x]);
-      for (const l of timelineLines(tail.moves, tail.sans, { engine: eng, quakes: qs, traces: ts, flags: fl, startPly: b.toPly })) say('  ', l);
+      for (const l of timelineLines(tail.moves, tail.sans, { engine: eng, quakes: qs, traces: ts, flags: fl, states: tail.states ?? [], startPly: b.toPly })) say('  ', l);
       // The tail's states carry the ledgers for its own quake boards.
       const tailStates = [...(L.states ?? []).filter((s) => s.ply <= b.toPly), ...(tail.states ?? [])];
       for (const q of tail.quakes ?? []) {
@@ -312,3 +401,4 @@ if (wanted.has('log')) {
 }
 
 console.log(out.join('\n'));
+if (PROBE) process.exit(0); // the engine's worker keeps the loop alive otherwise

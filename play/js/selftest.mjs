@@ -1091,6 +1091,14 @@ async function main() {
       };
       await play(6);
       if (duel.ply < 2) throw new Error(`fixture ended after ${duel.ply} plies — cannot exercise undo`);
+      // Every ply's state carries the move that produced it; the player's
+      // states carry the enemy's predicted reply and whether it was followed
+      // (null when no fresh line existed — a quake in between, or ply 1).
+      const plyStates = r.states.filter((s) => s.ply > 0);
+      if (!plyStates.every((s) => s.move === r.moves[s.ply - 1] && s.san === r.sans[s.ply - 1] && (s.mover === 'player' || s.mover === 'engine'))) throw new Error('every ply state must carry its move, san and mover');
+      if (!plyStates.filter((s) => s.mover === 'player').every((s) => 'predicted' in s && 'followed' in s && 'engineSaw' in s)) throw new Error("player states must carry predicted / followed / engineSaw");
+      if (plyStates.some((s) => s.predicted && typeof s.followed !== 'boolean')) throw new Error('a predicted reply must come with a followed verdict');
+      const predictedN = plyStates.filter((s) => s.predicted).length;
       const plyBefore = duel.ply;
       const fenBefore = duel.fen();
       const stateBefore = duel.state;
@@ -1138,7 +1146,7 @@ async function main() {
       const s1 = store.claim('b');
       store.save(s1, data, { id: 'b' });
       if (s0 === s1 || store.claim('c') !== s0 || store.claim('b') !== s1 || store.index().length !== 2 || store.load(s1)?.schema !== 'dck-log/1') throw new Error('store slots must rotate and a game must keep its own slot');
-      return `${duel.ply} plies live + ${b.tail.moves.length} abandoned; ${r.engine.length} searches, ${due.length} due rolls with inputs, ${r.quakes.length} quakes, ${r.attempts.length} rejected draws; export ${(JSON.stringify(data).length / 1024).toFixed(0)} KB round-trips`;
+      return `${duel.ply} plies live + ${b.tail.moves.length} abandoned; ${r.engine.length} searches, ${predictedN} predicted replies on the states, ${due.length} due rolls with inputs, ${r.quakes.length} quakes, ${r.attempts.length} rejected draws; export ${(JSON.stringify(data).length / 1024).toFixed(0)} KB round-trips`;
     } finally {
       duel.destroy();
       engine.setoption('MultiPV', '1');

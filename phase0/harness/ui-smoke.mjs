@@ -564,6 +564,54 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(und.saved?.branches === und.n && und.saved?.plies === und.ply, `autosave rewritten after the undo (${und.saved?.plies} plies, ${und.saved?.branches} branches)`);
   await page.evaluate(() => { window.__DCK.options.undo = false; window.__DCK.applyOptions(); });
 }
+// --- The replay log's in-game half (2026-09-06): the debug panel's
+// "before" paints the last quake's pre-quake board and "after" restores the
+// live one; "deep Δ" probes that quake's three boards at the enemy's own
+// limits (the smoke's are fast) and lands the verdict on the record.
+{
+  await page.evaluate(() => { window.__DCK.options.godsDebug = true; window.__DCK.applyOptions(); });
+  await page.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state === 'playing', null, { timeout: 60000 });
+  const ba = await page.evaluate(() => {
+    const d = window.__DCK.app.duel;
+    const q = d.record.quakes[d.record.quakes.length - 1];
+    const live = d.fen();
+    const cells = () => Object.fromEntries([...document.querySelectorAll('#board .cell[data-square]')].map((c) => [c.dataset.square, `${[...c.classList].filter((k) => !k.startsWith('f') || k.length > 2).sort().join(' ')}|${c.querySelector('.piece')?.dataset.piece ?? ''}`]));
+    const before = cells();
+    const btn = document.getElementById('btnGodsBefore');
+    const wasDisabled = btn.disabled;
+    btn.click();
+    const showing = window.__DCK.gods.showingBefore?.ply ?? null;
+    const during = cells();
+    const label = btn.textContent;
+    btn.click();
+    const after = cells();
+    return {
+      hasQuake: !!q,
+      quakePly: q?.ply ?? null,
+      wasDisabled,
+      showing,
+      label,
+      differ: Object.keys(before).filter((k) => before[k] !== during[k]).length,
+      restored: Object.keys(before).every((k) => before[k] === after[k]),
+      off: window.__DCK.gods.showingBefore,
+      liveFen: d.fen() === live,
+      preFen: q?.preFen,
+    };
+  });
+  expect(ba.hasQuake && !ba.wasDisabled && ba.showing === ba.quakePly && ba.label.startsWith('after') && ba.off === null && ba.restored && ba.liveFen, `before/after: painted the pre-quake board of ply ${ba.showing} (${ba.differ} cells differ) and restored the live board`);
+  const deep = await page.evaluate(async () => {
+    const d = window.__DCK.app.duel;
+    const q = d.record.quakes[d.record.quakes.length - 1];
+    const queued = window.__DCK.gods.deep();
+    const t0 = Date.now();
+    while (!q.deepDelta && Date.now() - t0 < 60000) await new Promise((r) => setTimeout(r, 100));
+    const btn = document.getElementById('btnGodsDeep');
+    return { queued, dd: q.deepDelta ?? null, line: [...document.querySelectorAll('#gods-trace div')].some((x) => x.textContent.includes('DEEP Δ')), btnDisabled: btn.disabled, exported: window.__DCK.log.build().quakes.find((x) => x.ply === q.ply)?.deepDelta ?? null };
+  });
+  const s = (x) => (x ? `${x.type === 'mate' ? 'M' : ''}${x.value}` : '—');
+  expect(deep.queued && deep.dd?.pre && deep.dd?.post && deep.dd.go && deep.line && deep.btnDisabled && deep.exported, `deep Δ landed on the last quake (${deep.dd?.go}: ${s(deep.dd?.beforeMove)} → ${s(deep.dd?.pre)} → ${s(deep.dd?.post)}), the panel says so, the export carries it`);
+  await page.evaluate(() => { window.__DCK.options.godsDebug = false; window.__DCK.applyOptions(); });
+}
 await browser.close();
 server.close();
 

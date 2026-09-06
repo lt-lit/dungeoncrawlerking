@@ -899,6 +899,20 @@ What the panel shows:
   recorded on `record.tunes` with their ply, so an exported trace explains
   itself. Without the overlay they keep their shipped meaning (next duel).
   Config changes never touch the RNG stream, debt, or favor.
+- **before / after** (2026-09-06, the replay log's in-game half) — paints
+  the board as it stood BEFORE the last quake (the record's `preFen` with
+  the previous ply's ledgers), non-interactive while it shows the past;
+  `after` returns to now, as does any move, quake or undo. Player's turn only.
+- **deep Δ** — probes the last quake's three boards (before the ply's
+  move, before the quake, after it) at the ENEMY'S OWN limits (`duel.go`,
+  up to 10 s each on the phone), hash cleared, in the idle window ahead of
+  the shallow delta and the hint probe; the verdict lands on the
+  `record.quakes` entry (`deepDelta`) and the trace panel in words — "the
+  move LOST white's mate-in-10; the quake kept it" — the s75 lesson (a
+  mate the depth-12 probe cannot see is settled only at the enemy's depth,
+  and it was the player's move that lost it). One per quake, on demand;
+  "Keep evaluating" holds the engine all turn, so the job then runs on the
+  next one.
 - **Export** (`copy log`, was `copy trace`) — the full REPLAY LOG as JSON
   to the clipboard: the deal provenance (stage id, flip, crop, army specs,
   master setup seed — everything a replay re-deals from), the Director
@@ -978,11 +992,27 @@ end-of-game overlay; Options → Replay log → **Export this duel's log** /
 
 **Reading one:** `cd phase0 && node harness/log-report.mjs <dck-log_*.json>
 [header|timeline|quakes|branches|flags|anomalies|engine|log|all] [--ply N]
-[--json path]` — a timeline with engine evals and quake summaries, every
-quake's board before/after (`#` wall, `O` hole, `x` god-cracked wall, `^`
-crate) with its ladder path, protected census, inputs, gate verdict, rejected
-draws and timing, every undo with the pre-undo board and the abandoned line,
-flags, anomalies. No engine, no ffish.
+[--probe [go]] [--json path]` — a timeline with engine evals and quake
+summaries, every quake's board before/after (`#` wall, `O` hole, `x`
+god-cracked wall, `^` crate) with its ladder path, protected census, inputs,
+gate verdict, rejected draws and timing, every undo with the pre-undo board
+and the abandoned line, flags, anomalies. No engine, no ffish — except
+`--probe`, which re-searches each quake's three boards (before the ply's
+move, before the quake, after it) with the real engine (default `depth 22
+movetime 20000`, hash cleared, the vendored pair overlaid into node_modules)
+and says what the move and what the quake did: "the move LOST white's
+mate-in-10; the quake kept it".
+
+**The first false alarm, and the marks that catch it (s75, 2026-09-06):** a
+mate-in-10 the enemy's own search had conceded was thrown away by the
+player's next move, one ply before a quake that then got the blame — human
+players cannot see a mate-in-11 and will throw them away all the time. So
+every ply's state now carries `move` / `san` / `mover` and, for the player,
+`predicted` (the enemy's predicted reply, pv[1] of a search whose pv[0] it
+then played, no quake in between), `followed`, and `engineSaw` (that search's
+score, enemy POV); the report marks `⚠ left the engine's mate-in-N line` on
+the timeline and counts them in the header. The in-game half is the debug
+panel's **before / after** and **deep Δ** (see the overlay section above).
 
 **Gates:** `selftest.html` "replay log" (a live 5x6 duel against the real
 engine: states, the engine record, inputs on every due roll, one undo → one
@@ -990,7 +1020,9 @@ branch with the pre-undo fen and the abandoned tail, `seq` unique, the export
 round-trips through JSON, the store rotates); `ui-smoke.mjs` asserts the
 export on the live board and an undo through the real button path.
 
-**Not yet** (a future session): the in-game replay analyzer/viewer, an
-offline replayer that feeds the recorded inputs back into the Director and
-diffs against the recorded traces, and `gods-metrics.mjs` reading browser
-logs directly.
+**Not yet** (a future session, designer-deferred 2026-09-06 after two
+logs showed no gods misbehaviour and the offline loop answered the question
+in minutes): a full in-game replay scrubber (step every ply and branch on
+the real board), an offline replayer that feeds the recorded inputs back
+into the Director and diffs against the recorded traces, and
+`gods-metrics.mjs` reading browser logs directly.
