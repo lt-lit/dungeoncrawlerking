@@ -582,8 +582,13 @@ no blink beyond the arrows' repaints. **The designer's verdict (2026-09-07,
 Zenfone 10 + Firefox/Windows): "works fine on both desktop and mobile",
 k 3 on the desktop and k 6 on the phone, and the fill scaling "doesn't
 look bad either"; one "big white rectangle flash", suspected of the SVG
-arrow overlay — hence the pixel arrows above. Whether the DOM board goes
-is the next verdict** (CLAUDE.md § Phase 2).
+arrow overlay — hence the pixel arrows above.** **The second verdict
+(2026-09-07, the next session): "looks fine with canvas rendering on both
+desktop and mobile, including integer scaling" — THE DOM BOARD GOES.**
+The retirement is the next build and the camera the PR after it; what
+dies, what stays and the camera's shape are in CLAUDE.md § Phase 2's
+handoff. Until that PR lands, this section and "Art themes" describe
+both boards.
 
 ## Art themes (2026-09-03)
 

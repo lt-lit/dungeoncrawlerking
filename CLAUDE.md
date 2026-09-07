@@ -347,8 +347,10 @@ painters, judged for flicker on the designer's Firefox/Windows and
 Android Firefox BEFORE anything is built on it — the "NO CANVAS on the
 board" rule (the debris layer's flicker rounds) was written against
 PER-CELL canvases mixed into DOM compositing, and one board-sized surface
-is a different animal, but the phone decides. CARRIES OVER: `piecetiers`,
-the debris ledger + painter, `classifyTerrain`, the autotile masks, the
+is a different animal, but the phone decides. CARRIES OVER (NOT
+`piecetiers` — listed here at first and struck in the second session's
+handoff below: the canvas board paints a sprite whole and never cuts
+one, so the tiers retire with the DOM board): the debris ledger + painter, `classifyTerrain`, the autotile masks, the
 atlas + repack tool (one atlas PNG in place of 160 KB of data URIs), the
 rules, the Director, the replay log. REWRITTEN: board-ui's DOM painting,
 style.css's tile rules, the arrow/mark overlays, the FLIP slides and quake
@@ -440,8 +442,10 @@ scaling "doesn't look bad either"; one "big white rectangle flash",
 suspected of the arrow overlay ("the arrows should probably be in the
 same rendering system, reworked to fit the 16x16 tile art") — done, the
 pixel arrows above; the replay log of that session (s60, 62 plies, 7
-quakes, 2 undos) had no anomalies.** Whether the DOM board goes is the
-next verdict.
+quakes, 2 undos) had no anomalies.** **THE SECOND VERDICT (2026-09-07,
+the next session): "the current build looks fine with canvas rendering
+on both desktop and mobile, including integer scaling" — THE DOM BOARD
+GOES (the handoff below).**
 DECIDED the same session (brief §5.1, §10, §11): the DUEL IS A CAMERA
 VIEW OF THE SAME WORLD, zoomed (the largest integer step that fits the
 arena, the dungeon outside dimmed — small fights zoom in, no letterbox,
@@ -459,17 +463,105 @@ likely 2.625): a 10-file arena at k 6 = 96 device px = 5.7 mm per tile
 (the DOM board draws ~100); exploration at k 4 = 17 × 34 tiles at 3.8 mm;
 across current phones a 10-file arena lands between 5.0 and 7.1 mm per
 tile, within a step of today; a 1080p desktop is height-bound at k 5–6
-with 35 tiles of dungeon beside the arena. **HANDOFF (end of 2026-09-07;
-the designer's screenshot verdict on the dials + hint list: "looks
-good"): NEXT is the phone verdict on the pixel arrows, the dials and the
-hint list (and whether the white flash is gone with the overlay); then
-RETIRE THE DOM BOARD — board-ui's DOM painting, style.css's tile rules,
-the FLIP slides, the arrow SVG, the per-cell debris `<img>` and the
-piece tiers' CSS go, the replay analyzer mounts the canvas board, ui-smoke
-loses its DOM branches, `canvas-parity.mjs` and `piece-grid.mjs` retire
-with the board they gate (the canvas board keeps `canvas-grid.mjs`);
-then the camera + rotation + edge-on doors, then the world + the army
-rule on one hand-built map, then enemies + LOS + the trigger pipeline.**
+with 35 tiles of dungeon beside the arena. The first handoff (end of the
+milestone-1 session: the screenshot verdict on the dials + hint list was
+"looks good") asked for the phone verdict on the pixel arrows, the dials
+and the hint list, then the retirement, then the camera — that verdict
+is in (above), and the handoff of record is the one that follows.
+**HANDOFF (2026-09-07, the next session — a discussion, nothing built;
+the designer took all five decisions, "sounds fine by me"): (1) RETIRE
+THE DOM BOARD — the NEXT BUILD, one PR of deletion plus ONE move, never
+mixed with the camera. GOES: board-ui's `BoardUI` class and
+`renderArrows` (its PURE half STAYS — `classifyTerrain`, `residueStep`,
+`decorFor`, the variant hashes, the masks, `PIECE_SETS` / `DOOR_SETS`,
+`DEFAULT_PIECE_FIT`, `pickPromotion`; seven files import them, the canvas
+board and the repack tool included), style.css's ~65 cell/board rules,
+the FLIP slides, the arrow SVG, the per-cell debris `<img>`, the piece
+tiers' CSS + `piecetiers.mjs` + `gen-piece-halves.mjs` + `gen-sprites.mjs`,
+and tiles.css ALL THE WAY (decision 3) — its three surviving readers move
+to the atlas: the atlas warms the crack SVGs and the classic tiles off
+computed style (the repack tool puts them in the PNG), the debris SAMPLER
+decodes sprites off the board's computed style (main.mjs ~2160; it reads
+the atlas), the options legend paints from the tile variables (it reads
+the atlas) — `test-debris.mjs`'s determinism check is the guard that the
+sampled pixels did not change, the PR's one real risk. The replay page
+mounts `BoardUI` DIRECTLY (replay.mjs:247): it mounts the canvas board
+and paints DEBRIS for the first time (the painter is pure — a deferred
+item). OPTIONS THAT DIE: Renderer, Piece pixels (display / free), the
+three % piece dials, and the CLASSIC GLYPH PIECE SET (decision 2: text,
+not pixel art — it dies; the classic FLOOR theme stays, the canvas has
+its colours); Scaling integer / fill stays. The residue ledger (opened /
+rubble, diffed from the previous paint's cell classes) switches to
+`residueStep` on data, the replay page's rule — residue must be
+persistent world state beside holes and debris anyway. GATES:
+`piece-grid.mjs` and `canvas-parity.mjs` retire, ui-smoke loses its DOM
+branches, selftest its DOM dial checks; `canvas-grid.mjs` and
+`flicker-scan.mjs` stay. PRUNE THE DOCS IN THE SAME PR: rule 18 and the
+DOM flicker rules become history, and the art-theme saga above is mostly
+DOM detail — cut this file to what survives, park the history in the
+README. (2) THE CAMERA — the SECOND PR. The buffer becomes the VIEWPORT
+(the screen's device size ÷ k in tiles, plus a one-tile margin for
+partial tiles and one headroom row), painted from a WORLD grid through a
+camera {origin, facing, k}; canvas-board's `#origin(sq)` is the ONE
+function to redirect (every painter takes an origin; hit-testing is its
+inverse); full repaint of the viewport per change (about 600 cells at
+phone k 4 — six arenas' worth of today's per-change paint; no dirty
+rectangles until something needs them; a 100×100 painted whole would be
+1600² and pointless). THE CAMERA OWNS THE SCREEN (decision 4): k on BOTH
+axes, and the duel zoom is the largest integer k that fits the arena on
+both axes INCLUDING the headroom row (else the top rank's heads clip at
+the barrier), the world outside dimmed — today k is the container's
+WIDTH alone and the board box is capped at 560 CSS px, which is why the
+desktop got k 3 (560 ÷ 160 floors to 3); a 1080p desktop is height-bound
+at k 5–6, so the panels (the player's bar, the hint list; the desktop
+sits the board beside them at 45%) move to give the camera the screen —
+the desktop look is the designer's to judge on the first build. FILL
+becomes DUEL-ONLY (exploration has no arena to fit; it is always
+integer). FACING goes into the camera model NOW, the turn BUTTONS wait
+for the army (a full turn is unobservable until an army turns):
+`flipped` already IS the 180° turn — coordinate mirroring in `gridPos`,
+`#squareAt` and `#arenaToBuf` — so quarter turns generalise it to a
+facing with the buffer's width and height swapping; `classifyTerrain`
+needs NO rewrite — a wall mask is eight neighbour bits, so a quarter turn
+is a BIT PERMUTATION applied before the tile lookup, the same for the
+four-bit ruin / pit-rim / doorway-post masks; debris buffers rotate by
+index permutation; the gate is a debug ROTATE button walked over the
+36-arena bed. Variant hashes move to WORLD coordinates (today the
+arena's file + rank) so a crop or a turn never reshuffles the floor. The
+EDGE-ON DOOR is a GENERATED PLACEHOLDER (decision 5: the wall's top band
+with a slab and a post above and below, brief §11) until per-theme art
+exists. A zoom step is a CUT like a turn — which makes the brief's
+snap-zoom for the tap-a-piece move free (phone k 4 tiles are under 4 mm,
+below a thumb: the d-pad carries the army, the individual move needs the
+zoom). (3) THE WORLD + THE ARMY RULE — most plumbing exists: stage
+schema 2 IS a world file (a hand-built 100×100 map is the same file,
+bigger); the debris ledger keys on the environment's uncropped grid
+through `envTransform`, so the WORLD IS THAT ENVIRONMENT and a duel IS A
+CROP. THE SAVE IS THE WORLD: holes (the Director's, written back after a
+duel), residue, debris, army positions, facing and enemy states in ONE
+serializable object per floor, keyed the way the debris ledger is today
+— decide it at the milestone's start so the replay log can grow an
+exploration section without a second format. NEW: a pure MOVE GENERATOR
+on the world grid for the army rule's "its own chess move" (sliders
+blocked by walls and pieces, knight hops, pawns forward along facing, no
+check — ffish caps at 12×10 and rule 7's catalog is per dimension; the
+exploration layer lives outside FSF by design, brief §2 item 1, and this
+generator is NEVER duel legality); a STAMPING path that puts the CARRIED
+formation, facing as it stands, into the barrier's crop (`dealMatchup`
+keeps dealing random armies for the setup screen and the labs; the
+molding invariants — royal rearmost, pawns in front per file — are the
+shape of the pattern the player carries); the TRIGGER check as one pure
+module read by the linter, the live check and the threat display; the
+ENGINE BOOTS AT PAGE LOAD once a world exists (the barrier drop must not
+wait on the WASM; the catalog + incremental per-deal variants already
+cover any crop). The Phase 1 page survives as "a world the size of the
+arena where the duel triggers at once", which keeps the god lab, the
+smokes and the analyzer alive without a port. (4) THE TRIGGER RULE IS
+STALE AGAINST THE BED: brief §5.3 caps kings at 7 apart (gap 4) and §4.4
+has the band under re-investigation, but the wave-6 arenas stand the
+kings 9 apart (gap 8) and those were "the fun" — marked under review in
+the brief; settle the band before (5) enemies + LOS + the trigger
+pipeline, and never build the trigger to the old numbers.**
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
