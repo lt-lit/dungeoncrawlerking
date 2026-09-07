@@ -615,7 +615,15 @@ capture's spray flies while the engine thinks (never awaited — the event is
 which touches nothing else on the cell); a shattering crate holds until
 the piece arrives instead of dissolving, a captured piece still dissolves
 under the blow; the gods' rungs fly inside their beats. Reduced motion,
-`?fx=0` or the Particles toggle: the debris simply appears.
+`?fx=0` or the Particles toggle: the debris simply appears. One frame loop
+serves every flight in the air: a flight is flying, then LANDED (its chunks
+held on the canvas, its `landed` promise resolved so the game can paint the
+cells under them), then released once those cells wear the debris — two
+loops clearing one canvas had made overlapping flights flicker. And a cell
+only ever switches to a debris image the browser has already decoded
+(`debrisReady`: new data URLs are decoded through an Image first, waiting
+cells take them when they land), because swapping a background to an
+undecoded URL paints one frame without it.
 
 **Persistence rides the environment**, never the duel: main.mjs keeps one
 ledger per stage in localStorage (`dck.debris.v1:<stage id>`), opened when

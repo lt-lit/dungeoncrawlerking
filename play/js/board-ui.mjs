@@ -361,6 +361,7 @@ export class BoardUI {
     }
     container.textContent = '';
     this.cells = new Map();
+    this.debrisUrls = new Map(); // square → the debris url(...) the cell wears (never re-set when unchanged)
 
     const rankOrder = [];
     for (let r = ranks; r >= 1; r--) rankOrder.push(r);
@@ -436,9 +437,20 @@ export class BoardUI {
   setDebris(sq, url) {
     const cell = this.cells.get(sq);
     if (!cell) return;
+    const had = this.debrisUrls.get(sq) ?? null;
+    if ((url ?? null) === had) return; // the style is only ever touched on a real change
     if (url) {
-      if (cell.style.getPropertyValue('--debris') !== url) cell.style.setProperty('--debris', url);
-    } else if (cell.style.getPropertyValue('--debris')) cell.style.removeProperty('--debris');
+      cell.style.setProperty('--debris', url);
+      this.debrisUrls.set(sq, url);
+    } else {
+      cell.style.removeProperty('--debris');
+      this.debrisUrls.delete(sq);
+    }
+  }
+
+  /** The debris url(...) a square currently wears, or null. */
+  debrisUrl(sq) {
+    return this.debrisUrls.get(sq) ?? null;
   }
 
   /** Hide a square's sprite while the flight shatters it (setPosition's next
@@ -581,10 +593,7 @@ export class BoardUI {
       // floor — and the cell's background stack paints it under the terrain
       // (style.css --debris). Touched only when it changes: the URL is
       // ~1.4 KB and a paint visits every cell.
-      const dz = debris ? debris(sq, k) : null;
-      if (dz) {
-        if (cell.style.getPropertyValue('--debris') !== dz) cell.style.setProperty('--debris', dz);
-      } else if (cell.style.getPropertyValue('--debris')) cell.style.removeProperty('--debris');
+      this.setDebris(sq, debris ? debris(sq, k) : null);
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
       const v = k.v;
@@ -891,6 +900,7 @@ export class BoardUI {
     this.container.textContent = '';
     this.container.classList.remove('board', 'inactive');
     this.cells.clear();
+    this.debrisUrls.clear();
   }
 }
 

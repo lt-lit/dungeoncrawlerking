@@ -10,37 +10,45 @@
 // so the flight is a tween from the broken thing to a known target, with a
 // hop for the arc and a bounce for stone.
 //
-// Two kinds of chunk fly: the PERSISTENT ones the painter will paint (they
-// land and hold until the caller commits the cells — commit first, then
-// clear the canvas, so the eye never sees a gap) and the EPHEMERAL shatter
-// (debris.mjs shatterOf: the broken sprite cut into 2×2 blocks, most of
-// which fade in the air). A skid is drawn PROGRESSIVELY under the sliding
-// piece (streak): the motion draws the mark.
+// Two kinds of chunk fly: the PERSISTENT ones the painter will paint and the
+// EPHEMERAL shatter (debris.mjs shatterOf: the broken sprite cut into 2×2
+// blocks, most of which fade in the air). A skid is drawn PROGRESSIVELY
+// under the sliding piece (streak): the motion draws the mark.
+//
+// ONE FRAME LOOP for every flight in the air (the first cut gave each flight
+// its own loop, and two flights — a capture's spray still airborne when a
+// quake's beats began, two skids drawn side by side — cleared each other's
+// chunks at fifteen hertz: the designer's "flickering for a split second").
+// A flight goes flying → LANDED (its chunks HELD at their final pixels, its
+// `landed` promise resolved, so the caller can paint the cells under them)
+// → RELEASED (the caller has painted; the chunks leave the canvas). The
+// canvas clears only when no flight remains.
 //
 // Cost: a hundred chunks a frame on a 160×160 canvas — well under a
-// millisecond on a phone. Reduced motion / ?fx=0 give ms = 0 and every call
-// resolves at once (the debris then simply appears, the painter's path).
+// millisecond on a phone. Reduced motion / ?fx=0 give ms = 0 and a flight
+// lands at once (the debris then simply appears, the painter's path).
 import { toArenaPx, MATERIALS } from './debris.mjs';
 
 const TICK = 66; // ms between frames — the pixel-art step
 
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const easeOut = (p) => 1 - (1 - p) * (1 - p);
+const NONE = { id: 0, landed: Promise.resolve() };
 
 export class Particles {
   constructor(boardUI) {
     this.ui = boardUI;
-    this.live = 0; // flights in the air (a paint commits under them; the canvas clears when the last lands)
+    this.flights = []; // in the air or held — see the header
     this.frames = 0; // drawn frames (a test surface)
-  }
-
-  #ctx() {
-    const c = this.ui.fxCanvas;
-    return c.getContext('2d');
+    this.nextId = 1;
+    this.timer = null;
   }
 
   get busy() {
-    return this.live > 0;
+    return this.flights.length > 0;
+  }
+
+  #ctx() {
+    return this.ui.fxCanvas.getContext('2d');
   }
 
   /** Draw one chunk at an env-pixel position (top-left), alpha 0…1. */
@@ -56,72 +64,95 @@ export class Particles {
     }
   }
 
+  #drawFlight(ctx, f, u) {
+    const { tx, origin, hop } = f;
+    if (f.kind === 'streak') {
+      for (const c of f.chunks) if (c.t <= u) this.#draw(ctx, tx, c, c.x, c.y);
+      return;
+    }
+    for (const c of f.chunks) {
+      const p = Math.min(1, u / c.t);
+      const e = easeOut(p);
+      const x = origin.x - c.w / 2 + (c.x - (origin.x - c.w / 2)) * e;
+      let y = origin.y - c.h / 2 + (c.y - (origin.y - c.h / 2)) * e;
+      if (p < 1) y -= hop * Math.sin(Math.PI * p) * (0.6 + 0.4 * c.t);
+      else if (f.bounce && c.sz >= 2 && u < c.t + 0.18) y -= Math.round(2 * Math.sin((Math.PI * (u - c.t)) / 0.18));
+      this.#draw(ctx, tx, c, x, y);
+    }
+    for (const c of f.eph) {
+      if (u > c.fade + 0.3) continue;
+      const p = Math.min(1, u / c.t);
+      const e = easeOut(p);
+      const x = c.x + (c.tx - c.x) * e;
+      const y = c.y + (c.ty - c.y) * e - hop * 1.4 * Math.sin(Math.PI * p);
+      const alpha = u < c.fade ? 1 : Math.max(0, 1 - (u - c.fade) / 0.3);
+      this.#draw(ctx, tx, c, x, y, alpha);
+    }
+  }
+
+  /** The one loop: clear once, draw every flight at its own time, land the
+   *  ones that are done, drop the released, stop when none remain. */
+  #frame() {
+    this.timer = null;
+    const ctx = this.#ctx();
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const now = performance.now();
+    this.flights = this.flights.filter((f) => !f.released);
+    for (const f of this.flights) {
+      const u = Math.min(1, (now - f.t0) / f.ms);
+      this.#drawFlight(ctx, f, u);
+      if (u >= 1 && !f.landedAt) {
+        f.landedAt = now;
+        f.resolve();
+      }
+    }
+    this.frames++;
+    if (!this.flights.length) {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      return;
+    }
+    this.timer = setTimeout(() => this.#frame(), TICK);
+  }
+
+  #launch(f) {
+    if (!f.ms || (!f.chunks.length && !(f.eph ?? []).length)) return NONE;
+    f.id = this.nextId++;
+    f.t0 = performance.now();
+    f.landedAt = 0;
+    f.released = false;
+    f.landed = new Promise((r) => { f.resolve = r; });
+    this.flights.push(f);
+    if (!this.timer) this.#frame();
+    return { id: f.id, landed: f.landed };
+  }
+
   /**
    * Fly chunks from an origin (env px) to their targets. `chunks` are the
    * painter's persistent chunks ({x, y, w, h, px, t}); `eph` the shatter
-   * blocks ({x, y, tx, ty, t, fade}); `hop` the arc height in px. Resolves
-   * when the last chunk has landed; the caller commits the cells first and
-   * THEN calls clear() (or lets the next flight's first frame clear).
+   * blocks ({x, y, tx, ty, t, fade}); `hop` the arc height in px. Returns
+   * { id, landed }: `landed` resolves when the last chunk is down and HELD;
+   * the caller paints the cells under it and then calls release(id).
    */
-  async fly({ tx, chunks = [], eph = [], origin, ms = 320, hop = 5, bounce = false }) {
-    if (!ms || (!chunks.length && !eph.length)) return;
-    this.live++;
-    const ctx = this.#ctx();
-    const t0 = performance.now();
-    try {
-      for (;;) {
-        const u = Math.min(1, (performance.now() - t0) / ms);
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        for (const c of chunks) {
-          const p = Math.min(1, u / c.t);
-          const e = easeOut(p);
-          let x = origin.x - c.w / 2 + (c.x - (origin.x - c.w / 2)) * e;
-          let y = origin.y - c.h / 2 + (c.y - (origin.y - c.h / 2)) * e;
-          if (p < 1) y -= hop * Math.sin(Math.PI * p) * (0.6 + 0.4 * c.t);
-          else if (bounce && c.sz >= 2 && u < c.t + 0.18) y -= Math.round(2 * Math.sin(Math.PI * (u - c.t) / 0.18));
-          this.#draw(ctx, tx, c, x, y);
-        }
-        for (const c of eph) {
-          const p = Math.min(1, u / c.t);
-          if (u > c.fade + 0.3) continue;
-          const e = easeOut(p);
-          const x = c.x + (c.tx - c.x) * e;
-          const y = c.y + (c.ty - c.y) * e - hop * 1.4 * Math.sin(Math.PI * Math.min(1, p));
-          const alpha = u < c.fade ? 1 : Math.max(0, 1 - (u - c.fade) / 0.3);
-          this.#draw(ctx, tx, c, x, y, alpha);
-        }
-        this.frames++;
-        if (u >= 1) break;
-        await wait(TICK);
-      }
-    } finally {
-      this.live--;
-    }
+  fly({ tx, chunks = [], eph = [], origin, ms = 320, hop = 5, bounce = false }) {
+    return this.#launch({ kind: 'fly', tx, chunks, eph, origin, ms, hop, bounce });
   }
 
   /** Draw a skid's chunks progressively over `ms`, in step with the slide. */
-  async streak({ tx, chunks = [], ms = 340 }) {
-    if (!ms || !chunks.length) return;
-    this.live++;
-    const ctx = this.#ctx();
-    const t0 = performance.now();
-    try {
-      for (;;) {
-        const u = Math.min(1, (performance.now() - t0) / ms);
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        for (const c of chunks) if (c.t <= u) this.#draw(ctx, tx, c, c.x, c.y);
-        this.frames++;
-        if (u >= 1) break;
-        await wait(TICK);
-      }
-    } finally {
-      this.live--;
-    }
+  streak({ tx, chunks = [], ms = 340 }) {
+    return this.#launch({ kind: 'streak', tx, chunks, eph: [], origin: { x: 0, y: 0 }, ms, hop: 0, bounce: false });
   }
 
-  /** The canvas is empty (nothing in the air). */
+  /** The cells under a landed flight are painted: its chunks may go. */
+  release(id) {
+    if (!id) return;
+    const f = this.flights.find((x) => x.id === id);
+    if (f) f.released = true;
+    if (!this.timer && this.flights.length) this.#frame();
+  }
+
+  /** Clear the canvas — only when nothing is in the air or held. */
   clear() {
-    if (this.live) return; // another flight still owns the frame
+    if (this.flights.some((f) => !f.released)) return;
     const c = this.ui.fx.querySelector(':scope > canvas.fx-debris');
     if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
   }

@@ -725,11 +725,13 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     }
     const evs = K.debris.events();
     const painted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.style.getPropertyValue('--debris')).length;
-    return { plies, captures, frames: K.debris.frames(), canvas: !!canvas, size: canvas ? [canvas.width, canvas.height] : null, blank, events: evs.length, painted, pending: K.debris.stats().pending, fx: K.debris.options.fx, files: K.app.boardUI.files, ranks: K.app.boardUI.ranks };
+    const st = K.debris.stats();
+    return { plies, captures, frames: K.debris.frames(), canvas: !!canvas, size: canvas ? [canvas.width, canvas.height] : null, blank, events: evs.length, painted, pending: st.pending, flights: st.flights, ready: st.ready, decoding: st.decoding, fx: K.debris.options.fx, files: K.app.boardUI.files, ranks: K.app.boardUI.ranks };
   });
   expect(fl.fx && fl.events > 0, `motion on: ${fl.events} events over ${fl.plies} plies (${fl.captures} captures)`);
   expect(fl.frames > 0 && fl.canvas && fl.size[0] === fl.files * 16 && fl.size[1] === fl.ranks * 16, `the flight drew ${fl.frames} frames on a ${fl.size?.[0]}×${fl.size?.[1]} canvas at the board's pixel grid`);
-  expect(fl.blank && fl.pending === 0 && fl.painted > 0, `everything landed: canvas clear, nothing pending, ${fl.painted} squares painted`);
+  expect(fl.blank && fl.pending === 0 && fl.flights === 0 && fl.painted > 0, `everything landed: canvas clear, no flight held, nothing pending, ${fl.painted} squares painted`);
+  expect(fl.ready > 0 && fl.decoding === 0, `every debris image reached a cell decoded (${fl.ready} decoded, ${fl.decoding} in flight)`);
   expect(errs2.length === 0, `no page errors with the flight on${errs2.length ? ` — ${errs2.join(' | ')}` : ''}`);
   await page2.close();
 }

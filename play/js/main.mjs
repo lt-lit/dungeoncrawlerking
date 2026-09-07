@@ -91,7 +91,7 @@ const app = {
   // (env cell index → url(...) | null), events still in flight, the sprite
   // sampler, the flight, the last paint's terrain kinds — see the debris
   // section below and play/js/debris.mjs.
-  debris: { ledger: null, envId: null, tx: null, urls: new Map(), pending: new Set(), sampler: null, particles: null, saveTimer: null, kinds: null, dryPly: -1, warmSeq: 0 },
+  debris: { ledger: null, envId: null, tx: null, urls: new Map(), pending: new Set(), sampler: null, particles: null, saveTimer: null, kinds: null, dryPly: -1, warmSeq: 0, ready: new Set(), decoding: new Map(), desired: new Map(), waiting: new Map() },
   previewPaint: null, // what the setup preview last painted ({files, ranks, fen, skins}) — a repaint on a toggle
   quakeMarks: null, // {from, to, pits, cracked, breached, arrows, text} — the gods' residue
   // since the player last moved (several quakes MERGE), held on the board and in
@@ -2111,9 +2111,54 @@ function debrisPaintCtx(o = debrisOpts()) {
   };
 }
 
-/** The painter board-ui setPosition calls per square: the cell's debris
- *  buffer as a url(...), cached per env cell until an event, an undo, a
- *  toggle or a theme touches it. Floor only (debris.mjs kindIsFloor). */
+/** Is this debris image DECODED? A cell only ever switches to an image the
+ *  browser already holds: swapping a background to an undecoded data URL
+ *  paints one frame without it (the designer's "debris flickering for a
+ *  split second"). The first time a URL is seen it is decoded through an
+ *  Image (the same URL then hits the image cache from CSS), and every cell
+ *  waiting on it takes it the moment it lands. */
+function debrisReady(url) {
+  const D = app.debris;
+  if (D.ready.has(url)) return true;
+  if (typeof Image === 'undefined') { D.ready.add(url); return true; }
+  if (!D.decoding.has(url)) {
+    if (D.ready.size > 3000) D.ready.clear(); // a session's worth of images: re-decode rather than hoard
+    const img = new Image();
+    img.src = url.slice(5, -2); // url("…") → …
+    const job = img
+      .decode()
+      .catch(() => {})
+      .then(() => {
+        D.ready.add(url);
+        D.decoding.delete(url);
+        const cells = D.waiting.get(url);
+        D.waiting.delete(url);
+        if (cells) for (const sq of cells) if (D.desired.get(sq) === url) app.boardUI?.setDebris(sq, url);
+      });
+    D.decoding.set(url, job);
+  }
+  return false;
+}
+
+/** The square's WANTED debris url(...) (or null), from the per-env-cell
+ *  paint cache; the cache is dropped by an event, an undo, a toggle or a
+ *  theme. Floor only (debris.mjs kindIsFloor). */
+function debrisUrlFor(sq, k, ctx) {
+  const D = app.debris;
+  if (!kindIsFloor(k)) return null;
+  const { ef, er } = toEnvCell(D.tx, sq);
+  if (!D.ledger.inBounds(ef, er)) return null;
+  const i = D.ledger.cellIndex(ef, er);
+  if (D.urls.has(i)) return D.urls.get(i);
+  const buf = paintCell(D.ledger, ef, er, ctx);
+  const url = buf ? `url("${pngDataUrl(TILE, TILE, buf)}")` : null;
+  D.urls.set(i, url);
+  return url;
+}
+
+/** The painter board-ui setPosition calls per square: the wanted image when
+ *  it is decoded, else what the cell already wears until it is (debrisReady
+ *  applies it then). Null clears at once. */
 function debrisPainter() {
   const D = app.debris;
   if (!D.ledger || !D.tx) return null;
@@ -2121,15 +2166,14 @@ function debrisPainter() {
   if (!o.destruction && !o.blood && !o.skid && !o.wear) return null;
   const ctx = debrisPaintCtx(o);
   return (sq, k) => {
-    if (!kindIsFloor(k)) return null;
-    const { ef, er } = toEnvCell(D.tx, sq);
-    if (!D.ledger.inBounds(ef, er)) return null;
-    const i = D.ledger.cellIndex(ef, er);
-    if (D.urls.has(i)) return D.urls.get(i);
-    const buf = paintCell(D.ledger, ef, er, ctx);
-    const url = buf ? `url("${pngDataUrl(TILE, TILE, buf)}")` : null;
-    D.urls.set(i, url);
-    return url;
+    const url = debrisUrlFor(sq, k, ctx);
+    D.desired.set(sq, url);
+    if (!url) return null;
+    if (debrisReady(url)) return url;
+    let w = D.waiting.get(url);
+    if (!w) D.waiting.set(url, (w = new Set()));
+    w.add(sq);
+    return app.boardUI?.debrisUrl(sq) ?? null;
   };
 }
 
@@ -2198,12 +2242,15 @@ function debrisParticles() {
 }
 
 /** Land an event: its cells repaint directly (a flight lands between
- *  paints; setDebris touches nothing else on the cell). */
-function debrisLand(ev) {
+ *  paints; setDebris touches nothing else on the cell), and the call
+ *  resolves once their images are decoded and applied (capped), so a held
+ *  flight is released only when the debris under it is really there. */
+async function debrisLand(ev) {
   const D = app.debris;
   if (!ev || !D.ledger || !D.tx) return;
   D.pending.delete(ev.id);
   const painter = debrisPainter();
+  const jobs = [];
   for (const i of D.ledger.cellsOf(ev)) {
     D.urls.delete(i);
     const ef = i % D.ledger.files, er = (i - ef) / D.ledger.files;
@@ -2211,7 +2258,10 @@ function debrisLand(ev) {
     if (!sq || !app.boardUI?.cells.has(sq)) continue;
     const k = D.kinds?.get(sq);
     app.boardUI.setDebris(sq, painter && k ? painter(sq, k) : null);
+    const want = D.desired.get(sq);
+    if (want && D.decoding.has(want)) jobs.push(D.decoding.get(want));
   }
+  if (jobs.length) await Promise.race([Promise.all(jobs), wait(300)]);
 }
 
 /**
@@ -2229,23 +2279,25 @@ async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 3
   if (!o.fx || !fxMs || !o[CATEGORY[ev.k]] || !app.boardUI) return debrisLand(ev);
   D.pending.add(ev.id);
   for (const i of D.ledger.cellsOf(ev)) D.urls.delete(i);
+  let flight = null;
+  const P = debrisParticles();
   try {
     const ctx = debrisPaintCtx(o);
     const chunks = chunksOf(ev, debrisSampler(), ctx);
     const sprite = shatter ? debrisSampler().get(spriteVar(shatter)) : null;
     const eph = sprite ? shatterOf(ev, sprite, { intensity: o.intensity, inward }) : [];
     if (sq && sprite && !inward) app.boardUI.shatterSprite(sq);
-    const P = debrisParticles();
-    if (ev.k === 'skid') await P.streak({ tx: D.tx, chunks, ms: fxMs });
+    if (ev.k === 'skid') flight = P.streak({ tx: D.tx, chunks, ms: fxMs });
     else {
       const arc = Particles.arcFor(ev.m);
-      await P.fly({ tx: D.tx, chunks, eph, origin: { x: ev.x, y: ev.y }, ms: fxMs, hop: arc.hop, bounce: arc.bounce });
+      flight = P.fly({ tx: D.tx, chunks, eph, origin: { x: ev.x, y: ev.y }, ms: fxMs, hop: arc.hop, bounce: arc.bounce });
     }
+    await flight.landed; // the chunks are down and HELD on the canvas
   } catch (e) {
     console.warn('debris flight', e);
   }
-  debrisLand(ev);
-  debrisParticles().clear();
+  await debrisLand(ev); // the cells wear the debris (decoded) under the held chunks…
+  if (flight) P.release(flight.id); // …and only then do the chunks leave the canvas
 }
 
 /** The capture a move made, if any: the square whose occupant vanished
@@ -3042,7 +3094,7 @@ window.__DCK = {
     get options() {
       return debrisOpts();
     },
-    stats: () => (app.debris.ledger ? { ...app.debris.ledger.stats(), pending: app.debris.pending.size, urls: app.debris.urls.size, sampler: app.debris.sampler?.size ?? 0 } : null),
+    stats: () => (app.debris.ledger ? { ...app.debris.ledger.stats(), pending: app.debris.pending.size, urls: app.debris.urls.size, sampler: app.debris.sampler?.size ?? 0, ready: app.debris.ready.size, decoding: app.debris.decoding.size, flights: app.debris.particles?.flights.length ?? 0 } : null),
     events: () => (app.debris.ledger ? app.debris.ledger.events.map((e) => ({ ...e })) : []),
     /** One arena square: its env cell, the events on it, its wear and the painted URL (from the DOM). */
     cell: (sq) => {

@@ -682,6 +682,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   height: 100%;
   image-rendering: pixelated;
   pointer-events: none;
+  will-change: transform; /* its own compositor layer, empty or not — a layer that comes and goes re-composites the board under it */
 }
 /* A sprite the flight is shattering: the chunks ARE the sprite now. */
 .cell .piece.fx-shattered { visibility: hidden; }

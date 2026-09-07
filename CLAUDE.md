@@ -860,7 +860,18 @@ a crumble's blocks fall INTO the pit), a skid draws progressively under
 the slide; captures fly while the engine thinks (never awaited; the event
 is `pending` until it lands, then its cells repaint through
 `setDebris`, which touches nothing else on a cell — a held quake frame
-stays held), quake rungs fly inside their beats. A capture's victim is
+stays held), quake rungs fly inside their beats. TWO FLICKER FIXES from
+the designer's first phone session ("pieces and the debris sometimes
+flickering for a split second"): a cell only ever SWITCHES TO A DECODED
+IMAGE (`debrisReady`: a new data URL is decoded through an Image first
+and every waiting cell takes it when it lands; swapping a background to
+an undecoded URL paints one frame without it), the applied URL per cell
+lives in board-ui's `debrisUrls` map so an unchanged square's style is
+never touched, and the flight runs ONE frame loop for every flight in the
+air — flying → landed (chunks HELD on the canvas, `landed` resolved) →
+released after the cells wear the decoded debris — where the first cut's
+per-flight loops cleared each other's chunks at 15 Hz whenever a capture
+spray overlapped a quake beat or two skids drew side by side. A capture's victim is
 the square whose occupant VANISHED (the landing square or the en-passant
 pawn), a shattering crate holds until the piece arrives (no dissolve),
 a piece still dissolves under the blow. Toggles filter the PAINT, never
