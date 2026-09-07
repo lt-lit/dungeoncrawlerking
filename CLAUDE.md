@@ -459,9 +459,17 @@ likely 2.625): a 10-file arena at k 6 = 96 device px = 5.7 mm per tile
 (the DOM board draws ~100); exploration at k 4 = 17 × 34 tiles at 3.8 mm;
 across current phones a 10-file arena lands between 5.0 and 7.1 mm per
 tile, within a step of today; a 1080p desktop is height-bound at k 5–6
-with 35 tiles of dungeon beside the arena. NEXT: the phone verdict, then
-the camera + rotation + edge-on doors, then the world + the army rule on
-one hand-built map, then enemies + LOS + the trigger pipeline.
+with 35 tiles of dungeon beside the arena. **HANDOFF (end of 2026-09-07;
+the designer's screenshot verdict on the dials + hint list: "looks
+good"): NEXT is the phone verdict on the pixel arrows, the dials and the
+hint list (and whether the white flash is gone with the overlay); then
+RETIRE THE DOM BOARD — board-ui's DOM painting, style.css's tile rules,
+the FLIP slides, the arrow SVG, the per-cell debris `<img>` and the
+piece tiers' CSS go, the replay analyzer mounts the canvas board, ui-smoke
+loses its DOM branches, `canvas-parity.mjs` and `piece-grid.mjs` retire
+with the board they gate (the canvas board keeps `canvas-grid.mjs`);
+then the camera + rotation + edge-on doors, then the world + the army
+rule on one hand-built map, then enemies + LOS + the trigger pipeline.**
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
