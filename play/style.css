@@ -602,6 +602,48 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   width: var(--piece-box-w, 100%);
   height: var(--piece-box-h, 100%);
 }
+/* TILE-GRID pieces (2026-09-07, Options → Piece pixels "tile grid" — the
+   DEFAULT; board-ui setPieceFit pixels:'tile' stamps data-piece-pixels on
+   the board): a sprite pixel IS a tile pixel — the same size and the same
+   alignment as the 16×16 floor under it, the way the tiles are. Measured
+   in Playwright's Chromium AND Firefox (phase0/harness/piece-grid.mjs): the
+   only construction that lands on the floor's device-pixel grid in both,
+   at every fractional cell size, is a 16×16 image painted exactly as the
+   floor is — a CELL-SIZED box with `center / 100% 100%`. A box of any other
+   size (23/16 of the cell, two cells, a 200% background) drifts by a device
+   pixel on some rows in one browser or the other, and a background offset
+   by whole tile pixels drifts too. So the piece is TWO such boxes: its BODY
+   (--piece-lo, the sprite's lower 16 rows; tiles.css, cut by
+   lib/piecehalves.mjs) in its square, and its HEAD (--piece-hi, the rows
+   above) in a ::before one cell up — top:-100% has the north square's own
+   geometry, and the box is later in the DOM than that square, so a nearer
+   piece's head paints over the piece behind it, as before. No size, lift or
+   shift dial applies: the piece stands on its square's bottom edge at the
+   art's own scale (a wider set's box keeps the tile's 16 centre columns —
+   deja-view's knights lose one outline column). The shadow is one tile
+   pixel (100cqh/16 in the cell; the FLIP clone gets --tpx inline, its
+   layer being no size container). */
+[data-pieces][data-piece-pixels="tile"] .piece[data-piece] {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--piece-lo) center / 100% 100% no-repeat;
+  filter: drop-shadow(0 var(--tpx, calc(100cqh / 16)) 0 #000a);
+}
+[data-pieces][data-piece-pixels="tile"] .piece[data-piece]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--piece-hi) center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+/* Headroom under tile-grid pieces: a head rises (fit − 16)/16 of a cell
+   above the top rank (nulltale 7 px, dread 10, pixel-chess none). */
+.board[data-pieces][data-piece-pixels="tile"] { margin-top: calc(var(--cell-size) * max(0, (var(--piece-fit, 16) - 16) / 16)); }
 [data-pieces] .promo-btn[data-piece] {
   font-size: 0;
   width: 2.6rem;
@@ -904,6 +946,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #options-card h2 { margin: 0 0 .2rem; font-size: 1.1rem; }
 
 .opt { display: flex; align-items: center; gap: .5rem; font-size: .95rem; }
+.opt[hidden], .opt-hint[hidden] { display: none; } /* (the display rule above would beat the UA [hidden]) */
 .opt.sub { margin-left: 1.4rem; font-size: .88rem; color: var(--muted); }
 .opt input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--gold); }
 .opt select { background: var(--panel-2); color: var(--text); border: 1px solid #444; border-radius: .3rem; padding: .1rem .3rem; }

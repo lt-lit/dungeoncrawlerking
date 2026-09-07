@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
 import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS } from '../../play/js/board-ui.mjs';
+import { pieceHalves, halvesDecl, halvesRule } from '../lib/piecehalves.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -948,12 +949,19 @@ pieceNames.forEach((name, row) => {
       blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
       const fen = side === 'white' ? letter.toUpperCase() : letter;
       decl.push(`  --piece-${fen}: url("data:image/png;base64,${encodePng(tile).toString('base64')}");`);
+      // The TILE-GRID halves (2026-09-07): the piece's 32-row atlas cell cut
+      // into two 16×16 images, body and head, painted one per cell-sized box
+      // (lib/piecehalves.mjs; gen-piece-halves.mjs writes the same lines
+      // from the committed atlas when the packs are not on disk).
+      const cell32 = blank(bw, PA);
+      blit(cell32, tile, 0, PA - bh);
+      decl.push(...halvesDecl(fen, pieceHalves(cell32)));
     }
   });
   css.push(`[data-pieces="${name}"] {\n${decl.join('\n')}\n}`);
   provenance.push({ theme: 'pieces', role: name, pack: set.pack, sheet: index.pieces.sets[name].sheets.join(' + '), x: '—', y: '—' });
 });
-for (const letter of [...PIECE_ORDER]) for (const fen of [letter.toUpperCase(), letter]) css.push(`[data-pieces] [data-piece="${fen}"] { --piece-img: var(--piece-${fen}); }`);
+for (const letter of [...PIECE_ORDER]) for (const fen of [letter.toUpperCase(), letter]) css.push(`[data-pieces] [data-piece="${fen}"] { --piece-img: var(--piece-${fen}); }`, halvesRule(fen));
 
 mkdirSync(join(PLAY, 'img'), { recursive: true });
 writeFileSync(join(PLAY, 'img', 'pieces.png'), encodePng(piecesAtlas));

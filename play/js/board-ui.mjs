@@ -147,12 +147,19 @@ export const CRACK_VARIANTS = 4;
  *  a row of urns is not five identical urns and a repaint never swaps one. */
 export const SKIN_VARIANTS = 10;
 
+/** How a piece sprite's pixels are sized (setPieceFit `pixels`):
+ *  'tile' — a sprite pixel IS a tile pixel, the same size and alignment as
+ *  the 16×16 floor (the DEFAULT since 2026-09-07; the dials do not apply);
+ *  'display' — the fitted box scaled by the dials and snapped to whole
+ *  DEVICE pixels (round 11's "pixel-perfect"); 'free' — the dials alone. */
+export const PIECE_PIXELS = ['tile', 'display', 'free'];
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
- *  the box at 146% of its fit, lifted 0.22 cell, nudged 0.04 right, and
- *  PIXEL-PERFECT on, so a piece stands on its square's bottom edge and
- *  rises well into the one above at a whole-pixel scale. */
-export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, snap: true };
+ *  the box at 146% of its fit, lifted 0.22 cell, nudged 0.04 right — for
+ *  the 'display' and 'free' modes; and the pixel mode, 'tile' (designer
+ *  2026-09-07: "the pixels making up the pieces [must] exactly match the
+ *  size and alignment of the pixels making up the 16x16 tiles"). */
+export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, pixels: 'tile' };
 
 /** Stable floor-texture variant for a square: f1 (the common stone) on
  *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the
@@ -354,10 +361,11 @@ export class BoardUI {
     container.classList.toggle('inactive', true);
     container.style.setProperty('--files', files);
     container.style.setProperty('--ranks', ranks);
-    // Pixel-perfect pieces re-lay out with the board's size (setPieceFit snap).
-    this.pieceSnap = false;
+    // Display-pixel pieces re-lay out with the board's size (setPieceFit
+    // pixels 'display'); tile-grid pieces are pure CSS and never measure.
+    this.piecePixels = 'free';
     if (typeof ResizeObserver !== 'undefined') {
-      this.pieceObserver = new ResizeObserver(() => { if (this.pieceSnap) this.layoutPieceSnap(); });
+      this.pieceObserver = new ResizeObserver(() => { if (this.piecePixels === 'display') this.layoutPieceSnap(); });
       this.pieceObserver.observe(container);
     }
     container.textContent = '';
@@ -753,26 +761,30 @@ export class BoardUI {
     else delete this.container.dataset.doors;
   }
 
-  /** The piece-sprite fit dials (Options → Piece size / lift / shift /
-   *  Pixel-perfect; style.css --piece-scale / --piece-lift / --piece-shift
-   *  and data-piece-snap): `scale` multiplies every set's fitted box (1 =
-   *  the tallest piece stands 0.96 cell), `lift` raises it and `shift`
-   *  moves it right by that fraction of a cell, and `snap` sizes the box
-   *  in WHOLE device-pixel multiples of the sprite (--piece-fit /
-   *  --piece-box, the set's native pixels from tiles.css) and lands it on
-   *  whole device pixels — the art scales without uneven pixels, re-laid
-   *  out on every resize. Non-finite values clear to the CSS defaults
-   *  (DEFAULT_PIECE_FIT). */
-  setPieceFit({ scale, lift, shift, snap = false } = {}) {
-    // (snap defaults to OFF here on purpose: a bare setPieceFit({}) — the
-    // selftest's "clear" — clears everything; main.mjs passes the dials.)
+  /** The piece-sprite fit (Options → Piece pixels / size / lift / shift;
+   *  style.css --piece-scale / --piece-lift / --piece-shift,
+   *  data-piece-pixels and data-piece-snap on the board). `pixels` is one
+   *  of PIECE_PIXELS: 'tile' paints every sprite pixel as one TILE pixel —
+   *  a cell-sized box per half of the sprite, pure CSS, the dials ignored;
+   *  'display' sizes the fitted box in WHOLE device-pixel multiples of the
+   *  sprite (--piece-fit / --piece-box, the set's native pixels from
+   *  tiles.css) and lands it on whole device pixels, re-laid out on every
+   *  resize; 'free' is the dials alone (`snap: true` is the legacy spelling
+   *  of 'display'). `scale` multiplies every set's fitted box (1 = the
+   *  tallest piece stands 0.96 cell), `lift` raises it and `shift` moves it
+   *  right by that fraction of a cell. Non-finite values clear to the CSS
+   *  defaults (DEFAULT_PIECE_FIT); an absent mode is 'free' — a bare
+   *  setPieceFit({}) is the selftest's "clear everything". */
+  setPieceFit({ scale, lift, shift, pixels, snap = false } = {}) {
     const st = this.container.style;
     for (const [k, v] of [['--piece-scale', scale], ['--piece-lift', lift], ['--piece-shift', shift]]) {
       if (Number.isFinite(v)) st.setProperty(k, String(v));
       else st.removeProperty(k);
     }
-    this.pieceSnap = !!snap;
-    if (this.pieceSnap) this.container.dataset.pieceSnap = '';
+    this.piecePixels = PIECE_PIXELS.includes(pixels) ? pixels : snap ? 'display' : 'free';
+    if (this.piecePixels === 'free') delete this.container.dataset.piecePixels;
+    else this.container.dataset.piecePixels = this.piecePixels;
+    if (this.piecePixels === 'display') this.container.dataset.pieceSnap = '';
     else delete this.container.dataset.pieceSnap;
     this.layoutPieceSnap();
   }
@@ -781,24 +793,27 @@ export class BoardUI {
     const st = this.container.style;
     const num = (v) => (v === '' ? null : Number(v));
     const px = (k) => st.getPropertyValue(k) || null;
+    const snap = this.piecePixels === 'display';
     return {
       scale: num(st.getPropertyValue('--piece-scale')),
       lift: num(st.getPropertyValue('--piece-lift')),
       shift: num(st.getPropertyValue('--piece-shift')),
-      snap: this.pieceSnap,
-      box: this.pieceSnap ? { w: px('--piece-box-w'), h: px('--piece-box-h'), left: px('--piece-left'), top: px('--piece-top') } : null,
+      pixels: this.piecePixels,
+      snap,
+      box: snap ? { w: px('--piece-box-w'), h: px('--piece-box-h'), left: px('--piece-left'), top: px('--piece-top') } : null,
     };
   }
 
-  /** Pixel-perfect layout (setPieceFit snap): measure a cell, take the
-   *  largest whole device-pixel scale k that keeps the set's box within the
-   *  size dial, and publish the box and its offsets in CSS px on the board
-   *  (style.css [data-piece-snap] reads them). Cleared when snap is off or
-   *  nothing can be measured (no set, a detached board). */
+  /** Display-pixel layout (setPieceFit pixels 'display'): measure a cell,
+   *  take the largest whole device-pixel scale k that keeps the set's box
+   *  within the size dial, and publish the box and its offsets in CSS px on
+   *  the board (style.css [data-piece-snap] reads them). Cleared in the
+   *  other modes or when nothing can be measured (no set, a detached
+   *  board). */
   layoutPieceSnap() {
     const st = this.container.style;
     const clear = () => { for (const k of ['--piece-box-w', '--piece-box-h', '--piece-left', '--piece-top']) st.removeProperty(k); };
-    if (!this.pieceSnap) return clear();
+    if (this.piecePixels !== 'display') return clear();
     const cs = getComputedStyle(this.container);
     const fit = parseFloat(cs.getPropertyValue('--piece-fit')), box = parseFloat(cs.getPropertyValue('--piece-box'));
     const cw = this.cells.values().next().value?.getBoundingClientRect().width ?? 0;
@@ -885,6 +900,10 @@ export class BoardUI {
     clone.style.top = `${g.top - base.top}px`;
     clone.style.width = `${g.width}px`;
     clone.style.height = `${g.height}px`;
+    // A tile-grid piece's box IS its cell, and its head is a ::before one
+    // box up, which the clone carries; its one-tile-pixel shadow is 100cqh/16
+    // in the cell, but the fx layer is no size container, so pin it in px.
+    if (this.piecePixels === 'tile') clone.style.setProperty('--tpx', `${g.height / 16}px`);
     clone.style.transitionDuration = `${ms}ms`;
     this.fx.appendChild(clone);
     glyph.style.visibility = 'hidden';

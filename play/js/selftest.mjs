@@ -21,7 +21,7 @@ import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalS
 import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
-import { BoardUI } from './board-ui.mjs';
+import { BoardUI, DEFAULT_PIECE_FIT, PIECE_PIXELS } from './board-ui.mjs';
 
 const out = document.getElementById('out');
 const summaryEl = document.getElementById('summary');
@@ -1341,13 +1341,21 @@ async function main() {
     if (at('a1') !== 'K' || at('d1') !== 'P' || at('a5') !== 'k') throw new Error(`pieces carry data-piece (${at('a1')}, ${at('d1')}, ${at('a5')})`);
     ui.setPieces('pixel-chess');
     if (ui.pieces !== 'pixel-chess' || host.dataset.pieces !== 'pixel-chess') throw new Error('setPieces must stamp data-pieces');
-    // The fit dials are published on the board; pixel-perfect stamps its
+    // The fit dials are published on the board; the display snap stamps its
     // attribute (the box itself needs a laid-out board — ui-smoke measures it).
     ui.setPieceFit({ scale: 1.2, lift: 0.25, shift: -0.1, snap: true });
     const pf = ui.pieceFit;
-    if (pf.scale !== 1.2 || pf.lift !== 0.25 || pf.shift !== -0.1 || !pf.snap || !('pieceSnap' in host.dataset)) throw new Error(`setPieceFit must publish the dials: ${JSON.stringify(pf)}`);
+    if (pf.scale !== 1.2 || pf.lift !== 0.25 || pf.shift !== -0.1 || !pf.snap || pf.pixels !== 'display' || !('pieceSnap' in host.dataset) || host.dataset.piecePixels !== 'display') throw new Error(`setPieceFit must publish the dials (snap = the display mode): ${JSON.stringify(pf)}`);
+    // The tile grid (2026-09-07): its own attribute, no display snap, the
+    // dials still published (they apply the moment the mode changes).
+    ui.setPieceFit({ scale: 1.2, lift: 0.25, shift: -0.1, pixels: 'tile' });
+    const pt = ui.pieceFit;
+    if (pt.pixels !== 'tile' || pt.snap || pt.box || host.dataset.piecePixels !== 'tile' || 'pieceSnap' in host.dataset || pt.scale !== 1.2) throw new Error(`setPieceFit pixels 'tile' must stamp data-piece-pixels alone: ${JSON.stringify(pt)} ${JSON.stringify(host.dataset)}`);
+    if (DEFAULT_PIECE_FIT.pixels !== 'tile' || !PIECE_PIXELS.includes(DEFAULT_PIECE_FIT.pixels)) throw new Error('the tile grid is the default piece pixel mode');
+    ui.setPieceFit({ pixels: 'no-such-mode', snap: false });
+    if (ui.pieceFit.pixels !== 'free' || 'piecePixels' in host.dataset) throw new Error('an unknown pixel mode is free');
     ui.setPieceFit({});
-    if (ui.pieceFit.scale !== null || ui.pieceFit.lift !== null || ui.pieceFit.snap || 'pieceSnap' in host.dataset) throw new Error('setPieceFit({}) clears to the CSS defaults');
+    if (ui.pieceFit.scale !== null || ui.pieceFit.lift !== null || ui.pieceFit.snap || ui.pieceFit.pixels !== 'free' || 'pieceSnap' in host.dataset || 'piecePixels' in host.dataset) throw new Error('setPieceFit({}) clears to the CSS defaults');
     ui.setPieces('no-such-set');
     if (ui.pieces !== null) throw new Error('an unknown piece set clears to the glyphs');
     ui.setDoors('castle');

@@ -190,7 +190,14 @@
       <input type="range" id="optPieceShift" min="-0.5" max="0.5" step="0.01">
       <span class="opt-val" id="optPieceShiftV"></span>
     </label>
-    <label class="opt"><input type="checkbox" id="optPieceSnap"> Pixel-perfect pieces <span class="opt-val">(whole-pixel scale)</span></label>
+    <label class="opt">Piece pixels
+      <select id="optPiecePixels">
+        <option value="tile" selected>Tile grid (one floor pixel each)</option>
+        <option value="display">Screen pixels (whole-pixel scale)</option>
+        <option value="free">Free (any scale)</option>
+      </select>
+    </label>
+    <p class="opt-hint" id="optPiecePixelsHint"></p>
     <!-- THE DEBRIS LAYER (2026-09-07, play/js/debris.mjs): the floor
          remembers. Every kind is a toggle; the ledger records everything
          regardless, so a toggle flipped mid-game reveals the whole history. -->

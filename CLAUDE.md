@@ -136,7 +136,9 @@ which paints behind it by DOM order; ranges widened
 to 50–200% / −50…+100% / ±50% because the first caps were hit;
 pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
 device-pixel multiple of the set's native `--piece-fit`/`--piece-box`
-from tiles.css, landed on whole pixels); selftest 35/35, ui-smoke green
+from tiles.css, landed on whole pixels — **SUPERSEDED as the default by
+the TILE GRID, 2026-09-07 (see "PIECE PIXELS" below); it survives as the
+`display` mode**); selftest 35/35, ui-smoke green
 asserting the ruin / doorway / nothing per breached square, wall-face-only
 props and the pixel-perfect box; **round 12**: a ruin's stub case counts
 STANDING walls only (a wall, a cracked wall or a door — never another
@@ -249,6 +251,48 @@ overflow:hidden clipped at the padding box); with pixel-perfect on, the
 headroom margin can over-reserve by up to one sprite step; the pit
 outline is per tile, so it does not wrap the inner corner of an L of
 joined pits — see `play/README.md` § "Art themes");
+**PIECE PIXELS — THE TILE GRID ✅ built 2026-09-07 (designer: "the scale
+of the chess pieces themselves bothers me… I need the pixels making up
+the pieces to exactly match the size and alignment of the pixels making
+up the 16x16 tiles, just like the debris layer" — the round-11
+"pixel-perfect" checkbox had been a MISREAD: it snapped the fitted box to
+whole SCREEN pixels, a different size from a tile pixel on an unrelated
+grid).** Options → Look → **Piece pixels** (`?piecepixels=tile|display|
+free`, `setPieceFit({ pixels })`, `PIECE_PIXELS`, `data-piece-pixels` on
+the board; `tile` is the DEFAULT and a saved `pieceSnap` is no longer
+read): on the tile grid every sprite pixel is one floor pixel. THE
+MEASURED RULE (`phase0/harness/piece-grid.mjs`, Playwright Chromium +
+Firefox, coordinate-encoded floor and king compared per device pixel over
+18 fractional layouts each): the ONLY construction that lands on the
+floor's device-pixel grid in BOTH browsers is a 16×16 image painted
+exactly as the floor is — a CELL-SIZED box with `center / 100% 100%`. A
+box of any other size (the 23-row sprite at 23/16 of the cell, a two-cell
+box, a 200% background on the cell) drifts a device pixel on some rows in
+one browser or the other; a background offset by whole tile pixels drifts
+too; the same-shaped box with `0 0` matches a `0 0` floor but not the
+`center` one; and a plain `<img>` behaves like `0 0` — so the debris
+layer's per-cell `<img>` is a sub-device-pixel phase off the `center`
+floor in both browsers (invisible at phone scale; making every tile rule
+`0 0` would fix it — not done, the repack tool emits those rules). So a
+tile-grid piece is TWO cell-sized boxes: the BODY (`--piece-lo`, the
+sprite's lower 16 rows) in its square, the HEAD (`--piece-hi`) in a
+`::before` at `top:-100%` (the north square's geometry, later in the DOM
+so a nearer head paints over the piece behind). The halves are cut from
+each piece's 32-row atlas cell by `phase0/lib/piecehalves.mjs` (ONE
+implementation: the repack tool emits them; `gen-piece-halves.mjs` writes
+the same lines from the committed `img/pieces.png` without the packs,
+`--check` for staleness; a wider box keeps the 16 centre columns —
+deja-view's knights lose one outline column). The piece stands on its
+square's bottom edge at the art's scale; the size / lift / shift dials do
+not apply (rows hidden — a whole-pixel lift/shift is not exact either,
+it would have to be baked into the halves); the shadow is one tile pixel
+(`100cqh/16`; the FLIP clone gets `--tpx` inline, its layer being no size
+container, and carries the head as its `::before`); the headroom margin
+is (fit − 16)/16 of a cell. `display` (the old snap) and `free` keep the
+dials. Gates: piece-grid 4/4 (18/18 exact in each browser, the free-mode
+control off the grid), selftest, ui-smoke (display box a whole multiple;
+tile box = the cell painted like the floor, head one cell up, dials
+hidden), replay-smoke, `gen-piece-halves --check`.
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
@@ -1107,6 +1151,8 @@ node harness/strip-ruin-chips.mjs --check  # the committed ruin tiles carry no b
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
 node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner (the debris layer's three flicker rounds); --idle 25000 for an idle turn; compare <dirs…>
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
+node harness/gen-piece-halves.mjs --check  # the tile-grid piece halves in tiles.css match the committed atlas (drop --check to rewrite them without the packs)
+node harness/piece-grid.mjs          # THE PIECE GRID gate: tile-grid pieces land on the floor's device-pixel grid in Chromium + Firefox (npx playwright install firefox once)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)
