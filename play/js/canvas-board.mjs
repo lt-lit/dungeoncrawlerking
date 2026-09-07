@@ -79,9 +79,14 @@ const RUMBLE = [[0, 0], [-1, 0], [1, 0], [-1, 0], [1, 0], [0, 0]];
 
 /** The set drawn when no piece set is chosen (the glyphs are text, not pixel art). */
 export const DEFAULT_SET = 'nulltale';
-/** Position-snap strategies (setSnapMode) and the default the gate settled. */
+/** Position-snap strategies (setSnapMode) and the default the gate settled
+ *  (phase0/harness/canvas-grid.mjs, 2026-09-07): 'none' — the browser's
+ *  own placement — measured exact in Firefox at every ratio and width,
+ *  integer and fill, and in Chromium at ratio 1 (the only ratio its
+ *  emulator can measure); 'margin' measured the same; 'transform' defeats
+ *  Chromium's own snapping and is kept for the record. */
 export const SNAP_MODES = ['none', 'margin', 'transform'];
-export const DEFAULT_SNAP = 'margin';
+export const DEFAULT_SNAP = 'none';
 
 const clampInt = (v, [lo, hi]) => (Number.isFinite(Number(v)) ? Math.max(lo, Math.min(hi, Math.round(Number(v)))) : 0);
 const wait = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());

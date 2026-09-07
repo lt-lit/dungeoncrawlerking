@@ -391,8 +391,16 @@ truth; (c) the element's POSITION is fractional in device pixels whenever
 the page above it is, and a canvas composited at a fractional offset is
 resampled (ratio 1.25: the first 4-px block 3 rows tall) —
 `setSnapMode` `none` / `margin` / `transform`, `canvas-grid.mjs` measures
-all three per browser and the default is what measured exact in both
-(the gate's verdict is in the README). GATES: `canvas-parity.mjs` (the
+them per browser — VERDICT: `none` (the browser's own placement) is the
+default: Firefox, whose emulated ratio is the real preference, landed
+1:1 in 18/18 cases (ratios 1–3 × nine widths, integer + fill, `none` and
+`margin` alike); Chromium at ratio 1 exact with either; `transform`
+fails everywhere (a float translate defeats the browser's snapping); and
+CHROMIUM AT ANY OTHER RATIO CANNOT BE MEASURED under Playwright — its
+emulation is a compositor scale over a layout that still believes ratio
+1, so a canvas is resampled twice and blocks drift a device pixel part
+way across even on a whole-pixel, exact-size box (the gate runs Chromium
+at ratio 1 only and says why); the real phone is the final word. GATES: `canvas-parity.mjs` (the
 DOM board forced to an exact integer cell vs the canvas buffer, every
 square's 16×16 on the start, after 14 seeded plies with the gods hot and
 on the other themes — EXACT, 24 320/24 320 per snapshot; the DOM's arrow
@@ -401,7 +409,12 @@ pattern at nine ratio × width cases, integer + fill, Chromium +
 Firefox), `ui-smoke.mjs --renderer canvas` (the DOM-only probes skipped,
 the geometry / diag / live remount checked; everything else renderer-
 neutral through `__DCK.marks.cell` + `__DCK.renderer.decor`), selftest
-43/43 (both boards classify, decorate and mark alike on detached boards).
+43/43 (both boards classify, decorate and mark alike on detached boards),
+`flicker-scan.mjs --renderer canvas` in Playwright's Firefox (a 48-s
+duel: 3.3 / 18.4 piece- / debris-scale blinks per 10 s vs the DOM board's
+8.5 / 48.2 on its own random duel, motion on; the s59 door and torch
+vanish 0 times; a 25-s idle turn with the probe streaming shows nothing
+beyond the arrows' repaints).
 DECIDED the same session (brief §5.1, §10, §11): the DUEL IS A CAMERA
 VIEW OF THE SAME WORLD, zoomed (the largest integer step that fits the
 arena, the dungeon outside dimmed — small fights zoom in, no letterbox,

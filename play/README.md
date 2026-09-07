@@ -502,14 +502,23 @@ across, in both browsers. Under an EMULATED ratio (a headless driver's
 `deviceScaleFactor`) Chromium reports that box in CSS px, a whole factor
 off; the board falls back to css × ratio when the two disagree by more
 than a pixel (`renderInfo.emulated`). The element's POSITION is fractional
-in device pixels too whenever the page above it is, and a canvas composited
-at a fractional offset is resampled (at ratio 1.25 the first 4-px block
-came out 3 rows tall); `setSnapMode` carries three strategies — `none`
-(the browser's own placement), `margin` (a layout offset onto the grid,
-quantised to a layout unit) and `transform` (a float translate) — and
-`phase0/harness/canvas-grid.mjs` measures all three per browser; the
-default is the one that measured exact in both (see the gate's output in
-CLAUDE.md § Phase 2).
+in device pixels too whenever the page above it is; `setSnapMode` carries
+three strategies — `none` (the browser's own placement), `margin` (a
+layout offset onto the grid, quantised to a layout unit) and `transform`
+(a float translate) — and `phase0/harness/canvas-grid.mjs` measures them
+per browser. **The verdict (2026-09-07): `none` is the default.** In
+Firefox — whose emulated ratio is the real preference — the blit landed
+1:1 in 18 of 18 cases (ratios 1, 1.25, 2, 2.625 and 3 at nine widths,
+integer and fill, `none` and `margin` alike); in Chromium at ratio 1 all
+four cases were exact with either, and `transform` failed everywhere (a
+float translate defeats the browser's own snapping). Chromium at any
+other ratio cannot be measured under Playwright: its emulation is a
+compositor-level scale over a layout that still believes ratio 1, so a
+canvas bitmap is resampled twice and blocks drift a device pixel part way
+across even with the element on a whole device pixel and its box exactly
+its backing size — the emulator, not the browser; the gate runs Chromium
+at ratio 1 only and says so. The real phone's screenshot is the final
+word for that path.
 
 **Gates.** `phase0/harness/canvas-parity.mjs` drives the game twice in
 headless Chromium at ratio 1 — the DOM board forced to an exact integer
@@ -531,8 +540,15 @@ residue, rungs, debris, the flight, the replay log — is renderer-neutral
 through `__DCK.marks.cell` and `__DCK.renderer.decor`), and the selftest
 asserts that both boards classify, decorate and mark every square alike
 on detached boards (no atlas: the data half). `flicker-scan.mjs` records
-either renderer (`?renderer=` rides its query). **The phone's verdict
-decides whether the DOM board goes** (CLAUDE.md § Phase 2).
+either renderer (`--renderer canvas`): in Playwright's Firefox at the
+phone viewport, a 48-s canvas duel (25 quakes and captures) scanned at
+3.3 piece-scale and 18.4 debris-scale blinks per 10 s against the DOM
+board's 8.5 and 48.2 on a duel of its own (motion on — slides, bursts
+and flights are transient by design; the games differ, the moves are
+random), the s59 door and torch vanishing 0 times on the canvas (0 and
+1 on the DOM), and a 25-s idle turn with the hint probe streaming showed
+no blink beyond the arrows' repaints. **The phone's verdict decides
+whether the DOM board goes** (CLAUDE.md § Phase 2).
 
 ## Art themes (2026-09-03)
 

@@ -88,9 +88,13 @@ async function record() {
     if (idleMs) {
       await new Promise((done) => {
         const tick = () => {
-          const pieces = [...document.querySelectorAll('#board .piece')];
+          // The DOM sampler: every .piece present and visible? On the canvas
+          // board there are no piece elements — the buffer is the truth, and
+          // the frame scan below is the check — so the sample is a no-op.
+          const canvasBoard = K.renderer?.kind === 'canvas';
+          const pieces = canvasBoard ? [] : [...document.querySelectorAll('#board .piece')];
           const vis = pieces.filter((p) => { const cs = getComputedStyle(p); return cs.visibility !== 'hidden' && cs.display !== 'none' && parseFloat(cs.opacity) > 0.5; }).length;
-          samples.push({ t: Math.round(performance.now() - idleStart), n: pieces.length, vis });
+          samples.push({ t: Math.round(performance.now() - idleStart), n: pieces.length, vis, canvasBoard });
           if (performance.now() - idleStart < idleMs) requestAnimationFrame(tick); else done();
         };
         requestAnimationFrame(tick);
@@ -109,7 +113,8 @@ async function record() {
   const frames = fs.readdirSync(OUT).filter((f) => /^f\d+\.png$/.test(f)).length;
   fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ rect, size, browser: browserName, stage, plies, idleMs, debris, t0, marks: log.marks.map((m) => ({ ...m, t: m.t - t0 })), samples: log.samples, muts: log.muts, stats: log.stats, errs, fps: 25 }, null, 1));
   const bad = log.samples.filter((x) => x.vis < x.n || x.n === 0).length;
-  console.log(`${OUT}: ${frames} frames (${browserName}, ${desktop ? 'desktop' : 'phone'}), ${log.marks.length} marks${idleMs ? `, idle ${idleMs} ms: ${log.samples.length} DOM samples, ${bad} with a hidden/missing piece, ${log.muts.filter((m) => m.t >= 0).length} board mutations` : ''}, errs ${errs.length}`);
+  const canvasIdle = log.samples[0]?.canvasBoard;
+  console.log(`${OUT}: ${frames} frames (${browserName}, ${desktop ? 'desktop' : 'phone'}), ${log.marks.length} marks${idleMs ? `, idle ${idleMs} ms: ${log.samples.length} ${canvasIdle ? 'samples (the canvas board — no piece elements to sample, the frame scan is the check)' : `DOM samples, ${bad} with a hidden/missing piece`}, ${log.muts.filter((m) => m.t >= 0).length} board mutations` : ''}, errs ${errs.length}`);
 }
 
 function signatures(OUT) {
