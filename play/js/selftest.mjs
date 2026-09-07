@@ -22,6 +22,7 @@ import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
 import { BoardUI, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE } from './board-ui.mjs';
+import { CanvasBoard } from './canvas-board.mjs'; // Phase 2: the 16×16 canvas renderer, same surface
 import { pieceTiers, CANVAS_ROWS } from './piecetiers.mjs';
 
 const out = document.getElementById('out');
@@ -1276,6 +1277,45 @@ async function main() {
   // --- Art themes (2026-09-03): the repacked tilesets ride a data-theme
   // attribute; wall RUNS and floor VARIANTS are classes the themes paint.
   // (selftest.html loads no stylesheet — computed looks are ui-smoke's job.)
+  // --- PHASE 2 (2026-09-07): the canvas board classifies exactly as the DOM
+  // board does — one terrain rule (classifyTerrain), one test surface
+  // (cellClasses), the same decor and marks — on detached boards (no atlas,
+  // no paint: the data half).
+  await check('canvas board: cellClasses, decor and marks agree with the DOM board', async () => {
+    const hostA = document.createElement('div'), hostB = document.createElement('div');
+    const dom = new BoardUI(hostA, { files: 6, ranks: 6 });
+    const cvs = new CanvasBoard(hostB, { files: 6, ranks: 6, atlas: {} });
+    const fens = [
+      ['4^1/*1^^^*/1**2*/2^3/^**1^1/3*2 w - - 0 1', { holes: new Set(['b2', 'c2']), godCrates: new Set(['a2', 'c4']), skins: { b6: 'door', c6: 'door', a6: 'barrel', d4: 'masonry', e5: 'chest', a5: 'wreckage' }, opened: new Set(['d1']), rubble: new Set(['e1']) }],
+      ['6/6/6/6/6/6 w - - 0 1', {}],
+      ['r3k1/pp1ppp/6/2P3/PP2PP/R3K1 w - - 0 1', { skins: {} }],
+    ];
+    let cells = 0, decor = 0;
+    for (const [fen, ledgers] of fens) {
+      dom.setPosition(fen, ledgers);
+      cvs.setPosition(fen, ledgers);
+      const marks = { selected: 'a1', targets: ['a2', 'b3'], check: 'e1', pit: 'b2', cracked: ['a2'], breached: ['d1'], heat: { c3: 'a', d3: 't' }, arrows: [{ from: 'a1', to: 'a2', kind: 'last' }] };
+      dom.setMarks(marks);
+      cvs.setMarks(marks);
+      for (const sq of dom.cells.keys()) {
+        const a = dom.cellClasses(sq).sort().join(' '), b = cvs.cellClasses(sq).sort().join(' ');
+        if (a !== b) throw new Error(`${sq}: dom [${a}] vs canvas [${b}]`);
+        cells++;
+        const dec = hostA.querySelector(`[data-square="${sq}"] .decor`)?.className.replace('decor decor-', '') ?? null;
+        if (dec !== cvs.decorOf(sq)) throw new Error(`${sq}: decor dom ${dec} vs canvas ${cvs.decorOf(sq)}`);
+        if (dec) decor++;
+      }
+      if (hostA.querySelectorAll('.arrow-layer g.arrow').length !== hostB.querySelectorAll('.arrow-layer g.arrow').length) throw new Error('both boards draw the same arrows');
+    }
+    if (cvs.kind !== 'canvas' || dom.kind !== 'dom') throw new Error('kind');
+    cvs.setPieceFit({ tileLift: 99, tileShift: -99 });
+    if (cvs.pieceFit.pixels !== 'tile' || cvs.pieceFit.tileLift !== TILE_LIFT_RANGE[1] || cvs.pieceFit.tileShift !== -7) throw new Error(`the canvas board is tile-grid only and clamps its placement (${JSON.stringify(cvs.pieceFit)})`);
+    if (!Array.from({ length: 16 * 6 }).every((_, i) => cvs.gridPos(dom.cells.keys().next().value).col === dom.gridPos(dom.cells.keys().next().value).col)) throw new Error('gridPos');
+    cvs.destroy();
+    dom.destroy();
+    return `${cells} squares over ${fens.length} positions classify alike (${decor} decor props / doorways), marks alike, arrows alike`;
+  });
+
   await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
     const host = document.createElement('div');
     const ui = new BoardUI(host, { files: 4, ranks: 5 });

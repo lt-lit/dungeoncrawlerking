@@ -739,6 +739,45 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .board.inactive .cell { cursor: default; }
 .board:not(.inactive) .cell { cursor: pointer; }
 
+/* ---------- PHASE 2 — THE CANVAS BOARD (play/js/canvas-board.mjs, 2026-09-07) ----------
+   One native 16×16 buffer, scaled once onto one <canvas> that spans the
+   container's width; the board is centred in it at the integer step (or
+   fills it in the fallback). The container keeps its width formula and
+   its data-theme / data-pieces / data-doors (the legend and the debris
+   sampler read the cascade off it) but none of the DOM board's grid,
+   border, clip, headroom margin or shake — the canvas draws its own frame
+   and jitters its own blit. The arrow layer is positioned on the board
+   rectangle inline. */
+.board.board-canvas {
+  display: block;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  clip-path: none;
+  overflow: visible;
+  margin-top: 0 !important;
+  background: transparent;
+  line-height: 0;
+}
+.board.board-canvas > canvas.board-surface {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  touch-action: manipulation;
+}
+.board.board-canvas > .arrow-layer { inset: auto; }
+.board.board-canvas.inactive > canvas { cursor: default; }
+.board.board-canvas:not(.inactive) > canvas { cursor: pointer; }
+#board.board-canvas.quaking { animation: none; }
+#render-diag {
+  font-family: ui-monospace, monospace;
+  font-size: .68rem;
+  color: var(--muted);
+  text-align: center;
+  padding: .15rem .2rem 0;
+}
+#render-diag[hidden] { display: none; }
+
 /* ---------- piece motion (FLIP clones on the fx layer) ---------- */
 
 .fx-layer {

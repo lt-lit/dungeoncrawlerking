@@ -43,6 +43,11 @@
     <div id="enemy-bar" class="side-bar"></div>
     <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
     <div id="board"></div>
+    <!-- PHASE 2 — the 16×16 renderer (2026-09-07): while the canvas board is
+         on, one line says what the screen got — device pixel ratio, the
+         canvas's device-pixel size, the scale and whether it is the integer
+         step or the fill fallback. -->
+    <div id="render-diag" hidden aria-live="polite"></div>
     <!-- The player's bar also carries the hint list and the gods line (the
          last quake, held until the player moves) — folded in rather than
          a new row, to protect the board's height budget on a phone. -->
@@ -151,6 +156,20 @@
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
     </div>
     <h2>Look</h2>
+    <!-- PHASE 2 milestone 1 (2026-09-07): the 16×16 canvas renderer behind
+         a switch while the phone judges it (?renderer=canvas). -->
+    <label class="opt">Renderer
+      <select id="optRenderer">
+        <option value="dom" selected>DOM board (Phase 1)</option>
+        <option value="canvas">Canvas — one 16&#215;16 buffer, scaled once</option>
+      </select>
+    </label>
+    <label class="opt">Scaling
+      <select id="optScaling">
+        <option value="integer" selected>Integer step (even pixels)</option>
+        <option value="fill">Fill the width (any scale)</option>
+      </select>
+    </label>
     <label class="opt">Art set
       <select id="optTheme">
         <option value="auto" selected>The stage's own</option>

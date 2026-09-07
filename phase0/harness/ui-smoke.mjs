@@ -9,7 +9,7 @@
 //
 // Setup (once): cd phase0 && npm i --no-save playwright  (Chromium: see
 // selftest-headless.mjs). Usage: cd phase0 && node harness/ui-smoke.mjs
-//   [--stage s59-hall-corner] [--plies 60] [--seed 3] [--shots]
+//   [--stage s59-hall-corner] [--plies 60] [--seed 3] [--shots] [--renderer dom|canvas]
 //   [--go 'depth 8 movetime 120']  (the engine's search limits per move —
 //   shallower searches grab material, which is how to reproduce the
 //   "cracked wall captured in the reply" path below)
@@ -35,6 +35,11 @@ const SEED = arg('seed', '3');
 const SHOTS = argv.includes('--shots');
 const THEME = arg('theme', null); // ?theme= override for the run (default: the stage's own)
 const GO = arg('go', 'depth 8 movetime 120');
+// PHASE 2 (2026-09-07): --renderer canvas drives the 16×16 canvas board
+// through the same surface; the DOM-only probes (computed styles of cells,
+// the piece tiers) are skipped there and the canvas's own geometry checked.
+const RENDERER = arg('renderer', 'dom');
+const CANVAS = RENDERER === 'canvas';
 
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
@@ -78,6 +83,7 @@ const q = new URLSearchParams({
   onset: '1',
   mramp: '2',
   debt: '2',
+  renderer: RENDERER,
   ...(THEME ? { theme: THEME } : {}),
   // No gods overlay: its eval-delta probes run BEFORE the hint probe in the
   // idle window and would delay the hints this smoke times.
@@ -95,6 +101,20 @@ await page.evaluate(() => {
   window.__DCK.applyOptions();
 });
 await page.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+// Renderer-neutral probes: every square's classes (the shared test surface)
+// and its decor, from data on the canvas board and from the DOM otherwise.
+await page.evaluate(() => {
+  const K = window.__DCK;
+  window.__smoke = {
+    canvas: K.renderer.kind === 'canvas',
+    cells: () => Object.fromEntries([...K.app.boardUI.cells.keys()].map((sq) => [sq, K.marks.cell(sq)])),
+    decor: (sq) => (K.renderer.kind === 'canvas' ? K.renderer.decor(sq) : document.querySelector(`#board [data-square="${sq}"] .decor`)?.className.replace('decor decor-', '') ?? null),
+    /** A signature of a square's drawn pixels (canvas) — the theme check's "it changed". */
+    sig: (sq) => { const px = K.renderer.square(sq); if (!px) return null; let h = 0; for (let i = 0; i < px.length; i++) h = (h * 31 + px[i]) >>> 0; return h; },
+    painted: () => K.debris.stats().painted,
+  };
+});
+if (CANVAS) await page.evaluate(() => window.__DCK.renderer.ready());
 
 if (SHOTS) {
   fs.rmSync(OUT, { recursive: true, force: true }); // ply-numbered names: a stale shot from an earlier run would masquerade as this one
@@ -134,39 +154,44 @@ const themeState = () =>
       // it runs on any --stage.
       masksBad: await (async () => {
         const { canonicalMask } = await import('/play/js/board-ui.mjs');
-        const cells = new Map([...document.querySelectorAll('#board .cell[data-square]')].map((c) => [c.dataset.square, c]));
+        const cells = new Map(Object.entries(window.__smoke.cells()));
+        const has = (cl, k) => !!cl && cl.includes(k);
         const solid = (f, r) => {
           const c = cells.get(String.fromCharCode(97 + f) + r);
-          return !!c && !c.classList.contains('hole') && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door') || c.classList.contains('skin-masonry'));
+          return !!c && !has(c, 'hole') && (has(c, 'wall') || has(c, 'cracked') || has(c, 'skin-door') || has(c, 'skin-masonry'));
         };
         const bad = [];
         let n = 0;
         for (const [sq, c] of cells) {
-          if (!c.classList.contains('wall') || c.classList.contains('hole')) continue;
+          if (!has(c, 'wall') || has(c, 'hole')) continue;
           n++;
           const f = sq.charCodeAt(0) - 97;
           const r = parseInt(sq.slice(1), 10);
           const want = canonicalMask((solid(f, r + 1) ? 1 : 0) | (solid(f + 1, r) ? 2 : 0) | (solid(f, r - 1) ? 4 : 0) | (solid(f - 1, r) ? 8 : 0) | (solid(f + 1, r + 1) ? 16 : 0) | (solid(f + 1, r - 1) ? 32 : 0) | (solid(f - 1, r - 1) ? 64 : 0) | (solid(f - 1, r + 1) ? 128 : 0));
-          if (!c.classList.contains(`wm-${want}`)) bad.push(`${sq}:${[...c.classList].find((k) => k.startsWith('wm-')) ?? 'none'}≠wm-${want}`);
+          if (!c.includes(`wm-${want}`)) bad.push(`${sq}:${c.find((k) => k.startsWith('wm-')) ?? 'none'}≠wm-${want}`);
         }
         return { n, bad };
       })(),
       pieces: window.__DCK.pieces,
       king: (() => { const el = document.querySelector('#board .piece[data-piece="K"]'); const cs = el && getComputedStyle(el); return cs ? { bg: cs.backgroundImage, font: cs.fontSize } : null; })(),
+      // The canvas board: signatures of a wall, a floor and the king's square (a theme or set change must move them).
+      sig: window.__smoke.canvas ? (() => { const S = window.__smoke; const cells = S.cells(); const wall = Object.keys(cells).find((sq) => cells[sq].includes('wall')); const floor = Object.keys(cells).find((sq) => !cells[sq].some((c) => ['wall', 'hole', 'furniture'].includes(c))); const fen = window.__DCK.app.duel.fen(); const kingSq = (fen.match(/K/) && (() => { const grid = fen.split(' ')[0].split('/'); for (let r = 0; r < grid.length; r++) { let f = 0; for (const ch of grid[r].replace(/\d+/g, (d) => '.'.repeat(+d))) { if (ch === 'K') return String.fromCharCode(97 + f) + (grid.length - r); f++; } } return null; })()); window.__DCK.renderer.paintNow(); return { wall: wall ? S.sig(wall) : null, floor: floor ? S.sig(floor) : null, king: kingSq ? S.sig(kingSq) : null }; })() : null,
     };
   });
 const stageTheme = THEME ?? (await page.evaluate(() => window.__DCK.app.session.deal.stage.theme));
 // The wall half of a theme check passes vacuously on a stage with no stone
 // wall (themeState's wall is null there); the note says so.
 const wallOk = (wall, want) => wall === null || wall.includes(want);
-const wallNote = (t) => (t.wall === null ? ' — no stone wall on this stage, wall check skipped' : '');
+const wallNote = (t) => (t.wall === null ? (CANVAS ? '' : ' — no stone wall on this stage, wall check skipped') : '');
+const themeSigs = {}; // canvas: per theme, the signatures
 const short = (v) => (v ?? 'none').slice(0, 30);
 {
   const t = await themeState();
   expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend === stageTheme, `board and legend wear the stage's theme "${stageTheme}" (${t.theme}/${t.attr}/${t.legend})`);
-  expect(wallOk(t.wall, 'data:image/png') && (t.floor ?? '').includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${short(t.wall)}…, floor ${short(t.floor)}…)${wallNote(t)}`);
+  if (CANVAS) { themeSigs[stageTheme] = t.sig; expect(t.sig.floor !== null && t.sig.wall !== undefined, `the canvas board paints the stage (floor sig ${t.sig.floor}, wall sig ${t.sig.wall}, king sig ${t.sig.king})`); }
+  else expect(wallOk(t.wall, 'data:image/png') && (t.floor ?? '').includes('data:image/png'), `themed walls and floor paint the repacked PNG tiles (wall ${short(t.wall)}…, floor ${short(t.floor)}…)${wallNote(t)}`);
   expect(t.masksBad.n > 0 && t.masksBad.bad.length === 0, `wall autotile masks match the standing-neighbour rule on all ${t.masksBad.n} walls${t.masksBad.bad.length ? ` — ${t.masksBad.bad.join(' ')}` : ''}`);
-  if (STAGE === 's59-hall-corner') {
+  if (STAGE === 's59-hall-corner' && !CANVAS) {
     expect(t.door.includes('data:image/png'), 'the door leaf paints the pack door sprite (g5, a door in an east–west line)');
     // g5 is a dark square: the checker shade (a flat gradient) is allowed, the in-house bevel (160deg) is not.
     expect(t.doorBg.includes('data:image/png') && !t.doorBg.includes('160deg'), `the floor tile shows behind the door, no in-house bevel (${t.doorBg.slice(0, 60)}…)`);
@@ -180,13 +205,19 @@ const setTheme = (name) =>
 for (const name of THEME ? [] : ['hall', 'castle', 'crypt']) {
   await setTheme(name);
   const t = await themeState();
+  if (CANVAS) themeSigs[name] = t.sig;
   expect(t.theme === name && t.legend === name && wallOk(t.wall, 'data:image/png'), `Art set "${name}" overrides the stage (${t.theme}, legend ${t.legend})${wallNote(t)}`);
   await shot(`00-theme-${name}`);
+}
+if (CANVAS && !THEME) {
+  const floors = new Set(Object.values(themeSigs).map((x) => x?.floor)), walls = new Set(Object.values(themeSigs).map((x) => x?.wall));
+  expect(floors.size === 3 && (walls.size === 3 || themeSigs.hall?.wall === null), `the canvas board repaints per theme: ${floors.size} floor looks, ${walls.size} wall looks over hall / castle / crypt`);
 }
 if (!THEME) await setTheme('classic');
 if (!THEME) {
   const t = await themeState();
-  expect(t.theme === null && t.attr === null && wallOk(t.wall, 'data:image/svg') && !(t.floor ?? '').includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${short(t.wall)}…)${wallNote(t)}`);
+  if (CANVAS) expect(t.theme === null && t.attr === null && t.sig.floor !== themeSigs.hall?.floor, `"classic" strips the theme: the canvas board paints its flat floor (sig ${t.sig.floor})`);
+  else expect(t.theme === null && t.attr === null && wallOk(t.wall, 'data:image/svg') && !(t.floor ?? '').includes('data:image'), `"classic" strips the theme: in-house SVG wall, flat floor (${short(t.wall)}…)${wallNote(t)}`);
   await shot('00-theme-classic');
 }
 await setTheme('auto');
@@ -199,41 +230,47 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
 // Piece sprites: the default set paints the king as a PNG sprite; classic is the glyph.
 {
   const t = await themeState();
-  expect(t.pieces === 'nulltale' && t.king?.bg.includes('data:image/png') && t.king?.font === '0px', `pieces default to the NullTale sprites (${t.pieces}, ${t.king?.font})`);
+  if (CANVAS) expect(t.pieces === 'nulltale' && t.sig.king !== null, `pieces default to the NullTale sprites (${t.pieces}; king square sig ${t.sig.king})`);
+  else expect(t.pieces === 'nulltale' && t.king?.bg.includes('data:image/png') && t.king?.font === '0px', `pieces default to the NullTale sprites (${t.pieces}, ${t.king?.font})`);
   await page.evaluate(() => { window.__DCK.options.pieces = 'classic'; window.__DCK.applyOptions(); });
   const c = await themeState();
-  expect(c.pieces === null && c.king?.bg === 'none' && c.king?.font !== '0px', `"classic" pieces are the glyphs again (${c.king?.bg.slice(0, 20)}, ${c.king?.font})`);
+  if (CANVAS) expect(c.pieces === null, `"classic" pieces: the canvas board keeps drawing the default set (glyphs are text, not pixel art) — ${c.pieces}`);
+  else expect(c.pieces === null && c.king?.bg === 'none' && c.king?.font !== '0px', `"classic" pieces are the glyphs again (${c.king?.bg.slice(0, 20)}, ${c.king?.font})`);
   await page.evaluate(() => { window.__DCK.options.pieces = 'pixel-chess-wood'; window.__DCK.applyOptions(); });
-  expect((await themeState()).pieces === 'pixel-chess-wood', 'the wood set applies');
+  const wood = await themeState();
+  expect(wood.pieces === 'pixel-chess-wood' && (!CANVAS || wood.sig.king !== t.sig.king), `the wood set applies${CANVAS ? ' and repaints the king' : ''}`);
   await shot('00-pieces-wood');
   await page.evaluate(() => { window.__DCK.options.pieces = 'nulltale'; window.__DCK.applyOptions(); });
   // Decor: wall props (torch / banner / chain) on wall faces only — the
   // floor litter is packed away (round 10) — never on holes or furniture.
-  const decor = await page.evaluate(() => [...document.querySelectorAll('#board .decor')].map((d) => ({ cls: [...d.classList].filter((c) => c.startsWith('decor-')), cell: [...d.parentElement.classList] })));
-  expect(decor.every((d) => d.cls.length === 1 && (d.cls[0] === 'decor-doorway' ? !d.cell.includes('wall') && !d.cell.includes('furniture') : d.cell.includes('wall') && ['decor-torch', 'decor-banner', 'decor-chain'].includes(d.cls[0]))), `${decor.length} cosmetic props: wall props on wall faces only, no floor litter`);
+  const decor = await page.evaluate(() => { const S = window.__smoke; const cells = S.cells(); return Object.keys(cells).map((sq) => ({ name: S.decor(sq), cell: cells[sq] })).filter((d) => d.name); });
+  expect(decor.every((d) => (d.name === 'doorway' ? !d.cell.includes('wall') && !d.cell.includes('furniture') : d.cell.includes('wall') && ['torch', 'banner', 'chain'].includes(d.name))), `${decor.length} cosmetic props: wall props on wall faces only, no floor litter`);
 }
 
 // --- skins: the hall's doors paint from ply 0 — g5 (east–west line) as the
 // leaf, d8 (north–south line) as a weak spot ---------------------------------
 if (STAGE === 's59-hall-corner') {
-  const door = await page.evaluate(() => ({ g5: window.__DCK.marks.cell('g5'), d8: window.__DCK.marks.cell('d8'), sprite: !!document.querySelector('#board [data-square="g5"] .piece.neutral') }));
+  const door = await page.evaluate(() => ({ g5: window.__DCK.marks.cell('g5'), d8: window.__DCK.marks.cell('d8'), sprite: window.__smoke.canvas || !!document.querySelector('#board [data-square="g5"] .piece.neutral') }));
   expect(door.g5?.includes('furniture') && door.g5?.includes('skin-door') && door.sprite, `g5 is the door leaf with its sprite (${door.g5})`);
   // Round 16: g5+h5, the double doors in the south wall, are ONE two-wide
   // door — g5 the left half, h5 the right — and each half paints its own
   // pack sprite (the leaves' data URIs differ).
   const dbl = await page.evaluate(() => {
-    const bg = (sq) => getComputedStyle(document.querySelector(`#board [data-square="${sq}"] .piece.neutral`)).backgroundImage;
-    return { g5: window.__DCK.marks.cell('g5'), h5: window.__DCK.marks.cell('h5'), same: bg('g5') === bg('h5'), png: bg('g5').includes('data:image/png') };
+    const S = window.__smoke;
+    const bg = (sq) => (S.canvas ? String(S.sig(sq)) : getComputedStyle(document.querySelector(`#board [data-square="${sq}"] .piece.neutral`)).backgroundImage);
+    return { g5: window.__DCK.marks.cell('g5'), h5: window.__DCK.marks.cell('h5'), same: bg('g5') === bg('h5'), png: S.canvas || bg('g5').includes('data:image/png') };
   });
-  expect(dbl.g5?.includes('door2-l') && dbl.h5?.includes('door2-r') && dbl.png && !dbl.same, `g5+h5 are one double door: left half + right half, two different pack sprites (${dbl.g5} / ${dbl.h5})`);
+  expect(dbl.g5?.includes('door2-l') && dbl.h5?.includes('door2-r') && dbl.png && !dbl.same, `g5+h5 are one double door: left half + right half, two different ${CANVAS ? 'paints' : 'pack sprites'} (${dbl.g5} / ${dbl.h5})`);
   // Round 17: a furniture PROP's sprite box is two cells tall, anchored to
   // its cell's bottom (small props centred in the square, tall urns rising
   // north); a door's stays one cell.
-  const boxes = await page.evaluate(() => {
-    const h = (sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const p = c.querySelector('.piece.neutral'); return p ? Math.round(p.getBoundingClientRect().height / c.getBoundingClientRect().height * 100) / 100 : null; };
-    return { crate: h('j1'), door: h('g5') };
-  });
-  expect(boxes.crate === 2 && boxes.door === 1, `a prop's sprite box is 2 cells tall, a door's 1 (j1 crate ${boxes.crate}, g5 door ${boxes.door})`);
+  if (!CANVAS) {
+    const boxes = await page.evaluate(() => {
+      const h = (sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const p = c.querySelector('.piece.neutral'); return p ? Math.round(p.getBoundingClientRect().height / c.getBoundingClientRect().height * 100) / 100 : null; };
+      return { crate: h('j1'), door: h('g5') };
+    });
+    expect(boxes.crate === 2 && boxes.door === 1, `a prop's sprite box is 2 cells tall, a door's 1 (j1 crate ${boxes.crate}, g5 door ${boxes.door})`);
+  }
   expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('weak'), `d8, the door in the north–south line, is a weak spot (${door.d8})`);
 }
 
@@ -344,6 +381,7 @@ for (let i = 0; i < PLIES; i++) {
           // The sprite on a cracked wall is the CRACK, never a crate (the
           // crate default and the crack rule share a specificity — order bug
           // caught 2026-09-02 by a screenshot).
+          if (CANVAS) continue; // the crack's pixels are the parity gate's business (canvas-parity.mjs)
           const bg = await page.evaluate((s) => { const el = document.querySelector(`#board [data-square="${s}"] .piece.neutral`); return el ? getComputedStyle(el).backgroundImage : null; }, sq);
           expect(bg !== null && bg.includes('0b0a10') && !bg.includes('3a2213'), `${sq}: cracked wall paints the crack, not a crate sprite${bg === null ? ' (no sprite element!)' : ''}`);
           // …and the WALL under it: the cell keeps its wall case over the
@@ -371,10 +409,10 @@ for (let i = 0; i < PLIES; i++) {
       const skinsNow = await page.evaluate(() => window.__DCK.skins);
       for (const sq of m.breached) {
         if (cells[sq]?.includes('hole')) continue;
-        const dec = await page.evaluate((s) => document.querySelector(`#board [data-square="${s}"] .decor`)?.className ?? null, sq);
+        const dec = await page.evaluate((s) => window.__smoke.decor(s), sq);
         const stub = cells[sq]?.find((c) => c.startsWith('wm-')) ?? null;
         if (residue.rubble.includes(sq)) expect(cells[sq]?.includes('ruin') && stub !== null && dec === null, `${sq}: breached wall keeps its ruin stub (${stub}, ${dec})`);
-        else if (residue.opened.includes(sq)) expect(dec === 'decor decor-doorway' && !cells[sq]?.includes('ruin'), `${sq}: breached door keeps its open doorway (${dec})`);
+        else if (residue.opened.includes(sq)) expect(dec === 'doorway' && !cells[sq]?.includes('ruin'), `${sq}: breached door keeps its open doorway (${dec})`);
         else expect(!cells[sq]?.includes('ruin') && dec === null && !['door', 'masonry'].includes(skinsNow[sq] ?? null), `${sq}: a burst crate leaves nothing (${skinsNow[sq]}, ${stub}, ${dec})`);
       }
       const quakeArrows = await page.evaluate(() => document.querySelectorAll('#board .arrow-layer g.arrow-quake').length);
@@ -421,38 +459,32 @@ if ((await page.evaluate(() => window.__DCK.app.duel?.state)) === 'playing') {
  *  Runs in the page. */
 function tilesVsLedgers({ holes, godCrates, fen }) {
   const bad = [];
-  for (const sq of holes) if (!window.__DCK.marks.cell(sq).includes('hole')) bad.push(`${sq} not a hole`);
-  for (const cell of document.querySelectorAll('#board .cell.cracked')) if (!godCrates.includes(cell.dataset.square)) bad.push(`${cell.dataset.square} cracked without ledger`);
-  for (const sq of godCrates) {
-    const cls = window.__DCK.marks.cell(sq);
-    if (cls.includes('furniture') && !cls.includes('cracked')) bad.push(`${sq} god crate painted as authored`);
-  }
-  const standing = (f, r) => {
-    const c = document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"]`);
-    return !!c && (c.classList.contains('wall') || c.classList.contains('cracked') || c.classList.contains('skin-door') || c.classList.contains('skin-masonry'));
-  };
-  for (const cell of document.querySelectorAll('#board .cell.ruin')) {
-    const sq = cell.dataset.square;
+  const S = window.__smoke;
+  const cells = S.cells();
+  const cl = (sq) => cells[sq] ?? null;
+  const has = (sq, k) => !!cl(sq)?.includes(k);
+  const caseOf = (sq) => cl(sq)?.find((k) => k.startsWith('wm-')) ?? 'no case';
+  for (const sq of holes) if (!has(sq, 'hole')) bad.push(`${sq} not a hole`);
+  for (const sq of Object.keys(cells)) if (has(sq, 'cracked') && !godCrates.includes(sq)) bad.push(`${sq} cracked without ledger`);
+  for (const sq of godCrates) if (has(sq, 'furniture') && !has(sq, 'cracked')) bad.push(`${sq} god crate painted as authored`);
+  const at = (f, r) => String.fromCharCode(97 + f) + r;
+  const standing = (f, r) => { const sq = at(f, r); return !!cl(sq) && (has(sq, 'wall') || has(sq, 'cracked') || has(sq, 'skin-door') || has(sq, 'skin-masonry')); };
+  for (const sq of Object.keys(cells)) {
     const f = sq.charCodeAt(0) - 97;
     const r = parseInt(sq.slice(1), 10);
-    const want = (standing(f, r + 1) ? 1 : 0) | (standing(f + 1, r) ? 2 : 0) | (standing(f, r - 1) ? 4 : 0) | (standing(f - 1, r) ? 8 : 0);
-    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} ruin wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its standing neighbours say wm-${want}`);
-  }
-  for (const span of document.querySelectorAll('#board .decor-doorway')) {
-    const cell = span.parentElement;
-    const sq = cell.dataset.square;
-    const f = sq.charCodeAt(0) - 97;
-    const r = parseInt(sq.slice(1), 10);
-    const want = (standing(f + 1, r) ? 2 : 0) | (standing(f - 1, r) ? 8 : 0);
-    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} doorway wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its standing walls say wm-${want}`);
-  }
-  const isHole = (f, r) => !!document.querySelector(`#board [data-square="${String.fromCharCode(97 + f)}${r}"].hole`);
-  for (const cell of document.querySelectorAll('#board .cell.hole')) {
-    const sq = cell.dataset.square;
-    const f = sq.charCodeAt(0) - 97;
-    const r = parseInt(sq.slice(1), 10);
-    const want = (isHole(f, r + 1) ? 1 : 0) | (isHole(f + 1, r) ? 2 : 0) | (isHole(f, r - 1) ? 4 : 0) | (isHole(f - 1, r) ? 8 : 0);
-    if (!cell.classList.contains(`wm-${want}`)) bad.push(`${sq} hole wears ${[...cell.classList].find((k) => k.startsWith('wm-')) ?? 'no case'}, its hole neighbours say wm-${want}`);
+    if (has(sq, 'ruin')) {
+      const want = (standing(f, r + 1) ? 1 : 0) | (standing(f + 1, r) ? 2 : 0) | (standing(f, r - 1) ? 4 : 0) | (standing(f - 1, r) ? 8 : 0);
+      if (!has(sq, `wm-${want}`)) bad.push(`${sq} ruin wears ${caseOf(sq)}, its standing neighbours say wm-${want}`);
+    }
+    if (S.decor(sq) === 'doorway') {
+      const want = (standing(f + 1, r) ? 2 : 0) | (standing(f - 1, r) ? 8 : 0);
+      if (!has(sq, `wm-${want}`)) bad.push(`${sq} doorway wears ${caseOf(sq)}, its standing walls say wm-${want}`);
+    }
+    if (has(sq, 'hole')) {
+      const isHole = (ff, rr) => has(at(ff, rr), 'hole');
+      const want = (isHole(f, r + 1) ? 1 : 0) | (isHole(f + 1, r) ? 2 : 0) | (isHole(f, r - 1) ? 4 : 0) | (isHole(f - 1, r) ? 8 : 0);
+      if (!has(sq, `wm-${want}`)) bad.push(`${sq} hole wears ${caseOf(sq)}, its hole neighbours say wm-${want}`);
+    }
   }
   void fen;
   return bad;
@@ -493,7 +525,27 @@ expect(await page.evaluate(() => !!document.getElementById('optHintCont') && doc
 // down for the head, and the dial rows hidden. Sits here, after the probe
 // checks: every applyOptions re-runs the idle probe. (Whether the pixels
 // land on the floor's device grid is harness/piece-grid.mjs's job.)
-const snap = await page.evaluate(() => {
+if (CANVAS) {
+  // The canvas board: an integer scale, a device-pixel-sized canvas, the
+  // diagnostics line saying so, the placement dials in whole tile pixels.
+  const geo = await page.evaluate(() => { const K = window.__DCK; return { info: K.renderer.info, diag: K.renderer.diagShown, fit: K.pieceFit, pxDialsShown: !document.getElementById('optTileLift').closest('.opt').hidden, dialsHidden: document.getElementById('optPieceScale').closest('.opt').hidden, select: document.getElementById('optRenderer').value, canvases: document.querySelectorAll('#board canvas').length, cw: document.querySelector('#board canvas').width, cssW: document.querySelector('#board canvas').getBoundingClientRect().width }; });
+  expect(geo.info.renderer === 'canvas' && geo.info.integer && Number.isInteger(geo.info.k) && geo.info.k >= 1 && geo.info.devW === geo.cw && Math.abs(geo.cssW * geo.info.dpr - geo.cw) < 1, `canvas board: k ${geo.info.k} (${geo.info.tilePx} device px per tile), the canvas ${geo.cw} device px = its css width × ${geo.info.dpr}, one canvas on the board (${geo.canvases})`);
+  expect(typeof geo.diag === 'string' && geo.diag.startsWith('canvas ·') && geo.diag.includes(`k ${geo.info.k}`), `the diagnostics line reads "${geo.diag}"`);
+  expect(geo.fit.pixels === 'tile' && geo.select === 'canvas' && geo.pxDialsShown && geo.dialsHidden, `tile-grid only: lift ${geo.fit.tileLift} / shift ${geo.fit.tileShift} px, the px dials shown, the % dials hidden, the Renderer select reads canvas`);
+  // Switching back to the DOM board mid-duel remounts it on the same position; and back again.
+  const sw = await page.evaluate(async () => {
+    const K = window.__DCK;
+    const fen = K.app.duel.fen();
+    const dom = K.renderer.set('dom');
+    const cells = document.querySelectorAll('#board .cell[data-square]').length, canvases = document.querySelectorAll('#board canvas').length, painted = K.debris.stats().painted;
+    const back = K.renderer.set('canvas');
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    return { dom, cells, canvases, painted, back, same: K.app.duel.fen() === fen, canvasesBack: document.querySelectorAll('#board canvas').length, paintedBack: K.debris.stats().painted, diag: K.renderer.diagShown };
+  });
+  expect(sw.dom === 'dom' && sw.cells > 0 && sw.canvases === 0 && sw.painted > 0 && sw.back === 'canvas' && sw.same && sw.canvasesBack === 1 && sw.paintedBack === sw.painted && !!sw.diag, `the Renderer option remounts live: → dom (${sw.cells} cells, ${sw.painted} debris squares) → canvas (${sw.paintedBack} debris squares, diag back)`);
+}
+const snap = CANVAS ? null : await page.evaluate(() => {
   const K = window.__DCK;
   K.options.piecePixels = 'display'; K.applyOptions();
   const el = document.querySelector('#board .piece[data-piece="K"]');
@@ -519,11 +571,11 @@ const snap = await page.evaluate(() => {
     rowVars: el2.closest('.cell').style.getPropertyValue('--tier-mid-top'), northTop: (() => { const c = el2.closest('.cell'); const north = c.previousElementSibling && [...document.querySelectorAll('#board .cell')].find((x) => x.getBoundingClientRect().left === cell.left && Math.abs(x.getBoundingClientRect().bottom - cell.top) < 0.02); return north ? north.getBoundingClientRect().top - cell.top : null; })(),
   };
 });
-expect(snap.rowVars.endsWith('px') && snap.northTop !== null && Math.abs(parseFloat(snap.rowVars) - snap.northTop) < 1e-6, `the king's cell carries the measured row above as its mid tier's box (${snap.rowVars} = the north square's top ${snap.northTop?.toFixed(5)})`);
+if (snap) expect(snap.rowVars.endsWith('px') && snap.northTop !== null && Math.abs(parseFloat(snap.rowVars) - snap.northTop) < 1e-6, `the king's cell carries the measured row above as its mid tier's box (${snap.rowVars} = the north square's top ${snap.northTop?.toFixed(5)})`);
 // The tile grid's placement (whole tile pixels) is BAKED into the tiers:
 // the default lift wears inline --piece-<fen>-lo/-mid/-hi cut from the
 // decoded set, lift 0 wears tiles.css's own; the headroom follows the lift.
-const bake = await page.evaluate(async () => {
+const bake = CANVAS ? null : await page.evaluate(async () => {
   const K = window.__DCK, board = document.getElementById('board');
   const dflt = K.pieceFit.tileLift;
   await K.app.boardUI.pieceBaked;
@@ -539,12 +591,12 @@ const bake = await page.evaluate(async () => {
   await K.app.boardUI.pieceBaked;
   return { dflt, lifted, flat, back: K.pieceFit.tiers };
 });
-expect(bake.dflt > 0 && bake.lifted.tiers === 36 && bake.lifted.lo && bake.lifted.mid && bake.lifted.hi === 'none' && bake.lifted.liftVar === String(bake.dflt) && bake.lifted.label === `+${bake.dflt} px`, `the default lift (${bake.dflt} px) is baked: ${bake.lifted.tiers} inline tiers on the board, the king's lo and mid cut, hi none, the label reads ${bake.lifted.label}`);
-expect((bake.lifted.afterTop === '-200%' || parseFloat(bake.lifted.afterTop) < -1) && bake.lifted.afterImg === 'none' && bake.lifted.margin > bake.flat.margin, `the ::after tier sits two cells up (top ${bake.lifted.afterTop}) painting nothing at this lift; the headroom grew ${bake.flat.margin.toFixed(1)} → ${bake.lifted.margin.toFixed(1)}px`);
-expect(bake.flat.tiers === 0 && bake.flat.lo === '' && bake.flat.liftVar === '' && bake.back === 36, `lift 0 wears tiles.css's own tiers (no inline tier, no lift var), the default bakes again (${bake.back})`);
-expect(snap.fit > 0 && snap.k >= 1 && Math.abs(snap.k - Math.round(snap.k)) < 1e-3 && snap.on.snap && snap.on.pixels === 'display' && snap.on.box?.h && snap.dialsShown, `display-pixel pieces: king box ${snap.h}px = ${snap.k}× the set's ${snap.fit}-px height, the dials shown`);
-expect(snap.mode === 'tile' && !snap.snapAttr && snap.select === 'tile' && snap.tile.pixels === 'tile' && !snap.tile.box && snap.dialsHidden && snap.boxIsCell && snap.bodyImg && snap.body === '100% 100% @ 50% 50%', `tile-grid pieces (the default): the king's box is its cell, painted like the floor (${snap.body}), the dials hidden`);
-expect(snap.headImg && snap.headPaint === '100% 100% @ 50% 50%' && (snap.headTop === '-100%' || Math.abs(parseFloat(snap.headTop) + snap.cellH) < 0.02) && Math.abs(parseFloat(snap.headH) - snap.cellH) < 0.02 && snap.margin > 0, `its head is a ::before one cell up (top ${snap.headTop}, height ${snap.headH}, cell ${snap.cellH.toFixed(2)}px), the board stepped down ${snap.margin.toFixed(1)}px for it`);
+if (bake) expect(bake.dflt > 0 && bake.lifted.tiers === 36 && bake.lifted.lo && bake.lifted.mid && bake.lifted.hi === 'none' && bake.lifted.liftVar === String(bake.dflt) && bake.lifted.label === `+${bake.dflt} px`, `the default lift (${bake.dflt} px) is baked: ${bake.lifted.tiers} inline tiers on the board, the king's lo and mid cut, hi none, the label reads ${bake.lifted.label}`);
+if (bake) expect((bake.lifted.afterTop === '-200%' || parseFloat(bake.lifted.afterTop) < -1) && bake.lifted.afterImg === 'none' && bake.lifted.margin > bake.flat.margin, `the ::after tier sits two cells up (top ${bake.lifted.afterTop}) painting nothing at this lift; the headroom grew ${bake.flat.margin.toFixed(1)} → ${bake.lifted.margin.toFixed(1)}px`);
+if (bake) expect(bake.flat.tiers === 0 && bake.flat.lo === '' && bake.flat.liftVar === '' && bake.back === 36, `lift 0 wears tiles.css's own tiers (no inline tier, no lift var), the default bakes again (${bake.back})`);
+if (snap) expect(snap.fit > 0 && snap.k >= 1 && Math.abs(snap.k - Math.round(snap.k)) < 1e-3 && snap.on.snap && snap.on.pixels === 'display' && snap.on.box?.h && snap.dialsShown, `display-pixel pieces: king box ${snap.h}px = ${snap.k}× the set's ${snap.fit}-px height, the dials shown`);
+if (snap) expect(snap.mode === 'tile' && !snap.snapAttr && snap.select === 'tile' && snap.tile.pixels === 'tile' && !snap.tile.box && snap.dialsHidden && snap.boxIsCell && snap.bodyImg && snap.body === '100% 100% @ 50% 50%', `tile-grid pieces (the default): the king's box is its cell, painted like the floor (${snap.body}), the dials hidden`);
+if (snap) expect(snap.headImg && snap.headPaint === '100% 100% @ 50% 50%' && (snap.headTop === '-100%' || Math.abs(parseFloat(snap.headTop) + snap.cellH) < 0.02) && Math.abs(parseFloat(snap.headH) - snap.cellH) < 0.02 && snap.margin > 0, `its head is a ::before one cell up (top ${snap.headTop}, height ${snap.headH}, cell ${snap.cellH.toFixed(2)}px), the board stepped down ${snap.margin.toFixed(1)}px for it`);
 if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT, '06-options.png') });
 // --- The replay log (2026-09-06): the export builds from the live duel and
 // is complete (states per ply, the engine record, inputs on every due roll,
@@ -683,14 +735,15 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       want.skid += (q.displacements ?? []).length;
       if (q.crumble) want.crumble++;
     }
-    const painted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.querySelector(':scope > img.debris')).map((c) => c.dataset.square);
-    // every debris image is a decoded 16×16 PNG, the cell's FIRST child (under the sprites and pieces), with painted pixels behind it
-    const urlsOk = painted.every((sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const im = c.querySelector(':scope > img.debris'); return im.naturalWidth === 16 && im.naturalHeight === 16 && im.complete && im.src.startsWith('data:image/png;base64,') && c.firstElementChild === im && K.debris.cell(sq).painted && K.debris.cell(sq).pixels > 0; });
+    const S = window.__smoke;
+    const painted = Object.keys(S.cells()).filter((sq) => K.debris.cell(sq).painted);
+    // every debris image is a decoded 16×16 PNG, the cell's FIRST child (under the sprites and pieces), with painted pixels behind it — on the canvas board, a buffer the square wears
+    const urlsOk = painted.every((sq) => { if (S.canvas) return K.debris.cell(sq).pixels > 0; const c = document.querySelector(`#board [data-square="${sq}"]`); const im = c.querySelector(':scope > img.debris'); return im.naturalWidth === 16 && im.naturalHeight === 16 && im.complete && im.src.startsWith('data:image/png;base64,') && c.firstElementChild === im && K.debris.cell(sq).painted && K.debris.cell(sq).pixels > 0; });
     const paintedOnFloor = painted.every((sq) => { const cl = K.marks.cell(sq); return !cl.includes('wall') && !cl.includes('hole') && !cl.includes('furniture'); });
     const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square));
     const breachPainted = breachSquares.filter((sq) => !!K.debris.cell(sq)?.painted);
     // No canvas on the board, no piece z-index (Firefox dropped z-indexed pieces for a frame): the pieces stack as they always did.
-    const layerOrder = (() => { const cs = (sel) => getComputedStyle(document.querySelector(sel)).zIndex; return { canvases: document.querySelectorAll('#board canvas').length, piece: cs('#board .piece'), arrows: cs('#board .arrow-layer'), fx: cs('#board .fx-layer') }; })();
+    const layerOrder = (() => { const cs = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).zIndex : null; }; return { canvases: document.querySelectorAll('#board canvas').length, piece: cs('#board .piece'), arrows: cs('#board .arrow-layer'), fx: cs('#board .fx-layer') }; })();
     const captures = d.record.sans.filter((s) => s.includes('x')).length;
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(K.debris.key + K.debris.env)); } catch { /* none */ }
@@ -705,8 +758,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(dz.attr === 'destruction blood skid wear fx', `the board carries data-debris (${dz.attr})`);
   expect((dz.byKind.kill ?? 0) + (dz.byKind.smash ?? 0) === dz.captures, `one kill or smash per capture on the record (${dz.byKind.kill ?? 0} kills + ${dz.byKind.smash ?? 0} smashes = ${dz.captures} captures)`);
   expect((dz.byKind.weaken ?? 0) === dz.want.weaken && (dz.byKind.breach ?? 0) === dz.want.breach && (dz.byKind.skid ?? 0) === dz.want.skid && (dz.byKind.crumble ?? 0) === dz.want.crumble, `every quake rung left its event (weaken ${dz.byKind.weaken ?? 0}/${dz.want.weaken}, breach ${dz.byKind.breach ?? 0}/${dz.want.breach}, skid ${dz.byKind.skid ?? 0}/${dz.want.skid}, crumble ${dz.byKind.crumble ?? 0}/${dz.want.crumble})`);
-  expect(dz.events > 0 && dz.painted > 0 && dz.urlsOk && dz.paintedOnFloor && dz.pending === 0, `${dz.painted} squares wear a decoded 16×16 debris image as their first child, all on floor, nothing left in flight (${dz.events} events)`);
-  expect(dz.layerOrder.piece === 'auto' && dz.layerOrder.arrows === '3' && dz.layerOrder.fx === '4' && dz.layerOrder.canvases === 0, `the stack is untouched: pieces z ${dz.layerOrder.piece}, arrows ${dz.layerOrder.arrows}, clones ${dz.layerOrder.fx}, and not one canvas on the board`);
+  expect(dz.events > 0 && dz.painted > 0 && dz.urlsOk && dz.paintedOnFloor && dz.pending === 0, `${dz.painted} squares wear ${CANVAS ? 'a 16×16 debris buffer in the canvas' : 'a decoded 16×16 debris image as their first child'}, all on floor, nothing left in flight (${dz.events} events)`);
+  if (CANVAS) expect(dz.layerOrder.canvases === 1 && dz.layerOrder.piece === null && dz.layerOrder.fx === null, `the canvas board: one canvas, no piece elements, no fx layer (arrows z ${dz.layerOrder.arrows})`);
+  else expect(dz.layerOrder.piece === 'auto' && dz.layerOrder.arrows === '3' && dz.layerOrder.fx === '4' && dz.layerOrder.canvases === 0, `the stack is untouched: pieces z ${dz.layerOrder.piece}, arrows ${dz.layerOrder.arrows}, clones ${dz.layerOrder.fx}, and not one canvas on the board`);
   expect(dz.breach === 0 || dz.breachPainted > 0, `a breached wall's square wears its own stone (${dz.breachPainted}/${dz.breach})`);
   expect(dz.plyMax <= dz.ply, `no event outlives the record after the undos (latest event ply ${dz.plyMax} ≤ ${dz.ply})`);
   expect(dz.traffic > 0, `traffic wears the floor (${dz.traffic} cells visited)`);
@@ -715,7 +769,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // Toggles filter the paint, not the record.
   const tog = await page.evaluate(async () => {
     const K = window.__DCK;
-    const count = () => document.querySelectorAll('#board .cell[data-square] > img.debris').length;
+    const count = () => window.__smoke.painted();
     const before = count();
     K.options.debris = { ...K.options.debris, destruction: false, blood: false, skid: false, wear: false };
     K.applyOptions();
@@ -737,7 +791,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const events = K.debris.stats().events, epoch = K.debris.stats().epoch;
     K.preview();
     await new Promise((r) => setTimeout(r, 300));
-    const previewPainted = document.querySelectorAll('#board .cell[data-square] > img.debris').length;
+    const previewPainted = window.__smoke.painted();
     const previewPhase = K.app.phase;
     await K.begin();
     return { events, epoch, previewPainted, previewPhase, epochNow: K.debris.stats().epoch, eventsNow: K.debris.stats().events, phase: K.app.phase };
@@ -752,7 +806,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs2 = [];
   page2.on('pageerror', (e) => errs2.push(String(e).split('\n')[0]));
-  const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', ...(THEME ? { theme: THEME } : {}) });
+  const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', renderer: RENDERER, ...(THEME ? { theme: THEME } : {}) });
   await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?${q2}`);
   await page2.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page2.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
@@ -770,17 +824,18 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const t0 = Date.now();
     while (K.debris.busy && Date.now() - t0 < 5000) await wait(50);
     const evs = K.debris.events();
-    const canvases = document.querySelectorAll('#board .cell[data-square] > img.debris').length;
+    const canvasBoard = K.renderer.kind === 'canvas';
+    const canvases = canvasBoard ? K.debris.stats().painted : document.querySelectorAll('#board .cell[data-square] > img.debris').length;
     const st = K.debris.stats();
     // every image is a persistent one, the cell's first child; the flight's group is gone
     const persistent = st.painted;
-    const firstChild = [...document.querySelectorAll('#board .cell[data-square] > img.debris')].every((c) => c.parentElement.firstElementChild === c);
-    const transient = document.querySelectorAll('#board svg.flight-layer g.flight').length + document.querySelectorAll('#board canvas').length;
+    const firstChild = canvasBoard || [...document.querySelectorAll('#board .cell[data-square] > img.debris')].every((c) => c.parentElement.firstElementChild === c);
+    const transient = document.querySelectorAll('#board svg.flight-layer g.flight').length + (canvasBoard ? (K.debris.busy ? 1 : 0) : document.querySelectorAll('#board canvas').length);
     return { plies, captures, frames: K.debris.frames(), canvases, persistent, firstChild, transient, events: evs.length, pending: st.pending, flights: st.flights, fx: K.debris.options.fx };
   });
   expect(fl.fx && fl.events > 0, `motion on: ${fl.events} events over ${fl.plies} plies (${fl.captures} captures)`);
-  expect(fl.frames > 0, `the flight drew ${fl.frames} frames on the flight SVG`);
-  expect(fl.pending === 0 && fl.flights === 0 && fl.transient === 0 && fl.canvases === fl.persistent && fl.persistent > 0 && fl.firstChild, `everything landed: no flight held, nothing pending, the flight group gone, no canvas, ${fl.persistent} squares keep their debris image as the cell's first child`);
+  expect(fl.frames > 0, `the flight drew ${fl.frames} frames ${CANVAS ? 'into the canvas buffer' : 'on the flight SVG'}`);
+  expect(fl.pending === 0 && fl.flights === 0 && fl.transient === 0 && fl.canvases === fl.persistent && fl.persistent > 0 && fl.firstChild, `everything landed: no flight held, nothing pending, the flight ${CANVAS ? 'cleared' : 'group gone, no canvas'}, ${fl.persistent} squares keep their debris${CANVAS ? '' : ' image as the cell\'s first child'}`);
   expect(errs2.length === 0, `no page errors with the flight on${errs2.length ? ` — ${errs2.join(' | ')}` : ''}`);
   await page2.close();
 }

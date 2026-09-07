@@ -2,3 +2,5 @@ node_modules/
 results/ui-smoke/
 assets-src/
 results/replay-smoke/
+results/canvas-parity/
+results/canvas-grid/

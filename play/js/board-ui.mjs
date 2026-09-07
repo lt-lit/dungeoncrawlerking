@@ -184,7 +184,7 @@ function squareHash(f, rank, salt) {
  *  a prop must never read as a piece or as terrain. Floor litter (web /
  *  bones / skull / candle) is PACKED AWAY (designer round 10: it made the
  *  pieces harder to read); the sprites stay in tiles.css. */
-function decorFor({ wallTile, cracked, mask, f, rank, earned }) {
+export function decorFor({ wallTile, cracked, mask, f, rank, earned }) {
   if (earned) return earned; // the open doorway a door left behind
   if (!wallTile || cracked || !(mask & 10) || mask & 4) return null;
   const r = squareHash(f, rank, 7) % 1000;
@@ -199,7 +199,11 @@ function floorVariant(f, rank) {
 
 /** Which of the crack drawings a square wears if its wall cracks. */
 function crackVariant(f, rank) {
-  return `ck${1 + (squareHash(f, rank, 11) % CRACK_VARIANTS)}`;
+  return `ck${crackVariantIndex(f, rank)}`;
+}
+/** The crack drawing's NUMBER (1…CRACK_VARIANTS) for a square. */
+export function crackVariantIndex(f, rank) {
+  return 1 + (squareHash(f, rank, 11) % CRACK_VARIANTS);
 }
 /** Which of a skin's sprite variants a square shows (SKIN_VARIANTS). */
 function skinVariant(f, rank) {
@@ -359,6 +363,91 @@ export function residueStep(prev, next, skins = {}, files, ranks) {
   return { opened, rubble };
 }
 
+/**
+ * Draw arrows on an SVG overlay (the arrow layer: viewBox files×CELL by
+ * ranks×CELL, flip-aware square centres). Shared by the DOM board and the
+ * canvas board (canvas-board.mjs), whose arrows are the same vector UI
+ * over the board rectangle.
+ */
+export function renderArrows(svg, arrows, { files, ranks, flipped = false }) {
+  const centerOf = (sq) => {
+    const f = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq.slice(1), 10);
+    const col = flipped ? files - 1 - f : f;
+    const rowFromTop = flipped ? rank - 1 : ranks - rank;
+    return [col * CELL + CELL / 2, rowFromTop * CELL + CELL / 2];
+  };
+  svg.textContent = '';
+  // Ascending sort key: quake arrows first (drawn first = underneath), then
+  // hints from worst rank to best, so rank 1 is appended last (on top).
+  const key = (a) => (a.kind === 'quake' ? -100 : a.kind === 'last' ? -90 : -(a.rank ?? 2 - (a.strength ?? 1)));
+  const sorted = [...arrows].sort((a, b) => key(a) - key(b));
+  for (const { from, to, strength = 1, rank = null, kind = 'hint', label = null } of sorted) {
+    const [x1, y1] = centerOf(from);
+    const [x2, y2] = centerOf(to);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (!len) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    const s = Math.max(0, Math.min(1, strength));
+    // A labelled arrow is a fixed 2.5 units wide (25% of a cell) — the
+    // text's cap height is ~1.4, so it sits inside the coloured shaft with
+    // the outline clear on both sides; otherwise 1.6–2.2 by strength.
+    const width = label ? 2.5 : 1.4 + 0.8 * s;
+    const head = label ? 3.2 : Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
+    // Unlabelled: the shaft starts clear of the origin glyph and the tip
+    // pulls short of the destination centre so the head never covers a
+    // piece. Labelled: start at the origin centre and pull back less, so
+    // a one-square move still has ~6 units of shaft for the number.
+    const tail = label ? 0 : 0.32;
+    const pull = label ? 0.06 : 0.2;
+    const tipX = x2 - ux * CELL * pull;
+    const tipY = y2 - uy * CELL * pull;
+    const baseX = tipX - ux * head;
+    const baseY = tipY - uy * head;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.classList.add('arrow', `arrow-${kind}`);
+    if (rank) {
+      g.classList.add(`rank-${rank}`);
+      g.dataset.rank = String(rank);
+    }
+    g.dataset.from = from;
+    g.dataset.to = to;
+    g.setAttribute('opacity', (0.6 + 0.3 * s).toFixed(2));
+    const px = -uy;
+    const py = ux;
+    const lineAttrs = { x1: x1 + ux * CELL * tail, y1: y1 + uy * CELL * tail, x2: baseX, y2: baseY };
+    const points = `${tipX},${tipY} ${baseX + px * head * 0.5},${baseY + py * head * 0.5} ${baseX - px * head * 0.5},${baseY - py * head * 0.5}`;
+    // A dark halo under the coloured stroke keeps silver legible on light
+    // cells and bronze on the pit — a stroke, not a CSS filter (filters
+    // scale with the non-uniform viewBox).
+    g.appendChild(svgEl('line', { ...lineAttrs, class: 'halo', 'stroke-width': width + 1.1 }));
+    g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 1.1 }));
+    g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
+    g.appendChild(svgEl('polygon', { points }));
+    if (label) {
+      // Along the shaft: midpoint between the shaft's start and the head's
+      // base, rotated to the arrow's angle (flipped so it never reads
+      // upside down), font sized to the shaft's length (bold monospace
+      // advances ~0.62 em per glyph) with a floor so it stays a number.
+      const sx = x1 + ux * CELL * tail;
+      const sy = y1 + uy * CELL * tail;
+      const mx = (sx + baseX) / 2;
+      const my = (sy + baseY) / 2;
+      const shaftLen = Math.hypot(baseX - sx, baseY - sy);
+      const size = Math.max(1.3, Math.min(2.0, (shaftLen - 0.6) / (0.62 * label.length)));
+      let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
+      if (deg > 90 || deg <= -90) deg += 180;
+      const text = svgEl('text', { x: mx, y: my, class: 'label', 'font-size': size.toFixed(2), transform: `rotate(${deg.toFixed(1)} ${mx} ${my})` });
+      text.textContent = label;
+      g.appendChild(text);
+    }
+    svg.appendChild(g);
+  }
+}
+
 export class BoardUI {
   constructor(container, { files, ranks, flipped = false, onSquareTap = null } = {}) {
     this.container = container;
@@ -500,6 +589,16 @@ export class BoardUI {
     return this.debrisBufs.get(sq) ?? null;
   }
 
+  /** Does the square wear a debris image right now? */
+  hasDebris(sq) {
+    return !!this.cells.get(sq)?.querySelector(':scope > img.debris');
+  }
+
+  /** Which renderer this is (main.mjs picks by option): the DOM board. */
+  get kind() {
+    return 'dom';
+  }
+
   /** The FLIGHT's drawing surface (play/js/particles.mjs): a second SVG
    *  over the board, same viewBox as the arrow layer and stacked with it
    *  (above the pieces, below the FLIP clones), made on first use. No
@@ -555,75 +654,7 @@ export class BoardUI {
    * phone and the old head was two thirds of a cell.
    */
   setArrows(arrows) {
-    this.svg.textContent = '';
-    // Ascending sort key: quake arrows first (drawn first = underneath), then
-    // hints from worst rank to best, so rank 1 is appended last (on top).
-    const key = (a) => (a.kind === 'quake' ? -100 : a.kind === 'last' ? -90 : -(a.rank ?? 2 - (a.strength ?? 1)));
-    const sorted = [...arrows].sort((a, b) => key(a) - key(b));
-    for (const { from, to, strength = 1, rank = null, kind = 'hint', label = null } of sorted) {
-      const [x1, y1] = this.#squareCenter(from);
-      const [x2, y2] = this.#squareCenter(to);
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const len = Math.hypot(dx, dy);
-      if (!len) continue;
-      const ux = dx / len;
-      const uy = dy / len;
-      const s = Math.max(0, Math.min(1, strength));
-      // A labelled arrow is a fixed 2.5 units wide (25% of a cell) — the
-      // text's cap height is ~1.4, so it sits inside the coloured shaft with
-      // the outline clear on both sides; otherwise 1.6–2.2 by strength.
-      const width = label ? 2.5 : 1.4 + 0.8 * s;
-      const head = label ? 3.2 : Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
-      // Unlabelled: the shaft starts clear of the origin glyph and the tip
-      // pulls short of the destination centre so the head never covers a
-      // piece. Labelled: start at the origin centre and pull back less, so
-      // a one-square move still has ~6 units of shaft for the number.
-      const tail = label ? 0 : 0.32;
-      const pull = label ? 0.06 : 0.2;
-      const tipX = x2 - ux * CELL * pull;
-      const tipY = y2 - uy * CELL * pull;
-      const baseX = tipX - ux * head;
-      const baseY = tipY - uy * head;
-      const g = document.createElementNS(SVG_NS, 'g');
-      g.classList.add('arrow', `arrow-${kind}`);
-      if (rank) {
-        g.classList.add(`rank-${rank}`);
-        g.dataset.rank = String(rank);
-      }
-      g.dataset.from = from;
-      g.dataset.to = to;
-      g.setAttribute('opacity', (0.6 + 0.3 * s).toFixed(2));
-      const px = -uy;
-      const py = ux;
-      const lineAttrs = { x1: x1 + ux * CELL * tail, y1: y1 + uy * CELL * tail, x2: baseX, y2: baseY };
-      const points = `${tipX},${tipY} ${baseX + px * head * 0.5},${baseY + py * head * 0.5} ${baseX - px * head * 0.5},${baseY - py * head * 0.5}`;
-      // A dark halo under the coloured stroke keeps silver legible on light
-      // cells and bronze on the pit — a stroke, not a CSS filter (filters
-      // scale with the non-uniform viewBox).
-      g.appendChild(svgEl('line', { ...lineAttrs, class: 'halo', 'stroke-width': width + 1.1 }));
-      g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 1.1 }));
-      g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
-      g.appendChild(svgEl('polygon', { points }));
-      if (label) {
-        // Along the shaft: midpoint between the shaft's start and the head's
-        // base, rotated to the arrow's angle (flipped so it never reads
-        // upside down), font sized to the shaft's length (bold monospace
-        // advances ~0.62 em per glyph) with a floor so it stays a number.
-        const sx = x1 + ux * CELL * tail;
-        const sy = y1 + uy * CELL * tail;
-        const mx = (sx + baseX) / 2;
-        const my = (sy + baseY) / 2;
-        const shaftLen = Math.hypot(baseX - sx, baseY - sy);
-        const size = Math.max(1.3, Math.min(2.0, (shaftLen - 0.6) / (0.62 * label.length)));
-        let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
-        if (deg > 90 || deg <= -90) deg += 180;
-        const text = svgEl('text', { x: mx, y: my, class: 'label', 'font-size': size.toFixed(2), transform: `rotate(${deg.toFixed(1)} ${mx} ${my})` });
-        text.textContent = label;
-        g.appendChild(text);
-      }
-      this.svg.appendChild(g);
-    }
+    renderArrows(this.svg, arrows, { files: this.files, ranks: this.ranks, flipped: this.flipped });
   }
 
   /**

@@ -13,7 +13,7 @@
 // Usage (cd phase0; Firefox once: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 // npx playwright install firefox):
 //   node harness/flicker-scan.mjs record --out /tmp/cast [--browser firefox|chromium]
-//        [--stage s59-hall-corner] [--plies 24] [--idle 25000] [--debris off|all|list]
+//        [--stage s59-hall-corner] [--plies 24] [--idle 25000] [--debris off|all|list] [--renderer dom|canvas]
 //        [--desktop] [--root <repo>] [--port 8960]
 //   node harness/flicker-scan.mjs scan /tmp/cast
 //   node harness/flicker-scan.mjs compare /tmp/castA /tmp/castB …
@@ -59,7 +59,8 @@ async function record() {
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
-  const q = new URLSearchParams({ stage, autobegin: '1', seed: '3', go: 'depth 6 movetime 100', probe: 'depth 4 movetime 50', onset: '1', mramp: '2', debt: '2', ...(debris ? { debris } : {}) });
+  const renderer = arg('renderer', null); // PHASE 2: --renderer canvas records the canvas board
+  const q = new URLSearchParams({ stage, autobegin: '1', seed: '3', go: 'depth 6 movetime 100', probe: 'depth 4 movetime 50', onset: '1', mramp: '2', debt: '2', ...(debris ? { debris } : {}), ...(renderer ? { renderer } : {}) });
   await page.goto(`http://127.0.0.1:${PORT}/play/index.html?${q}`);
   await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   if (idleMs) await page.evaluate(() => { const o = window.__DCK.options; o.cheat = true; o.hints = true; o.hintN = 3; o.evalBar = true; window.__DCK.applyOptions(); });

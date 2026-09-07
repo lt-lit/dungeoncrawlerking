@@ -353,6 +353,75 @@ style.css's tile rules, the arrow/mark overlays, the FLIP slides and quake
 fx, the smoke suites' renderer checks; the replay analyzer shares the new
 renderer. Until it lands the DOM board carries the duel exactly as gated
 above; nothing else is built on the DOM renderer.
+**MILESTONE 1 ✅ BUILT 2026-09-07 — THE CANVAS BOARD, behind the Renderer
+option while the phone judges it** (`play/js/canvas-board.mjs` +
+`atlas.mjs` + `pixelfont.mjs`; `play/README.md` § "The canvas board").
+Not a throwaway spike (designer: "is it setting up plumbing… or built out
+of old parts just to see integer scaling?" — it is the real renderer's
+first milestone): the same method surface as `BoardUI` (main.mjs drives
+either through `createBoard`; `options.renderer` `dom`/`canvas`,
+`?renderer=`, `options.scaling` `integer`/`fill`, `?scaling=`; a change
+REMOUNTS live on the same position), the art straight off the atlas PNGs
+(the in-house SVGs — cracks, the classic set — decoded off style.css's
+properties until the repack tool moves them), one native buffer with
+HEADROOM (fit − 16 + lift), painter's order (floor, flat terrain, debris
+OVER a ruin's stub, decor and the doorway OVER the debris, marks under,
+the tall things row by row far-to-near — props and pieces interleaved —
+marks over, the 3×5-font coordinates, the flight's pixels, a piece in
+mid-slide), ONE blit at k = ⌊device width ÷ (16 × files)⌋ (the board
+centred in whole device pixels; `fill` = the exact quotient), on-grid
+slides in whole native pixels, terrain fx with held end frames, the
+rumble as blit jitter (`rumble(ms)`), the flight through
+`particles.mjs`'s new sink (`ui.drawFlight`; SVG paths on the DOM board),
+the arrows still the shared SVG (`renderArrows`), the container still
+stamped `data-theme/-pieces/-doors` (the legend and the debris sampler
+read the cascade), a diagnostics line under the board (`#render-diag`:
+dpr, device-pixel size, k, integer/fill), `__DCK.renderer` (kind / info /
+diag / square / buffer / decor / testPattern / snapMode / set). Not there
+on purpose: glyph pieces (the default set stands in), the % dials (tile
+grid only), pixel-art arrows, the camera. THREE MEASURED FACTS (rule 18
+grows): (a) the screen canvas must be sized EXPLICITLY in whole device
+pixels from the container's `device-pixel-content-box` — a `100%` canvas
+is a fractional number of device pixels and gets resampled, a column
+drifting in part way across, in both browsers; (b) under an EMULATED
+ratio (Playwright's `deviceScaleFactor`) Chromium reports that box in
+CSS px, a whole factor off — the board falls back to css × ratio when
+they disagree (`renderInfo.emulated`), the real phone's observer is the
+truth; (c) the element's POSITION is fractional in device pixels whenever
+the page above it is, and a canvas composited at a fractional offset is
+resampled (ratio 1.25: the first 4-px block 3 rows tall) —
+`setSnapMode` `none` / `margin` / `transform`, `canvas-grid.mjs` measures
+all three per browser and the default is what measured exact in both
+(the gate's verdict is in the README). GATES: `canvas-parity.mjs` (the
+DOM board forced to an exact integer cell vs the canvas buffer, every
+square's 16×16 on the start, after 14 seeded plies with the gods hot and
+on the other themes — EXACT, 24 320/24 320 per snapshot; the DOM's arrow
+SVG hidden, the coordinate corners masked), `canvas-grid.mjs` (the test
+pattern at nine ratio × width cases, integer + fill, Chromium +
+Firefox), `ui-smoke.mjs --renderer canvas` (the DOM-only probes skipped,
+the geometry / diag / live remount checked; everything else renderer-
+neutral through `__DCK.marks.cell` + `__DCK.renderer.decor`), selftest
+43/43 (both boards classify, decorate and mark alike on detached boards).
+DECIDED the same session (brief §5.1, §10, §11): the DUEL IS A CAMERA
+VIEW OF THE SAME WORLD, zoomed (the largest integer step that fits the
+arena, the dungeon outside dimmed — small fights zoom in, no letterbox,
+no board mode); the CAMERA TURNS WITH THE ARMY (screen-up = facing; every
+direction-bearing tile is mask-generated, so the masks are computed in
+SCREEN space and the tiles follow the turn; debris buffers rotate by
+index permutation; pieces and props never rotate; variant hashes key on
+world coordinates; the turn is a cut) — only the DOOR needs edge-on art
+per theme; the ONE MOVEMENT RULE (d-pad moves the king, every piece takes
+the king step OR its own chess move that most reduces its BFS distance to
+its slot, rotation turns the pattern, automatic moves never capture, a
+wait button); integer scaling the default, FILL the fallback (designer:
+"not a dealbreaker"). THE PHONE NUMBERS (1080-wide Zenfone 10, ratio
+likely 2.625): a 10-file arena at k 6 = 96 device px = 5.7 mm per tile
+(the DOM board draws ~100); exploration at k 4 = 17 × 34 tiles at 3.8 mm;
+across current phones a 10-file arena lands between 5.0 and 7.1 mm per
+tile, within a step of today; a 1080p desktop is height-bound at k 5–6
+with 35 tiles of dungeon beside the arena. NEXT: the phone verdict, then
+the camera + rotation + edge-on doors, then the world + the army rule on
+one hand-built map, then enemies + LOS + the trigger pipeline.
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
@@ -1215,6 +1284,9 @@ node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node h
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 node harness/gen-piece-halves.mjs --check  # the tile-grid piece halves in tiles.css match the committed atlas (drop --check to rewrite them without the packs)
 node harness/piece-grid.mjs          # THE PIECE GRID gate: tile-grid pieces land on the floor's device-pixel grid in Chromium + Firefox (npx playwright install firefox once)
+node harness/canvas-parity.mjs --shots   # PHASE 2: the canvas board draws what the DOM board draws, tile pixel for tile pixel (start, 14 hot plies, every theme)
+node harness/canvas-grid.mjs --browser all  # PHASE 2: the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy
+node harness/ui-smoke.mjs --renderer canvas --shots  # the live smoke on the canvas board
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)

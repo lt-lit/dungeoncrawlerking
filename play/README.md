@@ -57,7 +57,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   stripping back to the in-house SVG), with screenshots in
   `phase0/results/ui-smoke/` for the eye (`00-theme-*.png` is the same
   opening board in every theme). `window.__DCK.cheat`, `window.__DCK.marks`
-  and `window.__DCK.theme` are the read-only surfaces it uses.
+  and `window.__DCK.theme` are the read-only surfaces it uses;
+  `--renderer canvas` runs it on the Phase 2 canvas board (§ "The canvas
+  board" below), whose own gates are `node harness/canvas-parity.mjs`
+  (tile-for-tile against the DOM board) and `node harness/canvas-grid.mjs`
+  (the blit on the device-pixel grid, Chromium + Firefox).
 
 ## Layout
 
@@ -423,23 +427,112 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
-## The next renderer — the 16×16 grid (decided 2026-09-07)
+## The canvas board — Phase 2 milestone 1 (2026-09-07)
 
 The designer committed to 16×16 for everything and Phase 2 opens with the
-rendering pipeline that makes it true (brief §2 item 5, §10). The board
-below is a CSS grid of fractional cells where every layer is a separate
-image the browser resamples on its own — which is why the tile-grid
-pieces of 2026-09-07 needed cell-sized boxes, measured row rectangles,
+rendering pipeline that makes it true (brief §2 item 5, §10). The DOM
+board under "Art themes" is a CSS grid of fractional cells where every
+layer is a separate image the browser resamples on its own — which is why
+the tile-grid pieces needed cell-sized boxes, measured row rectangles,
 positions baked into tiles and a two-browser gate to line up with the
 floor, why the debris image sits a sub-device-pixel off it, and why a
-slide shimmers off-grid. The replacement is one full-board buffer at 16
-px per tile, every layer written by the pure painters this page already
-has (`piecetiers.mjs`, `debris.mjs`, `classifyTerrain`, the autotile
-masks, the atlas), scaled to the screen once at an integer device-pixel
-factor, with a camera for the 100×100 floor. A spike on one board-sized
-canvas, judged for flicker on the designer's two Firefoxes, comes before
-anything is built on it. Until then everything under "Art themes" is the
-shipped, gated renderer, and nothing new is built on it.
+slide shimmers off-grid. **The replacement is built, behind a switch,
+while the phone judges it**: `js/canvas-board.mjs` (`CanvasBoard`, the
+same method surface as `BoardUI` — main.mjs and the replay page drive
+either), `js/atlas.mjs` (the art, straight off `img/tileset.png` +
+`img/pieces.png` + `img/tileset.json` — no data URIs; the in-house SVGs,
+the cracks and the classic set, are decoded off style.css's properties
+until the repack tool moves them into the PNG) and `js/pixelfont.mjs` (a
+3×5 font for the edge coordinates). Options → Look → **Renderer** (`dom` /
+`canvas`; `?renderer=canvas`; `options.renderer`) and **Scaling**
+(`integer` / `fill`; `?scaling=`); the change remounts the board live on
+the same position. While the canvas board is on, a diagnostics line under
+the board says what the screen got — `canvas · dpr 2.625 · 1012×1032
+device px · k 6 (integer) · 96 px/tile · 36.6 css px` — and
+`__DCK.renderer` exposes it (`kind`, `info`, `diag`, `square(sq)`,
+`buffer()`, `decor(sq)`, `testPattern(on)`, `snapMode(m)`, `paintNow()`,
+`ready()`, `set(renderer, scaling)`).
+
+**The shape.** One native buffer at 16 px per tile — files×16 wide,
+ranks×16 tall plus HEADROOM for the top rank's tall pieces (fit − 16 +
+lift, so a head never leaves the buffer) — repainted from scratch on
+every change in painter's order: floor (+ the dark square's shade), flat
+terrain by `classifyTerrain` (the one terrain rule, shared with the DOM
+board and the replay analyzer: wall cases, holes, ruins, cracked walls
+with the crack masked to the wall's pixels by `source-atop`), the
+square's DEBRIS (the painter's 16×16 buffer put straight in), decor and
+the open doorway above it (the DOM's decor span is above its debris
+image, so the posts stand on the rubble), the marks under the pieces
+(the gods' one-pixel frames, the debug heat), then row by row from the
+far rank to the near one the TALL things — furniture props (16×32) and
+pieces (the set's sprite at its native size, lifted and shifted by whole
+tile pixels, one tile pixel of shadow — a cached silhouette) — so a
+nearer head paints over the piece behind it, then selection / check /
+target over the pieces, the coordinates, the debris FLIGHT's pixels
+(`particles.mjs` hands a frame to `drawFlight` on this board and draws
+SVG paths on the other — the flight model is unchanged) and a piece in
+mid-slide last. Nothing in it has a fractional coordinate. **One blit**
+(`drawImage`, smoothing off) puts it on the screen canvas at scale k =
+⌊device width ÷ (16 × files)⌋, the board centred in whole device pixels
+(`integer`) or at the exact quotient (`fill`: uneven pixel widths, every
+layer still aligned because they share the one resample). The arrows
+stay an SVG over the board rectangle (vector UI, `renderArrows` shared
+with the DOM board); the container keeps `data-theme` / `data-pieces` /
+`data-doors` (the legend and the debris sampler read the cascade off it).
+A slide moves its sprite in whole native pixels per frame; a terrain
+rung's fx (crack with jitter and a flash, burst, sink to the lone pit) is
+drawn in the buffer and its END FRAME held until setPosition commits; the
+quake's rumble jitters the blit by whole native pixels (`rumble(ms)`,
+which main.mjs calls beside the class the canvas's CSS ignores); a
+captured door swings. One requestAnimationFrame loop while anything
+moves, nothing otherwise. Hit-testing is division: pointer → device px →
+tile. Not here on purpose (milestone 1): the classic GLYPH pieces (a set
+is always drawn — glyphs are text, not pixel art; the default set stands
+in), the % piece-fit dials (the tile grid is the only mode: the art's own
+scale, lift and shift in whole tile pixels), pixel-art arrows, the
+overworld camera.
+
+**Landing on the device grid — what measured.** The screen canvas must
+be sized EXPLICITLY in whole device pixels (`ResizeObserver` on the
+container's `device-pixel-content-box` → the canvas's CSS width = its
+backing width ÷ ratio): a `width: 100%` canvas is a fractional number of
+device pixels whenever the container's is, and a bitmap drawn into a box
+a fraction wider than itself is resampled — a column drifts in part way
+across, in both browsers. Under an EMULATED ratio (a headless driver's
+`deviceScaleFactor`) Chromium reports that box in CSS px, a whole factor
+off; the board falls back to css × ratio when the two disagree by more
+than a pixel (`renderInfo.emulated`). The element's POSITION is fractional
+in device pixels too whenever the page above it is, and a canvas composited
+at a fractional offset is resampled (at ratio 1.25 the first 4-px block
+came out 3 rows tall); `setSnapMode` carries three strategies — `none`
+(the browser's own placement), `margin` (a layout offset onto the grid,
+quantised to a layout unit) and `transform` (a float translate) — and
+`phase0/harness/canvas-grid.mjs` measures all three per browser; the
+default is the one that measured exact in both (see the gate's output in
+CLAUDE.md § Phase 2).
+
+**Gates.** `phase0/harness/canvas-parity.mjs` drives the game twice in
+headless Chromium at ratio 1 — the DOM board forced to an exact integer
+cell, the canvas board's buffer read straight off `__DCK.renderer` — and
+compares every square's 16×16 on the start position, after fourteen seeded
+plies with the gods hot (holes, cracks, breaches, ruins, doorways, debris,
+blood, the residue frames) and on the other two themes: **exact, 24 320 of
+24 320 tile pixels per snapshot** (the coordinate corners masked, the
+DOM's arrow SVG hidden — the same SVG rides above the canvas). Two draw-
+order rules fell out of getting there: the debris paints OVER a ruin's
+stub (the DOM's image is above the cell background) and the open doorway
+paints over the debris (the decor span is above the image).
+`phase0/harness/canvas-grid.mjs` is the device-pixel gate (the test
+pattern, nine ratio × width cases, integer and fill, Chromium + Firefox).
+`ui-smoke.mjs --renderer canvas` runs the live smoke on this board (the
+DOM-only probes skipped, the canvas's geometry, the diagnostics line and
+the live remount checked instead; every other check — tiles vs ledgers,
+residue, rungs, debris, the flight, the replay log — is renderer-neutral
+through `__DCK.marks.cell` and `__DCK.renderer.decor`), and the selftest
+asserts that both boards classify, decorate and mark every square alike
+on detached boards (no atlas: the data half). `flicker-scan.mjs` records
+either renderer (`?renderer=` rides its query). **The phone's verdict
+decides whether the DOM board goes** (CLAUDE.md § Phase 2).
 
 ## Art themes (2026-09-03)
 
