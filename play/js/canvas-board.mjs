@@ -43,9 +43,10 @@
 //               otherwise.
 //   ARROWS      the hint arrows, the enemy's last move and the gods'
 //               displacements are PIXEL ART in the buffer (pixelarrow.mjs:
-//               a chunky shaft and head with a one-pixel halo, a hint's
-//               eval as a staircase of 3×5 digits inside the shaft), drawn
-//               above the pieces — where
+//               a shaft and head with a one-pixel halo, the width and
+//               opacity the player's dials — setArrowStyle; no number on a
+//               hint, the hint line lists the evals), drawn above the
+//               pieces — where
 //               the DOM board keeps its SVG overlay. No overlay element
 //               sits on the canvas at all (a designer's white flash on the
 //               first build pointed at the SVG; the diagnostics line
@@ -60,7 +61,7 @@
 // one arena). The atlas is play/js/atlas.mjs.
 import { splitFen, parseBoard, WALL } from './fen.mjs';
 import { classifyTerrain, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './board-ui.mjs';
-import { drawArrow, arrowColour, sortArrows } from './pixelarrow.mjs';
+import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
 
@@ -111,7 +112,7 @@ export function resetAtlas() {
 }
 
 export class CanvasBoard {
-  constructor(container, { files, ranks, flipped = false, onSquareTap = null, scaling = 'integer', atlas = null, onResize = null } = {}) {
+  constructor(container, { files, ranks, flipped = false, onSquareTap = null, scaling = 'integer', atlas = null, onResize = null, arrowStyle = null } = {}) {
     this.container = container;
     this.onResize = onResize;
     this.files = files;
@@ -171,6 +172,7 @@ export class CanvasBoard {
     this.buf = document.createElement('canvas');
     this.bctx = this.buf.getContext('2d', { willReadFrequently: true });
     this.arrows = []; // the arrows drawn in the buffer, in draw order (pixelarrow.mjs)
+    this.arrowStyle = normalizeArrowStyle(arrowStyle); // the width / opacity dials (setArrowStyle)
     this.scratch = document.createElement('canvas'); // an arrow's opaque pixels before its alpha lands
     this.canvas.addEventListener('click', (e) => this.#onClick(e));
     this.#observe();
@@ -380,6 +382,12 @@ export class CanvasBoard {
    *  painted into the buffer above the pieces on the next frame. */
   setArrows(arrows) {
     this.arrows = sortArrows(arrows ?? []);
+    this.invalidate();
+  }
+  /** The arrows' style — the shaft's width in floor pixels and the opacity
+   *  (Options → Look; pixelarrow.mjs). Repaints the same arrows. */
+  setArrowStyle(style) {
+    this.arrowStyle = normalizeArrowStyle(style);
     this.invalidate();
   }
 
@@ -1063,7 +1071,7 @@ export class CanvasBoard {
       if (!this.cells.has(a.from) || !this.cells.has(a.to)) continue;
       const p = this.#origin(a.from), q = this.#origin(a.to);
       const s = Math.max(0, Math.min(1, a.strength ?? 1));
-      drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, strength: s, alpha: 0.6 + 0.3 * s, scratch: sg });
+      drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg });
     }
   }
 

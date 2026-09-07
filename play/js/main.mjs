@@ -45,6 +45,7 @@ import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, PIECE
 // scaled once to the screen, behind the Renderer option (`?renderer=canvas`)
 // while the phone judges it. Same method surface as the DOM board.
 import { CanvasBoard } from './canvas-board.mjs';
+import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
@@ -257,7 +258,7 @@ const OPT_KEY = 'dck.options.v1';
  *  of the width (the fallback: uneven pixel widths, every layer aligned). */
 const RENDERERS = ['dom', 'canvas'];
 const SCALINGS = ['integer', 'fill'];
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, renderer: 'dom', scaling: 'integer', theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, renderer: 'dom', scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -295,6 +296,9 @@ function loadOptions() {
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
     if (!RENDERERS.includes(options.renderer)) options.renderer = 'dom';
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
+    // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
+    options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
+    options.arrowAlpha = clampNum(options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
     if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
@@ -393,6 +397,11 @@ function syncOptionsUI() {
     : fit.pixels === 'display'
       ? 'The dials place the piece; its box is a whole multiple of the sprite in screen pixels.'
       : 'The dials place the piece at any scale.';
+  const ar = arrowStyleFor();
+  $('optArrowWidth').value = String(ar.width);
+  $('optArrowWidthV').textContent = `${ar.width} px`;
+  $('optArrowAlpha').value = String(ar.alpha);
+  $('optArrowAlphaV').textContent = `${Math.round(ar.alpha * 100)}%`;
   const dz = debrisOpts();
   $('optDebrisDestruction').checked = dz.destruction;
   $('optDebrisBlood').checked = dz.blood;
@@ -420,6 +429,15 @@ function pieceFitFor() {
   };
 }
 
+/** The arrows' style (both boards' setArrowStyle): `?arrowwidth=` (the
+ *  shaft in floor pixels, 1–5) / `?arrowalpha=` (0.2–1) > the Options. */
+function arrowStyleFor() {
+  return {
+    width: Math.round(clampNum(params.get('arrowwidth') ?? options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width)),
+    alpha: clampNum(params.get('arrowalpha') ?? options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha),
+  };
+}
+
 /** The board renderer: `?renderer=dom|canvas` (never saved) > the Options. */
 function rendererFor() {
   const pick = params.get('renderer') ?? options.renderer;
@@ -436,13 +454,14 @@ function scalingFor() {
  *  one method surface). The canvas board reports its geometry to the
  *  diagnostics line under the board. */
 function createBoard(el, opts) {
+  const arrowStyle = arrowStyleFor();
   if (rendererFor() === 'canvas') {
-    const ui = new CanvasBoard(el, { ...opts, scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+    const ui = new CanvasBoard(el, { ...opts, arrowStyle, scaling: scalingFor(), onResize: (info) => renderDiag(info) });
     void ui.ready.then(() => renderDiag(ui.renderInfo));
     return ui;
   }
   renderDiag(null);
-  return new BoardUI(el, opts);
+  return new BoardUI(el, { ...opts, arrowStyle });
 }
 
 /** The diagnostics line under the board (the canvas board only): device
@@ -520,6 +539,7 @@ function applyTheme() {
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
   app.boardUI?.setPieceFit(pieceFitFor());
+  app.boardUI?.setArrowStyle?.(arrowStyleFor());
   void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
   const legend = document.querySelector('.legend');
   if (legend) {
@@ -698,8 +718,11 @@ async function runCheatSearch() {
 }
 
 /** Paint one set of MultiPV lines: the eval bar (rank 1) and, with hints
- *  on, rank-coloured arrows + the hint line ("1 Nf3 · 2 e4 · 3 d4 · d14").
- *  `partial` marks a mid-search paint (the depth readout says so). */
+ *  on, rank-coloured arrows + the hint list ("1 Nf3 +0.8 · 2 e4 +0.6 · 3 d4
+ *  +0.5 · d14"). The evals live in the list, NOT on the arrows (designer
+ *  2026-09-07: "I don't think the numbers are worth keeping [on the
+ *  arrows]. Let's list them somewhere else"). `partial` marks a mid-search
+ *  paint (the depth readout says so). */
 function applyHintLines(pvs, n, duel, partial) {
   const sorted = [...pvs].filter((pv) => pv.rank <= n).sort((a, b) => a.rank - b.rank);
   if (!sorted.length || sorted[0].rank !== 1) return;
@@ -712,25 +735,53 @@ function applyHintLines(pvs, n, duel, partial) {
   const cpOf = (s) => (!s ? 0 : s.type === 'mate' ? (s.value > 0 ? 10000 - s.value : -10000 - s.value) : s.value);
   const best = cpOf(sorted[0].score);
   const arrows = [];
-  const sans = [];
+  const items = [];
   for (const pv of sorted) {
     const m = pv.move.match(UCI_MOVE_RE);
     if (!m) continue;
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
-    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', label: pv.score ? fmtScore(pv.score) : null });
+    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint' });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
     } catch {
       /* keep uci */
     }
-    sans.push(`${pv.rank} ${san}`);
+    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null });
   }
   app.cheatArrows = arrows;
   renderPlayMarks();
   const depth = sorted[0].depth ?? cheat.depth;
   if (depth) cheat.depth = depth;
-  setHintLine(`${sans.join(' · ')}${depth ? ` · d${depth}${partial ? '…' : ''}` : ''}`);
+  setHintList(items, depth ? `d${depth}${partial ? '…' : ''}` : '');
+}
+
+/** The hint list in the player's bar: one entry per rank — a swatch in the
+ *  rank's arrow colour (CSS, by class), the move and its eval — then the
+ *  depth readout. Its textContent reads "1 Nf3 +0.8 · 2 e4 +0.6 · d14". */
+function setHintList(items, depthText) {
+  const el = $('hint-line');
+  el.textContent = '';
+  items.forEach((it, i) => {
+    if (i) el.append(' · ');
+    const span = document.createElement('span');
+    span.className = `hint-item rank-${it.rank}`;
+    span.dataset.rank = String(it.rank);
+    span.append(`${it.rank} ${it.san}`);
+    if (it.score) {
+      const b = document.createElement('b');
+      b.textContent = ` ${it.score}`;
+      span.appendChild(b);
+    }
+    el.appendChild(span);
+  });
+  if (depthText) {
+    if (items.length) el.append(' · ');
+    const d = document.createElement('span');
+    d.className = 'hint-depth';
+    d.textContent = depthText;
+    el.appendChild(d);
+  }
 }
 
 /** Replace a dead idle-window engine instance and rebind the live duel
@@ -2955,6 +3006,16 @@ $('optTileShift').addEventListener('input', (e) => {
   options.tileShift = Math.round(clampNum(e.target.value, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
   applyOptions();
 });
+// The arrow dials (2026-09-07): the shaft in floor pixels and the opacity,
+// pushed to the mounted board through applyTheme (setArrowStyle).
+$('optArrowWidth').addEventListener('input', (e) => {
+  options.arrowWidth = Math.round(clampNum(e.target.value, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
+  applyOptions();
+});
+$('optArrowAlpha').addEventListener('input', (e) => {
+  options.arrowAlpha = clampNum(e.target.value, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
+  applyOptions();
+});
 // The debris toggles (2026-09-07): every kind a checkbox, the amount a
 // slider, and two ways to forget.
 for (const [el, key] of [['optDebrisDestruction', 'destruction'], ['optDebrisBlood', 'blood'], ['optDebrisSkid', 'skid'], ['optDebrisWear', 'wear'], ['optDebrisFx', 'fx']]) {
@@ -3266,6 +3327,19 @@ window.__DCK = {
   },
   get cheat() {
     return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };
+  },
+  /** The arrows' style as the board wears it (the dials, or the URL's override). */
+  get arrowStyle() {
+    return app.boardUI?.arrowStyle ?? arrowStyleFor();
+  },
+  /** Set the dials (drops any URL override so the Options rule again). */
+  setArrowStyle: (width, alpha) => {
+    params.delete('arrowwidth');
+    params.delete('arrowalpha');
+    if (width != null) options.arrowWidth = Math.round(clampNum(width, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
+    if (alpha != null) options.arrowAlpha = clampNum(alpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
+    applyOptions();
+    return app.boardUI?.arrowStyle ?? null;
   },
   get marks() {
     return { quake: app.quakeMarks, godsLine: $('gods-line').textContent, cell: (sq) => app.boardUI?.cellClasses(sq) ?? null };

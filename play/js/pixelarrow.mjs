@@ -8,35 +8,59 @@
 // onto any 2D context whose transform is the pixel grid.
 //
 // Geometry, in native pixels: the shaft runs from the origin square's
-// centre (pulled a few pixels clear of the piece for an unlabelled arrow)
-// to a tip short of the destination's centre, so the head never covers a
-// piece. An UNLABELLED arrow (the last move, a displacement) is a 2–3 px
-// shaft with a 5-px head. A LABELLED arrow (a hint) is the chunky kind:
-// a 5-px shaft and a 6-px head, and THE NUMBER RIDES INSIDE THE SHAFT.
-// The first cut set it on a plate beside the shaft and the designer found
-// it "way too big"; a second put the digits in an axis-aligned band on the
-// shaft, which hung out of every diagonal in rectangular corners. Now the
-// digits are a STAIRCASE: every glyph stays upright and each steps along
-// the arrow's own direction by the least advance that keeps the 3×5 cells
-// apart (4 px of x or 6 px of y, whichever the direction reaches first),
-// so a horizontal arrow reads as a line of digits, a vertical one as a
-// column, and a knight's move or a diagonal as a flight of steps — read in
-// the screen's order, left to right or top to bottom, whichever way the
-// arrow points. Each glyph's cell grown by one pixel is a PAD that joins
-// the shaft (the shaft bulges a pixel where the digits are), the run sits
-// on the shaft's midpoint and backs off toward the tail when it would
-// reach into the head. The label is shortened to fit a tile: no leading
-// plus, one decimal under ten, whole pawns from ten ("12", "5.1", "-1.2",
-// "M3"). A pixel is lit when its centre is within the shaft's half-width
-// of the segment, inside the head's triangle or inside a pad; the halo is
-// the same test one pixel wider. Every arrow shares one shape; the colour
-// says whose (board-ui's kinds and ranks), the opacity nudges with
-// strength.
+// centre, pulled a few pixels clear of the piece, to a tip short of the
+// destination's centre, so the head never covers a piece. THE STYLE is
+// the player's (Options → Look: `width`, the shaft in floor pixels 1–5,
+// and `alpha`, the opacity — designer 2026-09-07: "make the arrows
+// thinner. A thickness and opacity dial wouldn't hurt"): the head grows
+// with the shaft (width + 3 long, width + 1 to each side), an odd width
+// runs through a pixel centre and an even one along a pixel boundary so
+// a horizontal or vertical shaft is exactly `width` rows, and the opacity
+// is the dial's scaled by the arrow's strength (arrowAlpha). The hint
+// arrows carry NO NUMBER — the designer cut the evals off the arrows the
+// same day ("not worth keeping"; a plate beside the shaft had been "way
+// too big", a staircase of digits inside it small enough but not worth
+// the clutter) and the hint line under the board lists them instead. A
+// LABEL is still drawn when a caller asks for one (the replay page
+// numbers its PV arrows): a 5-px shaft with a 6-px head and the digits a
+// STAIRCASE inside it — every 3×5 glyph upright, each stepping along the
+// arrow's own direction by the least advance that keeps the cells apart
+// (4 px of x or 6 px of y), a line on a horizontal arrow, a column on a
+// vertical one, a flight of steps on a diagonal, read in the screen's
+// order; each glyph's cell grown by a pixel is a PAD the shaft bulges to,
+// and the run backs off toward the tail when it would reach into the
+// head; the label is compacted to a tile ("12", "5.1", "-1.2", "M3"). A
+// pixel is lit when its centre is within the shaft's half-width of the
+// segment, inside the head's triangle or inside a pad; the halo is the
+// same test one pixel wider. Every arrow shares one shape; the colour
+// says whose (board-ui's kinds and ranks).
 import { drawText, GLYPH_W, GLYPH_H } from './pixelfont.mjs';
 
 export const ARROW_COLOURS = { 'hint-1': '#f2c14e', 'hint-2': '#c9ced8', 'hint-3': '#c8813f', quake: '#7cc8ff', last: '#e0443f' };
 const INK = '#14151a';
 const HALO = '#000000';
+
+/** The arrow style dials: the shaft's width in floor pixels and the
+ *  opacity at full strength. Both boards take a style through
+ *  `setArrowStyle`; main.mjs keeps it in the Options. */
+export const ARROW_STYLE_DEFAULT = Object.freeze({ width: 2, alpha: 0.85 });
+export const ARROW_WIDTH_RANGE = [1, 5];
+export const ARROW_ALPHA_RANGE = [0.2, 1];
+
+/** A clamped, whole-pixel copy of a style (missing or bad fields → the defaults). */
+export function normalizeArrowStyle(style) {
+  const w = Math.round(Number(style?.width)), a = Number(style?.alpha);
+  return {
+    width: Number.isFinite(w) ? Math.min(ARROW_WIDTH_RANGE[1], Math.max(ARROW_WIDTH_RANGE[0], w)) : ARROW_STYLE_DEFAULT.width,
+    alpha: Number.isFinite(a) ? Math.min(ARROW_ALPHA_RANGE[1], Math.max(ARROW_ALPHA_RANGE[0], Math.round(a * 100) / 100)) : ARROW_STYLE_DEFAULT.alpha,
+  };
+}
+
+/** An arrow's opacity: the style's alpha at full strength, 60% of it at none. */
+export function arrowAlpha(alpha, strength = 1) {
+  const s = Math.max(0, Math.min(1, Number.isFinite(strength) ? strength : 1));
+  return Math.max(0, Math.min(1, alpha * (0.6 + 0.4 * s)));
+}
 
 /** The colour an arrow wears: its rank for a hint, its kind otherwise. */
 export function arrowColour({ kind = 'hint', rank = null }) {
@@ -97,14 +121,20 @@ export function glyphStep(ux, uy) {
  * segment, the head triangle, the label's glyphs and pads, and the
  * bounding box — or null for a zero-length arrow.
  */
-export function arrowShape(x1, y1, x2, y2, { label = null, strength = 1 } = {}) {
+export function arrowShape(x1, y1, x2, y2, { label = null, width = ARROW_STYLE_DEFAULT.width } = {}) {
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.hypot(dx, dy);
   if (!len) return null;
   const ux = dx / len, uy = dy / len;
   const text = label ? compactLabel(label) : null;
-  const half = text ? 2.5 : 1 + 0.5 * Math.max(0, Math.min(1, strength)); // shaft half-width: 5 px labelled, 2–3 px by strength
-  const headLen = text ? 6 : 5, headHalf = text ? 4 : 3;
+  const w = text ? 5 : normalizeArrowStyle({ width }).width; // the shaft in pixels: the style's, or 5 so the digits fit
+  // An odd shaft runs through a pixel centre, an even one along a pixel
+  // boundary: a square's centre (8, 8) is a boundary, so shift the odd ones
+  // half a pixel and a horizontal or vertical shaft is exactly `w` rows.
+  const off = w % 2 ? -0.5 : 0;
+  x1 += off; y1 += off; x2 += off; y2 += off;
+  const half = w / 2;
+  const headLen = text ? 6 : w + 3, headHalf = text ? 4 : w + 1;
   const tail = text ? 0 : 5; // px clear of the origin centre
   const pull = 3; // px short of the destination centre
   const sx = x1 + ux * tail, sy = y1 + uy * tail;
@@ -136,7 +166,7 @@ export function arrowShape(x1, y1, x2, y2, { label = null, strength = 1 } = {}) 
   const xs = [sx, tipX, tri[2], tri[4], ...(pads ?? []).flatMap((p) => [p.x, p.x + p.w])], ys = [sy, tipY, tri[3], tri[5], ...(pads ?? []).flatMap((p) => [p.y, p.y + p.h])];
   const pad = Math.ceil(half + 2);
   return {
-    shaft: [sx, sy, baseX, baseY], half, tri, label: text ? { text, glyphs, pads } : null,
+    shaft: [sx, sy, baseX, baseY], half, width: w, tri, label: text ? { text, glyphs, pads } : null,
     box: { x0: Math.floor(Math.min(...xs)) - pad, y0: Math.floor(Math.min(...ys)) - pad, x1: Math.ceil(Math.max(...xs)) + pad, y1: Math.ceil(Math.max(...ys)) + pad },
     mid,
   };
@@ -145,11 +175,12 @@ export function arrowShape(x1, y1, x2, y2, { label = null, strength = 1 } = {}) 
 /**
  * Rasterise one arrow onto `ctx` (its transform the pixel grid): the halo
  * (one pixel wider, black), then the fill, then the label's digits in
- * dark ink. `alpha` is applied to the whole arrow through a scratch
- * canvas so the halo never shows through a translucent fill.
+ * dark ink. `width` is the style's shaft (floor pixels); `alpha` is applied
+ * to the whole arrow through a scratch canvas so the halo never shows
+ * through a translucent fill (the caller scales it by strength — arrowAlpha).
  */
-export function drawArrow(ctx, x1, y1, x2, y2, { colour = ARROW_COLOURS['hint-1'], label = null, strength = 1, alpha = 1, scratch = null } = {}) {
-  const s = arrowShape(x1, y1, x2, y2, { label, strength });
+export function drawArrow(ctx, x1, y1, x2, y2, { colour = ARROW_COLOURS['hint-1'], label = null, width = ARROW_STYLE_DEFAULT.width, alpha = 1, scratch = null } = {}) {
+  const s = arrowShape(x1, y1, x2, y2, { label, width });
   if (!s) return;
   const g = scratch ?? ctx;
   if (scratch) {
@@ -158,7 +189,7 @@ export function drawArrow(ctx, x1, y1, x2, y2, { colour = ARROW_COLOURS['hint-1'
   }
   const pads = s.label?.pads ?? [];
   const inPad = (px, py, grow) => pads.some((p) => px >= p.x - grow && px <= p.x + p.w + grow && py >= p.y - grow && py <= p.y + p.h + grow);
-  const lit = (px, py, grow) => distToSegment(px, py, s.shaft[0], s.shaft[1], s.shaft[2], s.shaft[3]) <= s.half + grow || distToTriangle(px, py, s.tri) <= grow || inPad(px, py, grow);
+  const lit = (px, py, grow) => distToSegment(px, py, s.shaft[0], s.shaft[1], s.shaft[2], s.shaft[3]) < s.half + grow || distToTriangle(px, py, s.tri) <= grow || inPad(px, py, grow);
   const paint = (grow, fill) => {
     g.fillStyle = fill;
     for (let y = s.box.y0; y <= s.box.y1; y++) for (let x = s.box.x0; x <= s.box.x1; x++) if (lit(x + 0.5, y + 0.5, grow)) g.fillRect(x, y, 1, 1);

@@ -299,13 +299,17 @@ if (probe) {
   expect(probe.arrows[0].rank === 1, 'rank 1 is first in the arrow list');
   expect(/^1 /.test(probe.hintLine), `hint line starts with the rank-1 SAN: "${probe.hintLine}"`);
   // The drawn arrows: the DOM's SVG groups, or the canvas board's list (pixel art in its buffer), in draw order.
+  // No arrow carries an eval (designer 2026-09-07: "not worth keeping"); the hint LIST has them, one per rank.
   const drawn = await page.evaluate(() => {
     const K = window.__DCK;
     if (K.renderer.kind === 'canvas') return K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => ({ label: a.label ?? null, rank: String(a.rank) }));
     return [...document.querySelectorAll('#board .arrow-layer g.arrow-hint')].map((g) => ({ label: g.querySelector('text.label')?.textContent ?? null, rank: g.dataset.rank }));
   });
-  const labels = drawn.map((d) => d.label);
-  expect(labels.length === probe.arrows.length && labels.every((l) => l && /^(\+|−|-)?\d+\.\d$|^−?M\d+$/.test(l)), `every hint arrow carries an eval label: ${labels}`);
+  expect(drawn.length === probe.arrows.length && drawn.every((d) => d.label === null), `no hint arrow carries a label: ${JSON.stringify(drawn.map((d) => d.label))}`);
+  const evals = probe.hintLine.match(/(\+|−|-)\d+\.\d(?!\d)|−?M\d+/g) ?? [];
+  expect(evals.length === probe.arrows.length, `the hint line lists an eval per hint: "${probe.hintLine}"`);
+  const listed = await page.evaluate(() => [...document.querySelectorAll('#hint-line .hint-item')].map((s) => s.dataset.rank + (s.querySelector('b') ? '' : '?')));
+  expect(listed.join('') === probe.arrows.map((a) => a.rank).join(''), `the hint list carries one entry per rank in rank order, each with its eval: ${listed}`);
   const domRanks = drawn.map((d) => d.rank);
   expect(domRanks.length === probe.arrows.length && domRanks[domRanks.length - 1] === '1', `${CANVAS ? 'the buffer' : 'DOM'} draws hints worst→best, best on top: ${domRanks}`);
   // A streaming probe repaints: wait for the depth to move at least once
@@ -315,6 +319,40 @@ if (probe) {
   const climbed = await page.waitForFunction((d) => window.__DCK.cheat.depth > d, d0, { timeout: 3000 }).then(() => true).catch(() => false);
   expect(climbed, `probe streamed a deeper paint after d${d0}`);
   await shot('01-hints');
+  // The arrow dials (designer 2026-09-07: "make the arrows thinner. A thickness and opacity dial wouldn't hurt"):
+  // width in floor pixels on both boards — the SVG stroke, or the gold pixels the rank-1 arrow lights in its
+  // origin square of the buffer — and the opacity; the setting persists; the default is 2 px at 85%.
+  const dial = await page.evaluate(async () => {
+    const K = window.__DCK;
+    const first = K.cheat.arrows.find((a) => a.rank === 1);
+    const measure = () => {
+      if (K.renderer.kind === 'canvas') {
+        K.renderer.paintNow();
+        const px = K.renderer.square(first.from);
+        let gold = 0;
+        for (let i = 0; i < px.length; i += 4) if (px[i] === 0xf2 && px[i + 1] === 0xc1 && px[i + 2] === 0x4e && px[i + 3] === 255) gold++;
+        return gold;
+      }
+      const g = document.querySelector('#board .arrow-layer g.arrow-hint.rank-1');
+      return g ? parseFloat(g.querySelector('line:not(.halo)').getAttribute('stroke-width')) * 16 / 10 : -1;
+    };
+    const dflt = K.arrowStyle;
+    K.setArrowStyle(5, 1);
+    const wide = measure();
+    K.setArrowStyle(1, 1);
+    const thin = measure();
+    const thinStyle = K.arrowStyle;
+    K.setArrowStyle(1, 0.5);
+    const faint = measure();
+    const faintStyle = K.arrowStyle;
+    const saved = JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}');
+    K.setArrowStyle(dflt.width, dflt.alpha);
+    return { kind: K.renderer.kind, dflt, wide, thin, faint, thinStyle, faintStyle, saved: { w: saved.arrowWidth, a: saved.arrowAlpha }, back: K.arrowStyle };
+  });
+  expect(dial.dflt.width === 2 && dial.dflt.alpha === 0.85, `the arrows' default style is 2 px at 85%: ${JSON.stringify(dial.dflt)}`);
+  expect(dial.wide > dial.thin && dial.thin > 0 && dial.thinStyle.width === 1 && dial.thinStyle.alpha === 1, `the width dial: ${dial.kind === 'canvas' ? 'gold pixels in the rank-1 arrow\'s origin square' : 'the rank-1 stroke in floor px'} ${dial.wide} at 5 px vs ${dial.thin} at 1 px (${JSON.stringify(dial.thinStyle)})`);
+  expect(dial.kind === 'canvas' ? dial.faint === 0 : Math.abs(dial.faint - dial.thin) < 1e-6, `the opacity dial: at 50% ${dial.kind === 'canvas' ? 'no pixel is the pure colour any more' : 'the stroke is unchanged'} (${dial.faint}), style ${JSON.stringify(dial.faintStyle)}`);
+  expect(dial.faintStyle.alpha === 0.5 && dial.saved.w === 1 && dial.saved.a === 0.5 && dial.back.width === dial.dflt.width, `the dials persist in the options (${JSON.stringify(dial.saved)}) and reset (${JSON.stringify(dial.back)})`);
 }
 
 // --- play random moves until each rung has fired (or the ply budget runs out)

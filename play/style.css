@@ -230,6 +230,16 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #hint-line { color: var(--gold); }
 #gods-line { color: var(--gods); }
 #hint-line:empty, #gods-line:empty { display: none; }
+/* The hint LIST (2026-09-07): rank, move and eval per hint — the numbers
+   live here, not on the arrows (designer: "I don't think the numbers are
+   worth keeping" on the board). A swatch in the rank's arrow colour ties
+   each entry to its arrow; the eval is bold; the depth readout is muted. */
+#hint-line .hint-item { white-space: nowrap; }
+#hint-line .hint-item::before { content: ''; display: inline-block; width: .55em; height: .55em; margin-right: .3em; border-radius: 2px; background: var(--hint-1); box-shadow: 0 0 0 1px #000; }
+#hint-line .hint-item.rank-2::before { background: var(--hint-2); }
+#hint-line .hint-item.rank-3::before { background: var(--hint-3); }
+#hint-line .hint-item b { font-weight: 700; color: var(--text); }
+#hint-line .hint-depth { color: var(--muted); }
 
 /* ---------- board ---------- */
 
@@ -731,9 +741,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .arrow-layer .arrow line:not(.halo) { stroke: var(--arrow); }
 .arrow-layer .arrow polygon:not(.halo) { fill: var(--arrow); }
 .arrow-layer .arrow .halo { stroke: #000; fill: #000; opacity: .6; }
-/* The eval label INSIDE a hint arrow: dark ink running along the shaft
-   (board-ui.mjs sets the size and rotation per arrow), fully within the
-   coloured shaft — no box, no halo of its own. */
+/* A label INSIDE an arrow: dark ink running along the shaft (board-ui.mjs
+   sets the size and rotation per arrow), fully within the coloured shaft —
+   no box, no halo of its own. The hints carry none since 2026-09-07 (the
+   hint list has the evals); the replay page numbers its PV arrows with it. */
 .arrow-layer .arrow text.label { fill: #14151a; font-family: ui-monospace, Menlo, monospace; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
 
 .board.inactive .cell { cursor: default; }

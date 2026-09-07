@@ -53,7 +53,9 @@ lives in `phase0/harness/ui-smoke.mjs`; **round 2, same day**: floor is olive
 flagstone and walls are pixel-art purple-grey stone blocks, a cracked wall is
 the block with a branching black crack and NO crate sprite, hint arrows are
 outlined on shaft and head and carry their eval written into the arrow (paints
-are depth-consistent across ranks), the floor is warm grey, and `^` has
+are depth-consistent across ranks — UNTIL 2026-09-07, when the designer cut
+the numbers off the arrows for the hint LIST under the board, see milestone
+1 below), the floor is warm grey, and `^` has
 SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
 crate/masonry; cosmetics only, never grid state) authored over the whole bed
 by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
@@ -374,11 +376,17 @@ slides in whole native pixels, terrain fx with held end frames, the
 rumble as blit jitter (`rumble(ms)`), the flight through
 `particles.mjs`'s new sink (`ui.drawFlight`; SVG paths on the DOM board),
 the ARROWS as PIXEL ART in the buffer (`pixelarrow.mjs`: shaft + head +
-one-pixel halo, a hint's eval as a STAIRCASE of upright 3×5 digits INSIDE
-the shaft, each stepping along the arrow's direction — a line, a column
-or a flight of steps — compacted to a tile: "12", "5.1", "M3"; a plate
-beside the shaft was "way too big", an axis-aligned band hung out of the
-diagonals; the first build kept
+one-pixel halo; THE STYLE IS THE PLAYER'S — Options → Look → Arrow width
+(the shaft in floor pixels 1–5, default 2, the head growing with it; odd
+widths through a pixel centre, even along a boundary, so a straight shaft
+is exactly that many rows) and Arrow opacity (0.2–1, default 0.85, scaled
+by strength), `?arrowwidth=` / `?arrowalpha=`, `setArrowStyle` on BOTH
+boards, `__DCK.arrowStyle`; and NO NUMBER ON A HINT — a plate beside the
+shaft was "way too big", a staircase of 3×5 digits inside it was cut the
+same day ("not worth keeping"), so the HINT LIST in the player's bar
+carries rank swatch + SAN + eval + depth; a label is still drawn as that
+staircase for a caller that asks — the replay page's numbered PV arrows;
+the first build kept
 the SVG overlay above the canvas and the designer's first session saw "a
 big white rectangle flash" it was suspected of — nothing overlays the
 canvas now; the DOM board keeps `renderArrows`), the container still
@@ -418,7 +426,8 @@ Firefox), `ui-smoke.mjs --renderer canvas` (the DOM-only probes skipped,
 the geometry / diag / live remount checked; everything else renderer-
 neutral through `__DCK.marks.cell` + `__DCK.renderer.decor`), selftest
 44/44 (both boards classify, decorate and mark alike on detached boards;
-the arrows' compact labels, the staircase's steps and its ink),
+the arrows' compact labels, the staircase's steps and its ink, a straight
+shaft exactly the dial's rows, the DOM board's dials re-rendering),
 `flicker-scan.mjs --renderer canvas` in Playwright's Firefox (a 48-s
 duel: 3.3 / 18.4 piece- / debris-scale blinks per 10 s vs the DOM board's
 8.5 / 48.2 on its own random duel, motion on; the s59 door and torch

@@ -476,22 +476,29 @@ mid-slide last. Nothing in it has a fractional coordinate. **One blit**
 ⌊device width ÷ (16 × files)⌋, the board centred in whole device pixels
 (`integer`) or at the exact quotient (`fill`: uneven pixel widths, every
 layer still aligned because they share the one resample). **The arrows
-are pixel art in the buffer** (`js/pixelarrow.mjs`: a chunky shaft and
-head with a one-pixel black halo; a hint's eval RIDES INSIDE THE SHAFT as
-a STAIRCASE of 3×5 digits — every glyph upright, each stepping along the
-arrow's own direction by the least advance that keeps the cells apart (4
-px of x or 6 px of y), so a horizontal arrow reads as a line, a vertical
-one as a column and a diagonal or a knight's move as a flight of steps,
-in the screen's reading order; each glyph's cell grown by a pixel is a
-pad the shaft bulges to; the run sits on the shaft's midpoint and backs
-off toward the tail when it would reach into the head; the label is
-compacted to a tile: no leading plus, one decimal under ten, whole pawns
-from ten — "12", "5.1", "-1.2", "M3". The first cut set the whole label
-on a plate beside the shaft and the designer found it "way too big"; the
-second put the digits in an axis-aligned band, which hung out of every
-diagonal in rectangular corners. The colour is by kind and rank as
-before, the opacity by strength through a scratch canvas so the halo
-never shows through) —
+are pixel art in the buffer** (`js/pixelarrow.mjs`: a shaft and head with
+a one-pixel black halo, the colour by kind and rank as before, the alpha
+through a scratch canvas so the halo never shows through. THE STYLE IS
+THE PLAYER'S — Options → Look → **Arrow width** (the shaft in floor
+pixels, 1–5, default 2; the head grows with it, width + 3 long and width
++ 1 to each side; an odd width runs through a pixel centre and an even one
+along a boundary, so a straight shaft is exactly that many rows) and
+**Arrow opacity** (0.2–1, default 0.85, scaled by the arrow's strength:
+60% of it at none), `?arrowwidth=` / `?arrowalpha=`, `setArrowStyle` on
+both boards (the DOM board draws the same shape in viewBox units),
+`__DCK.arrowStyle` / `setArrowStyle(w, a)` — designer 2026-09-07: "make
+the arrows thinner. A thickness and opacity dial wouldn't hurt". THE
+HINTS CARRY NO NUMBER: the first pixel arrows set each hint's eval on a
+plate beside the shaft ("way too big"), a second cut put the digits inside
+the shaft as a staircase of 3×5 glyphs stepping along the arrow, and the
+designer cut the numbers off the board altogether ("I don't think the
+numbers are worth keeping. Let's list them somewhere else") — the HINT
+LIST in the player's bar has them: one entry per rank, a swatch in the
+rank's arrow colour, the move and its eval in bold, then the depth
+(`1 Nf3 +0.8 · 2 e4 +0.6 · 3 d4 +0.5 · d14`). A LABEL is still drawn when
+a caller asks for one — the replay page numbers its PV arrows — as that
+staircase inside a 5-px shaft, compacted to a tile: "12", "5.1", "-1.2",
+"M3") —
 the first build kept the DOM board's SVG overlay above the canvas, and
 the designer's first session on it saw "a big white rectangle flash"
 that pointed at the overlay, so nothing overlays the canvas at all now
@@ -559,8 +566,10 @@ the live remount checked instead; every other check — tiles vs ledgers,
 residue, rungs, debris, the flight, the replay log — is renderer-neutral
 through `__DCK.marks.cell` and `__DCK.renderer.decor`), and the selftest
 asserts that both boards classify, decorate and mark every square alike
-on detached boards (no atlas: the data half), and that the pixel arrows'
-compact labels, staircase steps and ink land as the shape says (44/44).
+on detached boards (no atlas: the data half), that the pixel arrows'
+compact labels, staircase steps and ink land as the shape says and a
+straight shaft is exactly the dial's width in rows (1–5), and that the
+DOM board's arrows take the width / opacity dials and re-render (44/44).
 `flicker-scan.mjs` records
 either renderer (`--renderer canvas`): in Playwright's Firefox at the
 phone viewport, a 48-s canvas duel (25 quakes and captures) scanned at
@@ -1023,10 +1032,12 @@ verification is the meter-lab rerun on this same bed.
 The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
 on the player's turn — arrows coloured by RANK, gold / silver / bronze, at
-about half their old size, outlined, each carrying its eval written INTO
-the arrow ("+0.8", "−M2"), whose width/opacity still scale lichess-style with
-how close each move is to the best one; the ranked SANs plus the reached
-depth go to the hint line in the player's bar under the board;
+about half their old size, outlined, their width the Arrow width dial
+and their opacity the Arrow opacity dial scaled lichess-style by how close
+each move is to the best one; the evals are NOT on the arrows (they were,
+until 2026-09-07 — "not worth keeping") but in the HINT LIST in the
+player's bar under the board: a swatch in each rank's colour, the SAN,
+the eval in bold, then the reached depth;
 MultiPV is restored to 1 when the probe settles and pinned to 1 by the duel
 before every reply, which stays full-strength), **Keep evaluating** (the
 probe drops its time limit and thinks to the depth cap or until you move —
@@ -1052,7 +1063,7 @@ The hint probe (2026-09-02) thinks as long as the enemy does — the same
 and STREAMS: every `info multipv` line repaints the arrows (engine.mjs
 `go()` takes an `onLine` reader), so the first hints land at depth ~8
 within a few hundred ms and sharpen while you think; the hint line shows
-the depth reached (`1 Nf3 · 2 e4 · 3 d4 · d14…`). `?probe=<go args>`
+the depth reached (`1 Nf3 +0.8 · 2 e4 +0.6 · 3 d4 +0.5 · d14…`). `?probe=<go args>`
 overrides it (E2E runs pass a short one next to `?go=`). Cancel hardening:
 your move sends `stop` and waits ≤300 ms; a probe that never answers marks
 the instance suspect and it is recycled before the reply search (measured:

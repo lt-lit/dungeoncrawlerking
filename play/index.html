@@ -228,6 +228,18 @@
       <input type="range" id="optPieceShift" min="-0.5" max="0.5" step="0.01">
       <span class="opt-val" id="optPieceShiftV"></span>
     </label>
+    <!-- The arrows (2026-09-07): the hints' evals are listed in the hint
+         line under the board, never on the arrows; the shaft's width is in
+         floor pixels and the head follows it; the opacity is the dial's at
+         full strength (?arrowwidth= / ?arrowalpha=). -->
+    <label class="opt">Arrow width
+      <input type="range" id="optArrowWidth" min="1" max="5" step="1">
+      <span class="opt-val" id="optArrowWidthV"></span>
+    </label>
+    <label class="opt">Arrow opacity
+      <input type="range" id="optArrowAlpha" min="0.2" max="1" step="0.05">
+      <span class="opt-val" id="optArrowAlphaV"></span>
+    </label>
     <!-- THE DEBRIS LAYER (2026-09-07, play/js/debris.mjs): the floor
          remembers. Every kind is a toggle; the ledger records everything
          regardless, so a toggle flipped mid-game reveals the whole history. -->

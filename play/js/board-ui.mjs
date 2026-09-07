@@ -96,6 +96,7 @@
 // layer — the enemy's last move in red, the gods' displacements in their
 // blue, the oracle's hints by rank (round 13: no square tints for moves).
 import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
+import { normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs'; // the arrows' width / opacity dials (shared with the canvas board)
 import { pngDataUrl } from './pngmini.mjs'; // THE DEBRIS LAYER: a square's debris image; the tile-grid piece tiers
 import { pieceTiers, TIERS, TIER_VARS, tierRowVars, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './piecetiers.mjs';
 
@@ -369,7 +370,9 @@ export function residueStep(prev, next, skins = {}, files, ranks) {
  * canvas board (canvas-board.mjs), whose arrows are the same vector UI
  * over the board rectangle.
  */
-export function renderArrows(svg, arrows, { files, ranks, flipped = false }) {
+export function renderArrows(svg, arrows, { files, ranks, flipped = false, style = null }) {
+  const st = normalizeArrowStyle(style);
+  const U = CELL / 16; // viewBox units per floor pixel — the dial is in floor pixels, like the canvas board's
   const centerOf = (sq) => {
     const f = sq.charCodeAt(0) - 97;
     const rank = parseInt(sq.slice(1), 10);
@@ -394,9 +397,12 @@ export function renderArrows(svg, arrows, { files, ranks, flipped = false }) {
     const s = Math.max(0, Math.min(1, strength));
     // A labelled arrow is a fixed 2.5 units wide (25% of a cell) — the
     // text's cap height is ~1.4, so it sits inside the coloured shaft with
-    // the outline clear on both sides; otherwise 1.6–2.2 by strength.
-    const width = label ? 2.5 : 1.4 + 0.8 * s;
-    const head = label ? 3.2 : Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
+    // the outline clear on both sides; otherwise the style's width in
+    // floor pixels, the head growing with it (width + 3 long, width + 1 to
+    // each side — the canvas board's shape, pixelarrow.mjs).
+    const width = label ? 2.5 : st.width * U;
+    const head = label ? 3.2 : (st.width + 3) * U;
+    const headHalf = label ? head * 0.5 : (st.width + 1) * U;
     // Unlabelled: the shaft starts clear of the origin glyph and the tip
     // pulls short of the destination centre so the head never covers a
     // piece. Labelled: start at the origin centre and pull back less, so
@@ -415,16 +421,16 @@ export function renderArrows(svg, arrows, { files, ranks, flipped = false }) {
     }
     g.dataset.from = from;
     g.dataset.to = to;
-    g.setAttribute('opacity', (0.6 + 0.3 * s).toFixed(2));
+    g.setAttribute('opacity', arrowAlpha(st.alpha, s).toFixed(2));
     const px = -uy;
     const py = ux;
     const lineAttrs = { x1: x1 + ux * CELL * tail, y1: y1 + uy * CELL * tail, x2: baseX, y2: baseY };
-    const points = `${tipX},${tipY} ${baseX + px * head * 0.5},${baseY + py * head * 0.5} ${baseX - px * head * 0.5},${baseY - py * head * 0.5}`;
+    const points = `${tipX},${tipY} ${baseX + px * headHalf},${baseY + py * headHalf} ${baseX - px * headHalf},${baseY - py * headHalf}`;
     // A dark halo under the coloured stroke keeps silver legible on light
     // cells and bronze on the pit — a stroke, not a CSS filter (filters
-    // scale with the non-uniform viewBox).
-    g.appendChild(svgEl('line', { ...lineAttrs, class: 'halo', 'stroke-width': width + 1.1 }));
-    g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 1.1 }));
+    // scale with the non-uniform viewBox). One floor pixel each side.
+    g.appendChild(svgEl('line', { ...lineAttrs, class: 'halo', 'stroke-width': width + 2 * U }));
+    g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 2 * U }));
     g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
     g.appendChild(svgEl('polygon', { points }));
     if (label) {
@@ -449,13 +455,15 @@ export function renderArrows(svg, arrows, { files, ranks, flipped = false }) {
 }
 
 export class BoardUI {
-  constructor(container, { files, ranks, flipped = false, onSquareTap = null } = {}) {
+  constructor(container, { files, ranks, flipped = false, onSquareTap = null, arrowStyle = null } = {}) {
     this.container = container;
     this.files = files;
     this.ranks = ranks;
     this.flipped = flipped;
     this.onSquareTap = onSquareTap;
     this.interactive = false;
+    this.arrowStyle = normalizeArrowStyle(arrowStyle); // the arrows' width / opacity dials (setArrowStyle)
+    this.arrowList = []; // the last arrows set, re-rendered when the style changes
     container.classList.add('board');
     container.classList.toggle('inactive', true);
     container.style.setProperty('--files', files);
@@ -654,7 +662,16 @@ export class BoardUI {
    * phone and the old head was two thirds of a cell.
    */
   setArrows(arrows) {
-    renderArrows(this.svg, arrows, { files: this.files, ranks: this.ranks, flipped: this.flipped });
+    this.arrowList = arrows ?? [];
+    renderArrows(this.svg, this.arrowList, { files: this.files, ranks: this.ranks, flipped: this.flipped, style: this.arrowStyle });
+  }
+
+  /** The arrows' style — the shaft's width in floor pixels and the opacity
+   *  (Options → Look; pixelarrow.mjs' dials, shared with the canvas board).
+   *  Re-renders the arrows showing. */
+  setArrowStyle(style) {
+    this.arrowStyle = normalizeArrowStyle(style);
+    this.setArrows(this.arrowList);
   }
 
   /**
