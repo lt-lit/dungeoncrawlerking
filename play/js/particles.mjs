@@ -32,6 +32,10 @@
 // RELEASED (the caller has painted; the chunks leave). The group is
 // removed when no flight remains.
 //
+// Phase 2 (2026-09-07): on the CANVAS BOARD (canvas-board.mjs) the same
+// frame goes to `ui.drawFlight(pixels)` — pixels in its native buffer,
+// above the pieces — instead of SVG paths; the flight model is unchanged.
+//
 // Cost: a few hundred unit squares in a handful of path strings per frame.
 // Reduced motion / ?fx=0 give ms = 0 and a flight lands at once (the debris
 // then simply appears).
@@ -70,8 +74,41 @@ export class Particles {
       if (!p) continue;
       const q = Math.round(a * 4) / 4;
       const key = `${c.px[s]},${c.px[s + 1]},${c.px[s + 2]}|${q}`;
-      paths.set(key, (paths.get(key) ?? '') + `M${(p.x * PX).toFixed(3)} ${(p.y * PX).toFixed(3)}h${PX}v${PX}h-${PX}z`);
+      let list = paths.get(key);
+      if (!list) paths.set(key, (list = []));
+      list.push(p.x, p.y);
     }
+  }
+
+  /** Present a frame's pixels: on a board that draws its own flight (the
+   *  canvas board's drawFlight — pixels in its buffer above the pieces),
+   *  hand them over as a flat list; otherwise one SVG path per colour. */
+  #present(paths) {
+    if (typeof this.ui.drawFlight === 'function') {
+      const out = [];
+      for (const [key, list] of paths) {
+        const [rgb, q] = key.split('|');
+        const a = parseFloat(q);
+        for (let i = 0; i < list.length; i += 2) out.push({ rgb, a, x: list[i], y: list[i + 1] });
+      }
+      this.ui.drawFlight(out);
+      return;
+    }
+    const g = this.#group();
+    const els = [...g.children];
+    let i = 0;
+    for (const [key, list] of paths) {
+      const [rgb, q] = key.split('|');
+      let d = '';
+      for (let j = 0; j < list.length; j += 2) d += `M${(list[j] * PX).toFixed(3)} ${(list[j + 1] * PX).toFixed(3)}h${PX}v${PX}h-${PX}z`;
+      const el = els[i] ?? g.appendChild(document.createElementNS(SVG_NS, 'path'));
+      el.setAttribute('d', d);
+      el.setAttribute('fill', `rgb(${rgb})`);
+      if (q !== '1') el.setAttribute('fill-opacity', q);
+      else el.removeAttribute('fill-opacity');
+      i++;
+    }
+    for (let k = els.length - 1; k >= i; k--) els[k].remove();
   }
 
   #stampFlight(paths, f, u) {
@@ -131,19 +168,7 @@ export class Particles {
       this.clear();
       return;
     }
-    const g = this.#group();
-    const els = [...g.children];
-    let i = 0;
-    for (const [key, d] of paths) {
-      const [rgb, q] = key.split('|');
-      const el = els[i] ?? g.appendChild(document.createElementNS(SVG_NS, 'path'));
-      el.setAttribute('d', d);
-      el.setAttribute('fill', `rgb(${rgb})`);
-      if (q !== '1') el.setAttribute('fill-opacity', q);
-      else el.removeAttribute('fill-opacity');
-      i++;
-    }
-    for (let k = els.length - 1; k >= i; k--) els[k].remove();
+    this.#present(paths);
     this.frames++;
     this.timer = setTimeout(() => this.#frame(), TICK);
   }
@@ -187,7 +212,8 @@ export class Particles {
   /** The flight group gone — only when nothing is in the air or held. */
   clear() {
     if (this.flights.some((f) => !f.released)) return;
-    this.ui.container.querySelector(':scope > svg.flight-layer > g.flight')?.remove();
+    if (typeof this.ui.drawFlight === 'function') this.ui.drawFlight(null);
+    else this.ui.container.querySelector(':scope > svg.flight-layer > g.flight')?.remove();
   }
 
   /** The material's hop height and bounce, for a flight. */

@@ -22,6 +22,8 @@ import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
 import { BoardUI, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE } from './board-ui.mjs';
+import { CanvasBoard } from './canvas-board.mjs'; // Phase 2: the 16×16 canvas renderer, same surface
+import { arrowShape, glyphStep, compactLabel, drawArrow } from './pixelarrow.mjs'; // the canvas board's pixel-art arrows
 import { pieceTiers, CANVAS_ROWS } from './piecetiers.mjs';
 
 const out = document.getElementById('out');
@@ -1256,26 +1258,137 @@ async function main() {
     const rankOrder = gs.slice(2).map((g) => g.dataset.rank).join('');
     if (rankOrder !== '321') throw new Error(`hint arrows must draw worst→best (best on top), got ranks ${rankOrder}`);
     if (!gs[4].classList.contains('rank-1') || !gs[4].classList.contains('arrow-hint')) throw new Error('rank-1 hint arrow class missing');
-    const bestWidth = parseFloat(gs[4].querySelector('line:not(.halo)').getAttribute('stroke-width'));
-    if (!(bestWidth > 2.4 && bestWidth < 2.6)) throw new Error(`a labelled arrow's shaft should be 2.5 viewBox units (25% of a cell), got ${bestWidth}`);
-    const rank2Width = parseFloat(gs[3].querySelector('line:not(.halo)').getAttribute('stroke-width'));
-    if (!(rank2Width > 1.6 && rank2Width < 2.0)) throw new Error(`an unlabelled arrow's shaft scales with strength (~1.8 at 0.5), got ${rank2Width}`);
+    // The arrow style (2026-09-07): the shaft is the dial's width in floor
+    // pixels (CELL 10 units = 16 px), the opacity the dial's alpha scaled
+    // by strength; a labelled arrow (the replay page numbers its PV
+    // arrows) keeps the width its digits need.
+    const U = 10 / 16;
+    const shaftW = (g) => parseFloat(g.querySelector('line:not(.halo)').getAttribute('stroke-width'));
+    const op = (g) => parseFloat(g.getAttribute('opacity'));
+    if (Math.abs(shaftW(gs[3]) - 2 * U) > 1e-6) throw new Error(`an unlabelled arrow's shaft is the style's width in floor pixels (default 2 px = ${2 * U} units), got ${shaftW(gs[3])}`);
+    if (Math.abs(shaftW(gs[4]) - 2.5) > 1e-6) throw new Error(`a labelled arrow's shaft is 2.5 units so the digits fit, got ${shaftW(gs[4])}`);
+    if (Math.abs(op(gs[4]) - 0.85) > 0.011 || Math.abs(op(gs[3]) - 0.85 * 0.8) > 0.011) throw new Error(`opacity = alpha × (0.6 + 0.4·strength): rank 1 ${op(gs[4])}, rank 2 ${op(gs[3])}`);
     if (gs[4].querySelectorAll('.halo').length !== 2) throw new Error('every arrow carries a halo line + head');
     const labelEl = gs[4].querySelector('text.label');
-    if (labelEl?.textContent !== '+0.8') throw new Error('the rank-1 arrow carries its eval label');
+    if (labelEl?.textContent !== '+0.8') throw new Error('a labelled arrow carries its text');
     if (!/^rotate\(-?\d+(\.\d+)? /.test(labelEl.getAttribute('transform') ?? '')) throw new Error('the label runs along the arrow (rotate transform)');
-    const fs = parseFloat(labelEl.getAttribute('font-size'));
-    if (!(fs >= 1.3 && fs <= 2.0)) throw new Error(`label font sized to the shaft, got ${fs}`);
-    if (gs[4].querySelector('rect') || gs[4].querySelector('text.label-halo')) throw new Error('no box or halo twin behind the label — the eval sits inside the arrow');
     if (gs[3].querySelector('text.label')) throw new Error('an arrow without a label draws none');
+    ui.setArrowStyle({ width: 4, alpha: 0.5 });
+    const gs2 = [...host.querySelectorAll('.arrow-layer g.arrow')];
+    if (gs2.length !== 5) throw new Error('setArrowStyle re-renders the same arrows');
+    if (Math.abs(shaftW(gs2[3]) - 4 * U) > 1e-6 || Math.abs(op(gs2[3]) - 0.5 * 0.8) > 0.011) throw new Error(`setArrowStyle({ width: 4, alpha: 0.5 }): shaft ${shaftW(gs2[3])}, opacity ${op(gs2[3])}`);
+    if (Math.abs(shaftW(gs2[4]) - 2.5) > 1e-6) throw new Error('a labelled arrow keeps its own width under the dial');
+    ui.setArrowStyle({ width: 99, alpha: -1 });
+    if (ui.arrowStyle.width !== 5 || ui.arrowStyle.alpha !== 0.2) throw new Error(`the style clamps: ${JSON.stringify(ui.arrowStyle)}`);
+    ui.setArrowStyle(null);
+    if (ui.arrowStyle.width !== 2 || ui.arrowStyle.alpha !== 0.85) throw new Error(`setArrowStyle(null) is the default: ${JSON.stringify(ui.arrowStyle)}`);
     ui.setMarks({});
     if (host.querySelector('.arrow-layer g.arrow') || has('a1', 'fresh-crack') || has('b1', 'fresh-pit')) throw new Error('setMarks({}) must clear marks and arrows');
-    return 'wall/hole/crate/cracked (+ a door skin) from the ledgers, a–d + 5–1 coordinates, 3 terrain rung marks, arrows ranked 3→2→1 over the last-move arrow over the quake arrow, eval label on rank 1';
+    return 'wall/hole/crate/cracked (+ a door skin) from the ledgers, a–d + 5–1 coordinates, 3 terrain rung marks, arrows ranked 3→2→1 over the last-move arrow over the quake arrow, the width / opacity dials re-render them';
   });
 
   // --- Art themes (2026-09-03): the repacked tilesets ride a data-theme
   // attribute; wall RUNS and floor VARIANTS are classes the themes paint.
   // (selftest.html loads no stylesheet — computed looks are ui-smoke's job.)
+  // --- PHASE 2 (2026-09-07): the canvas board classifies exactly as the DOM
+  // board does — one terrain rule (classifyTerrain), one test surface
+  // (cellClasses), the same decor and marks — on detached boards (no atlas,
+  // no paint: the data half).
+  await check('canvas board: cellClasses, decor and marks agree with the DOM board', async () => {
+    const hostA = document.createElement('div'), hostB = document.createElement('div');
+    const dom = new BoardUI(hostA, { files: 6, ranks: 6 });
+    const cvs = new CanvasBoard(hostB, { files: 6, ranks: 6, atlas: {} });
+    const fens = [
+      ['4^1/*1^^^*/1**2*/2^3/^**1^1/3*2 w - - 0 1', { holes: new Set(['b2', 'c2']), godCrates: new Set(['a2', 'c4']), skins: { b6: 'door', c6: 'door', a6: 'barrel', d4: 'masonry', e5: 'chest', a5: 'wreckage' }, opened: new Set(['d1']), rubble: new Set(['e1']) }],
+      ['6/6/6/6/6/6 w - - 0 1', {}],
+      ['r3k1/pp1ppp/6/2P3/PP2PP/R3K1 w - - 0 1', { skins: {} }],
+    ];
+    let cells = 0, decor = 0;
+    for (const [fen, ledgers] of fens) {
+      dom.setPosition(fen, ledgers);
+      cvs.setPosition(fen, ledgers);
+      const marks = { selected: 'a1', targets: ['a2', 'b3'], check: 'e1', pit: 'b2', cracked: ['a2'], breached: ['d1'], heat: { c3: 'a', d3: 't' }, arrows: [{ from: 'a1', to: 'a2', kind: 'last' }] };
+      dom.setMarks(marks);
+      cvs.setMarks(marks);
+      for (const sq of dom.cells.keys()) {
+        const a = dom.cellClasses(sq).sort().join(' '), b = cvs.cellClasses(sq).sort().join(' ');
+        if (a !== b) throw new Error(`${sq}: dom [${a}] vs canvas [${b}]`);
+        cells++;
+        const dec = hostA.querySelector(`[data-square="${sq}"] .decor`)?.className.replace('decor decor-', '') ?? null;
+        if (dec !== cvs.decorOf(sq)) throw new Error(`${sq}: decor dom ${dec} vs canvas ${cvs.decorOf(sq)}`);
+        if (dec) decor++;
+      }
+      if (hostA.querySelectorAll('.arrow-layer g.arrow').length !== cvs.arrows.length) throw new Error('both boards draw the same arrows');
+      if (hostB.querySelector('svg')) throw new Error('the canvas board carries no SVG overlay — its arrows are pixels in the buffer');
+    }
+    if (cvs.kind !== 'canvas' || dom.kind !== 'dom') throw new Error('kind');
+    cvs.setPieceFit({ tileLift: 99, tileShift: -99 });
+    if (cvs.pieceFit.pixels !== 'tile' || cvs.pieceFit.tileLift !== TILE_LIFT_RANGE[1] || cvs.pieceFit.tileShift !== -7) throw new Error(`the canvas board is tile-grid only and clamps its placement (${JSON.stringify(cvs.pieceFit)})`);
+    if (!Array.from({ length: 16 * 6 }).every((_, i) => cvs.gridPos(dom.cells.keys().next().value).col === dom.gridPos(dom.cells.keys().next().value).col)) throw new Error('gridPos');
+    cvs.destroy();
+    dom.destroy();
+    return `${cells} squares over ${fens.length} positions classify alike (${decor} decor props / doorways), marks alike, arrows alike`;
+  });
+
+  await check('pixel arrows: compact labels, the digits a staircase inside the shaft', () => {
+    for (const [label, want] of [['+12.0', '12'], ['+5.1', '5.1'], ['−1.2', '-1.2'], ['−M3', '-M3'], ['M3', 'M3'], ['+0.8', '0.8'], ['-10.5', '-10'], ['+123.4', '123'], [null, null]]) {
+      if (compactLabel(label) !== want) throw new Error(`compactLabel(${label}) = ${compactLabel(label)}, want ${want}`);
+    }
+    // The step from glyph to glyph keeps the 3×5 cells a pixel apart along
+    // every direction and points the screen's reading way.
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, 2], [2, 1], [-1, 2], [1, -2], [1, 3], [-3, 1]]) {
+      const l = Math.hypot(dx, dy);
+      const { sx, sy } = glyphStep(dx / l, dy / l);
+      if (!(Math.abs(sx) >= 4 || Math.abs(sy) >= 6)) throw new Error(`step (${sx},${sy}) for (${dx},${dy}) lets glyphs overlap`);
+      if (Math.abs(dx) >= Math.abs(dy) ? sx <= 0 : sy <= 0) throw new Error(`step (${sx},${sy}) for (${dx},${dy}) reads backwards`);
+    }
+    let glyphs = 0;
+    for (const [x2, y2, label] of [[56, 8, '+5.6'], [8, 56, '-1.2'], [40, 24, '+12.3'], [24, 40, 'M3'], [40, 40, '+0.8'], [24, 8, '+12.0'], [8, 24, '+9.9']]) {
+      const s = arrowShape(8, 8, x2, y2, { label });
+      const cells = s.label.glyphs.map((g) => ({ x0: g.x, y0: g.y, x1: g.x + 3, y1: g.y + 5 }));
+      if (cells.length !== s.label.text.length) throw new Error(`${label}: ${cells.length} glyphs for "${s.label.text}"`);
+      for (let i = 1; i < cells.length; i++) {
+        const a = cells[i - 1], b = cells[i];
+        if (!(b.x0 >= a.x1 + 1 || a.x0 >= b.x1 + 1 || b.y0 >= a.y1 + 1 || a.y0 >= b.y1 + 1)) throw new Error(`${label} → ${x2},${y2}: glyphs ${i - 1} and ${i} touch`);
+      }
+      for (const p of s.label.pads) if (p.x < s.box.x0 || p.y < s.box.y0 || p.x + p.w > s.box.x1 || p.y + p.h > s.box.y1) throw new Error(`${label}: a pad outside the box`);
+      glyphs += cells.length;
+    }
+    // A one-square arrow backs the run off toward the tail: the digits end
+    // at the head's base, never over the head.
+    const one = arrowShape(8, 8, 24, 8, { label: '+12.0' });
+    const front = Math.max(...one.label.pads.map((p) => p.x + p.w));
+    if (front > one.shaft[2] + 1) throw new Error(`the run reaches ${front} past the head's base at ${one.shaft[2]}`);
+    if (arrowShape(8, 8, 24, 8, {}).label !== null) throw new Error('an unlabelled arrow carries no digits');
+    // The width dial: a horizontal arrow's shaft is exactly `width` rows of
+    // colour under a one-row halo each side (odd widths through a pixel
+    // centre, even ones along a boundary).
+    for (const w of [1, 2, 3, 4, 5]) {
+      const c2 = document.createElement('canvas');
+      c2.width = 48; c2.height = 24;
+      const g2 = c2.getContext('2d');
+      drawArrow(g2, 8, 8, 40, 8, { width: w, colour: '#f2c14e' });
+      const d = g2.getImageData(20, 0, 1, 24).data; // one column mid-shaft
+      let gold = 0, black = 0;
+      for (let y = 0; y < 24; y++) { const i = y * 4; if (d[i] === 0xf2 && d[i + 1] === 0xc1 && d[i + 2] === 0x4e) gold++; else if (d[i + 3] === 255 && !d[i] && !d[i + 1] && !d[i + 2]) black++; }
+      if (gold !== w || black !== 2) throw new Error(`width ${w}: ${gold} shaft rows and ${black} halo rows at x 20`);
+      if (arrowShape(8, 8, 40, 8, { width: w }).width !== w) throw new Error(`arrowShape carries the width (${w})`);
+    }
+    if (arrowShape(8, 8, 40, 8, { width: 9 }).width !== 5 || arrowShape(8, 8, 40, 8, { width: 0 }).width !== 1) throw new Error('the width clamps to 1–5');
+    // Rasterised: the digits land in ink where the shape put them.
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 24;
+    const ctx = cv.getContext('2d');
+    drawArrow(ctx, 8, 8, 56, 8, { label: '+5.6' });
+    const shape = arrowShape(8, 8, 56, 8, { label: '+5.6' });
+    const px = ctx.getImageData(0, 0, 64, 24).data;
+    const ink = [];
+    for (let y = 0; y < 24; y++) for (let x = 0; x < 64; x++) { const i = (y * 64 + x) * 4; if (px[i] === 0x14 && px[i + 1] === 0x15 && px[i + 2] === 0x1a && px[i + 3] === 255) ink.push([x, y]); }
+    if (ink.length !== 24) throw new Error(`"5.6" is 24 ink pixels, drew ${ink.length}`);
+    for (const [x, y] of ink) if (!shape.label.glyphs.some((g) => x >= g.x && x < g.x + 3 && y >= g.y && y < g.y + 5)) throw new Error(`ink at ${x},${y} outside every glyph`);
+    return `${glyphs} glyphs over 7 arrows, 12 directions stepped, 24 ink pixels where the shape says, widths 1–5 exact`;
+  });
+
   await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
     const host = document.createElement('div');
     const ui = new BoardUI(host, { files: 4, ranks: 5 });

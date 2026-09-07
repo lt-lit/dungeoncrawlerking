@@ -57,7 +57,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   stripping back to the in-house SVG), with screenshots in
   `phase0/results/ui-smoke/` for the eye (`00-theme-*.png` is the same
   opening board in every theme). `window.__DCK.cheat`, `window.__DCK.marks`
-  and `window.__DCK.theme` are the read-only surfaces it uses.
+  and `window.__DCK.theme` are the read-only surfaces it uses;
+  `--renderer canvas` runs it on the Phase 2 canvas board (§ "The canvas
+  board" below), whose own gates are `node harness/canvas-parity.mjs`
+  (tile-for-tile against the DOM board) and `node harness/canvas-grid.mjs`
+  (the blit on the device-pixel grid, Chromium + Firefox).
 
 ## Layout
 
@@ -423,23 +427,163 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
-## The next renderer — the 16×16 grid (decided 2026-09-07)
+## The canvas board — Phase 2 milestone 1 (2026-09-07)
 
 The designer committed to 16×16 for everything and Phase 2 opens with the
-rendering pipeline that makes it true (brief §2 item 5, §10). The board
-below is a CSS grid of fractional cells where every layer is a separate
-image the browser resamples on its own — which is why the tile-grid
-pieces of 2026-09-07 needed cell-sized boxes, measured row rectangles,
+rendering pipeline that makes it true (brief §2 item 5, §10). The DOM
+board under "Art themes" is a CSS grid of fractional cells where every
+layer is a separate image the browser resamples on its own — which is why
+the tile-grid pieces needed cell-sized boxes, measured row rectangles,
 positions baked into tiles and a two-browser gate to line up with the
 floor, why the debris image sits a sub-device-pixel off it, and why a
-slide shimmers off-grid. The replacement is one full-board buffer at 16
-px per tile, every layer written by the pure painters this page already
-has (`piecetiers.mjs`, `debris.mjs`, `classifyTerrain`, the autotile
-masks, the atlas), scaled to the screen once at an integer device-pixel
-factor, with a camera for the 100×100 floor. A spike on one board-sized
-canvas, judged for flicker on the designer's two Firefoxes, comes before
-anything is built on it. Until then everything under "Art themes" is the
-shipped, gated renderer, and nothing new is built on it.
+slide shimmers off-grid. **The replacement is built, behind a switch,
+while the phone judges it**: `js/canvas-board.mjs` (`CanvasBoard`, the
+same method surface as `BoardUI` — main.mjs and the replay page drive
+either), `js/atlas.mjs` (the art, straight off `img/tileset.png` +
+`img/pieces.png` + `img/tileset.json` — no data URIs; the in-house SVGs,
+the cracks and the classic set, are decoded off style.css's properties
+until the repack tool moves them into the PNG) and `js/pixelfont.mjs` (a
+3×5 font for the edge coordinates). Options → Look → **Renderer** (`dom` /
+`canvas`; `?renderer=canvas`; `options.renderer`) and **Scaling**
+(`integer` / `fill`; `?scaling=`); the change remounts the board live on
+the same position. While the canvas board is on, a diagnostics line under
+the board says what the screen got — `canvas · dpr 2.625 · 1012×1032
+device px · k 6 (integer) · 96 px/tile · 36.6 css px` — and
+`__DCK.renderer` exposes it (`kind`, `info`, `diag`, `square(sq)`,
+`buffer()`, `decor(sq)`, `testPattern(on)`, `snapMode(m)`, `paintNow()`,
+`ready()`, `set(renderer, scaling)`).
+
+**The shape.** One native buffer at 16 px per tile — files×16 wide,
+ranks×16 tall plus HEADROOM for the top rank's tall pieces (fit − 16 +
+lift, so a head never leaves the buffer) — repainted from scratch on
+every change in painter's order: floor (+ the dark square's shade), flat
+terrain by `classifyTerrain` (the one terrain rule, shared with the DOM
+board and the replay analyzer: wall cases, holes, ruins, cracked walls
+with the crack masked to the wall's pixels by `source-atop`), the
+square's DEBRIS (the painter's 16×16 buffer put straight in), decor and
+the open doorway above it (the DOM's decor span is above its debris
+image, so the posts stand on the rubble), the marks under the pieces
+(the gods' one-pixel frames, the debug heat), then row by row from the
+far rank to the near one the TALL things — furniture props (16×32) and
+pieces (the set's sprite at its native size, lifted and shifted by whole
+tile pixels, one tile pixel of shadow — a cached silhouette) — so a
+nearer head paints over the piece behind it, then selection / check /
+target over the pieces, the coordinates, the debris FLIGHT's pixels
+(`particles.mjs` hands a frame to `drawFlight` on this board and draws
+SVG paths on the other — the flight model is unchanged) and a piece in
+mid-slide last. Nothing in it has a fractional coordinate. **One blit**
+(`drawImage`, smoothing off) puts it on the screen canvas at scale k =
+⌊device width ÷ (16 × files)⌋, the board centred in whole device pixels
+(`integer`) or at the exact quotient (`fill`: uneven pixel widths, every
+layer still aligned because they share the one resample). **The arrows
+are pixel art in the buffer** (`js/pixelarrow.mjs`: a shaft and head with
+a one-pixel black halo, the colour by kind and rank as before, the alpha
+through a scratch canvas so the halo never shows through. THE STYLE IS
+THE PLAYER'S — Options → Look → **Arrow width** (the shaft in floor
+pixels, 1–5, default 2; the head grows with it, width + 3 long and width
++ 1 to each side; an odd width runs through a pixel centre and an even one
+along a boundary, so a straight shaft is exactly that many rows) and
+**Arrow opacity** (0.2–1, default 0.85, scaled by the arrow's strength:
+60% of it at none), `?arrowwidth=` / `?arrowalpha=`, `setArrowStyle` on
+both boards (the DOM board draws the same shape in viewBox units),
+`__DCK.arrowStyle` / `setArrowStyle(w, a)` — designer 2026-09-07: "make
+the arrows thinner. A thickness and opacity dial wouldn't hurt". THE
+HINTS CARRY NO NUMBER: the first pixel arrows set each hint's eval on a
+plate beside the shaft ("way too big"), a second cut put the digits inside
+the shaft as a staircase of 3×5 glyphs stepping along the arrow, and the
+designer cut the numbers off the board altogether ("I don't think the
+numbers are worth keeping. Let's list them somewhere else") — the HINT
+LIST in the player's bar has them: one entry per rank, a swatch in the
+rank's arrow colour, the move and its eval in bold, then the depth
+(`1 Nf3 +0.8 · 2 e4 +0.6 · 3 d4 +0.5 · d14`). A LABEL is still drawn when
+a caller asks for one — the replay page numbers its PV arrows — as that
+staircase inside a 5-px shaft, compacted to a tile: "12", "5.1", "-1.2",
+"M3") —
+the first build kept the DOM board's SVG overlay above the canvas, and
+the designer's first session on it saw "a big white rectangle flash"
+that pointed at the overlay, so nothing overlays the canvas at all now
+(the DOM board keeps `renderArrows`). The container keeps `data-theme` /
+`data-pieces` / `data-doors` (the legend and the debris sampler read the
+cascade off it).
+A slide moves its sprite in whole native pixels per frame; a terrain
+rung's fx (crack with jitter and a flash, burst, sink to the lone pit) is
+drawn in the buffer and its END FRAME held until setPosition commits; the
+quake's rumble jitters the blit by whole native pixels (`rumble(ms)`,
+which main.mjs calls beside the class the canvas's CSS ignores); a
+captured door swings. One requestAnimationFrame loop while anything
+moves, nothing otherwise. Hit-testing is division: pointer → device px →
+tile. Not here on purpose (milestone 1): the classic GLYPH pieces (a set
+is always drawn — glyphs are text, not pixel art; the default set stands
+in), the % piece-fit dials (the tile grid is the only mode: the art's own
+scale, lift and shift in whole tile pixels), the overworld camera.
+
+**Landing on the device grid — what measured.** The screen canvas must
+be sized EXPLICITLY in whole device pixels (`ResizeObserver` on the
+container's `device-pixel-content-box` → the canvas's CSS width = its
+backing width ÷ ratio): a `width: 100%` canvas is a fractional number of
+device pixels whenever the container's is, and a bitmap drawn into a box
+a fraction wider than itself is resampled — a column drifts in part way
+across, in both browsers. Under an EMULATED ratio (a headless driver's
+`deviceScaleFactor`) Chromium reports that box in CSS px, a whole factor
+off; the board falls back to css × ratio when the two disagree by more
+than a pixel (`renderInfo.emulated`). The element's POSITION is fractional
+in device pixels too whenever the page above it is; `setSnapMode` carries
+three strategies — `none` (the browser's own placement), `margin` (a
+layout offset onto the grid, quantised to a layout unit) and `transform`
+(a float translate) — and `phase0/harness/canvas-grid.mjs` measures them
+per browser. **The verdict (2026-09-07): `none` is the default.** In
+Firefox — whose emulated ratio is the real preference — the blit landed
+1:1 in 18 of 18 cases (ratios 1, 1.25, 2, 2.625 and 3 at nine widths,
+integer and fill, `none` and `margin` alike); in Chromium at ratio 1 all
+four cases were exact with either, and `transform` failed everywhere (a
+float translate defeats the browser's own snapping). Chromium at any
+other ratio cannot be measured under Playwright: its emulation is a
+compositor-level scale over a layout that still believes ratio 1, so a
+canvas bitmap is resampled twice and blocks drift a device pixel part way
+across even with the element on a whole device pixel and its box exactly
+its backing size — the emulator, not the browser; the gate runs Chromium
+at ratio 1 only and says so. The real phone's screenshot is the final
+word for that path.
+
+**Gates.** `phase0/harness/canvas-parity.mjs` drives the game twice in
+headless Chromium at ratio 1 — the DOM board forced to an exact integer
+cell, the canvas board's buffer read straight off `__DCK.renderer` — and
+compares every square's 16×16 on the start position, after fourteen seeded
+plies with the gods hot (holes, cracks, breaches, ruins, doorways, debris,
+blood, the residue frames) and on the other two themes: **exact, 24 320 of
+24 320 tile pixels per snapshot** (the coordinate corners masked, the
+DOM's arrow SVG hidden — the same SVG rides above the canvas). Two draw-
+order rules fell out of getting there: the debris paints OVER a ruin's
+stub (the DOM's image is above the cell background) and the open doorway
+paints over the debris (the decor span is above the image). The arrows
+are left out of the comparison on both boards (the DOM's SVG hidden, the
+canvas's pixel arrows cleared).
+`phase0/harness/canvas-grid.mjs` is the device-pixel gate (the test
+pattern, nine ratio × width cases, integer and fill, Chromium + Firefox).
+`ui-smoke.mjs --renderer canvas` runs the live smoke on this board (the
+DOM-only probes skipped, the canvas's geometry, the diagnostics line and
+the live remount checked instead; every other check — tiles vs ledgers,
+residue, rungs, debris, the flight, the replay log — is renderer-neutral
+through `__DCK.marks.cell` and `__DCK.renderer.decor`), and the selftest
+asserts that both boards classify, decorate and mark every square alike
+on detached boards (no atlas: the data half), that the pixel arrows'
+compact labels, staircase steps and ink land as the shape says and a
+straight shaft is exactly the dial's width in rows (1–5), and that the
+DOM board's arrows take the width / opacity dials and re-render (44/44).
+`flicker-scan.mjs` records
+either renderer (`--renderer canvas`): in Playwright's Firefox at the
+phone viewport, a 48-s canvas duel (25 quakes and captures) scanned at
+3.3 piece-scale and 18.4 debris-scale blinks per 10 s against the DOM
+board's 8.5 and 48.2 on a duel of its own (motion on — slides, bursts
+and flights are transient by design; the games differ, the moves are
+random), the s59 door and torch vanishing 0 times on the canvas (0 and
+1 on the DOM), and a 25-s idle turn with the hint probe streaming showed
+no blink beyond the arrows' repaints. **The designer's verdict (2026-09-07,
+Zenfone 10 + Firefox/Windows): "works fine on both desktop and mobile",
+k 3 on the desktop and k 6 on the phone, and the fill scaling "doesn't
+look bad either"; one "big white rectangle flash", suspected of the SVG
+arrow overlay — hence the pixel arrows above. Whether the DOM board goes
+is the next verdict** (CLAUDE.md § Phase 2).
 
 ## Art themes (2026-09-03)
 
@@ -888,10 +1032,12 @@ verification is the meter-lab rerun on this same bed.
 The gear menu has a Cheater Mode toggle with four sub-options, persisted in
 localStorage: **Show best n moves** (a MultiPV probe of the current position
 on the player's turn — arrows coloured by RANK, gold / silver / bronze, at
-about half their old size, outlined, each carrying its eval written INTO
-the arrow ("+0.8", "−M2"), whose width/opacity still scale lichess-style with
-how close each move is to the best one; the ranked SANs plus the reached
-depth go to the hint line in the player's bar under the board;
+about half their old size, outlined, their width the Arrow width dial
+and their opacity the Arrow opacity dial scaled lichess-style by how close
+each move is to the best one; the evals are NOT on the arrows (they were,
+until 2026-09-07 — "not worth keeping") but in the HINT LIST in the
+player's bar under the board: a swatch in each rank's colour, the SAN,
+the eval in bold, then the reached depth;
 MultiPV is restored to 1 when the probe settles and pinned to 1 by the duel
 before every reply, which stays full-strength), **Keep evaluating** (the
 probe drops its time limit and thinks to the depth cap or until you move —
@@ -917,7 +1063,7 @@ The hint probe (2026-09-02) thinks as long as the enemy does — the same
 and STREAMS: every `info multipv` line repaints the arrows (engine.mjs
 `go()` takes an `onLine` reader), so the first hints land at depth ~8
 within a few hundred ms and sharpen while you think; the hint line shows
-the depth reached (`1 Nf3 · 2 e4 · 3 d4 · d14…`). `?probe=<go args>`
+the depth reached (`1 Nf3 +0.8 · 2 e4 +0.6 · 3 d4 +0.5 · d14…`). `?probe=<go args>`
 overrides it (E2E runs pass a short one next to `?go=`). Cancel hardening:
 your move sends `stop` and waits ≤300 ms; a probe that never answers marks
 the instance suspect and it is recycled before the reply search (measured:

@@ -41,6 +41,11 @@ import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, ge
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
+// PHASE 2 — THE 16×16 RENDERER, milestone 1 (2026-09-07): one native buffer
+// scaled once to the screen, behind the Renderer option (`?renderer=canvas`)
+// while the phone judges it. Same method surface as the DOM board.
+import { CanvasBoard } from './canvas-board.mjs';
+import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
@@ -247,7 +252,13 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+/** The board renderers (Phase 2 milestone 1): the DOM board, or the 16×16
+ *  canvas board; and the canvas board's scaling — an integer step (the
+ *  default: even pixels, the board centred in the width it gets) or a fill
+ *  of the width (the fallback: uneven pixel widths, every layer aligned). */
+const RENDERERS = ['dom', 'canvas'];
+const SCALINGS = ['integer', 'fill'];
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, renderer: 'dom', scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -283,6 +294,11 @@ function loadOptions() {
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
+    if (!RENDERERS.includes(options.renderer)) options.renderer = 'dom';
+    if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
+    // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
+    options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
+    options.arrowAlpha = clampNum(options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
     if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
@@ -352,6 +368,9 @@ function syncOptionsUI() {
   }
   $('btnLadderReset').disabled = !options.godLadder;
   $('optGodsDebug').checked = options.godsDebug;
+  $('optRenderer').value = rendererFor();
+  $('optScaling').value = scalingFor();
+  $('optScaling').closest('.opt').hidden = rendererFor() !== 'canvas';
   $('optTheme').value = options.theme;
   $('optPieces').value = options.pieces;
   $('optDoors').value = options.doors;
@@ -378,6 +397,11 @@ function syncOptionsUI() {
     : fit.pixels === 'display'
       ? 'The dials place the piece; its box is a whole multiple of the sprite in screen pixels.'
       : 'The dials place the piece at any scale.';
+  const ar = arrowStyleFor();
+  $('optArrowWidth').value = String(ar.width);
+  $('optArrowWidthV').textContent = `${ar.width} px`;
+  $('optArrowAlpha').value = String(ar.alpha);
+  $('optArrowAlphaV').textContent = `${Math.round(ar.alpha * 100)}%`;
   const dz = debrisOpts();
   $('optDebrisDestruction').checked = dz.destruction;
   $('optDebrisBlood').checked = dz.blood;
@@ -403,6 +427,84 @@ function pieceFitFor() {
     tileLift: Math.round(clampNum(params.get('tilelift') ?? options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift)),
     tileShift: Math.round(clampNum(params.get('tileshift') ?? options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift)),
   };
+}
+
+/** The arrows' style (both boards' setArrowStyle): `?arrowwidth=` (the
+ *  shaft in floor pixels, 1–5) / `?arrowalpha=` (0.2–1) > the Options. */
+function arrowStyleFor() {
+  return {
+    width: Math.round(clampNum(params.get('arrowwidth') ?? options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width)),
+    alpha: clampNum(params.get('arrowalpha') ?? options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha),
+  };
+}
+
+/** The board renderer: `?renderer=dom|canvas` (never saved) > the Options. */
+function rendererFor() {
+  const pick = params.get('renderer') ?? options.renderer;
+  return RENDERERS.includes(pick) ? pick : 'dom';
+}
+
+/** The canvas board's scaling: `?scaling=integer|fill` > the Options. */
+function scalingFor() {
+  const pick = params.get('scaling') ?? options.scaling;
+  return SCALINGS.includes(pick) ? pick : 'integer';
+}
+
+/** Mount a board of the chosen renderer on `el` (BoardUI or CanvasBoard —
+ *  one method surface). The canvas board reports its geometry to the
+ *  diagnostics line under the board. */
+function createBoard(el, opts) {
+  const arrowStyle = arrowStyleFor();
+  if (rendererFor() === 'canvas') {
+    const ui = new CanvasBoard(el, { ...opts, arrowStyle, scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+    void ui.ready.then(() => renderDiag(ui.renderInfo));
+    return ui;
+  }
+  renderDiag(null);
+  return new BoardUI(el, { ...opts, arrowStyle });
+}
+
+/** The diagnostics line under the board (the canvas board only): device
+ *  pixel ratio, the canvas's device-pixel size, the scale and whether it is
+ *  the integer step or the fill fallback. */
+function renderDiag(info) {
+  const el = $('render-diag');
+  if (!el) return;
+  const ui = app.boardUI;
+  if (!info || !ui || ui.kind !== 'canvas') {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  el.hidden = false;
+  el.textContent = ui.diag;
+}
+
+/** The mounted board no longer matches the options (renderer or scaling
+ *  changed): mount a fresh one of the same dims and repaint what was
+ *  showing — the preview, or the live duel with its marks. */
+function remountBoard() {
+  const ui = app.boardUI;
+  if (!ui) return;
+  const want = rendererFor();
+  const scaling = scalingFor();
+  if (ui.kind === want && (want !== 'canvas' || ui.scaling === scaling)) return;
+  if (app.busy && (app.phase === 'playing')) return; // never under an animation; the next mount takes it
+  const { files, ranks } = ui;
+  if (app.phase === 'preview' && app.previewPaint) {
+    const p = app.previewPaint;
+    mountPreviewBoard(p.files, p.ranks, p.fen, p.skins);
+    return;
+  }
+  ui.destroy();
+  app.boardUI = createBoard($('board'), { files, ranks, flipped: false, onSquareTap });
+  app.residue.lastFen = null; // the fresh board has no last paint to diff against
+  if (app.duel?.board && (app.phase === 'playing' || app.phase === 'ended')) {
+    paintBoard(app.duel.fen());
+    renderPlayMarks();
+    app.boardUI.setInteractive(app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.session.playerColor);
+  }
+  applyTheme();
 }
 
 /** The door set (board-ui DOOR_SETS): `?doors=` > the Doors option;
@@ -437,6 +539,7 @@ function applyTheme() {
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
   app.boardUI?.setPieceFit(pieceFitFor());
+  app.boardUI?.setArrowStyle?.(arrowStyleFor());
   void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
   const legend = document.querySelector('.legend');
   if (legend) {
@@ -460,6 +563,7 @@ function applyOptions() {
   syncOptionsUI();
   refreshCheatUI();
   refreshGodsUI();
+  remountBoard(); // a renderer or scaling change mounts the other board
   applyTheme();
   applyDebrisOptions(); // after the theme: the debris is that theme's pixels
   if (!cheatHints()) {
@@ -614,8 +718,11 @@ async function runCheatSearch() {
 }
 
 /** Paint one set of MultiPV lines: the eval bar (rank 1) and, with hints
- *  on, rank-coloured arrows + the hint line ("1 Nf3 · 2 e4 · 3 d4 · d14").
- *  `partial` marks a mid-search paint (the depth readout says so). */
+ *  on, rank-coloured arrows + the hint list ("1 Nf3 +0.8 · 2 e4 +0.6 · 3 d4
+ *  +0.5 · d14"). The evals live in the list, NOT on the arrows (designer
+ *  2026-09-07: "I don't think the numbers are worth keeping [on the
+ *  arrows]. Let's list them somewhere else"). `partial` marks a mid-search
+ *  paint (the depth readout says so). */
 function applyHintLines(pvs, n, duel, partial) {
   const sorted = [...pvs].filter((pv) => pv.rank <= n).sort((a, b) => a.rank - b.rank);
   if (!sorted.length || sorted[0].rank !== 1) return;
@@ -628,25 +735,53 @@ function applyHintLines(pvs, n, duel, partial) {
   const cpOf = (s) => (!s ? 0 : s.type === 'mate' ? (s.value > 0 ? 10000 - s.value : -10000 - s.value) : s.value);
   const best = cpOf(sorted[0].score);
   const arrows = [];
-  const sans = [];
+  const items = [];
   for (const pv of sorted) {
     const m = pv.move.match(UCI_MOVE_RE);
     if (!m) continue;
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
-    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', label: pv.score ? fmtScore(pv.score) : null });
+    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint' });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
     } catch {
       /* keep uci */
     }
-    sans.push(`${pv.rank} ${san}`);
+    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null });
   }
   app.cheatArrows = arrows;
   renderPlayMarks();
   const depth = sorted[0].depth ?? cheat.depth;
   if (depth) cheat.depth = depth;
-  setHintLine(`${sans.join(' · ')}${depth ? ` · d${depth}${partial ? '…' : ''}` : ''}`);
+  setHintList(items, depth ? `d${depth}${partial ? '…' : ''}` : '');
+}
+
+/** The hint list in the player's bar: one entry per rank — a swatch in the
+ *  rank's arrow colour (CSS, by class), the move and its eval — then the
+ *  depth readout. Its textContent reads "1 Nf3 +0.8 · 2 e4 +0.6 · d14". */
+function setHintList(items, depthText) {
+  const el = $('hint-line');
+  el.textContent = '';
+  items.forEach((it, i) => {
+    if (i) el.append(' · ');
+    const span = document.createElement('span');
+    span.className = `hint-item rank-${it.rank}`;
+    span.dataset.rank = String(it.rank);
+    span.append(`${it.rank} ${it.san}`);
+    if (it.score) {
+      const b = document.createElement('b');
+      b.textContent = ` ${it.score}`;
+      span.appendChild(b);
+    }
+    el.appendChild(span);
+  });
+  if (depthText) {
+    if (items.length) el.append(' · ');
+    const d = document.createElement('span');
+    d.className = 'hint-depth';
+    d.textContent = depthText;
+    el.appendChild(d);
+  }
 }
 
 /** Replace a dead idle-window engine instance and rebind the live duel
@@ -1670,14 +1805,16 @@ const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
 
 /** (Re)mount the board for the given dims and show a position on it. */
 function mountPreviewBoard(files, ranks, fen, skins = {}) {
-  if (!app.boardUI || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
+  const stale = app.boardUI && (app.boardUI.kind !== rendererFor() || (app.boardUI.kind === 'canvas' && app.boardUI.scaling !== scalingFor()));
+  if (!app.boardUI || stale || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
     if (app.boardUI) app.boardUI.destroy();
-    app.boardUI = new BoardUI($('board'), {
+    app.boardUI = createBoard($('board'), {
       files,
       ranks,
       flipped: false, // the player is always White at the bottom
       onSquareTap: onSquareTap,
     });
+    app.residue.lastFen = null;
   }
   app.previewPaint = { files, ranks, fen, skins };
   paintWithDebris(fen, { skins }); // the stage's scars from earlier duels (the debris ledger)
@@ -2610,6 +2747,7 @@ async function onQuake(ev) {
   // Beat 1 — the rumble, alone, so the eye is on the board before anything moves.
   board.style.setProperty('--fx-ms', `${FX(280)}ms`);
   board.classList.add('quaking');
+  ui.rumble?.(FX(280)); // the canvas board shakes its blit (its CSS ignores the class)
   await wait(FX(280));
   board.classList.remove('quaking');
   board.style.removeProperty('--fx-ms');
@@ -2820,6 +2958,14 @@ $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
 });
+$('optRenderer').addEventListener('change', (e) => {
+  options.renderer = RENDERERS.includes(e.target.value) ? e.target.value : 'dom';
+  applyOptions();
+});
+$('optScaling').addEventListener('change', (e) => {
+  options.scaling = SCALINGS.includes(e.target.value) ? e.target.value : 'integer';
+  applyOptions();
+});
 $('optTheme').addEventListener('change', (e) => {
   options.theme = e.target.value;
   applyOptions();
@@ -2858,6 +3004,16 @@ $('optTileLift').addEventListener('input', (e) => {
 });
 $('optTileShift').addEventListener('input', (e) => {
   options.tileShift = Math.round(clampNum(e.target.value, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
+  applyOptions();
+});
+// The arrow dials (2026-09-07): the shaft in floor pixels and the opacity,
+// pushed to the mounted board through applyTheme (setArrowStyle).
+$('optArrowWidth').addEventListener('input', (e) => {
+  options.arrowWidth = Math.round(clampNum(e.target.value, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
+  applyOptions();
+});
+$('optArrowAlpha').addEventListener('input', (e) => {
+  options.arrowAlpha = clampNum(e.target.value, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
   applyOptions();
 });
 // The debris toggles (2026-09-07): every kind a checkbox, the amount a
@@ -3106,7 +3262,7 @@ window.__DCK = {
       const buf = app.boardUI?.debrisBuf(sq) ?? null;
       let opaque = 0, pixels = 0;
       if (buf) for (let i = 3; i < buf.length; i += 4) { if (buf[i]) pixels++; if (buf[i] === 255) opaque++; }
-      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), painted: !!cell?.querySelector(':scope > img.debris'), pixels, opaque };
+      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), painted: !!app.boardUI?.hasDebris?.(sq), pixels, opaque };
     },
     /** The painter's raw buffer for a square (a Uint8ClampedArray or null). */
     paint: (sq) => {
@@ -3127,12 +3283,63 @@ window.__DCK = {
   get pieceFit() {
     return app.boardUI?.pieceFit ?? null;
   },
+  /** PHASE 2 (2026-09-07): which board is mounted and, on the canvas board,
+   *  its geometry (device pixel ratio, device-pixel size, the scale k,
+   *  integer or fill), the buffer's pixels and the device-pixel gate's
+   *  test pattern. */
+  renderer: {
+    get kind() {
+      return app.boardUI?.kind ?? null;
+    },
+    get info() {
+      return app.boardUI?.kind === 'canvas' ? app.boardUI.renderInfo : { renderer: app.boardUI?.kind ?? null };
+    },
+    get diag() {
+      return app.boardUI?.kind === 'canvas' ? app.boardUI.diag : '';
+    },
+    get diagShown() {
+      return !$('render-diag').hidden ? $('render-diag').textContent : null;
+    },
+    square: (sq) => (app.boardUI?.kind === 'canvas' ? app.boardUI.squarePixels(sq) : null),
+    buffer: () => (app.boardUI?.kind === 'canvas' ? app.boardUI.bufferPixels() : null),
+    decor: (sq) => (app.boardUI?.kind === 'canvas' ? app.boardUI.decorOf(sq) : null),
+    /** The arrows the canvas board draws, in draw order (the DOM board's are its SVG). */
+    get arrows() {
+      return app.boardUI?.kind === 'canvas' ? app.boardUI.arrows.map((a) => ({ ...a })) : null;
+    },
+    testPattern: (on) => app.boardUI?.setTestPattern?.(on),
+    snapMode: (mode) => app.boardUI?.setSnapMode?.(mode),
+    paintNow: () => app.boardUI?.paintNow?.(),
+    ready: () => app.boardUI?.ready ?? Promise.resolve(),
+    set: (renderer, scaling = null) => {
+      // A driver's choice beats the URL's (`?renderer=` pins the option otherwise).
+      params.delete('renderer');
+      params.delete('scaling');
+      options.renderer = RENDERERS.includes(renderer) ? renderer : options.renderer;
+      if (scaling) options.scaling = SCALINGS.includes(scaling) ? scaling : options.scaling;
+      applyOptions();
+      return app.boardUI?.kind;
+    },
+  },
   /** The current stage's skin grid ({square: skinName}). */
   get skins() {
     return stageSkins(app.session?.deal?.stage);
   },
   get cheat() {
     return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };
+  },
+  /** The arrows' style as the board wears it (the dials, or the URL's override). */
+  get arrowStyle() {
+    return app.boardUI?.arrowStyle ?? arrowStyleFor();
+  },
+  /** Set the dials (drops any URL override so the Options rule again). */
+  setArrowStyle: (width, alpha) => {
+    params.delete('arrowwidth');
+    params.delete('arrowalpha');
+    if (width != null) options.arrowWidth = Math.round(clampNum(width, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
+    if (alpha != null) options.arrowAlpha = clampNum(alpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
+    applyOptions();
+    return app.boardUI?.arrowStyle ?? null;
   },
   get marks() {
     return { quake: app.quakeMarks, godsLine: $('gods-line').textContent, cell: (sq) => app.boardUI?.cellClasses(sq) ?? null };

@@ -96,6 +96,7 @@
 // layer — the enemy's last move in red, the gods' displacements in their
 // blue, the oracle's hints by rank (round 13: no square tints for moves).
 import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
+import { normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs'; // the arrows' width / opacity dials (shared with the canvas board)
 import { pngDataUrl } from './pngmini.mjs'; // THE DEBRIS LAYER: a square's debris image; the tile-grid piece tiers
 import { pieceTiers, TIERS, TIER_VARS, tierRowVars, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './piecetiers.mjs';
 
@@ -184,7 +185,7 @@ function squareHash(f, rank, salt) {
  *  a prop must never read as a piece or as terrain. Floor litter (web /
  *  bones / skull / candle) is PACKED AWAY (designer round 10: it made the
  *  pieces harder to read); the sprites stay in tiles.css. */
-function decorFor({ wallTile, cracked, mask, f, rank, earned }) {
+export function decorFor({ wallTile, cracked, mask, f, rank, earned }) {
   if (earned) return earned; // the open doorway a door left behind
   if (!wallTile || cracked || !(mask & 10) || mask & 4) return null;
   const r = squareHash(f, rank, 7) % 1000;
@@ -199,7 +200,11 @@ function floorVariant(f, rank) {
 
 /** Which of the crack drawings a square wears if its wall cracks. */
 function crackVariant(f, rank) {
-  return `ck${1 + (squareHash(f, rank, 11) % CRACK_VARIANTS)}`;
+  return `ck${crackVariantIndex(f, rank)}`;
+}
+/** The crack drawing's NUMBER (1…CRACK_VARIANTS) for a square. */
+export function crackVariantIndex(f, rank) {
+  return 1 + (squareHash(f, rank, 11) % CRACK_VARIANTS);
 }
 /** Which of a skin's sprite variants a square shows (SKIN_VARIANTS). */
 function skinVariant(f, rank) {
@@ -359,14 +364,106 @@ export function residueStep(prev, next, skins = {}, files, ranks) {
   return { opened, rubble };
 }
 
+/**
+ * Draw arrows on an SVG overlay (the arrow layer: viewBox files×CELL by
+ * ranks×CELL, flip-aware square centres). Shared by the DOM board and the
+ * canvas board (canvas-board.mjs), whose arrows are the same vector UI
+ * over the board rectangle.
+ */
+export function renderArrows(svg, arrows, { files, ranks, flipped = false, style = null }) {
+  const st = normalizeArrowStyle(style);
+  const U = CELL / 16; // viewBox units per floor pixel — the dial is in floor pixels, like the canvas board's
+  const centerOf = (sq) => {
+    const f = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq.slice(1), 10);
+    const col = flipped ? files - 1 - f : f;
+    const rowFromTop = flipped ? rank - 1 : ranks - rank;
+    return [col * CELL + CELL / 2, rowFromTop * CELL + CELL / 2];
+  };
+  svg.textContent = '';
+  // Ascending sort key: quake arrows first (drawn first = underneath), then
+  // hints from worst rank to best, so rank 1 is appended last (on top).
+  const key = (a) => (a.kind === 'quake' ? -100 : a.kind === 'last' ? -90 : -(a.rank ?? 2 - (a.strength ?? 1)));
+  const sorted = [...arrows].sort((a, b) => key(a) - key(b));
+  for (const { from, to, strength = 1, rank = null, kind = 'hint', label = null } of sorted) {
+    const [x1, y1] = centerOf(from);
+    const [x2, y2] = centerOf(to);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (!len) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    const s = Math.max(0, Math.min(1, strength));
+    // A labelled arrow is a fixed 2.5 units wide (25% of a cell) — the
+    // text's cap height is ~1.4, so it sits inside the coloured shaft with
+    // the outline clear on both sides; otherwise the style's width in
+    // floor pixels, the head growing with it (width + 3 long, width + 1 to
+    // each side — the canvas board's shape, pixelarrow.mjs).
+    const width = label ? 2.5 : st.width * U;
+    const head = label ? 3.2 : (st.width + 3) * U;
+    const headHalf = label ? head * 0.5 : (st.width + 1) * U;
+    // Unlabelled: the shaft starts clear of the origin glyph and the tip
+    // pulls short of the destination centre so the head never covers a
+    // piece. Labelled: start at the origin centre and pull back less, so
+    // a one-square move still has ~6 units of shaft for the number.
+    const tail = label ? 0 : 0.32;
+    const pull = label ? 0.06 : 0.2;
+    const tipX = x2 - ux * CELL * pull;
+    const tipY = y2 - uy * CELL * pull;
+    const baseX = tipX - ux * head;
+    const baseY = tipY - uy * head;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.classList.add('arrow', `arrow-${kind}`);
+    if (rank) {
+      g.classList.add(`rank-${rank}`);
+      g.dataset.rank = String(rank);
+    }
+    g.dataset.from = from;
+    g.dataset.to = to;
+    g.setAttribute('opacity', arrowAlpha(st.alpha, s).toFixed(2));
+    const px = -uy;
+    const py = ux;
+    const lineAttrs = { x1: x1 + ux * CELL * tail, y1: y1 + uy * CELL * tail, x2: baseX, y2: baseY };
+    const points = `${tipX},${tipY} ${baseX + px * headHalf},${baseY + py * headHalf} ${baseX - px * headHalf},${baseY - py * headHalf}`;
+    // A dark halo under the coloured stroke keeps silver legible on light
+    // cells and bronze on the pit — a stroke, not a CSS filter (filters
+    // scale with the non-uniform viewBox). One floor pixel each side.
+    g.appendChild(svgEl('line', { ...lineAttrs, class: 'halo', 'stroke-width': width + 2 * U }));
+    g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 2 * U }));
+    g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
+    g.appendChild(svgEl('polygon', { points }));
+    if (label) {
+      // Along the shaft: midpoint between the shaft's start and the head's
+      // base, rotated to the arrow's angle (flipped so it never reads
+      // upside down), font sized to the shaft's length (bold monospace
+      // advances ~0.62 em per glyph) with a floor so it stays a number.
+      const sx = x1 + ux * CELL * tail;
+      const sy = y1 + uy * CELL * tail;
+      const mx = (sx + baseX) / 2;
+      const my = (sy + baseY) / 2;
+      const shaftLen = Math.hypot(baseX - sx, baseY - sy);
+      const size = Math.max(1.3, Math.min(2.0, (shaftLen - 0.6) / (0.62 * label.length)));
+      let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
+      if (deg > 90 || deg <= -90) deg += 180;
+      const text = svgEl('text', { x: mx, y: my, class: 'label', 'font-size': size.toFixed(2), transform: `rotate(${deg.toFixed(1)} ${mx} ${my})` });
+      text.textContent = label;
+      g.appendChild(text);
+    }
+    svg.appendChild(g);
+  }
+}
+
 export class BoardUI {
-  constructor(container, { files, ranks, flipped = false, onSquareTap = null } = {}) {
+  constructor(container, { files, ranks, flipped = false, onSquareTap = null, arrowStyle = null } = {}) {
     this.container = container;
     this.files = files;
     this.ranks = ranks;
     this.flipped = flipped;
     this.onSquareTap = onSquareTap;
     this.interactive = false;
+    this.arrowStyle = normalizeArrowStyle(arrowStyle); // the arrows' width / opacity dials (setArrowStyle)
+    this.arrowList = []; // the last arrows set, re-rendered when the style changes
     container.classList.add('board');
     container.classList.toggle('inactive', true);
     container.style.setProperty('--files', files);
@@ -500,6 +597,16 @@ export class BoardUI {
     return this.debrisBufs.get(sq) ?? null;
   }
 
+  /** Does the square wear a debris image right now? */
+  hasDebris(sq) {
+    return !!this.cells.get(sq)?.querySelector(':scope > img.debris');
+  }
+
+  /** Which renderer this is (main.mjs picks by option): the DOM board. */
+  get kind() {
+    return 'dom';
+  }
+
   /** The FLIGHT's drawing surface (play/js/particles.mjs): a second SVG
    *  over the board, same viewBox as the arrow layer and stacked with it
    *  (above the pieces, below the FLIP clones), made on first use. No
@@ -555,75 +662,16 @@ export class BoardUI {
    * phone and the old head was two thirds of a cell.
    */
   setArrows(arrows) {
-    this.svg.textContent = '';
-    // Ascending sort key: quake arrows first (drawn first = underneath), then
-    // hints from worst rank to best, so rank 1 is appended last (on top).
-    const key = (a) => (a.kind === 'quake' ? -100 : a.kind === 'last' ? -90 : -(a.rank ?? 2 - (a.strength ?? 1)));
-    const sorted = [...arrows].sort((a, b) => key(a) - key(b));
-    for (const { from, to, strength = 1, rank = null, kind = 'hint', label = null } of sorted) {
-      const [x1, y1] = this.#squareCenter(from);
-      const [x2, y2] = this.#squareCenter(to);
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const len = Math.hypot(dx, dy);
-      if (!len) continue;
-      const ux = dx / len;
-      const uy = dy / len;
-      const s = Math.max(0, Math.min(1, strength));
-      // A labelled arrow is a fixed 2.5 units wide (25% of a cell) — the
-      // text's cap height is ~1.4, so it sits inside the coloured shaft with
-      // the outline clear on both sides; otherwise 1.6–2.2 by strength.
-      const width = label ? 2.5 : 1.4 + 0.8 * s;
-      const head = label ? 3.2 : Math.min(3.6, width * 1.8); // head length ≤ 36% of a cell (was 65%)
-      // Unlabelled: the shaft starts clear of the origin glyph and the tip
-      // pulls short of the destination centre so the head never covers a
-      // piece. Labelled: start at the origin centre and pull back less, so
-      // a one-square move still has ~6 units of shaft for the number.
-      const tail = label ? 0 : 0.32;
-      const pull = label ? 0.06 : 0.2;
-      const tipX = x2 - ux * CELL * pull;
-      const tipY = y2 - uy * CELL * pull;
-      const baseX = tipX - ux * head;
-      const baseY = tipY - uy * head;
-      const g = document.createElementNS(SVG_NS, 'g');
-      g.classList.add('arrow', `arrow-${kind}`);
-      if (rank) {
-        g.classList.add(`rank-${rank}`);
-        g.dataset.rank = String(rank);
-      }
-      g.dataset.from = from;
-      g.dataset.to = to;
-      g.setAttribute('opacity', (0.6 + 0.3 * s).toFixed(2));
-      const px = -uy;
-      const py = ux;
-      const lineAttrs = { x1: x1 + ux * CELL * tail, y1: y1 + uy * CELL * tail, x2: baseX, y2: baseY };
-      const points = `${tipX},${tipY} ${baseX + px * head * 0.5},${baseY + py * head * 0.5} ${baseX - px * head * 0.5},${baseY - py * head * 0.5}`;
-      // A dark halo under the coloured stroke keeps silver legible on light
-      // cells and bronze on the pit — a stroke, not a CSS filter (filters
-      // scale with the non-uniform viewBox).
-      g.appendChild(svgEl('line', { ...lineAttrs, class: 'halo', 'stroke-width': width + 1.1 }));
-      g.appendChild(svgEl('polygon', { points, class: 'halo', 'stroke-width': 1.1 }));
-      g.appendChild(svgEl('line', { ...lineAttrs, 'stroke-width': width }));
-      g.appendChild(svgEl('polygon', { points }));
-      if (label) {
-        // Along the shaft: midpoint between the shaft's start and the head's
-        // base, rotated to the arrow's angle (flipped so it never reads
-        // upside down), font sized to the shaft's length (bold monospace
-        // advances ~0.62 em per glyph) with a floor so it stays a number.
-        const sx = x1 + ux * CELL * tail;
-        const sy = y1 + uy * CELL * tail;
-        const mx = (sx + baseX) / 2;
-        const my = (sy + baseY) / 2;
-        const shaftLen = Math.hypot(baseX - sx, baseY - sy);
-        const size = Math.max(1.3, Math.min(2.0, (shaftLen - 0.6) / (0.62 * label.length)));
-        let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
-        if (deg > 90 || deg <= -90) deg += 180;
-        const text = svgEl('text', { x: mx, y: my, class: 'label', 'font-size': size.toFixed(2), transform: `rotate(${deg.toFixed(1)} ${mx} ${my})` });
-        text.textContent = label;
-        g.appendChild(text);
-      }
-      this.svg.appendChild(g);
-    }
+    this.arrowList = arrows ?? [];
+    renderArrows(this.svg, this.arrowList, { files: this.files, ranks: this.ranks, flipped: this.flipped, style: this.arrowStyle });
+  }
+
+  /** The arrows' style — the shaft's width in floor pixels and the opacity
+   *  (Options → Look; pixelarrow.mjs' dials, shared with the canvas board).
+   *  Re-renders the arrows showing. */
+  setArrowStyle(style) {
+    this.arrowStyle = normalizeArrowStyle(style);
+    this.setArrows(this.arrowList);
   }
 
   /**
