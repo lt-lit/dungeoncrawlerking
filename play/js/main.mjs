@@ -42,7 +42,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
-import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES } from './debris.mjs';
+import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
@@ -247,7 +247,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -291,9 +291,13 @@ function loadOptions() {
     options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
     options.pieceSnap = !!options.pieceSnap;
     // The debris toggles (2026-09-07): five booleans and a clamped amount.
+    // v2 (same day): the slider's 100% became the old 200% (debris.mjs
+    // BASELINE), so a setting saved on the old scale is halved ONCE — the
+    // board looks exactly as it did.
     {
       const d = options.debris && typeof options.debris === 'object' ? options.debris : {};
-      options.debris = { destruction: d.destruction !== false, blood: d.blood !== false, skid: d.skid !== false, wear: d.wear !== false, fx: d.fx !== false, intensity: clampNum(d.intensity, [0, 2], 1) };
+      const legacy = d.v !== 2 && Number.isFinite(parseFloat(d.intensity));
+      options.debris = { destruction: d.destruction !== false, blood: d.blood !== false, skid: d.skid !== false, wear: d.wear !== false, fx: d.fx !== false, intensity: clampNum(legacy ? parseFloat(d.intensity) / DEBRIS_BASELINE : d.intensity, [0, 2], 1), v: 2 };
     }
     // The ladder override (v4.1): four clamped numbers or nothing.
     if (options.godLadder && typeof options.godLadder === 'object') {
@@ -1918,7 +1922,7 @@ async function driveTurn() {
 // and recounts the traffic from the record.
 
 const DEBRIS_KEY = 'dck.debris.v1:';
-const DEBRIS_DEFAULTS = { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1 };
+const DEBRIS_DEFAULTS = { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 };
 const DEBRIS_INTENSITY_RANGE = [0, 2];
 
 /** The live debris options: `?debris=` (test-only — `off`, `all`, or a comma
@@ -2103,7 +2107,7 @@ function debrisPaintCtx(o = debrisOpts()) {
   return {
     sprites: debrisSampler(),
     toggles: { destruction: o.destruction, blood: o.blood, skid: o.skid, wear: o.wear },
-    intensity: o.intensity,
+    intensity: o.intensity * DEBRIS_BASELINE, // the slider's 100% is the designer's 200%
     ply: app.duel?.ply ?? 0,
     epoch: D.ledger?.epoch ?? 0,
     pending: D.pending,
@@ -2252,7 +2256,7 @@ async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 3
     const ctx = debrisPaintCtx(o);
     const chunks = chunksOf(ev, debrisSampler(), ctx);
     const sprite = shatter ? debrisSampler().get(spriteVar(shatter)) : null;
-    const eph = sprite ? shatterOf(ev, sprite, { intensity: o.intensity, inward }) : [];
+    const eph = sprite ? shatterOf(ev, sprite, { intensity: ctx.intensity, inward }) : [];
     if (sq && sprite && !inward) app.boardUI.shatterSprite(sq);
     if (ev.k === 'skid') flight = P.streak({ tx: D.tx, chunks, ms: fxMs });
     else {

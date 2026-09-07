@@ -901,14 +901,22 @@ visible in every sample, only the hint arrows mutating), so the canvases
 went on principle. Headless Firefox also records whole-board white/black
 frames in every build including the pre-debris one (a capture artefact),
 so the recording (`flicker-*` in the session's scratch, not committed) is
-only good for per-square blinks; the phone and the desktop are the judge. A capture's victim is
+only good for per-square blinks; the phone and the desktop are the judge —
+and the designer's verdict on the `<img>` build (same day): "didn't see it
+this time". The recorder + scanner is committed as
+`phase0/harness/flicker-scan.mjs` (record a duel or an idle turn in
+Playwright's Firefox or Chromium, scan the frames for squares that blink,
+compare builds); Firefox needs `npx playwright install firefox` once. A capture's victim is
 the square whose occupant VANISHED (the landing square or the en-passant
 pawn), a shattering crate holds until the piece arrives (no dissolve),
 a piece still dissolves under the blow. Toggles filter the PAINT, never
 the record (Options → Debris: destruction / blood / skid / wear /
-particles, an amount slider 0–200% scaling counts and the cap, Clean this
-stage / every stage; `?debris=off|all|<list>`; `data-debris` on the
-board); an undo forgets this epoch's events past the rewound ply and
+particles, an amount slider 0–200% scaling counts and the cap — its 100%
+is the designer's settled baseline, what the first cut painted at 200%
+(`debris.mjs BASELINE` 2, hands the painter intensity × 2; a setting
+saved on the old scale is halved once on load, `options.debris.v` 2),
+Clean this stage / every stage; `?debris=off|all|<list>`; `data-debris`
+on the board); an undo forgets this epoch's events past the rewound ply and
 recounts the traffic from the record. The RUIN autotile lost its baked
 chips (`RUIN.chips` 0 in the repack tool; the committed tiles rewritten
 by `phase0/harness/strip-ruin-chips.mjs`, which strips isolated ≤2-px
@@ -920,8 +928,8 @@ settling, drying, the shatter, the painter's cap and toggles, the PNG
 round-trip against png.mjs, the strip), ui-smoke (one event per capture
 and per quake rung, decoded 16×16 images on floor only, not one canvas on the board, the layer stack, the saved ledger, toggles
 hide and keep, the preview shows the scars, a rematch is epoch + 1 with
-every event kept, and a second page with motion ON: frames drawn on a
-files×16 canvas, everything landed, no page errors), selftest 42/42,
+every event kept, and a second page with motion ON: frames drawn on the
+flight SVG, everything landed, no page errors), selftest 42/42,
 replay-smoke 63/63 unchanged. `__DCK.debris` = ledger / env / tx /
 options / stats / events / cell(sq) / paint(sq) / frames / busy / clean /
 save. Held for round two (designer): fallen props, bones, cobwebs on idle
@@ -1097,6 +1105,7 @@ node harness/test-logreport.mjs      # the shared report module's Node gate on t
 node harness/test-debris.mjs         # THE DEBRIS LAYER's Node gate: transform, ledger, painter, the debris PNG, the ruin tiles' chip strip
 node harness/strip-ruin-chips.mjs --check  # the committed ruin tiles carry no baked chips (the debris layer owns the flecks)
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
+node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner (the debris layer's three flicker rounds); --idle 25000 for an idle turn; compare <dirs…>
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor

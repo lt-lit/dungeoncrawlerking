@@ -48,6 +48,11 @@ export const CATEGORIES = ['destruction', 'blood', 'skid', 'wear'];
 
 export const CELL_CAP = 12; // events per cell bucket
 export const PIXEL_CAP = 112; // opaque debris pixels per cell at intensity 1 (of 256)
+/** The Amount slider's 100% (designer 2026-09-07, after a session at 200%:
+ *  "let's make 200% the new baseline"): the game hands the painter
+ *  intensity × BASELINE, so the slider keeps its 0–200% range and its
+ *  headroom while 100% paints what 200% used to. */
+export const BASELINE = 2;
 export const DRY_PLIES = 20; // blood is red this long, then maroon
 export const WEAR_LEVELS = [6, 16, 40]; // traffic → wear level 1 / 2 / 3
 

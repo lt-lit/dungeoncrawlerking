@@ -511,8 +511,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   /* NO position / z-index here (2026-09-07): stacking the pieces over a
      board-wide flight layer made Firefox drop every positioned child of
      the cells — pieces, sprites, torches — for a frame during the quake
-     animations. The debris flight draws into the cells' own canvases
-     instead, under the pieces by document order. */
+     animations. The debris flight draws on its own SVG above them
+     instead (.flight-layer below). */
 }
 
 .piece.white { color: #f4f0e4; text-shadow: 0 1px 1px #000, 0 0 3px #0008; }

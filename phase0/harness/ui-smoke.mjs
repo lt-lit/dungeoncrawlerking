@@ -622,7 +622,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // displacement a skid, a crumble the floor's; the ledger is the STAGE's
 // (persisted under the stage id, an epoch per duel); toggles filter the
 // paint, never the record; an undo forgets the rewound plies' events. Every
-// painted square carries a 16×16 PNG data URL in its own --debris layer.
+// painted square carries a decoded 16×16 PNG <img> as its first child.
 {
   const dz = await page.evaluate(() => {
     const K = window.__DCK;
@@ -660,7 +660,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(dz.attr === 'destruction blood skid wear fx', `the board carries data-debris (${dz.attr})`);
   expect((dz.byKind.kill ?? 0) + (dz.byKind.smash ?? 0) === dz.captures, `one kill or smash per capture on the record (${dz.byKind.kill ?? 0} kills + ${dz.byKind.smash ?? 0} smashes = ${dz.captures} captures)`);
   expect((dz.byKind.weaken ?? 0) === dz.want.weaken && (dz.byKind.breach ?? 0) === dz.want.breach && (dz.byKind.skid ?? 0) === dz.want.skid && (dz.byKind.crumble ?? 0) === dz.want.crumble, `every quake rung left its event (weaken ${dz.byKind.weaken ?? 0}/${dz.want.weaken}, breach ${dz.byKind.breach ?? 0}/${dz.want.breach}, skid ${dz.byKind.skid ?? 0}/${dz.want.skid}, crumble ${dz.byKind.crumble ?? 0}/${dz.want.crumble})`);
-  expect(dz.events > 0 && dz.painted > 0 && dz.urlsOk && dz.paintedOnFloor && dz.pending === 0, `${dz.painted} squares wear a 16×16 debris canvas as their first child, all on floor, nothing left in flight (${dz.events} events)`);
+  expect(dz.events > 0 && dz.painted > 0 && dz.urlsOk && dz.paintedOnFloor && dz.pending === 0, `${dz.painted} squares wear a decoded 16×16 debris image as their first child, all on floor, nothing left in flight (${dz.events} events)`);
   expect(dz.layerOrder.piece === 'auto' && dz.layerOrder.arrows === '3' && dz.layerOrder.fx === '4' && dz.layerOrder.canvases === 0, `the stack is untouched: pieces z ${dz.layerOrder.piece}, arrows ${dz.layerOrder.arrows}, clones ${dz.layerOrder.fx}, and not one canvas on the board`);
   expect(dz.breach === 0 || dz.breachPainted > 0, `a breached wall's square wears its own stone (${dz.breachPainted}/${dz.breach})`);
   expect(dz.plyMax <= dz.ply, `no event outlives the record after the undos (latest event ply ${dz.plyMax} ≤ ${dz.ply})`);
@@ -702,7 +702,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(again.epochNow === again.epoch + 1 && again.eventsNow === again.events && again.phase === 'playing', `a rematch is a new epoch on the same floor (epoch ${again.epoch} → ${again.epochNow}, ${again.eventsNow} events kept)`);
 }
 // --- THE FLIGHT: with motion on, the debris flies before it lands (the
-// canvas on the fx layer draws frames; the landing sets the cells' layer). ---
+// flight SVG draws frames; the landing swaps the cells' images). ---
 {
   const page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs2 = [];

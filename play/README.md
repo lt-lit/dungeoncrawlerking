@@ -628,7 +628,7 @@ the piece arrives instead of dissolving, a captured piece still dissolves
 under the blow; the gods' rungs fly inside their beats. Reduced motion,
 `?fx=0` or the Particles toggle: the debris simply appears. One frame loop
 serves every flight in the air: a flight is flying, then LANDED (its chunks
-held on the canvas, its `landed` promise resolved so the game can paint the
+held on the flight layer, its `landed` promise resolved so the game can paint the
 cells under them), then released the same tick — two loops clearing one
 canvas had made overlapping flights flicker. No z-index on the pieces: an
 intermediate cut stacked them over a board-wide flight layer with
@@ -650,7 +650,10 @@ rewound ply and recounts the traffic from the record's moves.
 
 **Options → Debris**: splinters/shards/rubble, blood, skid marks, worn
 paths, particles — each a checkbox — an amount slider (0–200%, scales the
-chunk counts and the cap), Clean this stage / Clean every stage. Toggles
+chunk counts and the cap; its 100% is the designer's settled baseline —
+what the first cut painted at 200%, `debris.mjs BASELINE` — and a setting
+saved on the old scale is halved once on load), Clean this stage / Clean
+every stage. Toggles
 filter the PAINT, never the record, so a toggle flipped mid-game reveals
 the whole history. `?debris=off|all|destruction,blood,skid,wear,fx` is the
 test override; the board carries `data-debris` with the enabled kinds.
