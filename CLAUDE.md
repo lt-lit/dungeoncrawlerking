@@ -828,13 +828,17 @@ pixels). THE LEDGER IS THE TRUTH, PIXELS ARE A CACHE: the painter
 by the event alone, sampling chunks off the actual sprite (plank pixels off
 the crate, the brick face off the wall, a material palette when no sprite
 is decoded), so a theme switch or a toggle repaints the whole history; the
-buffer becomes a DETERMINISTIC data URL (`pngmini.mjs`, store-only zlib,
-no canvas — a canvas rounds translucent pixels through premultiplied
-alpha) painted as `var(--debris)` in EVERY cell background stack
-(style.css) above the floor and shade, under the wall / pit / ruin stub /
-sprites / pieces, at the floor tile's own 100%×100% pixelated scaling —
-THE 16×16 RULE: no debris pixel is ever a different size or alignment from
-a floor pixel. Persistence RIDES THE ENVIRONMENT, never the duel:
+buffer is painted with putImageData into the square's own 16×16 DEBRIS
+CANVAS (board-ui `setDebris`: the cell's first child, under the sprites
+and pieces, scaled to the cell exactly like the floor tile — 100%×100%,
+pixelated), THE 16×16 RULE: no debris pixel is ever a different size or
+alignment from a floor pixel. (The first cut swapped a data URL into every
+cell's background stack; a background that changes to an image the
+browser has not decoded yet paints a frame without it — on Firefox that
+blinked every landing — and a cell's inline style change restyled the
+piece inside it. A canvas paints synchronously and touches nothing else.
+It paints over the cell's own tiles, which only matters on a ruin's stub —
+rubble on rubble; debris is floor-only.) Persistence RIDES THE ENVIRONMENT, never the duel:
 main.mjs keeps one ledger per stage in localStorage (`dck.debris.v1:<stage
 id>`), opened when the stage is previewed, ticked an epoch by every
 `beginDuel` (Rematch included — same dungeon), saved after every event,
@@ -849,29 +853,41 @@ events: every move visits its landing square and, for a straight move,
 the squares it passes over (a slider wears the file it runs on, a shuffle
 draws its circle), three levels of translucent scuff at `WEAR_LEVELS`
 6/16/40 visits — the one debris that needs no palette. THE FLIGHT
-(`play/js/particles.mjs`): the debris does not appear, it flies — one
-canvas on the fx layer at the board's pixel grid (`fxCanvas`, files×16 by
-ranks×16, pixelated) draws every live chunk as integer-pixel rects on a
-~15-Hz pixel-art tick from the broken thing to the exact pixels the
-painter lands them on (the painter decided first; the last frame IS the
-persistent debris), stone hops short and bounces, wood flies far, the
-victim SPRITE SHATTERS into 2×2 blocks that fade in the air (`shatterOf`;
-a crumble's blocks fall INTO the pit), a skid draws progressively under
-the slide; captures fly while the engine thinks (never awaited; the event
-is `pending` until it lands, then its cells repaint through
-`setDebris`, which touches nothing else on a cell — a held quake frame
-stays held), quake rungs fly inside their beats. TWO FLICKER FIXES from
-the designer's first phone session ("pieces and the debris sometimes
-flickering for a split second"): a cell only ever SWITCHES TO A DECODED
-IMAGE (`debrisReady`: a new data URL is decoded through an Image first
-and every waiting cell takes it when it lands; swapping a background to
-an undecoded URL paints one frame without it), the applied URL per cell
-lives in board-ui's `debrisUrls` map so an unchanged square's style is
-never touched, and the flight runs ONE frame loop for every flight in the
-air — flying → landed (chunks HELD on the canvas, `landed` resolved) →
-released after the cells wear the decoded debris — where the first cut's
-per-flight loops cleared each other's chunks at 15 Hz whenever a capture
-spray overlapped a quake beat or two skids drew side by side. A capture's victim is
+(`play/js/particles.mjs`): the debris does not appear, it flies — every
+live chunk is stamped, on a ~15-Hz pixel-art tick, INTO THE DEBRIS
+CANVASES OF THE CELLS IT IS OVER (board-ui `paintDebrisFrame` composites
+the frame over the square's persistent buffer, `restoreDebris` puts it
+back when the chunk has left), so a chunk passes BEHIND the pieces by
+document order and a landed chunk is never drawn over one; from the
+broken thing to the exact pixels the painter lands them on (the painter
+decided first; the last frame IS the persistent debris), stone hops short
+and bounces, wood flies far, the victim SPRITE SHATTERS into 2×2 blocks
+that fade in the air (`shatterOf`; a crumble's blocks fall INTO the pit),
+a skid draws progressively under the slide; captures fly while the engine
+thinks (never awaited; the event is `pending` until it lands, then its
+cells repaint through `setDebris`, which touches nothing else on a cell —
+a held quake frame stays held), quake rungs fly inside their beats. THE FLICKER ROUNDS
+(designer's first phone sessions: "pieces and the debris sometimes
+flickering for a split second… right after a capture all the pieces will
+blink out of existence, or the blood and debris will be rendered on top of
+the piece layer"): (1) the flight runs ONE frame loop for every flight in
+the air — flying → landed (chunks held, `landed` resolved) → released the
+same tick the cells' canvases take the debris — where per-flight loops had
+cleared each other's chunks at 15 Hz; (2) the flight draws into the cells'
+own canvases, under the pieces by document order, never on a layer of its
+own: the first cut flew it on the fx layer above everything (the "debris
+on top of the piece layer"), and an intermediate cut stacked the pieces
+over a board-wide flight layer with `position: relative; z-index: 3` —
+which made FIREFOX DROP EVERY POSITIONED CHILD OF THE CELLS (pieces,
+sprites, torches) for a frame during the quake animations, reproduced and
+isolated in Playwright's Firefox (the door and torch of s59 vanishing 7–8
+times a duel with the z-index, 0 without, 4 with the z-index and the
+flight off) — NEVER give the pieces a z-index; (3) the persistent layer is
+the per-cell canvas above (no data URLs, no decode, no cell-style churn).
+Headless Firefox also records whole-board white/black frames in every
+build including the pre-debris one (a capture artefact), so the recording
+(`flicker-*` in the session's scratch, not committed) is only good for
+per-square blinks; the phone is the judge. A capture's victim is
 the square whose occupant VANISHED (the landing square or the en-passant
 pawn), a shattering crate holds until the piece arrives (no dissolve),
 a piece still dissolves under the blow. Toggles filter the PAINT, never
@@ -884,11 +900,10 @@ chips (`RUIN.chips` 0 in the repack tool; the committed tiles rewritten
 by `phase0/harness/strip-ruin-chips.mjs`, which strips isolated ≤2-px
 components and refuses anything larger — every fleck on the floor is the
 debris layer's now, one set of dials). Gates: `phase0/harness/
-test-debris.mjs` (Node, 53 checks: the transform under flip/crop/auto-crop,
+test-debris.mjs` (Node, 50 checks: the transform under flip/crop/auto-crop,
 buckets, cap, undo, traffic, serialize, determinism, sprite sampling,
-settling, drying, the shatter, the painter's cap and toggles, the PNG
-round-trip against png.mjs, the strip), ui-smoke (one event per capture
-and per quake rung, PNG layers on floor only, the saved ledger, toggles
+settling, drying, the shatter, the painter's cap and toggles, the strip), ui-smoke (one event per capture
+and per quake rung, 16×16 canvases on floor only, the layer stack, the saved ledger, toggles
 hide and keep, the preview shows the scars, a rematch is epoch + 1 with
 every event kept, and a second page with motion ON: frames drawn on a
 files×16 canvas, everything landed, no page errors), selftest 42/42,
@@ -1013,10 +1028,11 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
-- `play/js/debris.mjs` + `particles.mjs` + `pngmini.mjs` — THE DEBRIS LAYER
-  (2026-09-07): the environment's scar ledger + painter (pure), the flight
-  on the fx canvas, the deterministic PNG; wired in main.mjs (§ THE DEBRIS
-  LAYER), painted by board-ui setPosition's `debris` callback.
+- `play/js/debris.mjs` + `particles.mjs` — THE DEBRIS LAYER (2026-09-07):
+  the environment's scar ledger + painter (pure) and the flight; wired in
+  main.mjs (§ THE DEBRIS LAYER), painted into per-cell canvases by
+  board-ui setPosition's `debris` callback / `setDebris`, the flight's
+  frames through `paintDebrisFrame` / `restoreDebris`.
 - `play/` — the Phase 1 game (vanilla-JS ES modules, GitHub Pages). Phase 0
   modules are ported verbatim into `play/js/`; `play/vendor/` carries its own
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to

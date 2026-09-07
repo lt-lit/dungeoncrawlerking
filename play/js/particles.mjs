@@ -1,33 +1,42 @@
 // THE FLIGHT (2026-09-07, designer: "what if we visibly see it spray out and
 // land on the environment… smashing thru walls with pieces could look so
-// cool"). Debris does not appear; it flies. One canvas over the board at the
-// board's own pixel grid (board-ui fxCanvas: files×16 by ranks×16, scaled up
-// pixelated) draws every live chunk as small rectangles at INTEGER pixel
-// coordinates on a pixel-art tick (~15 steps a second — sub-pixel motion
-// at sixty frames would be smoother and wrong for this art), and the last
+// cool"). Debris does not appear; it flies. Every live chunk is drawn, on a
+// pixel-art tick (~15 steps a second — sub-pixel motion at sixty frames
+// would be smoother and wrong for this art), INTO THE DEBRIS CANVASES OF
+// THE CELLS IT IS OVER (board-ui paintDebrisFrame: the cell's own 16×16
+// canvas, composited over the square's persistent debris for the frame),
+// at integer pixels of the same 16-grid the floor is drawn on. The last
 // frame of a flight is the persistent debris pixel for pixel: the painter
 // (debris.mjs chunksOf) decided where every chunk lands before it took off,
 // so the flight is a tween from the broken thing to a known target, with a
 // hop for the arc and a bounce for stone.
+//
+// Why the cells' own canvases and not one canvas over the board: a cell's
+// debris canvas is its first child, so anything drawn in it sits UNDER the
+// sprites and the pieces by document order — a chunk in the air passes
+// behind a piece, and a landed chunk is never drawn over one. The first
+// cut flew the chunks on the fx layer above everything ("blood and debris
+// rendered on top of the piece layer"), and the second gave the pieces a
+// z-index to stack them over a board-wide flight layer, which made Firefox
+// drop every positioned child of the cells — pieces, sprites, torches —
+// for a frame during the quake animations ("all the pieces will blink out
+// of existence"). Nothing here touches a piece or a cell's style.
 //
 // Two kinds of chunk fly: the PERSISTENT ones the painter will paint and the
 // EPHEMERAL shatter (debris.mjs shatterOf: the broken sprite cut into 2×2
 // blocks, most of which fade in the air). A skid is drawn PROGRESSIVELY
 // under the sliding piece (streak): the motion draws the mark.
 //
-// ONE FRAME LOOP for every flight in the air (the first cut gave each flight
-// its own loop, and two flights — a capture's spray still airborne when a
-// quake's beats began, two skids drawn side by side — cleared each other's
-// chunks at fifteen hertz: the designer's "flickering for a split second").
-// A flight goes flying → LANDED (its chunks HELD at their final pixels, its
-// `landed` promise resolved, so the caller can paint the cells under them)
-// → RELEASED (the caller has painted; the chunks leave the canvas). The
-// canvas clears only when no flight remains.
+// ONE FRAME LOOP for every flight in the air. A flight goes flying →
+// LANDED (its chunks held at their final pixels, its `landed` promise
+// resolved, so the caller can paint the persistent debris under them) →
+// RELEASED (the caller has painted; the chunks leave). A cell a chunk left
+// is restored to its persistent debris the next frame.
 //
-// Cost: a hundred chunks a frame on a 160×160 canvas — well under a
-// millisecond on a phone. Reduced motion / ?fx=0 give ms = 0 and a flight
-// lands at once (the debris then simply appears, the painter's path).
-import { toArenaPx, MATERIALS } from './debris.mjs';
+// Cost: a hundred chunks a frame stamped into a few dozen 16×16 buffers —
+// well under a millisecond on a phone. Reduced motion / ?fx=0 give ms = 0
+// and a flight lands at once (the debris then simply appears).
+import { toArenaPx, MATERIALS, T } from './debris.mjs';
 
 const TICK = 66; // ms between frames — the pixel-art step
 
@@ -41,33 +50,47 @@ export class Particles {
     this.frames = 0; // drawn frames (a test surface)
     this.nextId = 1;
     this.timer = null;
+    this.shown = new Set(); // squares wearing a transient frame
   }
 
   get busy() {
     return this.flights.length > 0;
   }
 
-  #ctx() {
-    return this.ui.fxCanvas.getContext('2d');
-  }
-
-  /** Draw one chunk at an env-pixel position (top-left), alpha 0…1. */
-  #draw(ctx, tx, c, x, y, alpha = 1) {
+  /** Stamp one chunk at an env-pixel position (top-left) into the per-square
+   *  frame buffers, alpha 0…1 — pixel by pixel, each into the square it is
+   *  over, replacing where opaque and blending where translucent. */
+  #stamp(overlays, tx, c, x, y, alpha = 1) {
+    const bx = Math.round(x), by = Math.round(y);
     for (let j = 0; j < c.h; j++) for (let i = 0; i < c.w; i++) {
       const s = (j * c.w + i) * 4;
-      const a = c.px[s + 3];
-      if (!a) continue;
-      const p = toArenaPx(tx, Math.round(x) + i, Math.round(y) + j);
+      const a = c.px[s + 3] * alpha;
+      if (a <= 0) continue;
+      const p = toArenaPx(tx, bx + i, by + j);
       if (!p) continue;
-      ctx.fillStyle = `rgba(${c.px[s]},${c.px[s + 1]},${c.px[s + 2]},${((a / 255) * alpha).toFixed(3)})`;
-      ctx.fillRect(p.x, p.y, 1, 1);
+      let buf = overlays.get(p.sq);
+      if (!buf) {
+        const base = this.ui.debrisBuf(p.sq);
+        buf = base ? new Uint8ClampedArray(base) : new Uint8ClampedArray(T * T * 4);
+        overlays.set(p.sq, buf);
+      }
+      const o = ((p.y % T) * T + (p.x % T)) * 4;
+      if (a >= 255 || !buf[o + 3]) {
+        buf[o] = c.px[s]; buf[o + 1] = c.px[s + 1]; buf[o + 2] = c.px[s + 2]; buf[o + 3] = Math.round(a);
+      } else {
+        const sa = a / 255, da = buf[o + 3] / 255, oa = sa + da * (1 - sa);
+        buf[o] = Math.round((c.px[s] * sa + buf[o] * da * (1 - sa)) / oa);
+        buf[o + 1] = Math.round((c.px[s + 1] * sa + buf[o + 1] * da * (1 - sa)) / oa);
+        buf[o + 2] = Math.round((c.px[s + 2] * sa + buf[o + 2] * da * (1 - sa)) / oa);
+        buf[o + 3] = Math.round(oa * 255);
+      }
     }
   }
 
-  #drawFlight(ctx, f, u) {
+  #stampFlight(overlays, f, u) {
     const { tx, origin, hop } = f;
     if (f.kind === 'streak') {
-      for (const c of f.chunks) if (c.t <= u) this.#draw(ctx, tx, c, c.x, c.y);
+      for (const c of f.chunks) if (c.t <= u) this.#stamp(overlays, tx, c, c.x, c.y);
       return;
     }
     for (const c of f.chunks) {
@@ -77,7 +100,7 @@ export class Particles {
       let y = origin.y - c.h / 2 + (c.y - (origin.y - c.h / 2)) * e;
       if (p < 1) y -= hop * Math.sin(Math.PI * p) * (0.6 + 0.4 * c.t);
       else if (f.bounce && c.sz >= 2 && u < c.t + 0.18) y -= Math.round(2 * Math.sin((Math.PI * (u - c.t)) / 0.18));
-      this.#draw(ctx, tx, c, x, y);
+      this.#stamp(overlays, tx, c, x, y);
     }
     for (const c of f.eph) {
       if (u > c.fade + 0.3) continue;
@@ -86,29 +109,33 @@ export class Particles {
       const x = c.x + (c.tx - c.x) * e;
       const y = c.y + (c.ty - c.y) * e - hop * 1.4 * Math.sin(Math.PI * p);
       const alpha = u < c.fade ? 1 : Math.max(0, 1 - (u - c.fade) / 0.3);
-      this.#draw(ctx, tx, c, x, y, alpha);
+      this.#stamp(overlays, tx, c, x, y, alpha);
     }
   }
 
-  /** The one loop: clear once, draw every flight at its own time, land the
-   *  ones that are done, drop the released, stop when none remain. */
+  /** The one loop: stamp every flight at its own time into per-square
+   *  buffers, paint those squares, restore the squares the chunks left,
+   *  land the flights that are done, drop the released, stop when none
+   *  remain. */
   #frame() {
     this.timer = null;
-    const ctx = this.#ctx();
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     const now = performance.now();
     this.flights = this.flights.filter((f) => !f.released);
+    const overlays = new Map();
     for (const f of this.flights) {
       const u = Math.min(1, (now - f.t0) / f.ms);
-      this.#drawFlight(ctx, f, u);
+      this.#stampFlight(overlays, f, u);
       if (u >= 1 && !f.landedAt) {
         f.landedAt = now;
         f.resolve();
       }
     }
+    for (const [sq, buf] of overlays) this.ui.paintDebrisFrame(sq, buf);
+    for (const sq of this.shown) if (!overlays.has(sq)) this.ui.restoreDebris(sq);
+    this.shown = new Set(overlays.keys());
     this.frames++;
     if (!this.flights.length) {
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      this.clear();
       return;
     }
     this.timer = setTimeout(() => this.#frame(), TICK);
@@ -150,11 +177,12 @@ export class Particles {
     if (!this.timer && this.flights.length) this.#frame();
   }
 
-  /** Clear the canvas — only when nothing is in the air or held. */
+  /** Every square back to its persistent debris — only when nothing is in
+   *  the air or held. */
   clear() {
     if (this.flights.some((f) => !f.released)) return;
-    const c = this.ui.fx.querySelector(':scope > canvas.fx-debris');
-    if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    for (const sq of this.shown) this.ui.restoreDebris(sq);
+    this.shown.clear();
   }
 
   /** The material's hop height and bounce, for a flight. */

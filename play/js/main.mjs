@@ -42,8 +42,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
-import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, T as TILE } from './debris.mjs';
-import { pngDataUrl } from './pngmini.mjs';
+import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES } from './debris.mjs';
 import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
@@ -88,10 +87,10 @@ const app = {
   residue: { opened: new Set(), rubble: new Set(), lastFen: null },
   // THE DEBRIS LAYER (2026-09-07): the environment's ledger (one per stage,
   // persisted), the live deal's transform into it, the per-cell paint cache
-  // (env cell index → url(...) | null), events still in flight, the sprite
-  // sampler, the flight, the last paint's terrain kinds — see the debris
-  // section below and play/js/debris.mjs.
-  debris: { ledger: null, envId: null, tx: null, urls: new Map(), pending: new Set(), sampler: null, particles: null, saveTimer: null, kinds: null, dryPly: -1, warmSeq: 0, ready: new Set(), decoding: new Map(), desired: new Map(), waiting: new Map() },
+  // (env cell index → 16×16 RGBA buffer | null), events still in flight,
+  // the sprite sampler, the flight, the last paint's terrain kinds — see
+  // the debris section below and play/js/debris.mjs.
+  debris: { ledger: null, envId: null, tx: null, urls: new Map(), pending: new Set(), sampler: null, particles: null, saveTimer: null, kinds: null, dryPly: -1, warmSeq: 0 },
   previewPaint: null, // what the setup preview last painted ({files, ranks, fen, skins}) — a repaint on a toggle
   quakeMarks: null, // {from, to, pits, cracked, breached, arrows, text} — the gods' residue
   // since the player last moved (several quakes MERGE), held on the board and in
@@ -2111,39 +2110,10 @@ function debrisPaintCtx(o = debrisOpts()) {
   };
 }
 
-/** Is this debris image DECODED? A cell only ever switches to an image the
- *  browser already holds: swapping a background to an undecoded data URL
- *  paints one frame without it (the designer's "debris flickering for a
- *  split second"). The first time a URL is seen it is decoded through an
- *  Image (the same URL then hits the image cache from CSS), and every cell
- *  waiting on it takes it the moment it lands. */
-function debrisReady(url) {
-  const D = app.debris;
-  if (D.ready.has(url)) return true;
-  if (typeof Image === 'undefined') { D.ready.add(url); return true; }
-  if (!D.decoding.has(url)) {
-    if (D.ready.size > 3000) D.ready.clear(); // a session's worth of images: re-decode rather than hoard
-    const img = new Image();
-    img.src = url.slice(5, -2); // url("…") → …
-    const job = img
-      .decode()
-      .catch(() => {})
-      .then(() => {
-        D.ready.add(url);
-        D.decoding.delete(url);
-        const cells = D.waiting.get(url);
-        D.waiting.delete(url);
-        if (cells) for (const sq of cells) if (D.desired.get(sq) === url) app.boardUI?.setDebris(sq, url);
-      });
-    D.decoding.set(url, job);
-  }
-  return false;
-}
-
-/** The square's WANTED debris url(...) (or null), from the per-env-cell
- *  paint cache; the cache is dropped by an event, an undo, a toggle or a
- *  theme. Floor only (debris.mjs kindIsFloor). */
-function debrisUrlFor(sq, k, ctx) {
+/** The square's debris buffer (16×16 RGBA, or null for a clean floor), from
+ *  the per-env-cell paint cache; the cache is dropped by an event, an undo,
+ *  a toggle or a theme. Floor only (debris.mjs kindIsFloor). */
+function debrisBufFor(sq, k, ctx) {
   const D = app.debris;
   if (!kindIsFloor(k)) return null;
   const { ef, er } = toEnvCell(D.tx, sq);
@@ -2151,30 +2121,20 @@ function debrisUrlFor(sq, k, ctx) {
   const i = D.ledger.cellIndex(ef, er);
   if (D.urls.has(i)) return D.urls.get(i);
   const buf = paintCell(D.ledger, ef, er, ctx);
-  const url = buf ? `url("${pngDataUrl(TILE, TILE, buf)}")` : null;
-  D.urls.set(i, url);
-  return url;
+  D.urls.set(i, buf);
+  return buf;
 }
 
-/** The painter board-ui setPosition calls per square: the wanted image when
- *  it is decoded, else what the cell already wears until it is (debrisReady
- *  applies it then). Null clears at once. */
+/** The painter board-ui setPosition calls per square: the buffer its debris
+ *  canvas should show (setDebris paints it synchronously — no image to
+ *  decode, nothing on the cell's own style — so nothing ever blinks). */
 function debrisPainter() {
   const D = app.debris;
   if (!D.ledger || !D.tx) return null;
   const o = debrisOpts();
   if (!o.destruction && !o.blood && !o.skid && !o.wear) return null;
   const ctx = debrisPaintCtx(o);
-  return (sq, k) => {
-    const url = debrisUrlFor(sq, k, ctx);
-    D.desired.set(sq, url);
-    if (!url) return null;
-    if (debrisReady(url)) return url;
-    let w = D.waiting.get(url);
-    if (!w) D.waiting.set(url, (w = new Set()));
-    w.add(sq);
-    return app.boardUI?.debrisUrl(sq) ?? null;
-  };
+  return (sq, k) => debrisBufFor(sq, k, ctx);
 }
 
 /** Every live paint of the board goes through here: the terrain classes
@@ -2241,16 +2201,14 @@ function debrisParticles() {
   return D.particles;
 }
 
-/** Land an event: its cells repaint directly (a flight lands between
- *  paints; setDebris touches nothing else on the cell), and the call
- *  resolves once their images are decoded and applied (capped), so a held
- *  flight is released only when the debris under it is really there. */
-async function debrisLand(ev) {
+/** Land an event: its cells' debris canvases repaint directly and at once
+ *  (a flight lands between paints; setDebris touches nothing else on the
+ *  cell), so the held flight can be released in the same tick. */
+function debrisLand(ev) {
   const D = app.debris;
   if (!ev || !D.ledger || !D.tx) return;
   D.pending.delete(ev.id);
   const painter = debrisPainter();
-  const jobs = [];
   for (const i of D.ledger.cellsOf(ev)) {
     D.urls.delete(i);
     const ef = i % D.ledger.files, er = (i - ef) / D.ledger.files;
@@ -2258,10 +2216,7 @@ async function debrisLand(ev) {
     if (!sq || !app.boardUI?.cells.has(sq)) continue;
     const k = D.kinds?.get(sq);
     app.boardUI.setDebris(sq, painter && k ? painter(sq, k) : null);
-    const want = D.desired.get(sq);
-    if (want && D.decoding.has(want)) jobs.push(D.decoding.get(want));
   }
-  if (jobs.length) await Promise.race([Promise.all(jobs), wait(300)]);
 }
 
 /**
@@ -2296,8 +2251,8 @@ async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 3
   } catch (e) {
     console.warn('debris flight', e);
   }
-  await debrisLand(ev); // the cells wear the debris (decoded) under the held chunks…
-  if (flight) P.release(flight.id); // …and only then do the chunks leave the canvas
+  debrisLand(ev); // the cells' canvases wear the debris under the held chunks…
+  if (flight) P.release(flight.id); // …and in the same tick the chunks leave the flight canvas
 }
 
 /** The capture a move made, if any: the square whose occupant vanished
@@ -3094,7 +3049,7 @@ window.__DCK = {
     get options() {
       return debrisOpts();
     },
-    stats: () => (app.debris.ledger ? { ...app.debris.ledger.stats(), pending: app.debris.pending.size, urls: app.debris.urls.size, sampler: app.debris.sampler?.size ?? 0, ready: app.debris.ready.size, decoding: app.debris.decoding.size, flights: app.debris.particles?.flights.length ?? 0 } : null),
+    stats: () => (app.debris.ledger ? { ...app.debris.ledger.stats(), pending: app.debris.pending.size, cached: app.debris.urls.size, sampler: app.debris.sampler?.size ?? 0, flights: app.debris.particles?.flights.length ?? 0, painted: app.boardUI?.debrisBufs.size ?? 0 } : null),
     events: () => (app.debris.ledger ? app.debris.ledger.events.map((e) => ({ ...e })) : []),
     /** One arena square: its env cell, the events on it, its wear and the painted URL (from the DOM). */
     cell: (sq) => {
@@ -3102,7 +3057,10 @@ window.__DCK = {
       if (!D.ledger || !D.tx) return null;
       const { ef, er } = toEnvCell(D.tx, sq);
       const cell = app.boardUI?.cells.get(sq);
-      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), url: cell?.style.getPropertyValue('--debris') || null };
+      const buf = app.boardUI?.debrisBuf(sq) ?? null;
+      let opaque = 0, pixels = 0;
+      if (buf) for (let i = 3; i < buf.length; i += 4) { if (buf[i]) pixels++; if (buf[i] === 255) opaque++; }
+      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), painted: !!cell?.querySelector(':scope > canvas.debris'), pixels, opaque };
     },
     /** The painter's raw buffer for a square (a Uint8ClampedArray or null). */
     paint: (sq) => {

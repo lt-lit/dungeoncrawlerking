@@ -361,7 +361,8 @@ export class BoardUI {
     }
     container.textContent = '';
     this.cells = new Map();
-    this.debrisUrls = new Map(); // square → the debris url(...) the cell wears (never re-set when unchanged)
+    this.debrisBufs = new Map(); // square → the 16×16 RGBA buffer its debris canvas shows (never repainted when unchanged)
+    this.debrisTransient = new Set(); // squares whose canvas exists only for a flight frame (no persistent debris)
 
     const rankOrder = [];
     for (let r = ranks; r >= 1; r--) rankOrder.push(r);
@@ -408,22 +409,6 @@ export class BoardUI {
     container.appendChild(this.fx);
   }
 
-  /** The flight's canvas (play/js/particles.mjs): one over the whole board
-   *  at the board's own pixel grid, created on first use, on the fx layer
-   *  (above the pieces — a chunk in the air passes in front of them; the
-   *  landed pixels live in the cells' own --debris layer underneath). */
-  get fxCanvas() {
-    let c = this.fx.querySelector(':scope > canvas.fx-debris');
-    if (!c) {
-      c = document.createElement('canvas');
-      c.className = 'fx-debris';
-      c.width = this.files * 16;
-      c.height = this.ranks * 16;
-      this.fx.appendChild(c);
-    }
-    return c;
-  }
-
   /** Column / row-from-top of a square on the rendered grid (flip-aware). */
   gridPos(sq) {
     const f = sq.charCodeAt(0) - 97;
@@ -431,26 +416,69 @@ export class BoardUI {
     return { col: this.flipped ? this.files - 1 - f : f, row: this.flipped ? rank - 1 : this.ranks - rank };
   }
 
-  /** Set one square's debris layer directly (a flight landing between
-   *  paints) — the URL or null; touches nothing else on the cell, so a
-   *  held quake frame stays held. */
-  setDebris(sq, url) {
+  /**
+   * Paint one square's debris: `buf` a 16×16 RGBA buffer (debris.mjs
+   * paintCell) or null for a clean floor. The square's debris CANVAS (its
+   * first child, under the sprites and pieces) takes it with putImageData —
+   * synchronous, nothing to decode, nothing on the cell's own style — so a
+   * flight can land between paints and a held quake frame stays held. An
+   * unchanged buffer is left alone.
+   */
+  setDebris(sq, buf) {
     const cell = this.cells.get(sq);
     if (!cell) return;
-    const had = this.debrisUrls.get(sq) ?? null;
-    if ((url ?? null) === had) return; // the style is only ever touched on a real change
-    if (url) {
-      cell.style.setProperty('--debris', url);
-      this.debrisUrls.set(sq, url);
-    } else {
-      cell.style.removeProperty('--debris');
-      this.debrisUrls.delete(sq);
+    const had = this.debrisBufs.get(sq) ?? null;
+    if (!buf && !had) return;
+    if (buf && had && buf.length === had.length && buf.every((v, i) => v === had[i])) return;
+    if (!buf) {
+      this.debrisBufs.delete(sq);
+      if (!this.debrisTransient.has(sq)) cell.querySelector(':scope > canvas.debris')?.remove();
+      return;
     }
+    this.#debrisCanvas(cell).getContext('2d').putImageData(new ImageData(buf, 16, 16), 0, 0);
+    this.debrisBufs.set(sq, buf);
+    this.debrisTransient.delete(sq);
   }
 
-  /** The debris url(...) a square currently wears, or null. */
-  debrisUrl(sq) {
-    return this.debrisUrls.get(sq) ?? null;
+  /** The square's debris canvas, made if it is missing (the cell's FIRST
+   *  child: under the sprites and the pieces by document order). */
+  #debrisCanvas(cell) {
+    let canvas = cell.querySelector(':scope > canvas.debris');
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.className = 'debris';
+      canvas.width = 16;
+      canvas.height = 16;
+      cell.insertBefore(canvas, cell.firstChild);
+    }
+    return canvas;
+  }
+
+  /** A FLIGHT frame (play/js/particles.mjs): show `buf` on the square's
+   *  canvas for this frame only — the persistent debris is untouched and
+   *  restoreDebris brings it back. */
+  paintDebrisFrame(sq, buf) {
+    const cell = this.cells.get(sq);
+    if (!cell) return;
+    if (!this.debrisBufs.has(sq)) this.debrisTransient.add(sq);
+    this.#debrisCanvas(cell).getContext('2d').putImageData(new ImageData(buf, 16, 16), 0, 0);
+  }
+
+  /** The square back to its persistent debris (or to nothing). */
+  restoreDebris(sq) {
+    const cell = this.cells.get(sq);
+    if (!cell) return;
+    const buf = this.debrisBufs.get(sq) ?? null;
+    const canvas = cell.querySelector(':scope > canvas.debris');
+    if (buf) {
+      if (canvas) canvas.getContext('2d').putImageData(new ImageData(buf, 16, 16), 0, 0);
+    } else if (canvas) canvas.remove();
+    this.debrisTransient.delete(sq);
+  }
+
+  /** The 16×16 RGBA buffer a square's debris canvas shows, or null. */
+  debrisBuf(sq) {
+    return this.debrisBufs.get(sq) ?? null;
   }
 
   /** Hide a square's sprite while the flight shatters it (setPosition's next
@@ -589,10 +617,9 @@ export class BoardUI {
     for (const [sq, cell] of this.cells) {
       const k = kinds.get(sq);
       // THE DEBRIS LAYER (2026-09-07): `debris(sq, kind)` answers the
-      // square's 16×16 debris buffer as a CSS url(...) — or null for a clean
-      // floor — and the cell's background stack paints it under the terrain
-      // (style.css --debris). Touched only when it changes: the URL is
-      // ~1.4 KB and a paint visits every cell.
+      // square's 16×16 RGBA buffer — or null for a clean floor — and the
+      // cell's own debris canvas paints it (setDebris; unchanged buffers
+      // are left alone).
       this.setDebris(sq, debris ? debris(sq, k) : null);
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
@@ -900,7 +927,8 @@ export class BoardUI {
     this.container.textContent = '';
     this.container.classList.remove('board', 'inactive');
     this.cells.clear();
-    this.debrisUrls.clear();
+    this.debrisBufs.clear();
+    this.debrisTransient.clear();
   }
 }
 

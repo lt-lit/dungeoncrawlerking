@@ -590,23 +590,28 @@ bounded twice: `CELL_CAP` (12) events per cell bucket, the oldest evicted;
 smallest chunks first. Debris settles with age: after an epoch the 1-px
 flecks are gone, after three the 2-px chips; skids fade.
 
-**The 16×16 rule.** The buffer becomes a data URL through `js/pngmini.mjs`
-(a store-only zlib PNG, deterministic bytes, no canvas) and is painted as
-`var(--debris)` in every cell's background stack (style.css) — above the
-floor tile and the checker shade, under the wall tile, the pit, the ruin
-stub, the sprites and the pieces — at the floor tile's own 100%×100%
-pixelated scaling, so a debris pixel is never a different size or
-alignment from a floor pixel. Debris paints on FLOOR only (a wall
-neighbour swallows its share of a spray; a smashed crate's square is floor
-from then on). Every rule that lists floor layers lists the debris layer;
-one that forgets it paints a clean square.
+**The 16×16 rule.** The buffer is painted with putImageData into the
+square's own 16×16 debris CANVAS (board-ui `setDebris`: the cell's first
+child, under the sprites and the pieces, scaled to the cell exactly like
+the floor tile — 100%×100%, pixelated), so a debris pixel is never a
+different size or alignment from a floor pixel. A canvas rather than a
+background image: the first cut swapped a data URL into every cell's
+background stack, and a background that changes to an image the browser
+has not decoded yet paints a frame without it (Firefox blinked on every
+landing), while touching a cell's inline style restyled the piece inside
+it; a canvas paints synchronously and touches nothing else. Debris paints
+on FLOOR only (a wall neighbour swallows its share of a spray; a smashed
+crate's square is floor from then on), so the one tile it can cover is a
+ruin's stub — rubble on rubble.
 
-**The flight** (`js/particles.mjs`). Debris does not appear, it flies: one
-canvas on the fx layer at the board's pixel grid (board-ui `fxCanvas`,
-files×16 by ranks×16, scaled up pixelated) draws every live chunk as an
-integer-pixel rectangle on a ~15-Hz pixel-art tick, from the thing that
-broke to the exact pixels the painter lands them on — the painter decided
-first, so the last frame of the flight IS the persistent debris. A hop for
+**The flight** (`js/particles.mjs`). Debris does not appear, it flies: on a
+~15-Hz pixel-art tick every live chunk is stamped into the debris canvas of
+the square it is over (board-ui `paintDebrisFrame` composites the frame over
+that square's persistent debris; `restoreDebris` puts it back once the
+chunk has left), so it passes behind the pieces by document order; from the
+thing that broke to the exact pixels the painter lands them on — the
+painter decided first, so the last frame of the flight IS the persistent
+debris. A hop for
 the arc, a bounce for stone and clay; the broken SPRITE SHATTERS into 2×2
 blocks that fade in the air (`shatterOf`); a crumble's floor blocks fall
 INTO the pit; a skid draws progressively under the sliding piece. A
@@ -618,12 +623,15 @@ under the blow; the gods' rungs fly inside their beats. Reduced motion,
 `?fx=0` or the Particles toggle: the debris simply appears. One frame loop
 serves every flight in the air: a flight is flying, then LANDED (its chunks
 held on the canvas, its `landed` promise resolved so the game can paint the
-cells under them), then released once those cells wear the debris — two
-loops clearing one canvas had made overlapping flights flicker. And a cell
-only ever switches to a debris image the browser has already decoded
-(`debrisReady`: new data URLs are decoded through an Image first, waiting
-cells take them when they land), because swapping a background to an
-undecoded URL paints one frame without it.
+cells under them), then released the same tick — two loops clearing one
+canvas had made overlapping flights flicker. No layer of its own and no
+z-index on the pieces: the first cut flew the chunks on the fx layer above
+everything ("blood and debris rendered on top of the piece layer"), and an
+intermediate cut stacked the pieces over a board-wide flight layer with
+`position: relative; z-index: 3`, which made Firefox drop every positioned
+child of the cells — pieces, sprites, torches — for a frame during the quake
+animations ("all the pieces will blink out of existence"; reproduced and
+isolated in Playwright's Firefox). Never give the pieces a z-index.
 
 **Persistence rides the environment**, never the duel: main.mjs keeps one
 ledger per stage in localStorage (`dck.debris.v1:<stage id>`), opened when

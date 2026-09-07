@@ -1,13 +1,12 @@
 // THE DEBRIS LAYER's Node gate (2026-09-07): play/js/debris.mjs (the
-// ledger, the transform, the chunks, the painter), play/js/pngmini.mjs
-// (the deterministic PNG) and the ruin tiles' chip strip. No DOM, no
+// ledger, the transform, the chunks, the painter) and the ruin tiles' chip
+// strip. No DOM, no
 // engine. Usage: cd phase0 && node harness/test-debris.mjs
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { decodePng } from '../lib/png.mjs';
 import * as D from '../../play/js/debris.mjs';
-import { encodePng, pngDataUrl, base64 } from '../../play/js/pngmini.mjs';
 import { run as stripCheck } from './strip-ruin-chips.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -150,18 +149,6 @@ const T = D.T;
   const win = new Uint8ClampedArray(T * T * 4);
   D.blitChunk(win, { x: 14, y: 14, w: 3, h: 3, px: new Uint8Array(36).fill(255) }, 0, 0);
   expect(win[(15 * T + 15) * 4 + 3] === 255 && win.filter((v, i) => i % 4 === 3 && v).length === 4, 'a chunk is clipped to the cell window');
-}
-
-// --- the PNG ----------------------------------------------------------------
-{
-  const buf = new Uint8ClampedArray(T * T * 4);
-  for (let i = 0; i < T * T; i++) { buf[i * 4] = i; buf[i * 4 + 1] = 255 - i; buf[i * 4 + 2] = (i * 7) & 255; buf[i * 4 + 3] = i % 3 ? 255 : 0x60; }
-  const png = encodePng(T, T, buf);
-  const back = decodePng(Buffer.from(png));
-  expect(back.width === T && back.height === T && Buffer.from(buf).equals(back.data), 'pngmini encodes what png.mjs decodes, byte for byte');
-  const url = pngDataUrl(T, T, buf);
-  expect(url.startsWith('data:image/png;base64,') && url === pngDataUrl(T, T, buf), `the data URL is deterministic (${url.length} chars)`);
-  expect(base64(new Uint8Array([77, 97, 110])) === 'TWFu' && base64(new Uint8Array([77, 97])) === 'TWE=' && base64(new Uint8Array([77])) === 'TQ==', 'base64 pads like the standard');
 }
 
 // --- the ruin tiles carry no chips any more -----------------------------------
