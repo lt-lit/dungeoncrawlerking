@@ -545,6 +545,135 @@ is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.
 
+## The debris layer (2026-09-07)
+
+The floor remembers. Designer brief: "a universal debris system, so traces
+of destruction can be seen everywhere" — blood for captured pieces, skid
+marks under the gods' displacements, worn paths, splinter spray for every
+kind of destruction, actual particle effects, all togglable, on the 16×16
+grid, persisting after duels and ready for a 100×100 dungeon floor.
+
+**The ledger** (`js/debris.mjs`, pure; Node gate
+`phase0/harness/test-debris.mjs`). Six kinds of event: `smash` (a piece
+captures terrain), `breach` / `crumble` / `weaken` (the gods), `kill` (a
+piece captured) and `skid` (a displacement, from → to). Each is a few
+numbers in ENVIRONMENT PIXEL SPACE — the base stage's own uncropped,
+unflipped grid, sixteen pixels a square, y down from its top rank — with a
+direction (away from the attacker; a god's edit bursts radially), the
+epoch (the duel count on this floor) and ply it happened on, and the
+sprite the broken thing was wearing (a role, a variant and a wall case,
+never pixels: `spriteVar` names the CSS custom property). A duel
+contributes through ONE transform, `envTransform(deal, stage)` — the
+deal's flip, crop and king-anchored auto-crop — for squares, pixels and
+direction vectors alike. Materials: stone (walls, masonry, weak spots),
+wood (crates, chests, doors, wreckage), clay (barrels and urns), floor (a
+crumble throws the floor's own pixels), blood.
+
+**The painter.** `paintCell(ledger, ef, er, ctx)` writes the cell's 16×16
+RGBA buffer: the wear scuff, then every event's chunks oldest first, each
+chunk a small rectangle SAMPLED OFF THE ACTUAL SPRITE (plank pixels off the
+crate that broke, the brick face off the wall, the glaze off the urn; the
+material's palette when no sprite is decoded — the game's sampler reads
+the property off the board and decodes it once per theme, warmed by
+`applyTheme`), placed by a PRNG seeded
+by the event alone, so the same ledger paints the same pixels after a
+reload, a theme switch or a toggle. Stone is chunky and lands short; wood
+flies far in slivers; clay in shards; big pieces near, flecks far. Blood is
+a pool a little along the blow plus droplets and two far drips, red for
+`DRY_PLIES` (20) plies and maroon after, or by the next duel. A skid is a
+translucent scuff along the drag, denser and darker at the landing. Wear
+is not events but a dense traffic grid — every move visits its landing
+square and, for a straight move, the squares it passed over — with three
+levels of translucent scuff (`WEAR_LEVELS` 6 / 16 / 40 visits). Growth is
+bounded twice: `CELL_CAP` (12) events per cell bucket, the oldest evicted;
+`PIXEL_CAP` (112) opaque pixels per cell, the oldest event dropping its
+smallest chunks first. Debris settles with age: after an epoch the 1-px
+flecks are gone, after three the 2-px chips; skids fade.
+
+**The 16×16 rule.** The buffer becomes a deterministic PNG data URL
+(`js/pngmini.mjs`, a store-only zlib PNG, no canvas) shown by the square's
+own 16×16 debris IMAGE (board-ui `setDebris`: a plain `<img>`, the cell's
+first child, under the sprites and the pieces, scaled to the cell exactly
+like the floor tile — 100%×100%, pixelated), so a debris pixel is never a
+different size or alignment from a floor pixel. A new image is decoded OFF
+the DOM and only then swapped in over the old one, so no frame ever paints
+without its debris. Three cuts went before it: a data URL swapped into the
+cell's background stack (a background that changes to an undecoded image
+paints a frame without it — Firefox blinked on every landing — and touching
+the cell's style restyled the piece inside it), then a per-cell canvas
+(which coincided with pieces vanishing for whole seconds on a desktop
+Firefox while idle). An `<img>` is a decoded bitmap to every compositor.
+Debris paints on FLOOR only (a wall neighbour swallows its share of a
+spray; a smashed crate's square is floor from then on), so the one tile it
+can cover is a ruin's stub — rubble on rubble.
+
+**The flight** (`js/particles.mjs`). Debris does not appear, it flies: on a
+~15-Hz pixel-art tick every live chunk is drawn as paths of 16-grid pixels
+on a second SVG over the board (board-ui `flightSvg`, the arrow layer's
+twin — above the pieces, below the FLIP clones; one path per colour, crisp
+edges, no canvas anywhere on the board), from the thing that broke to the
+exact pixels the painter lands them on — the painter decided first, so the
+last frame of the flight IS the persistent debris. A chunk in the air passes
+in front of a piece (the only place a board-wide layer can be without
+giving the pieces a z-index); the landed debris is under it. With the
+flight off, a rung's debris lands after the rung's own animation, never
+before the wall has broken. A hop for
+the arc, a bounce for stone and clay; the broken SPRITE SHATTERS into 2×2
+blocks that fade in the air (`shatterOf`); a crumble's floor blocks fall
+INTO the pit; a skid draws progressively under the sliding piece. A
+capture's spray flies while the engine thinks (never awaited — the event is
+`pending` until it lands, then its cells repaint through `setDebris`,
+which touches nothing else on the cell); a shattering crate holds until
+the piece arrives instead of dissolving, a captured piece still dissolves
+under the blow; the gods' rungs fly inside their beats. Reduced motion,
+`?fx=0` or the Particles toggle: the debris simply appears. One frame loop
+serves every flight in the air: a flight is flying, then LANDED (its chunks
+held on the flight layer, its `landed` promise resolved so the game can paint the
+cells under them), then released the same tick — two loops clearing one
+canvas had made overlapping flights flicker. No z-index on the pieces: an
+intermediate cut stacked them over a board-wide flight layer with
+`position: relative; z-index: 3`, which made Firefox drop every positioned
+child of the cells — pieces, sprites, torches — for a frame during the quake
+animations ("all the pieces will blink out of existence"; reproduced and
+isolated in Playwright's Firefox). Never give the pieces a z-index. And no
+canvas on the board: a per-cell canvas cut coincided with pieces vanishing
+for whole seconds on a desktop Firefox while idle.
+
+**Persistence rides the environment**, never the duel: main.mjs keeps one
+ledger per stage in localStorage (`dck.debris.v1:<stage id>`), opened when
+the stage is previewed (the preview shows its scars), ticked an epoch by
+every `beginDuel` — Rematch included, it is the same dungeon — and saved
+after every event, on undo, on end and on pagehide. When the 100×100 floor
+arrives a stage becomes a window into it with one more offset; nothing
+here is keyed to a duel. An undo forgets this epoch's events past the
+rewound ply and recounts the traffic from the record's moves.
+
+**Options → Debris**: splinters/shards/rubble, blood, skid marks, worn
+paths, particles — each a checkbox — an amount slider (0–200%, scales the
+chunk counts and the cap; its 100% is the designer's settled baseline —
+what the first cut painted at 200%, `debris.mjs BASELINE` — and a setting
+saved on the old scale is halved once on load), Clean this stage / Clean
+every stage. Toggles
+filter the PAINT, never the record, so a toggle flipped mid-game reveals
+the whole history. `?debris=off|all|destruction,blood,skid,wear,fx` is the
+test override; the board carries `data-debris` with the enabled kinds.
+Test surface: `__DCK.debris` — `ledger`, `env`, `tx`, `options`,
+`stats()`, `events()`, `cell(sq)` (env cell, events, traffic, wear, the
+painted URL), `paint(sq)` (the raw buffer), `frames()`, `busy`,
+`clean(all)`, `save()`.
+
+**The ruin tiles lost their chips.** The stone flecks the ruin autotile used
+to bake in are the debris layer's now (a breach scatters the wall's own
+pixels, under the same dials as everything else): `RUIN.chips` is 0 in the
+repack tool and the committed `tiles.css` / `img/tileset.png` were rewritten
+by `phase0/harness/strip-ruin-chips.mjs` (isolated components of at most
+two pixels; it refuses anything larger; `--check` is part of the Node gate).
+The stubs, their faces and the open doorways are untouched.
+
+Held for a second round: fallen wall props, bones, cobwebs on idle pieces,
+torches that gutter with tedium, hole craters, the promotion kit, per-side
+blood, and debris in the replay analyzer (the painter is pure, so it can).
+
 ## Stages (schema 2) + the army generator
 
 A stage is GROUND — walls and dimensions drawn as ASCII, nothing else

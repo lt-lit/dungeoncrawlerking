@@ -96,6 +96,7 @@
 // layer — the enemy's last move in red, the gods' displacements in their
 // blue, the oracle's hints by rank (round 13: no square tints for moves).
 import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
+import { pngDataUrl } from './pngmini.mjs'; // THE DEBRIS LAYER: a square's debris image
 
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const FURNITURE_GLYPH = '▦';
@@ -185,7 +186,17 @@ function crackVariant(f, rank) {
 }
 /** Which of a skin's sprite variants a square shows (SKIN_VARIANTS). */
 function skinVariant(f, rank) {
-  return `sv${1 + (squareHash(f, rank, 17) % SKIN_VARIANTS)}`;
+  return `sv${skinVariantIndex(f, rank)}`;
+}
+/** The variant NUMBER (1…SKIN_VARIANTS) — the debris layer records which
+ *  sprite a square wore when it broke, so the spray is that sprite's own
+ *  pixels (debris.mjs spriteVar). */
+export function skinVariantIndex(f, rank) {
+  return 1 + (squareHash(f, rank, 17) % SKIN_VARIANTS);
+}
+/** The floor-tile variant NUMBER (1…FLOOR_VARIANTS) a square wears. */
+export function floorVariantIndex(f, rank) {
+  return parseInt(floorVariant(f, rank).slice(1), 10);
 }
 
 function svgEl(tag, attrs) {
@@ -351,6 +362,8 @@ export class BoardUI {
     }
     container.textContent = '';
     this.cells = new Map();
+    this.debrisBufs = new Map(); // square → the 16×16 RGBA buffer its debris image shows (never re-encoded when unchanged)
+    this.debrisSeq = new Map(); // square → the latest setDebris call, so an older decode never lands over a newer one
 
     const rankOrder = [];
     for (let r = ranks; r >= 1; r--) rankOrder.push(r);
@@ -395,6 +408,86 @@ export class BoardUI {
     this.fx = document.createElement('div');
     this.fx.className = 'fx-layer';
     container.appendChild(this.fx);
+  }
+
+  /** Column / row-from-top of a square on the rendered grid (flip-aware). */
+  gridPos(sq) {
+    const f = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq.slice(1), 10);
+    return { col: this.flipped ? this.files - 1 - f : f, row: this.flipped ? rank - 1 : this.ranks - rank };
+  }
+
+  /**
+   * Show one square's debris: `buf` a 16×16 RGBA buffer (debris.mjs
+   * paintCell) or null for a clean floor. The square's debris IMAGE — an
+   * <img>, the cell's first child, under the sprites and the pieces by
+   * document order, scaled to the cell like the floor tile — is a plain
+   * decoded bitmap to every compositor (no canvas surface: the per-cell
+   * canvases of an earlier cut coincided with pieces vanishing for whole
+   * seconds on a desktop Firefox). The buffer becomes a data URL
+   * (pngmini.mjs, deterministic), a NEW image is decoded OFF the DOM, and
+   * only then swapped in over the old one — the old stays until the new is
+   * ready, so nothing ever paints a frame without its debris. Nothing on
+   * the cell's own style is touched, so a held quake frame stays held. An
+   * unchanged buffer is left alone. Resolves when the swap has landed (or
+   * at once when there was nothing to do).
+   */
+  async setDebris(sq, buf) {
+    const cell = this.cells.get(sq);
+    if (!cell) return;
+    const had = this.debrisBufs.get(sq) ?? null;
+    if (!buf && !had) return;
+    if (buf && had && buf.length === had.length && buf.every((v, i) => v === had[i])) return;
+    const seq = (this.debrisSeq.get(sq) ?? 0) + 1;
+    this.debrisSeq.set(sq, seq);
+    if (!buf) {
+      this.debrisBufs.delete(sq);
+      cell.querySelector(':scope > img.debris')?.remove();
+      return;
+    }
+    this.debrisBufs.set(sq, buf);
+    const img = document.createElement('img');
+    img.className = 'debris';
+    img.decoding = 'sync';
+    img.alt = '';
+    img.src = pngDataUrl(16, 16, buf);
+    try {
+      await img.decode();
+    } catch {
+      /* an undecodable image is a clean square */
+    }
+    if (this.debrisSeq.get(sq) !== seq || !this.cells.has(sq)) return; // superseded, or the board is gone
+    const old = cell.querySelector(':scope > img.debris');
+    if (old) cell.replaceChild(img, old);
+    else cell.insertBefore(img, cell.firstChild);
+  }
+
+  /** The 16×16 RGBA buffer a square's debris image shows (or is about to), or null. */
+  debrisBuf(sq) {
+    return this.debrisBufs.get(sq) ?? null;
+  }
+
+  /** The FLIGHT's drawing surface (play/js/particles.mjs): a second SVG
+   *  over the board, same viewBox as the arrow layer and stacked with it
+   *  (above the pieces, below the FLIP clones), made on first use. No
+   *  canvas — every chunk in the air is a path of 16-grid pixels. */
+  get flightSvg() {
+    let svg = this.container.querySelector(':scope > svg.flight-layer');
+    if (!svg) {
+      svg = document.createElementNS(SVG_NS, 'svg');
+      svg.classList.add('arrow-layer', 'flight-layer');
+      svg.setAttribute('viewBox', `0 0 ${this.files * CELL} ${this.ranks * CELL}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      this.container.insertBefore(svg, this.fx);
+    }
+    return svg;
+  }
+
+  /** Hide a square's sprite while the flight shatters it (setPosition's next
+   *  paint replaces the element, so nothing needs un-hiding). */
+  shatterSprite(sq) {
+    const glyph = this.cells.get(sq)?.querySelector('.piece');
+    if (glyph) glyph.classList.add('fx-shattered');
   }
 
   /** Center of a square in viewBox units (flip-aware). */
@@ -518,13 +611,18 @@ export class BoardUI {
    * never residue).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
-  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
+  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY, debris = null } = {}) {
     // What every square IS — the one terrain rule (classifyTerrain, pure,
     // shared with the replay analyzer's residue walk); this method only
     // paints it.
     const kinds = classifyTerrain(fen, { holes, godCrates, skins, opened, rubble }, this.files, this.ranks);
     for (const [sq, cell] of this.cells) {
       const k = kinds.get(sq);
+      // THE DEBRIS LAYER (2026-09-07): `debris(sq, kind)` answers the
+      // square's 16×16 RGBA buffer — or null for a clean floor — and the
+      // cell's own debris image shows it (setDebris; unchanged buffers are
+      // left alone; the swap lands once the image is decoded).
+      void this.setDebris(sq, debris ? debris(sq, k) : null);
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
       const v = k.v;
@@ -564,6 +662,7 @@ export class BoardUI {
           glyph.className = 'piece';
           cell.appendChild(glyph);
         }
+        glyph.classList.remove('fx-shattered'); // a flight's hide never outlives the paint
         if (isFurniture) {
           // Neutral sprite — neither side's color. Without this branch '^'
           // fell through to the piece path as a literal glyph styled WHITE
@@ -830,6 +929,8 @@ export class BoardUI {
     this.container.textContent = '';
     this.container.classList.remove('board', 'inactive');
     this.cells.clear();
+    this.debrisBufs.clear();
+    this.debrisSeq.clear();
   }
 }
 

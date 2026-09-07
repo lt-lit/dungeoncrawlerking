@@ -281,6 +281,29 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    a translucent shade over the tile (--floor-shade is transparent without a
    theme, so the plain look is untouched). */
 .cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); --shade: linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)); }
+/* THE DEBRIS LAYER (2026-09-07, play/js/debris.mjs): a square's debris is
+   a 16×16 IMAGE, the cell's first child (board-ui setDebris: a data URL,
+   decoded OFF the DOM and only then swapped in over the old one), scaled to
+   the cell exactly like the floor tile (100% × 100%, pixelated), so a
+   debris pixel is never a different size or alignment from a floor pixel.
+   A plain <img>, on purpose: a background image swapped to an undecoded
+   URL paints a frame without it (the first cut — Firefox blinked every
+   landing) and touching the cell's style restyles the piece inside it; a
+   per-cell <canvas> (the third cut) coincided with pieces vanishing for
+   whole seconds on a desktop Firefox while idle. An <img> is a decoded
+   bitmap to every compositor. It paints OVER the cell's own background
+   (the floor, and the wall / pit / ruin tiles — debris is painted on floor
+   squares only, so the one thing it can cover is a ruin's stub, which
+   reads as rubble on rubble) and UNDER the sprites and pieces, which
+   follow it in the cell. */
+.cell > img.debris {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
 /* THE crack comes in CRACK_VARIANTS drawings (gen-sprites --tile-crack-1…N);
    board-ui stamps ck1…ckN on every cell by a stable hash of its square, so
    neighbouring cracked walls differ and a repaint never swaps a crack
@@ -485,6 +508,11 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   font-size: 78cqmin;
   line-height: 1;
   pointer-events: none;
+  /* NO position / z-index here (2026-09-07): stacking the pieces over a
+     board-wide flight layer made Firefox drop every positioned child of
+     the cells — pieces, sprites, torches — for a frame during the quake
+     animations. The debris flight draws on its own SVG above them
+     instead (.flight-layer below). */
 }
 
 .piece.white { color: #f4f0e4; text-shadow: 0 1px 1px #000, 0 0 3px #0008; }
@@ -659,6 +687,16 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   pointer-events: none;
   z-index: 4; /* above the arrow layer, so a sliding piece is never occluded */
 }
+
+/* The debris FLIGHT (play/js/particles.mjs) is drawn on a second SVG over
+   the board — the arrow layer's twin (same class, same viewBox; above the
+   pieces, below the FLIP clones), every chunk a path of 16-grid pixels
+   with crisp edges. No canvas: three canvas cuts went before it (see the
+   header of particles.mjs). A chunk in the air passes in front of a
+   piece; the landed debris (the cell's own image) is under it. */
+.flight-layer .flight { shape-rendering: crispEdges; pointer-events: none; }
+/* A sprite the flight is shattering: the chunks ARE the sprite now. */
+.cell .piece.fx-shattered { visibility: hidden; }
 
 /* font-size is pinned inline by animateSlide — see the note there. */
 .fx-piece {

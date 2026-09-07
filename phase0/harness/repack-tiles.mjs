@@ -347,7 +347,12 @@ function wallBlob(spec, sheets) {
 // the wall's full face the stub "covered a ton of the square when
 // pointed south", 8–10 rows of 16; and a north–south case drew NO face
 // at all, the pass having read the south end as the column's bottom).
-const RUIN = { tongue: 1, fringe: 2, chips: 5, face: 2 };
+// chips: 0 since 2026-09-07 — the flecks on the floor belong to THE DEBRIS
+// LAYER now (play/js/debris.mjs: a breach scatters the wall's own pixels,
+// governed by the same dials as every other debris), so the ruin tile is
+// the stubs and their faces alone. The committed tiles were rewritten by
+// harness/strip-ruin-chips.mjs (the packs are gitignored); a repack agrees.
+const RUIN = { tongue: 1, fringe: 2, chips: 0, face: 2 };
 function ruinBlob(spec, sheets) {
   const fill = hex(spec.fill), hi = hex(spec.hi), lo = hex(spec.lo), edge = hex(spec.edge);
   const face = crop(sheets[spec.face.sheet], spec.face.x * T, spec.face.y * T + spec.face.row, T, FACE_H);

@@ -37,10 +37,13 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from './board-ui.mjs';
+import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
+// THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
+import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
+import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylog.mjs';
@@ -82,6 +85,13 @@ const app = {
   // diffing the furniture squares of consecutive paints (so an undo that
   // brings the '^' back clears it); reset per duel.
   residue: { opened: new Set(), rubble: new Set(), lastFen: null },
+  // THE DEBRIS LAYER (2026-09-07): the environment's ledger (one per stage,
+  // persisted), the live deal's transform into it, the per-cell paint cache
+  // (env cell index → 16×16 RGBA buffer | null), events still in flight,
+  // the sprite sampler, the flight, the last paint's terrain kinds — see
+  // the debris section below and play/js/debris.mjs.
+  debris: { ledger: null, envId: null, tx: null, urls: new Map(), pending: new Set(), sampler: null, particles: null, saveTimer: null, kinds: null, dryPly: -1, warmSeq: 0 },
+  previewPaint: null, // what the setup preview last painted ({files, ranks, fen, skins}) — a repaint on a toggle
   quakeMarks: null, // {from, to, pits, cracked, breached, arrows, text} — the gods' residue
   // since the player last moved (several quakes MERGE), held on the board and in
   // the gods line through the enemy's reply and cleared when the player moves
@@ -237,7 +247,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, pieceSnap: DEFAULT_PIECE_FIT.snap, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -280,6 +290,15 @@ function loadOptions() {
     options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
     options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
     options.pieceSnap = !!options.pieceSnap;
+    // The debris toggles (2026-09-07): five booleans and a clamped amount.
+    // v2 (same day): the slider's 100% became the old 200% (debris.mjs
+    // BASELINE), so a setting saved on the old scale is halved ONCE — the
+    // board looks exactly as it did.
+    {
+      const d = options.debris && typeof options.debris === 'object' ? options.debris : {};
+      const legacy = d.v !== 2 && Number.isFinite(parseFloat(d.intensity));
+      options.debris = { destruction: d.destruction !== false, blood: d.blood !== false, skid: d.skid !== false, wear: d.wear !== false, fx: d.fx !== false, intensity: clampNum(legacy ? parseFloat(d.intensity) / DEBRIS_BASELINE : d.intensity, [0, 2], 1), v: 2 };
+    }
     // The ladder override (v4.1): four clamped numbers or nothing.
     if (options.godLadder && typeof options.godLadder === 'object') {
       const clean = {};
@@ -341,6 +360,14 @@ function syncOptionsUI() {
   $('optPieceShift').value = String(fit.shift);
   $('optPieceShiftV').textContent = pct(fit.shift, true);
   $('optPieceSnap').checked = fit.snap;
+  const dz = debrisOpts();
+  $('optDebrisDestruction').checked = dz.destruction;
+  $('optDebrisBlood').checked = dz.blood;
+  $('optDebrisSkid').checked = dz.skid;
+  $('optDebrisWear').checked = dz.wear;
+  $('optDebrisFx').checked = dz.fx;
+  $('optDebrisIntensity').value = String(dz.intensity);
+  $('optDebrisIntensityV').textContent = `${Math.round(dz.intensity * 100)}%`;
 }
 
 /** The piece-fit dials (board-ui setPieceFit): `?piecescale=` /
@@ -387,6 +414,7 @@ function applyTheme() {
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
   app.boardUI?.setPieceFit(pieceFitFor());
+  void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
   const legend = document.querySelector('.legend');
   if (legend) {
     if (theme) legend.dataset.theme = theme;
@@ -410,6 +438,7 @@ function applyOptions() {
   refreshCheatUI();
   refreshGodsUI();
   applyTheme();
+  applyDebrisOptions(); // after the theme: the debris is that theme's pixels
   if (!cheatHints()) {
     clearHints();
     if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
@@ -893,6 +922,7 @@ async function doUndo() {
   renderGodsCensus();
   rerenderGodsTrace(); // ledger was truncated — re-derive the panel from it
   refreshGodsUI();
+  debrisUndo(duel.ply); // the rewound plies' scars go with them (this epoch only)
   paintBoard(duel.fen());
   renderPlayMarks();
   log($('duel-log'), `↩ took back to ply ${duel.ply}`, 'warn');
@@ -1182,7 +1212,7 @@ function godsBeforeOn() {
   app.godsBefore = { ply: ev.ply };
   app.selectedSquare = null;
   app.boardUI.setInteractive(false);
-  app.boardUI.setPosition(ev.preFen, { ...preQuakeLedgers(ev), skins: stageSkins(app.session?.deal?.stage), opened: app.residue.opened, rubble: app.residue.rubble });
+  app.boardUI.setPosition(ev.preFen, { ...preQuakeLedgers(ev), skins: stageSkins(app.session?.deal?.stage), opened: app.residue.opened, rubble: app.residue.rubble, debris: debrisPainter() });
   app.boardUI.setMarks({});
   setStatus(`the board before the gods' quake at ply ${ev.ply} — "after" returns to now`);
   syncBeforeButton();
@@ -1626,7 +1656,8 @@ function mountPreviewBoard(files, ranks, fen, skins = {}) {
       onSquareTap: onSquareTap,
     });
   }
-  app.boardUI.setPosition(fen, { skins });
+  app.previewPaint = { files, ranks, fen, skins };
+  paintWithDebris(fen, { skins }); // the stage's scars from earlier duels (the debris ledger)
   app.boardUI.setMarks({});
   app.boardUI.setInteractive(false);
   applyTheme();
@@ -1671,6 +1702,7 @@ function refreshLiveDeal() {
   if (!deal.ok) {
     app.session = null;
     const t = terrainOnly();
+    debrisBind(null); // the setup's flip and crop, no auto-crop
     mountPreviewBoard(t.files, t.ranks, t.fen, t.skins);
     $('enemy-bar').textContent = 'enemy · black';
     setPlayerBarText('you · white');
@@ -1681,6 +1713,7 @@ function refreshLiveDeal() {
     return;
   }
   app.session = makeSession(deal);
+  debrisBind(deal); // the stage's ledger + this deal's transform into it
   mountPreviewBoard(deal.files, deal.ranks, deal.fen, stageSkins(deal.stage));
   $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
   setPlayerBarText(`you · white · ${deal.white.army.value} pts`);
@@ -1796,6 +1829,13 @@ async function beginDuel() {
   clearHints();
   app.quakeMarks = null;
   app.residue = { opened: new Set(), rubble: new Set(), lastFen: null };
+  // The debris layer: this duel is a new EPOCH on the stage's floor (its
+  // scars stay; blood dries, flecks settle).
+  debrisBind(deal);
+  app.debris.ledger?.beginEpoch();
+  app.debris.dryPly = -1;
+  app.debris.urls.clear();
+  debrisSave();
   setGodsLine('');
   $('eval-fill').style.width = '50%';
   $('eval-text').textContent = '';
@@ -1867,6 +1907,455 @@ async function driveTurn() {
   }
 }
 
+// ------------------------------------------------------- THE DEBRIS LAYER
+// (2026-09-07 — play/js/debris.mjs is the ledger + painter, particles.mjs
+// the flight; this is the game's wiring.) The floor remembers: a capture
+// leaves blood, a smashed crate its splinters, a broken wall its stone, a
+// displacement its skid, and every square wears down with traffic. The
+// LEDGER BELONGS TO THE ENVIRONMENT — one per stage, in the stage's own
+// uncropped, unflipped grid, saved in localStorage under the stage id and
+// kept across duels (designer: never tie it to a duel) — and a duel only
+// contributes through its deal's transform (debris.mjs envTransform). Each
+// duel is an EPOCH on the floor (blood dries, flecks settle). Toggles filter
+// at paint time, never at record time, so a toggle flipped mid-game shows
+// the whole history. Undo forgets this epoch's events past the rewound ply
+// and recounts the traffic from the record.
+
+const DEBRIS_KEY = 'dck.debris.v1:';
+const DEBRIS_DEFAULTS = { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 };
+const DEBRIS_INTENSITY_RANGE = [0, 2];
+
+/** The live debris options: `?debris=` (test-only — `off`, `all`, or a comma
+ *  list of destruction/blood/skid/wear/fx) over the saved Options. */
+function debrisOpts() {
+  const o = { ...DEBRIS_DEFAULTS, ...(options.debris ?? {}) };
+  const p = params.get('debris');
+  if (p == null) return o;
+  if (p === 'off' || p === '0') return { ...o, destruction: false, blood: false, skid: false, wear: false, fx: false };
+  if (p === 'all' || p === '1') return { ...o, destruction: true, blood: true, skid: true, wear: true };
+  const set = new Set(p.split(',').map((s) => s.trim()).filter(Boolean));
+  return { ...o, destruction: set.has('destruction'), blood: set.has('blood'), skid: set.has('skid'), wear: set.has('wear'), fx: set.has('fx') };
+}
+
+/** The base stage a deal was dealt from (its ledger's environment). */
+function debrisStageOf(deal) {
+  return (deal && app.stages.find((s) => s.id === deal.stageId)) ?? currentStage();
+}
+
+/** Open (load or create) the environment's ledger. */
+function debrisEnvOpen(stage) {
+  const D = app.debris;
+  if (!stage) return null;
+  if (D.ledger && D.envId === stage.id) return D.ledger;
+  D.envId = stage.id;
+  D.ledger = null;
+  try {
+    const raw = localStorage.getItem(DEBRIS_KEY + stage.id);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (obj && obj.v === 1 && obj.files === stage.files && obj.ranks === stage.ranks) D.ledger = DebrisLedger.load(obj);
+    }
+  } catch {
+    /* a corrupt save is a clean floor */
+  }
+  if (!D.ledger) D.ledger = new DebrisLedger({ id: stage.id, files: stage.files, ranks: stage.ranks });
+  D.urls.clear();
+  D.pending.clear();
+  return D.ledger; // applyTheme warms the sampler once the board wears its theme
+}
+
+/** Bind the current deal's transform (arena → the stage's own grid). A
+ *  failed deal (the terrain-only preview) binds the setup's flip and crop. */
+function debrisBind(deal) {
+  const stage = debrisStageOf(deal);
+  if (!stage) return;
+  debrisEnvOpen(stage);
+  const d = deal?.ok ? deal : { flip: !!setup.flip, cropTop: setup.cropTop | 0, cropBottom: setup.cropBottom | 0, files: stage.files, ranks: stage.ranks - (setup.cropTop | 0) - (setup.cropBottom | 0) };
+  app.debris.tx = envTransform(d, stage);
+  app.debris.urls.clear();
+}
+
+function debrisSave(now = false) {
+  const D = app.debris;
+  if (!D.ledger) return;
+  clearTimeout(D.saveTimer);
+  const write = () => {
+    D.saveTimer = null;
+    try {
+      localStorage.setItem(DEBRIS_KEY + D.ledger.id, JSON.stringify(D.ledger.serialize()));
+    } catch {
+      /* QoL only */
+    }
+  };
+  if (now) write();
+  else D.saveTimer = setTimeout(write, 300);
+}
+
+/** Sprite pixels by CSS custom property, read off the board (so the theme
+ *  cascade applies), decoded once each. `get` is synchronous — the painter
+ *  is — so `ensure` warms what an event needs before it is recorded. */
+function debrisSampler() {
+  const D = app.debris;
+  if (D.sampler) return D.sampler;
+  // Keyed by THEME + name: the same property is a different sprite under
+  // each art set, and the board's theme can change under a warm-up.
+  const cache = new Map();
+  const inflight = new Map();
+  const themeKey = () => `${$('board').dataset.theme ?? ''}|`;
+  const fallback = (name) => (name.startsWith('--tile-wall') ? '--tile-wall' : name.startsWith('--tile-floor') ? '--tile-floor-1' : name.startsWith('--sprite-door2') ? '--sprite-door' : name.startsWith('--sprite-') ? '--sprite-crate' : null);
+  const resolve = (name) => {
+    const cs = getComputedStyle($('board'));
+    let v = cs.getPropertyValue(name).trim();
+    if (!v) {
+      const fb = fallback(name);
+      v = fb && fb !== name ? cs.getPropertyValue(fb).trim() : '';
+    }
+    const m = v.match(/url\(\s*["']?(.*?)["']?\s*\)/);
+    return m ? m[1] : null;
+  };
+  const decode = async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const w = img.naturalWidth || 16, h = img.naturalHeight || 16;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingEnabled = false;
+    g.drawImage(img, 0, 0, w, h);
+    return { w, h, data: g.getImageData(0, 0, w, h).data };
+  };
+  D.sampler = {
+    get: (name) => (name ? cache.get(themeKey() + name) ?? null : null),
+    has: (name) => cache.has(themeKey() + name),
+    /** Decode what is not cached yet (awaiting decodes already in the air);
+     *  returns how many sprites are NEW, so a warm-up knows whether to repaint. */
+    async ensure(names) {
+      const tk = themeKey();
+      let fresh = 0;
+      await Promise.all(
+        [...new Set(names.filter(Boolean))].map(async (n) => {
+          const key = tk + n;
+          if (cache.has(key)) return;
+          if (inflight.has(key)) return inflight.get(key);
+          const job = (async () => {
+            let img = null;
+            try {
+              const src = resolve(n);
+              if (src) img = await decode(src);
+            } catch {
+              /* the material palette stands in */
+            }
+            cache.set(key, img);
+            inflight.delete(key);
+            if (img) fresh++;
+          })();
+          inflight.set(key, job);
+          return job;
+        })
+      );
+      return fresh;
+    },
+    invalidate: () => cache.clear(),
+    get size() {
+      return cache.size;
+    },
+  };
+  return D.sampler;
+}
+
+/** Warm the sampler with everything this floor and this board can break:
+ *  every recorded event's sprite, the arena's standing skins, its wall
+ *  cases and the floors. Then repaint, because cells painted before the
+ *  warm-up carried palette stand-ins. */
+async function debrisWarm() {
+  const D = app.debris;
+  if (!D.ledger || typeof Image === 'undefined') return;
+  const names = new Set();
+  for (const ev of D.ledger.events) names.add(spriteVar({ role: ev.role, v: ev.v, mask: ev.mask }));
+  for (let v = 1; v <= 6; v++) names.add(`--tile-floor-${v}`);
+  if (D.kinds) {
+    for (const [sq, k] of D.kinds) {
+      if (k.wallTile || k.cracked || k.weak) names.add(`--tile-wall-${k.mask}`);
+      else if (k.skin) names.add(spriteVar(debrisSrcOf(sq, k)));
+    }
+  }
+  const token = (D.warmSeq = (D.warmSeq ?? 0) + 1);
+  const fresh = await debrisSampler().ensure([...names]);
+  if (!fresh || token !== D.warmSeq) return; // nothing new, or a later warm-up owns the repaint
+  D.urls.clear();
+  debrisRepaint();
+}
+
+/** What a square's terrain was wearing, as the debris layer records it: the
+ *  wall case for stone (a wall, a god-cracked wall, a weak spot — masonry
+ *  or an edge-on door), the door leaf or its double's half, else the skin
+ *  and the variant this square shows (board-ui skinVariantIndex). */
+function debrisSrcOf(sq, k) {
+  if (!k) return null;
+  const f = sq.charCodeAt(0) - 97, rank = parseInt(sq.slice(1), 10);
+  if (k.wallTile || k.cracked || k.weak) return { role: 'wall', v: 0, mask: k.mask };
+  if (k.hole) return null;
+  if (k.skin === 'door') return { role: k.door2 ? `door2-${k.door2}` : 'door', v: 1, mask: -1 };
+  if (k.furniture) return { role: k.skin ?? 'crate', v: skinVariantIndex(f, rank), mask: -1 };
+  return { role: 'floor', v: floorVariantIndex(f, rank), mask: -1 };
+}
+
+function debrisPaintCtx(o = debrisOpts()) {
+  const D = app.debris;
+  return {
+    sprites: debrisSampler(),
+    toggles: { destruction: o.destruction, blood: o.blood, skid: o.skid, wear: o.wear },
+    intensity: o.intensity * DEBRIS_BASELINE, // the slider's 100% is the designer's 200%
+    ply: app.duel?.ply ?? 0,
+    epoch: D.ledger?.epoch ?? 0,
+    pending: D.pending,
+  };
+}
+
+/** The square's debris buffer (16×16 RGBA, or null for a clean floor), from
+ *  the per-env-cell paint cache; the cache is dropped by an event, an undo,
+ *  a toggle or a theme. Floor only (debris.mjs kindIsFloor). */
+function debrisBufFor(sq, k, ctx) {
+  const D = app.debris;
+  if (!kindIsFloor(k)) return null;
+  const { ef, er } = toEnvCell(D.tx, sq);
+  if (!D.ledger.inBounds(ef, er)) return null;
+  const i = D.ledger.cellIndex(ef, er);
+  if (D.urls.has(i)) return D.urls.get(i);
+  const buf = paintCell(D.ledger, ef, er, ctx);
+  D.urls.set(i, buf);
+  return buf;
+}
+
+/** The painter board-ui setPosition calls per square: the buffer its debris
+ *  image should show (setDebris encodes it, decodes the new image off the
+ *  DOM and swaps it in over the old one — nothing on the cell's own style,
+ *  never a frame without its debris). */
+function debrisPainter() {
+  const D = app.debris;
+  if (!D.ledger || !D.tx) return null;
+  const o = debrisOpts();
+  if (!o.destruction && !o.blood && !o.skid && !o.wear) return null;
+  const ctx = debrisPaintCtx(o);
+  return (sq, k) => debrisBufFor(sq, k, ctx);
+}
+
+/** Every live paint of the board goes through here: the terrain classes
+ *  (setPosition) plus the debris layer, and the kinds are remembered for
+ *  the flight's landing and the warm-up. */
+function paintWithDebris(fen, ledgers) {
+  const D = app.debris;
+  D.kinds = classifyTerrain(fen, ledgers, app.boardUI.files, app.boardUI.ranks);
+  debrisDryTick();
+  app.boardUI.setPosition(fen, { ...ledgers, debris: debrisPainter() });
+}
+
+/** Blood dries DRY_PLIES plies after the kill: the cells of a kill crossing
+ *  that line repaint (everything else about age is per epoch). */
+function debrisDryTick() {
+  const D = app.debris;
+  const ply = app.duel?.ply ?? 0;
+  if (!D.ledger || D.dryPly === ply) return;
+  D.dryPly = ply;
+  for (const ev of D.ledger.events) if (ev.k === 'kill' && ev.e === D.ledger.epoch && ply - ev.p === DRY_PLIES) for (const i of D.ledger.cellsOf(ev)) D.urls.delete(i);
+}
+
+/** Repaint the board as it stands (a toggle, a theme, a warm-up). Never
+ *  under a held quake frame — the commit that follows carries it. */
+function debrisRepaint() {
+  if (!app.boardUI) return;
+  if ((app.phase === 'playing' || app.phase === 'ended') && app.duel) {
+    if (app.busy && app.phase === 'playing') return;
+    if (app.residue.lastFen && !app.godsBefore) paintBoard(app.residue.lastFen);
+  } else if (app.phase === 'preview' && app.previewPaint) {
+    const p = app.previewPaint;
+    mountPreviewBoard(p.files, p.ranks, p.fen, p.skins);
+  }
+}
+
+/**
+ * Record an event on an arena square: `k` the kind, `sq` where, `to` the
+ * landing square of a skid, (dx, dy) the direction in arena screen space
+ * (right, down — a blow away from the attacker), `src` what stood there
+ * (debrisSrcOf). Warms the sprite first so the painter and the flight see
+ * the same pixels. Returns the stored event (env space).
+ */
+async function debrisEvent({ k, sq, to = null, dx = 0, dy = 0, src = null, n = 1, ply = app.duel?.ply ?? 0 }) {
+  const D = app.debris;
+  if (!D.ledger || !D.tx) return null;
+  const origin = toEnvPx(D.tx, sq);
+  const d = envDir(D.tx, dx, dy);
+  const ev = { k, x: origin.x, y: origin.y, dx: d.dx, dy: d.dy, p: ply, s: D.ledger.next, src, n };
+  if (to) {
+    const e2 = toEnvPx(D.tx, to);
+    ev.x2 = e2.x;
+    ev.y2 = e2.y;
+  }
+  if (src) await debrisSampler().ensure([spriteVar(src)]);
+  const stored = D.ledger.add(ev);
+  for (const i of D.ledger.cellsOf(stored)) D.urls.delete(i);
+  debrisSave();
+  return stored;
+}
+
+function debrisParticles() {
+  const D = app.debris;
+  if (!D.particles || D.particles.ui !== app.boardUI) D.particles = new Particles(app.boardUI);
+  return D.particles;
+}
+
+/** Land an event: its cells' debris images are re-encoded, decoded and
+ *  swapped in (a flight lands between paints; setDebris touches nothing
+ *  else on the cell). Resolves when the swaps have landed — a few ms — so
+ *  a held flight is released only once the debris is really under it. */
+async function debrisLand(ev) {
+  const D = app.debris;
+  if (!ev || !D.ledger || !D.tx) return;
+  D.pending.delete(ev.id);
+  const painter = debrisPainter();
+  const swaps = [];
+  for (const i of D.ledger.cellsOf(ev)) {
+    D.urls.delete(i);
+    const ef = i % D.ledger.files, er = (i - ef) / D.ledger.files;
+    const sq = fromEnvCell(D.tx, ef, er);
+    if (!sq || !app.boardUI?.cells.has(sq)) continue;
+    const k = D.kinds?.get(sq);
+    swaps.push(app.boardUI.setDebris(sq, painter && k ? painter(sq, k) : null));
+  }
+  await Promise.race([Promise.all(swaps), wait(250)]);
+}
+
+/**
+ * Fly an event's chunks and land them. `shatter` = the src whose sprite
+ * bursts into 2×2 blocks (the thing that broke), `inward` for the crumble
+ * (the floor's blocks fall into the pit), `sq` the square whose sprite the
+ * flight replaces. Never throws; with the flight off (option, ?fx=0,
+ * reduced motion) the debris simply appears. Runs while the engine thinks.
+ */
+async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 320, after = null } = {}) {
+  const D = app.debris;
+  if (!ev) return;
+  const o = debrisOpts();
+  const fxMs = FX(ms);
+  if (!o.fx || !fxMs || !o[CATEGORY[ev.k]] || !app.boardUI) {
+    // No flight: the debris appears when the thing that made it is gone —
+    // after the rung's own animation (`after`), never before the wall has
+    // broken (the first cut dropped the stone on the floor at the start of
+    // the burst: "the transition is not smooth at all").
+    if (after) await after;
+    await debrisLand(ev);
+    return;
+  }
+  D.pending.add(ev.id);
+  for (const i of D.ledger.cellsOf(ev)) D.urls.delete(i);
+  let flight = null;
+  const P = debrisParticles();
+  try {
+    const ctx = debrisPaintCtx(o);
+    const chunks = chunksOf(ev, debrisSampler(), ctx);
+    const sprite = shatter ? debrisSampler().get(spriteVar(shatter)) : null;
+    const eph = sprite ? shatterOf(ev, sprite, { intensity: ctx.intensity, inward }) : [];
+    if (sq && sprite && !inward) app.boardUI.shatterSprite(sq);
+    if (ev.k === 'skid') flight = P.streak({ tx: D.tx, chunks, ms: fxMs });
+    else {
+      const arc = Particles.arcFor(ev.m);
+      flight = P.fly({ tx: D.tx, chunks, eph, origin: { x: ev.x, y: ev.y }, ms: fxMs, hop: arc.hop, bounce: arc.bounce });
+    }
+    await flight.landed; // the chunks are down and HELD on the flight layer
+  } catch (e) {
+    console.warn('debris flight', e);
+  }
+  await debrisLand(ev); // the cells wear the debris under the held chunks…
+  if (flight) P.release(flight.id); // …and then the chunks leave the flight layer
+}
+
+/** The capture a move made, if any: the square whose occupant vanished
+ *  (the landing square, or the pawn taken en passant — never the mover's
+ *  own from-square) and whether it was a piece or terrain. */
+function debrisCaptureOf(prevFen, nextFen, from, to) {
+  if (!prevFen || !nextFen) return null;
+  const before = getSquare(prevFen, to);
+  if (before && before !== WALL) return { sq: to, victim: before === FURNITURE ? 'terrain' : 'piece', char: before };
+  // En passant: the mover is a pawn, the victim stands beside the from-rank on the to-file.
+  const ep = to[0] + from.slice(1);
+  if (ep !== from && ep !== to) {
+    const b = getSquare(prevFen, ep);
+    if (b && b !== WALL && b !== FURNITURE && !getSquare(nextFen, ep)) return { sq: ep, victim: 'piece', char: b };
+  }
+  return null;
+}
+
+/** Traffic: the landing square and, for a straight move, every square it
+ *  passed over (a slider wears the file it runs on). */
+function debrisTraffic(from, to) {
+  const D = app.debris;
+  if (!D.ledger || !D.tx) return;
+  const a = parseSquare(from), b = parseSquare(to);
+  const visit = (f, r) => {
+    const { ef, er } = toEnvCell(D.tx, squareName(f, r));
+    const before = wearLevel(D.ledger.trafficAt(ef, er));
+    D.ledger.visit(ef, er);
+    if (wearLevel(D.ledger.trafficAt(ef, er)) !== before) D.urls.delete(D.ledger.cellIndex(ef, er));
+  };
+  const ar = a.rankFromBottom, br = b.rankFromBottom;
+  visit(b.file, br);
+  const df = Math.sign(b.file - a.file), dr = Math.sign(br - ar);
+  const straight = a.file === b.file || ar === br || Math.abs(b.file - a.file) === Math.abs(br - ar);
+  if (!straight) return;
+  for (let f = a.file + df, r = ar + dr; f !== b.file || r !== br; f += df, r += dr) visit(f, r);
+}
+
+/** Undo: forget this epoch's events past the ply, recount its traffic. */
+function debrisUndo(ply) {
+  const D = app.debris;
+  if (!D.ledger || !D.tx || !app.duel) return;
+  D.ledger.dropAfter(ply);
+  D.ledger.resetEpochTraffic();
+  for (const uci of app.duel.record.moves) {
+    const p = uci.match(UCI_MOVE_RE);
+    if (p) debrisTraffic(p[1], p[2]);
+  }
+  D.pending.clear();
+  D.urls.clear();
+  debrisSave();
+}
+
+/** Options → Debris: stamp the enabled kinds on the board (data-debris —
+ *  CSS and the tests read it), drop the paint cache, repaint. (A theme
+ *  change went through applyTheme just before, which warms the sampler.) */
+function applyDebrisOptions() {
+  const D = app.debris;
+  const o = debrisOpts();
+  const board = $('board');
+  const on = CATEGORIES.filter((c) => o[c]);
+  board.dataset.debris = on.length ? [...on, ...(o.fx ? ['fx'] : [])].join(' ') : 'off';
+  D.urls.clear();
+  debrisRepaint();
+}
+
+/** Forget every mark on this stage (or every stage). */
+function debrisClean(all = false) {
+  const D = app.debris;
+  if (all) {
+    try {
+      for (const k of Object.keys(localStorage)) if (k.startsWith(DEBRIS_KEY)) localStorage.removeItem(k);
+    } catch {
+      /* QoL only */
+    }
+  }
+  if (D.ledger) {
+    D.ledger.clear();
+    debrisSave(true);
+  }
+  D.urls.clear();
+  D.pending.clear();
+  debrisRepaint();
+}
+
+// ---------------------------------------------------------------------------
+
 /** Paint a position with the Director's terrain ledgers, so a crumbled '*'
  *  renders as a hole and a god-weakened '^' as a cracked wall (board-ui.mjs
  *  setPosition). Every LIVE-duel paint goes through here; the setup preview
@@ -1896,7 +2385,7 @@ function paintBoard(fen) {
     for (const sq of after) { res.opened.delete(sq); res.rubble.delete(sq); } // undo brought it back
   }
   res.lastFen = fen;
-  app.boardUI.setPosition(fen, { holes: dir?.holes ?? new Set(), godCrates: dir?.godCrates ?? new Set(), skins, opened: res.opened, rubble: res.rubble });
+  paintWithDebris(fen, { holes: dir?.holes ?? new Set(), godCrates: dir?.godCrates ?? new Set(), skins, opened: res.opened, rubble: res.rubble });
 }
 
 /** Compose all in-play board marks (selection, check, the gods' terrain
@@ -1999,10 +2488,34 @@ async function onMove({ uci, san, mover, ply }) {
   // needs to slide from. The engine's reply gets the longer slide: the player
   // did not choose it and has to read it.
   const parts = uci.match(UCI_MOVE_RE);
+  // THE DEBRIS LAYER: what this move broke. The board before the move is
+  // the last paint's fen (this hook runs before the commit); the victim is
+  // the square whose occupant vanished — the landing square, or the pawn
+  // taken en passant. A piece leaves BLOOD away from the blow; terrain
+  // leaves ITS OWN pixels (a crate's planks, a wall's stone) and the sprite
+  // SHATTERS on impact instead of dissolving. Traffic wears the path.
+  let hit = null, dz = null, hitSrc = null;
   if (parts) {
-    await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: true });
+    hit = debrisCaptureOf(app.residue.lastFen, duel.fen(), parts[1], parts[2]);
+    debrisTraffic(parts[1], parts[2]);
+    if (hit) {
+      const a = parseSquare(parts[1]), v = parseSquare(hit.sq);
+      const len = Math.hypot(v.file - a.file, v.rankFromBottom - a.rankFromBottom) || 1;
+      const dir = { dx: (v.file - a.file) / len, dy: -(v.rankFromBottom - a.rankFromBottom) / len }; // screen: down = lower rank
+      hitSrc = hit.victim === 'terrain' ? debrisSrcOf(hit.sq, app.debris.kinds?.get(hit.sq)) : null;
+      dz = await debrisEvent({ k: hit.victim === 'terrain' ? 'smash' : 'kill', sq: hit.sq, ...dir, src: hitSrc, ply });
+    }
+  }
+  if (parts) {
+    // A shattering crate holds until the piece arrives; a piece still dissolves under the blow.
+    const shatters = !!(dz && hit?.victim === 'terrain' && debrisOpts().fx && FX(1));
+    await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: !shatters });
     if (app.duel !== duel || !duel.board) return; // abandoned mid-slide
   }
+  // The spray flies while the engine thinks (never awaited); it lands into
+  // the cells' own layer, so the commit below paints without it and the
+  // landing fills it in.
+  if (dz) void debrisFly(dz, { shatter: hitSrc, sq: hit.sq, ms: hitSrc ? 340 : 300 });
   // The player has answered the gods; their residue has served its purpose.
   if (mover === 'player') {
     app.quakeMarks = null;
@@ -2079,12 +2592,34 @@ async function onQuake(ev) {
   board.style.removeProperty('--fx-ms');
   if (app.duel !== duel) return;
 
-  // Beat 2 — the motion, each edited tile held on its end frame.
-  for (const e of edits) await ui.animateTerrain(e.square, e.kind, FX(e.kind === 'breach' ? 320 : 300), { hold: true });
+  // Beat 2 — the motion, each edited tile held on its end frame. THE DEBRIS
+  // LAYER rides every rung: a weaken drops chips from the crack, a breach
+  // scatters the cracked wall's own stone and shatters it, a displacement
+  // scuffs the floor under the slide, a crumble throws the floor's pixels
+  // outward while its blocks fall into the pit. Every event is recorded on
+  // the PRE-quake board (what stood there) and awaited within its beat, so
+  // the commit below paints them landed.
+  const preKinds = classifyTerrain(ev.preFen, { ...preQuakeLedgers(ev), skins: stageSkins(app.session?.deal?.stage), opened: app.residue.opened, rubble: app.residue.rubble }, ui.files, ui.ranks);
+  for (const e of edits) {
+    const src = debrisSrcOf(e.square, preKinds.get(e.square));
+    const dzEv = e.kind === 'weaken' || e.kind === 'breach' ? await debrisEvent({ k: e.kind, sq: e.square, src }) : null;
+    const anim = ui.animateTerrain(e.square, e.kind, FX(e.kind === 'breach' ? 320 : 300), { hold: true });
+    await Promise.all([anim, dzEv ? debrisFly(dzEv, { shatter: e.kind === 'breach' ? src : null, sq: e.square, ms: e.kind === 'breach' ? 340 : 300, after: anim }) : null]);
+  }
   if (app.duel !== duel) return;
-  if (displacements.length) await ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) });
+  if (displacements.length) {
+    const skids = [];
+    for (const d of displacements) skids.push(await debrisEvent({ k: 'skid', sq: d.from, to: d.to }));
+    const slides = ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) });
+    await Promise.all([slides, ...skids.map((sk, i) => (async () => { await wait(i * FX(120)); await debrisFly(sk, { ms: 340, after: slides }); })())]);
+  }
   if (app.duel !== duel) return;
-  if (crumble) await ui.animateTerrain(crumble.square, 'crumble', FX(450), { hold: true });
+  if (crumble) {
+    const src = debrisSrcOf(crumble.square, preKinds.get(crumble.square));
+    const dzEv = await debrisEvent({ k: 'crumble', sq: crumble.square, src });
+    const anim = ui.animateTerrain(crumble.square, 'crumble', FX(450), { hold: true });
+    await Promise.all([anim, dzEv ? debrisFly(dzEv, { shatter: src, inward: true, ms: 450, after: anim }) : null]);
+  }
   if (app.duel !== duel) return; // user backed out mid-animation
 
   // Beat 3 — commit and mark. The marks outlive the enemy's reply and MERGE
@@ -2186,6 +2721,7 @@ async function onEnd({ result, winner, termination }) {
   refreshGodsUI(); // the panel survives the end screen — post-mortems welcome
   setStatus(result ? `${result} · ${termination}` : 'error');
   autosaveLog(); // the final position and the verdict
+  debrisSave(true); // the floor keeps its scars
 }
 
 // ------------------------------------------------------------------- wiring
@@ -2291,6 +2827,21 @@ $('optPieceSnap').addEventListener('change', (e) => {
   options.pieceSnap = e.target.checked;
   applyOptions();
 });
+// The debris toggles (2026-09-07): every kind a checkbox, the amount a
+// slider, and two ways to forget.
+for (const [el, key] of [['optDebrisDestruction', 'destruction'], ['optDebrisBlood', 'blood'], ['optDebrisSkid', 'skid'], ['optDebrisWear', 'wear'], ['optDebrisFx', 'fx']]) {
+  $(el).addEventListener('change', (e) => {
+    options.debris = { ...options.debris, [key]: e.target.checked };
+    applyOptions();
+  });
+}
+$('optDebrisIntensity').addEventListener('input', (e) => {
+  options.debris = { ...options.debris, intensity: clampNum(e.target.value, DEBRIS_INTENSITY_RANGE, 1) };
+  applyOptions();
+});
+$('btnDebrisClean').addEventListener('click', () => debrisClean(false));
+$('btnDebrisCleanAll').addEventListener('click', () => debrisClean(true));
+window.addEventListener('pagehide', () => debrisSave(true));
 /** Live ramp dials (Phase 1.2): while the debug overlay is on and a duel is
  *  running, Gods settings changes apply to the LIVE Director too (recorded
  *  on the duel ledger). Without the overlay they keep their shipped meaning:
@@ -2496,6 +3047,48 @@ window.__DCK = {
   /** The residue ledger: squares where a door was opened / a wall broken. */
   get residue() {
     return { opened: [...app.residue.opened], rubble: [...app.residue.rubble] };
+  },
+  /** THE DEBRIS LAYER (2026-09-07): the environment's ledger and its paint. */
+  debris: {
+    get ledger() {
+      return app.debris.ledger;
+    },
+    get env() {
+      return app.debris.envId;
+    },
+    get tx() {
+      return app.debris.tx;
+    },
+    get options() {
+      return debrisOpts();
+    },
+    stats: () => (app.debris.ledger ? { ...app.debris.ledger.stats(), pending: app.debris.pending.size, cached: app.debris.urls.size, sampler: app.debris.sampler?.size ?? 0, flights: app.debris.particles?.flights.length ?? 0, painted: app.boardUI?.debrisBufs.size ?? 0 } : null),
+    events: () => (app.debris.ledger ? app.debris.ledger.events.map((e) => ({ ...e })) : []),
+    /** One arena square: its env cell, the events on it, its wear and the painted URL (from the DOM). */
+    cell: (sq) => {
+      const D = app.debris;
+      if (!D.ledger || !D.tx) return null;
+      const { ef, er } = toEnvCell(D.tx, sq);
+      const cell = app.boardUI?.cells.get(sq);
+      const buf = app.boardUI?.debrisBuf(sq) ?? null;
+      let opaque = 0, pixels = 0;
+      if (buf) for (let i = 3; i < buf.length; i += 4) { if (buf[i]) pixels++; if (buf[i] === 255) opaque++; }
+      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), painted: !!cell?.querySelector(':scope > img.debris'), pixels, opaque };
+    },
+    /** The painter's raw buffer for a square (a Uint8ClampedArray or null). */
+    paint: (sq) => {
+      const D = app.debris;
+      if (!D.ledger || !D.tx) return null;
+      const { ef, er } = toEnvCell(D.tx, sq);
+      return paintCell(D.ledger, ef, er, debrisPaintCtx());
+    },
+    frames: () => app.debris.particles?.frames ?? 0,
+    get busy() {
+      return !!app.debris.particles?.busy;
+    },
+    clean: (all = false) => debrisClean(all),
+    save: () => debrisSave(true),
+    key: DEBRIS_KEY,
   },
   /** The piece-fit dials as applied to the live board. */
   get pieceFit() {
