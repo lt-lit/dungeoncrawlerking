@@ -40,7 +40,7 @@ import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, PIECE_PIXELS, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
+import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
@@ -247,7 +247,7 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -292,6 +292,8 @@ function loadOptions() {
     // (2026-09-07: the old `pieceSnap` boolean is not read — every saved
     // setting lands on the tile grid, which is what was asked for.)
     if (!PIECE_PIXELS.includes(options.piecePixels)) options.piecePixels = DEFAULT_PIECE_FIT.pixels;
+    options.tileLift = Math.round(clampNum(options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
+    options.tileShift = Math.round(clampNum(options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
     // The debris toggles (2026-09-07): five booleans and a clamped amount.
     // v2 (same day): the slider's 100% became the old 200% (debris.mjs
     // BASELINE), so a setting saved on the old scale is halved ONCE — the
@@ -362,10 +364,17 @@ function syncOptionsUI() {
   $('optPieceShift').value = String(fit.shift);
   $('optPieceShiftV').textContent = pct(fit.shift, true);
   $('optPiecePixels').value = fit.pixels;
-  // The dials place the fitted box; on the tile grid there is no box to place.
+  // The % dials place the fitted box; on the tile grid there is no box to
+  // place, and the whole-pixel lift / shift dials take their place.
   for (const id of ['optPieceScale', 'optPieceLift', 'optPieceShift']) $(id).closest('.opt').hidden = fit.pixels === 'tile';
+  for (const id of ['optTileLift', 'optTileShift']) $(id).closest('.opt').hidden = fit.pixels !== 'tile';
+  const pxv = (v) => `${v > 0 ? '+' : ''}${v} px`;
+  $('optTileLift').value = String(fit.tileLift);
+  $('optTileLiftV').textContent = pxv(fit.tileLift);
+  $('optTileShift').value = String(fit.tileShift);
+  $('optTileShiftV').textContent = pxv(fit.tileShift);
   $('optPiecePixelsHint').textContent = fit.pixels === 'tile'
-    ? 'Every sprite pixel is one floor pixel, on the floor\u2019s own grid; a piece stands on its square\u2019s bottom edge at the art\u2019s scale.'
+    ? 'Every sprite pixel is one floor pixel, on the floor\u2019s own grid, at the art\u2019s scale; lift and shift move a piece by whole floor pixels.'
     : fit.pixels === 'display'
       ? 'The dials place the piece; its box is a whole multiple of the sprite in screen pixels.'
       : 'The dials place the piece at any scale.';
@@ -381,8 +390,9 @@ function syncOptionsUI() {
 
 /** The piece-fit dials (board-ui setPieceFit): `?piecepixels=tile|display|
  *  free` (`?piecesnap=1` / `=0` are the old spellings of display / free),
- *  `?piecescale=` / `?piecelift=` / `?pieceshift=` (feel-check overrides,
- *  never saved) > the Options. */
+ *  `?tilelift=` / `?tileshift=` (whole tile pixels, the tile grid's own
+ *  placement), `?piecescale=` / `?piecelift=` / `?pieceshift=` (feel-check
+ *  overrides, never saved) > the Options. */
 function pieceFitFor() {
   const pixels = params.get('piecepixels') ?? (params.has('piecesnap') ? (params.get('piecesnap') !== '0' ? 'display' : 'free') : options.piecePixels);
   return {
@@ -390,6 +400,8 @@ function pieceFitFor() {
     lift: clampNum(params.get('piecelift') ?? options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift),
     shift: clampNum(params.get('pieceshift') ?? options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift),
     pixels: PIECE_PIXELS.includes(pixels) ? pixels : DEFAULT_PIECE_FIT.pixels,
+    tileLift: Math.round(clampNum(params.get('tilelift') ?? options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift)),
+    tileShift: Math.round(clampNum(params.get('tileshift') ?? options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift)),
   };
 }
 
@@ -2836,6 +2848,16 @@ $('optPieceShift').addEventListener('input', (e) => {
 });
 $('optPiecePixels').addEventListener('change', (e) => {
   options.piecePixels = PIECE_PIXELS.includes(e.target.value) ? e.target.value : DEFAULT_PIECE_FIT.pixels;
+  applyOptions();
+});
+// The tile grid's own placement, in whole tile pixels (baked into the
+// piece tiers on every step — a drag re-cuts the set from a decoded cache).
+$('optTileLift').addEventListener('input', (e) => {
+  options.tileLift = Math.round(clampNum(e.target.value, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
+  applyOptions();
+});
+$('optTileShift').addEventListener('input', (e) => {
+  options.tileShift = Math.round(clampNum(e.target.value, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
   applyOptions();
 });
 // The debris toggles (2026-09-07): every kind a checkbox, the amount a

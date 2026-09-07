@@ -96,7 +96,13 @@
 // layer — the enemy's last move in red, the gods' displacements in their
 // blue, the oracle's hints by rank (round 13: no square tints for moves).
 import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
-import { pngDataUrl } from './pngmini.mjs'; // THE DEBRIS LAYER: a square's debris image
+import { pngDataUrl } from './pngmini.mjs'; // THE DEBRIS LAYER: a square's debris image; the tile-grid piece tiers
+import { pieceTiers, TIERS, TIER_VARS, tierRowVars, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './piecetiers.mjs';
+
+export { TILE_LIFT_RANGE, TILE_SHIFT_RANGE };
+/** The FEN letters a piece span can carry (white then black). */
+const PIECE_FENS = [...'pnrbqk'].flatMap((l) => [l.toUpperCase(), l]);
+const clampInt = (v, [lo, hi]) => (Number.isFinite(Number(v)) ? Math.max(lo, Math.min(hi, Math.round(Number(v)))) : 0);
 
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const FURNITURE_GLYPH = '▦';
@@ -156,10 +162,14 @@ export const PIECE_PIXELS = ['tile', 'display', 'free'];
 /** The piece-fit dials' defaults (setPieceFit; style.css carries the same
  *  as its CSS fallbacks): the designer's settled phone numbers, round 11 —
  *  the box at 146% of its fit, lifted 0.22 cell, nudged 0.04 right — for
- *  the 'display' and 'free' modes; and the pixel mode, 'tile' (designer
+ *  the 'display' and 'free' modes; the pixel mode, 'tile' (designer
  *  2026-09-07: "the pixels making up the pieces [must] exactly match the
- *  size and alignment of the pixels making up the 16x16 tiles"). */
-export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, pixels: 'tile' };
+ *  size and alignment of the pixels making up the 16x16 tiles"); and the
+ *  tile grid's own placement in WHOLE TILE PIXELS — `tileLift` rows above
+ *  the square's bottom edge (designer, same day: "the foot of the piece
+ *  should be roughly centered on the tile") and `tileShift` columns east
+ *  of centre, baked into the tiers (layoutPieceTiers). */
+export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, pixels: 'tile', tileLift: 6, tileShift: 0 };
 
 /** Stable floor-texture variant for a square: f1 (the common stone) on
  *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the
@@ -364,12 +374,24 @@ export class BoardUI {
     // Display-pixel pieces re-lay out with the board's size (setPieceFit
     // pixels 'display'); tile-grid pieces are pure CSS and never measure.
     this.piecePixels = 'free';
+    // The tile grid's placement (whole tile pixels), baked into the tiers:
+    // the set's sprites decoded once, every (set, lift, shift) cut cached.
+    this.tileLift = 0;
+    this.tileShift = 0;
+    this.tierSeq = 0;
+    this.tierCache = new Map();
+    this.spriteCache = new Map();
+    this.pieceBaked = Promise.resolve(); // resolves when the board wears the latest placement
     if (typeof ResizeObserver !== 'undefined') {
-      this.pieceObserver = new ResizeObserver(() => { if (this.piecePixels === 'display') this.layoutPieceSnap(); });
+      this.pieceObserver = new ResizeObserver(() => {
+        if (this.piecePixels === 'display') this.layoutPieceSnap();
+        if (this.piecePixels === 'tile') this.layoutPieceRows();
+      });
       this.pieceObserver.observe(container);
     }
     container.textContent = '';
     this.cells = new Map();
+    this.cellRows = []; // the cells in rendered order, row by row from the top (a tier's north square is the row above, flip or no flip)
     this.debrisBufs = new Map(); // square → the 16×16 RGBA buffer its debris image shows (never re-encoded when unchanged)
     this.debrisSeq = new Map(); // square → the latest setDebris call, so an older decode never lands over a newer one
 
@@ -383,9 +405,12 @@ export class BoardUI {
     const bottomRank = rankOrder[rankOrder.length - 1];
     const leftFile = fileOrder[0];
     for (const rank of rankOrder) {
+      const row = [];
+      this.cellRows.push(row);
       for (const f of fileOrder) {
         const sq = String.fromCharCode(97 + f) + rank;
         const cell = document.createElement('div');
+        row.push(cell);
         // a1 dark: (file + rankFromBottom) even = dark.
         cell.className = 'cell ' + ((f + rank - 1) % 2 === 0 ? 'dark' : 'light') + ' ' + floorVariant(f, rank) + ' ' + crackVariant(f, rank) + ' ' + skinVariant(f, rank);
         cell.dataset.square = sq;
@@ -748,6 +773,7 @@ export class BoardUI {
     if (name && PIECE_SETS.includes(name)) this.container.dataset.pieces = name;
     else delete this.container.dataset.pieces;
     this.layoutPieceSnap(); // a set has its own native box
+    this.pieceBaked = this.layoutPieceTiers(); // … and its own sprites to re-cut
   }
 
   get pieces() {
@@ -772,10 +798,15 @@ export class BoardUI {
    *  resize; 'free' is the dials alone (`snap: true` is the legacy spelling
    *  of 'display'). `scale` multiplies every set's fitted box (1 = the
    *  tallest piece stands 0.96 cell), `lift` raises it and `shift` moves it
-   *  right by that fraction of a cell. Non-finite values clear to the CSS
-   *  defaults (DEFAULT_PIECE_FIT); an absent mode is 'free' — a bare
+   *  right by that fraction of a cell. On the tile grid those three do not
+   *  apply; `tileLift` / `tileShift` do — WHOLE tile pixels (TILE_LIFT_RANGE
+   *  / TILE_SHIFT_RANGE), the foot raised above the square's bottom edge and
+   *  moved east of centre, baked into the piece tiers (layoutPieceTiers)
+   *  and published as --piece-tile-lift for the headroom. Non-finite
+   *  values clear to the CSS defaults (DEFAULT_PIECE_FIT) — lift and shift
+   *  to 0, tiles.css's own tiers; an absent mode is 'free' — a bare
    *  setPieceFit({}) is the selftest's "clear everything". */
-  setPieceFit({ scale, lift, shift, pixels, snap = false } = {}) {
+  setPieceFit({ scale, lift, shift, pixels, snap = false, tileLift, tileShift } = {}) {
     const st = this.container.style;
     for (const [k, v] of [['--piece-scale', scale], ['--piece-lift', lift], ['--piece-shift', shift]]) {
       if (Number.isFinite(v)) st.setProperty(k, String(v));
@@ -786,7 +817,30 @@ export class BoardUI {
     else this.container.dataset.piecePixels = this.piecePixels;
     if (this.piecePixels === 'display') this.container.dataset.pieceSnap = '';
     else delete this.container.dataset.pieceSnap;
+    this.tileLift = clampInt(tileLift, TILE_LIFT_RANGE);
+    this.tileShift = clampInt(tileShift, TILE_SHIFT_RANGE);
+    if (this.piecePixels === 'tile' && this.tileLift) st.setProperty('--piece-tile-lift', String(this.tileLift));
+    else st.removeProperty('--piece-tile-lift');
     this.layoutPieceSnap();
+    this.layoutPieceRows();
+    this.pieceBaked = this.layoutPieceTiers();
+  }
+
+  /** Tile-grid tier boxes (style.css's ::before / ::after): every cell
+   *  carries the MEASURED rectangles of the square north of it and the
+   *  one above that (piecetiers.mjs tierRowVars), so a tier's box is that
+   *  square's exactly — `top: -100%` is not, once a grid hands its
+   *  sub-pixel remainder to some rows. Re-measured on every resize;
+   *  cleared in the other modes; a detached board has nothing to measure. */
+  layoutPieceRows() {
+    const tile = this.piecePixels === 'tile' && this.container.isConnected;
+    const rects = tile ? this.cellRows.map((row) => row.map((cell) => cell.getBoundingClientRect())) : null;
+    this.cellRows.forEach((row, r) => row.forEach((cell, c) => {
+      const st = cell.style;
+      for (const k of TIER_VARS) st.removeProperty(k);
+      if (!tile) return;
+      for (const [k, v] of Object.entries(tierRowVars(rects[r][c], rects[r - 1]?.[c] ?? null, rects[r - 2]?.[c] ?? null))) st.setProperty(k, v);
+    }));
   }
 
   get pieceFit() {
@@ -794,6 +848,8 @@ export class BoardUI {
     const num = (v) => (v === '' ? null : Number(v));
     const px = (k) => st.getPropertyValue(k) || null;
     const snap = this.piecePixels === 'display';
+    let tiers = 0;
+    for (const fen of PIECE_FENS) for (const t of TIERS) if (st.getPropertyValue(`--piece-${fen}-${t}`)) tiers++;
     return {
       scale: num(st.getPropertyValue('--piece-scale')),
       lift: num(st.getPropertyValue('--piece-lift')),
@@ -801,7 +857,82 @@ export class BoardUI {
       pixels: this.piecePixels,
       snap,
       box: snap ? { w: px('--piece-box-w'), h: px('--piece-box-h'), left: px('--piece-left'), top: px('--piece-top') } : null,
+      tileLift: this.tileLift,
+      tileShift: this.tileShift,
+      tiers, // inline tier properties the board wears (0 = tiles.css's lift-0 tiers)
     };
+  }
+
+  /** Tile-grid placement (setPieceFit tileLift / tileShift, whole tile
+   *  pixels): re-cut every piece of the set with the offset baked in
+   *  (piecetiers.mjs) and publish the tiers inline on the board
+   *  (--piece-<fen>-lo/-mid/-hi, over tiles.css's lift-0 ones) — a
+   *  background offset by whole tile pixels drifts off the floor's grid,
+   *  the tiles' content is the only exact way to move a piece
+   *  (phase0/harness/piece-grid.mjs). Nothing to bake — another mode, no
+   *  set, no offset, no document to decode in — clears them. The set's
+   *  sprites are decoded once (off the DOM, as the debris sampler does; a
+   *  canvas never touches the board) and every (set, lift, shift) cut is
+   *  cached, so a slider drag re-encodes twelve 16×16 PNGs per step; a
+   *  newer call supersedes one still decoding. Resolves when the board
+   *  wears it. */
+  async layoutPieceTiers() {
+    const st = this.container.style;
+    const seq = ++this.tierSeq;
+    const clear = () => { for (const fen of PIECE_FENS) for (const t of TIERS) st.removeProperty(`--piece-${fen}-${t}`); };
+    const set = this.pieces, lift = this.tileLift, shift = this.tileShift;
+    if (this.piecePixels !== 'tile' || !set || (!lift && !shift) || typeof Image === 'undefined' || !this.container.isConnected) return clear();
+    const key = `${set}|${lift}|${shift}`;
+    let decls = this.tierCache.get(key);
+    if (!decls) {
+      const sprites = await this.#pieceSprites(set);
+      if (seq !== this.tierSeq) return; // superseded while decoding
+      if (!sprites) return clear();
+      decls = {};
+      for (const fen of PIECE_FENS) {
+        if (!sprites[fen]) continue;
+        const tiers = pieceTiers(sprites[fen], { lift, shift });
+        for (const t of TIERS) decls[`--piece-${fen}-${t}`] = tiers[t] ? `url("${pngDataUrl(tiers[t].width, tiers[t].height, tiers[t].data)}")` : 'none';
+      }
+      this.tierCache.set(key, decls);
+      if (this.tierCache.size > 24) this.tierCache.delete(this.tierCache.keys().next().value);
+    }
+    if (seq !== this.tierSeq) return;
+    clear();
+    for (const [k, v] of Object.entries(decls)) st.setProperty(k, v);
+  }
+
+  /** The set's fitted sprites (bw × fit RGBA per FEN letter), read off the
+   *  board's computed --piece-<fen> (tiles.css) and decoded once per set;
+   *  null when the stylesheet is not there to read. */
+  async #pieceSprites(set) {
+    if (this.spriteCache.has(set)) return this.spriteCache.get(set);
+    const cs = getComputedStyle(this.container);
+    const out = {};
+    let any = false;
+    await Promise.all(PIECE_FENS.map(async (fen) => {
+      const m = cs.getPropertyValue(`--piece-${fen}`).match(/url\(\s*["']?(.*?)["']?\s*\)/);
+      if (!m) return;
+      try {
+        const img = new Image();
+        img.src = m[1];
+        await img.decode();
+        const w = img.naturalWidth, h = img.naturalHeight;
+        const c = document.createElement('canvas'); // off the DOM — never on the board
+        c.width = w;
+        c.height = h;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.imageSmoothingEnabled = false;
+        g.drawImage(img, 0, 0);
+        out[fen] = { width: w, height: h, data: g.getImageData(0, 0, w, h).data };
+        any = true;
+      } catch (e) {
+        console.warn('piece sprite decode', fen, e);
+      }
+    }));
+    if (!any) return null;
+    this.spriteCache.set(set, out);
+    return out;
   }
 
   /** Display-pixel layout (setPieceFit pixels 'display'): measure a cell,

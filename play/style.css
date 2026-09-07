@@ -617,12 +617,18 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    lib/piecehalves.mjs) in its square, and its HEAD (--piece-hi, the rows
    above) in a ::before one cell up — top:-100% has the north square's own
    geometry, and the box is later in the DOM than that square, so a nearer
-   piece's head paints over the piece behind it, as before. No size, lift or
-   shift dial applies: the piece stands on its square's bottom edge at the
-   art's own scale (a wider set's box keeps the tile's 16 centre columns —
-   deja-view's knights lose one outline column). The shadow is one tile
-   pixel (100cqh/16 in the cell; the FLIP clone gets --tpx inline, its
-   layer being no size container). */
+   piece's head paints over the piece behind it, as before — and a THIRD
+   (--piece-hi, ::after two cells up) for a lifted piece. The size dial
+   does not apply (the art's own scale); the tile-grid LIFT and SHIFT dials
+   (whole tile pixels, Options → Piece lift / shift) are BAKED INTO THE
+   TIERS by board-ui layoutPieceTiers (play/js/piecetiers.mjs: the set's
+   sprite decoded off the DOM, re-cut, encoded, set inline as
+   --piece-<fen>-lo/-mid/-hi) — a background offset by whole tile pixels
+   drifts off the grid, the tiles' content is the only exact way to move a
+   piece. A wider set's box keeps the tile's 16 centre columns (deja-view's
+   knights lose one outline column). The shadow is one tile pixel (100cqh/
+   16 in the cell; the FLIP clone gets --tpx inline, its layer being no
+   size container). */
 [data-pieces][data-piece-pixels="tile"] .piece[data-piece] {
   left: 0;
   top: 0;
@@ -631,19 +637,31 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background: var(--piece-lo) center / 100% 100% no-repeat;
   filter: drop-shadow(0 var(--tpx, calc(100cqh / 16)) 0 #000a);
 }
-[data-pieces][data-piece-pixels="tile"] .piece[data-piece]::before {
+/* The upper tiers' boxes are the north squares' MEASURED rectangles
+   (board-ui layoutPieceRows sets --tier-*-top / -h on every cell): a grid
+   hands its sub-pixel remainder to some rows, so `top: -100%` of this cell
+   can miss the row above by 1/64 px, which flips a device row (Chromium,
+   piece-grid.mjs). The percentages are the fallback above the top rank,
+   where there is no floor to align with. */
+[data-pieces][data-piece-pixels="tile"] .piece[data-piece]::before,
+[data-pieces][data-piece-pixels="tile"] .piece[data-piece]::after {
   content: '';
   position: absolute;
   left: 0;
-  top: -100%;
+  top: var(--tier-mid-top, -100%);
   width: 100%;
-  height: 100%;
-  background: var(--piece-hi) center / 100% 100% no-repeat;
+  height: var(--tier-mid-h, 100%);
+  background: var(--piece-mid) center / 100% 100% no-repeat;
   image-rendering: pixelated;
 }
-/* Headroom under tile-grid pieces: a head rises (fit − 16)/16 of a cell
-   above the top rank (nulltale 7 px, dread 10, pixel-chess none). */
-.board[data-pieces][data-piece-pixels="tile"] { margin-top: calc(var(--cell-size) * max(0, (var(--piece-fit, 16) - 16) / 16)); }
+[data-pieces][data-piece-pixels="tile"] .piece[data-piece]::after {
+  top: var(--tier-hi-top, -200%);
+  height: var(--tier-hi-h, 100%);
+  background-image: var(--piece-hi, none);
+}
+/* Headroom under tile-grid pieces: a head rises (fit − 16 + lift)/16 of a
+   cell above the top rank (board-ui publishes --piece-tile-lift). */
+.board[data-pieces][data-piece-pixels="tile"] { margin-top: calc(var(--cell-size) * max(0, (var(--piece-fit, 16) - 16 + var(--piece-tile-lift, 0)) / 16)); }
 [data-pieces] .promo-btn[data-piece] {
   font-size: 0;
   width: 2.6rem;

@@ -274,25 +274,46 @@ too; the same-shaped box with `0 0` matches a `0 0` floor but not the
 layer's per-cell `<img>` is a sub-device-pixel phase off the `center`
 floor in both browsers (invisible at phone scale; making every tile rule
 `0 0` would fix it — not done, the repack tool emits those rules). So a
-tile-grid piece is TWO cell-sized boxes: the BODY (`--piece-lo`, the
-sprite's lower 16 rows) in its square, the HEAD (`--piece-hi`) in a
-`::before` at `top:-100%` (the north square's geometry, later in the DOM
-so a nearer head paints over the piece behind). The halves are cut from
-each piece's 32-row atlas cell by `phase0/lib/piecehalves.mjs` (ONE
-implementation: the repack tool emits them; `gen-piece-halves.mjs` writes
-the same lines from the committed `img/pieces.png` without the packs,
-`--check` for staleness; a wider box keeps the 16 centre columns —
-deja-view's knights lose one outline column). The piece stands on its
-square's bottom edge at the art's scale; the size / lift / shift dials do
-not apply (rows hidden — a whole-pixel lift/shift is not exact either,
-it would have to be baked into the halves); the shadow is one tile pixel
-(`100cqh/16`; the FLIP clone gets `--tpx` inline, its layer being no size
-container, and carries the head as its `::before`); the headroom margin
-is (fit − 16)/16 of a cell. `display` (the old snap) and `free` keep the
-dials. Gates: piece-grid 4/4 (18/18 exact in each browser, the free-mode
-control off the grid), selftest, ui-smoke (display box a whole multiple;
-tile box = the cell painted like the floor, head one cell up, dials
-hidden), replay-smoke, `gen-piece-halves --check`.
+tile-grid piece is THREE cell-sized boxes, one per square it can cover:
+`--piece-lo` in its square, `--piece-mid` in a `::before` (later in the
+DOM than the north square, so a nearer head paints over the piece
+behind), `--piece-hi` in a `::after` — the upper boxes at the north
+squares' MEASURED rectangles (`layoutPieceRows` → per-cell
+`--tier-mid-top/-h`, `--tier-hi-top/-h`, re-measured on resize;
+`tierRowVars`): `top:-100%` is NOT the row above once the grid hands its
+sub-pixel remainder to some rows (Chromium: 35.6875-px rows over
+35.70313-px ones at one width — 1/32 px flipped a device row in the
+gate); the percentages are only the fallback above the top rank. **THE
+TIERS ARE THE POSITION (same day: "the pieces are now sitting right at
+the bottom of the cell… The foot of the piece should be roughly centered
+on the tile. I need sliders to adjust their position in tile grid
+mode")**: `play/js/piecetiers.mjs` (pure, browser-safe) cuts a set's
+fitted sprite into the three 16×16 tiles with its placement baked in —
+Options → **Piece lift** / **Piece shift** in WHOLE TILE PIXELS on the
+tile grid (`tileLift` −4…+20, default 6; `tileShift` ±7, default 0;
+`?tilelift=` / `?tileshift=`). tiles.css carries the lift-0 tiers
+(`--piece-<fen>-lo` / `-mid`; `phase0/lib/piecehalves.mjs` is the Node
+adapter over the same function — the repack tool emits them,
+`gen-piece-halves.mjs` writes the same lines from the committed
+`img/pieces.png` without the packs, `--check` for staleness; a wider box
+keeps the 16 centre columns — deja-view's knights lose one outline
+column); every other placement is BAKED AT RUNTIME by
+`board-ui.layoutPieceTiers` (the set's sprites read off the computed
+`--piece-<fen>`, decoded once off the DOM as the debris sampler does,
+re-cut per (set, lift, shift) and cached, `pngmini` PNGs set inline as
+`--piece-<fen>-lo/-mid/-hi`; `pieceBaked` resolves when worn;
+`--piece-tile-lift` feeds the headroom, (fit − 16 + lift)/16 of a cell).
+The size dial does not apply (the art's scale); the shadow is one tile
+pixel (`100cqh/16`; the FLIP clone gets `--tpx` inline, its layer being
+no size container, and carries the tiers as its pseudo-elements).
+`display` (the old snap) and `free` keep the % dials. Gates: piece-grid
+4/4 (72/72 exact in each browser — 18 layouts × lift-0 / default / a
+hi-tier reach / the clamps' edge — the free-mode control off the grid),
+selftest (the fit fields, the clamp, the pure cut), ui-smoke (display
+box a whole multiple; tile box = the cell painted like the floor, head
+one cell up, the default lift baked into 36 inline tiers, lift 0 wears
+the stylesheet's, the px dials shown and the % dials hidden),
+replay-smoke, `gen-piece-halves --check`.
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through

@@ -949,13 +949,12 @@ pieceNames.forEach((name, row) => {
       blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
       const fen = side === 'white' ? letter.toUpperCase() : letter;
       decl.push(`  --piece-${fen}: url("data:image/png;base64,${encodePng(tile).toString('base64')}");`);
-      // The TILE-GRID halves (2026-09-07): the piece's 32-row atlas cell cut
-      // into two 16×16 images, body and head, painted one per cell-sized box
-      // (lib/piecehalves.mjs; gen-piece-halves.mjs writes the same lines
+      // The TILE-GRID tiers (2026-09-07): the fitted sprite cut into 16×16
+      // tiles, one per square it covers at lift 0 (its own and the one
+      // above), painted one per cell-sized box (lib/piecehalves.mjs →
+      // play/js/piecetiers.mjs; gen-piece-halves.mjs writes the same lines
       // from the committed atlas when the packs are not on disk).
-      const cell32 = blank(bw, PA);
-      blit(cell32, tile, 0, PA - bh);
-      decl.push(...halvesDecl(fen, pieceHalves(cell32)));
+      decl.push(...halvesDecl(fen, pieceHalves(tile)));
     }
   });
   css.push(`[data-pieces="${name}"] {\n${decl.join('\n')}\n}`);

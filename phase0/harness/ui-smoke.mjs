@@ -511,13 +511,37 @@ const snap = await page.evaluate(() => {
   return {
     fit, h: r.height, k: (r.height * dpr) / fit, on, dialsShown,
     tile: K.pieceFit, mode: board.dataset.piecePixels, snapAttr: 'pieceSnap' in board.dataset, select: document.getElementById('optPiecePixels').value,
-    dialsHidden: document.getElementById('optPieceScale').closest('.opt').hidden,
+    dialsHidden: document.getElementById('optPieceScale').closest('.opt').hidden, pxDialsShown: !document.getElementById('optTileLift').closest('.opt').hidden,
     boxIsCell: near(box.left, cell.left) && near(box.top, cell.top) && near(box.width, cell.width) && near(box.height, cell.height),
     body: `${cs.backgroundSize} @ ${cs.backgroundPosition}`, bodyImg: cs.backgroundImage.startsWith('url("data:image/png'),
     headTop: head.top, headH: head.height, headImg: head.backgroundImage.startsWith('url("data:image/png'), headPaint: `${head.backgroundSize} @ ${head.backgroundPosition}`,
     cellH: cell.height, margin: parseFloat(getComputedStyle(board).marginTop),
+    rowVars: el2.closest('.cell').style.getPropertyValue('--tier-mid-top'), northTop: (() => { const c = el2.closest('.cell'); const north = c.previousElementSibling && [...document.querySelectorAll('#board .cell')].find((x) => x.getBoundingClientRect().left === cell.left && Math.abs(x.getBoundingClientRect().bottom - cell.top) < 0.02); return north ? north.getBoundingClientRect().top - cell.top : null; })(),
   };
 });
+expect(snap.rowVars.endsWith('px') && snap.northTop !== null && Math.abs(parseFloat(snap.rowVars) - snap.northTop) < 1e-6, `the king's cell carries the measured row above as its mid tier's box (${snap.rowVars} = the north square's top ${snap.northTop?.toFixed(5)})`);
+// The tile grid's placement (whole tile pixels) is BAKED into the tiers:
+// the default lift wears inline --piece-<fen>-lo/-mid/-hi cut from the
+// decoded set, lift 0 wears tiles.css's own; the headroom follows the lift.
+const bake = await page.evaluate(async () => {
+  const K = window.__DCK, board = document.getElementById('board');
+  const dflt = K.pieceFit.tileLift;
+  await K.app.boardUI.pieceBaked;
+  const st = board.style;
+  const lifted = { tiers: K.pieceFit.tiers, lo: st.getPropertyValue('--piece-K-lo').startsWith('url("data:image/png'), mid: st.getPropertyValue('--piece-K-mid').startsWith('url("data:image/png'), hi: st.getPropertyValue('--piece-K-hi'), liftVar: st.getPropertyValue('--piece-tile-lift'), margin: parseFloat(getComputedStyle(board).marginTop), label: document.getElementById('optTileLiftV').textContent };
+  const el = document.querySelector('#board .piece[data-piece="K"]');
+  const after = getComputedStyle(el, '::after');
+  lifted.afterTop = after.top; lifted.afterImg = after.backgroundImage;
+  K.options.tileLift = 0; K.options.tileShift = 0; K.applyOptions();
+  await K.app.boardUI.pieceBaked;
+  const flat = { tiers: K.pieceFit.tiers, lo: st.getPropertyValue('--piece-K-lo'), liftVar: st.getPropertyValue('--piece-tile-lift'), margin: parseFloat(getComputedStyle(board).marginTop) };
+  K.options.tileLift = dflt; K.applyOptions();
+  await K.app.boardUI.pieceBaked;
+  return { dflt, lifted, flat, back: K.pieceFit.tiers };
+});
+expect(bake.dflt > 0 && bake.lifted.tiers === 36 && bake.lifted.lo && bake.lifted.mid && bake.lifted.hi === 'none' && bake.lifted.liftVar === String(bake.dflt) && bake.lifted.label === `+${bake.dflt} px`, `the default lift (${bake.dflt} px) is baked: ${bake.lifted.tiers} inline tiers on the board, the king's lo and mid cut, hi none, the label reads ${bake.lifted.label}`);
+expect((bake.lifted.afterTop === '-200%' || parseFloat(bake.lifted.afterTop) < -1) && bake.lifted.afterImg === 'none' && bake.lifted.margin > bake.flat.margin, `the ::after tier sits two cells up (top ${bake.lifted.afterTop}) painting nothing at this lift; the headroom grew ${bake.flat.margin.toFixed(1)} → ${bake.lifted.margin.toFixed(1)}px`);
+expect(bake.flat.tiers === 0 && bake.flat.lo === '' && bake.flat.liftVar === '' && bake.back === 36, `lift 0 wears tiles.css's own tiers (no inline tier, no lift var), the default bakes again (${bake.back})`);
 expect(snap.fit > 0 && snap.k >= 1 && Math.abs(snap.k - Math.round(snap.k)) < 1e-3 && snap.on.snap && snap.on.pixels === 'display' && snap.on.box?.h && snap.dialsShown, `display-pixel pieces: king box ${snap.h}px = ${snap.k}× the set's ${snap.fit}-px height, the dials shown`);
 expect(snap.mode === 'tile' && !snap.snapAttr && snap.select === 'tile' && snap.tile.pixels === 'tile' && !snap.tile.box && snap.dialsHidden && snap.boxIsCell && snap.bodyImg && snap.body === '100% 100% @ 50% 50%', `tile-grid pieces (the default): the king's box is its cell, painted like the floor (${snap.body}), the dials hidden`);
 expect(snap.headImg && snap.headPaint === '100% 100% @ 50% 50%' && (snap.headTop === '-100%' || Math.abs(parseFloat(snap.headTop) + snap.cellH) < 0.02) && Math.abs(parseFloat(snap.headH) - snap.cellH) < 0.02 && snap.margin > 0, `its head is a ::before one cell up (top ${snap.headTop}, height ${snap.headH}, cell ${snap.cellH.toFixed(2)}px), the board stepped down ${snap.margin.toFixed(1)}px for it`);
