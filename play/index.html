@@ -32,7 +32,7 @@
          list is 36 stages long on a phone. -->
     <div id="saved-logs" hidden>
       <span class="saved-title">Saved replay logs</span>
-      <button id="btnSavedExport">Export</button>
+      <span class="saved-btns"><button id="btnSavedOpen" title="open in the replay analyzer">Open</button><button id="btnSavedExport">Export</button></span>
       <select id="savedLogSel" aria-label="saved replay logs"></select>
     </div>
     <div id="stage-list"></div>
@@ -131,6 +131,9 @@
     <button id="btnAgain" class="primary">Rematch</button>
     <button id="btnOverlayRedeal">Re-deal</button>
     <button id="btnOverlayExport" title="share or download this duel's replay log">&#9873; Export log</button>
+    <!-- The replay analyzer (2026-09-07): a separate page (../replay/) that
+         reads the same autosave ring, so Review just navigates there. -->
+    <button id="btnOverlayReview" title="open this duel in the replay analyzer">&#9654; Review</button>
     <button id="btnMenu">Back to setup</button>
   </div>
 </div>

@@ -984,6 +984,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #saved-logs .saved-title { white-space: nowrap; }
 #saved-logs select { grid-column: 1 / -1; width: 100%; min-width: 0; font-size: .8rem; }
 #saved-logs button { font-size: .8rem; padding: .3rem .7rem; }
+#saved-logs .saved-btns { display: flex; gap: .3rem; }
 
 /* Options → Replay log: the two buttons side by side. */
 .opt-row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .2rem 0 .6rem; }

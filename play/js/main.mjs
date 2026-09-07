@@ -44,11 +44,12 @@ import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT } from
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylog.mjs';
+import { deltaWords } from './logreport.mjs'; // the deep-Δ wording, shared with the report and the analyzer
 
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
 // that alters what the log records or how the gods decide.
-const APP_BUILD = '2026-09-06 replay-log.2';
+const APP_BUILD = '2026-09-07 replay-ui.1';
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -1062,26 +1063,6 @@ function appendGodsDelta(ev) {
     `p${ev.ply} Δeval (white POV) ${fmtScore(d.before)} → ${fmtScore(d.after)}${d.flipped ? ' — FLIP: the quake changed who is winning' : ''}`,
     d.flipped ? 'bad' : 'ok'
   );
-}
-
-/** What one step did to a white-POV score, in words: a mate lost, gained,
- *  shortened, lengthened or flipped, else the swing in pawns. `actor` is
- *  "the move" or "the quake". Shared with the report tool's wording. */
-function deltaWords(a, b, actor) {
-  if (!a || !b) return `${actor}: —`;
-  const mate = (s) => (s.type === 'mate' ? { side: s.value > 0 ? 'white' : 'black', n: Math.abs(s.value) } : null);
-  const ma = mate(a);
-  const mb = mate(b);
-  if (ma && !mb) return `${actor} LOST ${ma.side}'s mate-in-${ma.n}`;
-  if (!ma && mb) return `${actor} created a mate-in-${mb.n} for ${mb.side}`;
-  if (ma && mb) {
-    if (ma.side !== mb.side) return `${actor} FLIPPED the mate (${ma.side} M${ma.n} → ${mb.side} M${mb.n})`;
-    if (mb.n === ma.n) return `${actor} kept ${ma.side}'s mate-in-${ma.n}`;
-    return `${actor} ${mb.n > ma.n ? 'LENGTHENED' : 'shortened'} ${ma.side}'s mate (M${ma.n} → M${mb.n})`;
-  }
-  const swing = b.value - a.value;
-  if (Math.abs(swing) < 50) return `${actor} kept it (${swing >= 0 ? '+' : ''}${(swing / 100).toFixed(1)})`;
-  return `${actor} moved it ${swing >= 0 ? '+' : ''}${(swing / 100).toFixed(1)} for white`;
 }
 
 function appendGodsDeep(ev) {
@@ -2401,6 +2382,16 @@ $('btnOptionsExport').addEventListener('click', () => void exportCurrentLog());
 $('btnOptionsCopy').addEventListener('click', () => void exportCurrentLog('clipboard'));
 $('btnFlag').addEventListener('click', () => void flagMoment());
 $('btnSavedExport').addEventListener('click', () => void exportSavedLog());
+// The replay analyzer (2026-09-07) is its own page next to this one; it reads
+// the same autosave ring (same origin), so both entry points just navigate.
+$('btnSavedOpen').addEventListener('click', () => {
+  const slot = parseInt($('savedLogSel').value, 10);
+  if (Number.isInteger(slot)) location.href = `../replay/?slot=${slot}`;
+});
+$('btnOverlayReview').addEventListener('click', () => {
+  autosaveLog(); // the ended duel's final state, in the ring the analyzer reads
+  location.href = '../replay/?latest=1';
+});
 // Rematch: the SAME deal and the SAME Director seed — the identical duel,
 // for "let me try that again". Re-deal: back to the live preview on a
 // fresh seed.

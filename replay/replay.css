@@ -1,0 +1,195 @@
+/* The replay analyzer's own chrome (2026-09-07). The board, the tiles, the
+   topbar, the log and the eval bar come from ../play/style.css + tiles.css;
+   this file adds the load panel, the scrub strip, the sections and the
+   report blocks. Same dark theme, same variables. */
+
+.muted { color: var(--muted); font-size: .8rem; }
+
+.topbtn {
+  font-size: 1.1rem;
+  padding: .2rem .6rem;
+  border-radius: .5rem;
+  border: 1px solid #444;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  line-height: 1.3;
+}
+#btnLoadToggle, #btnExport, #btnCopyReport { font-size: 1.1rem; padding: .2rem .6rem; }
+
+/* ---------- load panel ---------- */
+
+#load-panel {
+  background: var(--panel);
+  border: 1px solid #333;
+  border-radius: .5rem;
+  padding: .6rem .8rem;
+  margin-bottom: .8rem;
+}
+#load-panel[hidden] { display: none; }
+.load-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .35rem .6rem;
+  align-items: center;
+  margin: .3rem 0 .6rem;
+  font-size: .8rem;
+}
+.load-row .load-title { white-space: nowrap; color: var(--gold); }
+.load-row select, .load-row textarea, .load-row input[type="file"] { grid-column: 1 / -1; width: 100%; min-width: 0; font-size: .8rem; box-sizing: border-box; }
+.load-row textarea { background: var(--bg); color: inherit; border: 1px solid #444; border-radius: .3rem; font-family: ui-monospace, monospace; }
+.load-row button { font-size: .8rem; padding: .3rem .7rem; }
+
+/* ---------- scrub strip ---------- */
+
+#scrub {
+  margin-top: .5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.scrub-row { display: flex; align-items: center; justify-content: center; gap: .35rem; flex-wrap: wrap; }
+.scrub-row button { font-size: .95rem; padding: .35rem .7rem; font-family: ui-monospace, monospace; }
+.scrub-row.jumps button { font-size: .8rem; padding: .3rem .55rem; color: var(--gods); }
+.scrub-row.jumps #btnLineUp { color: var(--gold); }
+#ply-readout { font-family: ui-monospace, monospace; font-size: .9rem; min-width: 6ch; text-align: center; color: var(--gold); }
+#plySlider { width: 100%; accent-color: var(--gold); }
+
+/* ---------- the strips (the gods' stats + eval over the plies) ---------- */
+/* Series colours: validated on the panel surface (dark lightness band,
+   colour-vision separation) — see dataviz; the readout text stays in the
+   text tokens, only the swatch and the mark carry the colour. */
+:root {
+  --s-pressure: #3d8fd6;
+  --s-tedium: #c4679a;
+  --s-heat: #c9772e;
+  --s-fun: #4f9f5a;
+  --s-eval: #b08b3b;
+}
+#strips { display: flex; flex-direction: column; gap: .15rem; margin-top: .2rem; }
+.strip {
+  display: block;
+  width: 100%;
+  height: 60px;
+  background: var(--panel);
+  border: 1px solid #2c2d36;
+  border-radius: .35rem;
+  touch-action: pan-y; /* a horizontal drag scrubs; the page still scrolls vertically */
+  cursor: crosshair;
+}
+.strip-eval { height: 40px; }
+.strip-legend {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, monospace;
+  font-size: .68rem;
+  color: var(--muted);
+  padding: 0 .1rem;
+}
+.strip-legend b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: .3rem;
+  padding: .1rem .3rem;
+  cursor: pointer;
+}
+.sw-btn:hover { background: var(--panel-2); }
+.sw-btn.off { opacity: .55; }
+.sw-btn.off .sw { background: transparent; box-shadow: inset 0 0 0 2px var(--sw, var(--muted)); }
+.sw-btn.off b { text-decoration: line-through; }
+.strip-legend .sw { display: inline-block; width: .75rem; height: .5rem; border-radius: 2px; }
+.sw-pressure { --sw: var(--s-pressure); background: var(--sw); }
+.sw-tedium { --sw: var(--s-tedium); background: var(--sw); }
+.sw-heat { --sw: var(--s-heat); background: var(--sw); }
+.sw-fun { --sw: var(--s-fun); background: var(--sw); }
+.sw-eval { --sw: var(--s-eval); background: var(--sw); }
+.strip-legend .st-key { margin-left: auto; color: var(--muted); }
+.st-grid { stroke: #2f3039; stroke-width: 1; }
+.st-zero { stroke: #3a3b46; }
+.st-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.st-line.st-pressure { stroke: var(--s-pressure); }
+.st-line.st-tedium { stroke: var(--s-tedium); }
+.st-line.st-heat { stroke: var(--s-heat); }
+.st-line.st-fun { stroke: var(--s-fun); }
+.st-line.st-eval { stroke: var(--s-eval); }
+.st-leader { stroke-width: 1; stroke-opacity: .8; }
+.st-leader.st-pressure { stroke: var(--s-pressure); }
+.st-leader.st-tedium { stroke: var(--s-tedium); }
+.st-leader.st-heat { stroke: var(--s-heat); }
+.st-leader.st-fun { stroke: var(--s-fun); }
+.st-label { fill: var(--muted); font-family: ui-monospace, monospace; font-size: 8px; }
+.st-area.st-pressure { fill: var(--s-pressure); fill-opacity: .22; stroke: none; }
+.st-tick { stroke: var(--text); stroke-width: 2; stroke-opacity: .75; }
+.st-tick-vetoed { stroke-opacity: .4; }
+.st-fork { stroke: var(--gold); stroke-width: 2; }
+.st-dot.st-eval { fill: var(--s-eval); }
+.st-dot-ring { fill: var(--panel); }
+.st-cursor { stroke: var(--gold); stroke-width: 1.5; stroke-opacity: .9; }
+
+/* ---------- report blocks ---------- */
+
+pre.rep {
+  font-family: ui-monospace, monospace;
+  font-size: .68rem;
+  line-height: 1.45;
+  background: var(--panel);
+  border-radius: .5rem;
+  padding: .5rem .6rem;
+  margin: .4rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+#ply-line { margin-top: .5rem; color: var(--text); }
+#ply-line:empty { display: none; }
+
+#sections { margin-top: .6rem; display: flex; flex-direction: column; gap: .35rem; }
+#sections details {
+  background: var(--panel);
+  border: 1px solid #3a3345;
+  border-radius: .5rem;
+  padding: .3rem .6rem;
+}
+#sections summary {
+  cursor: pointer;
+  font-family: ui-monospace, monospace;
+  font-size: .78rem;
+  color: var(--gold);
+  letter-spacing: .04em;
+  user-select: none;
+}
+#sections .sec-body { margin-top: .3rem; }
+#sections .sec-body pre.rep { background: var(--bg); }
+#sec-quake summary { color: var(--gods); }
+
+.tools { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; margin: .2rem 0; }
+.tools button { font-size: .72rem; padding: .25rem .55rem; font-family: ui-monospace, monospace; }
+.tools button.on { border-color: var(--gold); color: var(--gold); }
+.probe-go { display: flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--muted); margin-top: .3rem; }
+.probe-go input { flex: 1; background: var(--bg); color: inherit; border: 1px solid #444; border-radius: .3rem; padding: .2rem .4rem; font-family: ui-monospace, monospace; font-size: .75rem; min-width: 0; }
+#engine-status { margin-top: .3rem; font-family: ui-monospace, monospace; font-size: .72rem; }
+
+/* The timeline: one row per ply, tap to jump; the fork rows step into a branch. */
+.tl { max-height: 18rem; overflow: auto; font-family: ui-monospace, monospace; font-size: .68rem; line-height: 1.5; }
+.tl-row { white-space: pre; cursor: pointer; padding: 0 .3rem; border-radius: .25rem; width: max-content; min-width: 100%; box-sizing: border-box; }
+.tl-row:hover { background: var(--panel-2); }
+.tl-row.current { background: var(--accent); color: var(--text); }
+.tl-row.quake { color: var(--gods); }
+.tl-row.fork { color: var(--gold); }
+.tl-row.tune { color: var(--s-heat); }
+.tl-row.prefix { opacity: .55; }
+
+.undo-row { margin-bottom: .5rem; }
+
+#replay-log { max-height: 7rem; }
+#replay-log .warn { color: var(--gold); }
+#replay-log .ok { color: var(--ok); }
+#replay-log .bad { color: var(--bad); }
