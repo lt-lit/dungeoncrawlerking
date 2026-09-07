@@ -185,7 +185,17 @@ function crackVariant(f, rank) {
 }
 /** Which of a skin's sprite variants a square shows (SKIN_VARIANTS). */
 function skinVariant(f, rank) {
-  return `sv${1 + (squareHash(f, rank, 17) % SKIN_VARIANTS)}`;
+  return `sv${skinVariantIndex(f, rank)}`;
+}
+/** The variant NUMBER (1…SKIN_VARIANTS) — the debris layer records which
+ *  sprite a square wore when it broke, so the spray is that sprite's own
+ *  pixels (debris.mjs spriteVar). */
+export function skinVariantIndex(f, rank) {
+  return 1 + (squareHash(f, rank, 17) % SKIN_VARIANTS);
+}
+/** The floor-tile variant NUMBER (1…FLOOR_VARIANTS) a square wears. */
+export function floorVariantIndex(f, rank) {
+  return parseInt(floorVariant(f, rank).slice(1), 10);
 }
 
 function svgEl(tag, attrs) {
@@ -397,6 +407,47 @@ export class BoardUI {
     container.appendChild(this.fx);
   }
 
+  /** The flight's canvas (play/js/particles.mjs): one over the whole board
+   *  at the board's own pixel grid, created on first use, on the fx layer
+   *  (above the pieces — a chunk in the air passes in front of them; the
+   *  landed pixels live in the cells' own --debris layer underneath). */
+  get fxCanvas() {
+    let c = this.fx.querySelector(':scope > canvas.fx-debris');
+    if (!c) {
+      c = document.createElement('canvas');
+      c.className = 'fx-debris';
+      c.width = this.files * 16;
+      c.height = this.ranks * 16;
+      this.fx.appendChild(c);
+    }
+    return c;
+  }
+
+  /** Column / row-from-top of a square on the rendered grid (flip-aware). */
+  gridPos(sq) {
+    const f = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq.slice(1), 10);
+    return { col: this.flipped ? this.files - 1 - f : f, row: this.flipped ? rank - 1 : this.ranks - rank };
+  }
+
+  /** Set one square's debris layer directly (a flight landing between
+   *  paints) — the URL or null; touches nothing else on the cell, so a
+   *  held quake frame stays held. */
+  setDebris(sq, url) {
+    const cell = this.cells.get(sq);
+    if (!cell) return;
+    if (url) {
+      if (cell.style.getPropertyValue('--debris') !== url) cell.style.setProperty('--debris', url);
+    } else if (cell.style.getPropertyValue('--debris')) cell.style.removeProperty('--debris');
+  }
+
+  /** Hide a square's sprite while the flight shatters it (setPosition's next
+   *  paint replaces the element, so nothing needs un-hiding). */
+  shatterSprite(sq) {
+    const glyph = this.cells.get(sq)?.querySelector('.piece');
+    if (glyph) glyph.classList.add('fx-shattered');
+  }
+
   /** Center of a square in viewBox units (flip-aware). */
   #squareCenter(sq) {
     const f = sq.charCodeAt(0) - 97;
@@ -518,13 +569,22 @@ export class BoardUI {
    * never residue).
    * Committing a tile also strips any held terrain-fx class on the cell.
    */
-  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY } = {}) {
+  setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY, debris = null } = {}) {
     // What every square IS — the one terrain rule (classifyTerrain, pure,
     // shared with the replay analyzer's residue walk); this method only
     // paints it.
     const kinds = classifyTerrain(fen, { holes, godCrates, skins, opened, rubble }, this.files, this.ranks);
     for (const [sq, cell] of this.cells) {
       const k = kinds.get(sq);
+      // THE DEBRIS LAYER (2026-09-07): `debris(sq, kind)` answers the
+      // square's 16×16 debris buffer as a CSS url(...) — or null for a clean
+      // floor — and the cell's background stack paints it under the terrain
+      // (style.css --debris). Touched only when it changes: the URL is
+      // ~1.4 KB and a paint visits every cell.
+      const dz = debris ? debris(sq, k) : null;
+      if (dz) {
+        if (cell.style.getPropertyValue('--debris') !== dz) cell.style.setProperty('--debris', dz);
+      } else if (cell.style.getPropertyValue('--debris')) cell.style.removeProperty('--debris');
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
       const v = k.v;
@@ -564,6 +624,7 @@ export class BoardUI {
           glyph.className = 'piece';
           cell.appendChild(glyph);
         }
+        glyph.classList.remove('fx-shattered'); // a flight's hide never outlives the paint
         if (isFurniture) {
           // Neutral sprite — neither side's color. Without this branch '^'
           // fell through to the piece path as a literal glyph styled WHITE

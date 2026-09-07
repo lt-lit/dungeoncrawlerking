@@ -280,7 +280,16 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    variant (board-ui.mjs floorVariant). The dark squares keep the checker by
    a translucent shade over the tile (--floor-shade is transparent without a
    theme, so the plain look is untouched). */
-.cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); --shade: linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)); }
+.cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); --shade: linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)); --debris: none; }
+/* THE DEBRIS LAYER (2026-09-07, play/js/debris.mjs): every cell's background
+   stack carries var(--debris) — the square's 16×16 debris buffer as a data
+   URL, set inline by board-ui setPosition, `none` when the floor is clean —
+   ABOVE the floor tile and the checker shade and UNDER everything that
+   stands (a wall tile, the pit, a ruin stub, the sprites, the pieces), at
+   the same 100% × 100% pixelated scaling as the floor tile, so a debris
+   pixel is never a different size or alignment from a floor pixel. Every
+   rule below that lists floor layers lists the debris layer too; a rule
+   that forgets it paints a clean square. */
 /* THE crack comes in CRACK_VARIANTS drawings (gen-sprites --tile-crack-1…N);
    board-ui stamps ck1…ckN on every cell by a stable hash of its square, so
    neighbouring cracked walls differ and a repaint never swaps a crack
@@ -295,11 +304,11 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .cell.f5 { --tile-floor: var(--tile-floor-5, var(--tile-floor-1)); }
 .cell.f6 { --tile-floor: var(--tile-floor-6, var(--tile-floor-1)); }
 .cell.light {
-  background: var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-light);
+  background: var(--debris) center / 100% 100% no-repeat, var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-light);
   image-rendering: pixelated;
 }
 .cell.dark {
-  background: var(--shade), var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-dark);
+  background: var(--debris) center / 100% 100% no-repeat, var(--shade), var(--tile-floor, none) center / 100% 100% no-repeat, var(--cell-dark);
   image-rendering: pixelated;
 }
 /* Wall AUTOTILE (2026-09-03): board-ui classes every wall (and cracked
@@ -336,13 +345,13 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 /* The wall paints OVER the cell's floor layers (a themed pillar has
    transparent sides, and the floor shows through them). */
 .cell.wall {
-  background-image: var(--wall-tile), var(--tile-floor, none);
+  background-image: var(--wall-tile), var(--debris), var(--tile-floor, none);
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.wall { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); }
+.cell.dark.wall { background-image: var(--wall-tile), var(--debris), var(--shade), var(--tile-floor, none); }
 
 /* A god-made hole: sunken, black, permanent. Under a theme the PIT
    AUTOTILES (round 13, "ragged edges on hole tiles — needs complete
@@ -356,9 +365,9 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    animation (cell-darken below), so the commit is invisible. */
 .cell {
   --hole-css: linear-gradient(180deg, #000 0, transparent 40%), radial-gradient(ellipse at 50% 45%, #000 0%, var(--pit) 70%), linear-gradient(var(--pit), var(--pit));
-  --hole-under: var(--tile-floor, none);
+  --hole-under: var(--debris), var(--tile-floor, none);
 }
-.cell.dark { --hole-under: var(--shade), var(--tile-floor, none); }
+.cell.dark { --hole-under: var(--debris), var(--shade), var(--tile-floor, none); }
 .cell.hole {
   background-image: var(--hole-tile, var(--hole-css)), var(--hole-under);
   background-size: 100% 100%;
@@ -375,8 +384,9 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background-image:
     linear-gradient(180deg, transparent 0, transparent calc(100% - 3px), #00000050 calc(100% - 3px)),
     linear-gradient(160deg, #ffffff12, #00000030),
+    var(--debris),
     var(--tile-floor, none);
-  background-size: auto, auto, 100% 100%;
+  background-size: auto, auto, 100% 100%, 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
 }
@@ -384,9 +394,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   background-image:
     linear-gradient(180deg, transparent 0, transparent calc(100% - 3px), #00000050 calc(100% - 3px)),
     linear-gradient(160deg, #ffffff12, #00000030),
+    var(--debris),
     var(--shade),
     var(--tile-floor, none);
-  background-size: auto, auto, auto, 100% 100%;
+  background-size: auto, auto, 100% 100%, auto, 100% 100%;
 }
 /* Under a theme the pack sprites carry their own shadows, so the bevel goes
    and the FLOOR TILE shows behind every sprite (it used to be the flat
@@ -394,8 +405,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 /* :not(.cracked):not(.weak) — those two paint the WALL under the crack
    (rules below); this floor-only rule would outrank them by specificity
    and drop the wall (a live bug caught 2026-09-03). */
-[data-theme] .cell.furniture:not(.cracked):not(.weak) { background-image: var(--tile-floor, none); background-size: 100% 100%; }
-[data-theme] .cell.dark.furniture:not(.cracked):not(.weak) { background-image: var(--shade), var(--tile-floor, none); background-size: auto, 100% 100%; }
+[data-theme] .cell.furniture:not(.cracked):not(.weak) { background-image: var(--debris), var(--tile-floor, none); background-size: 100% 100%; }
+[data-theme] .cell.dark.furniture:not(.cracked):not(.weak) { background-image: var(--debris), var(--shade), var(--tile-floor, none); background-size: 100% 100%, auto, 100% 100%; }
 
 /* A wall the gods WEAKENED (§4.5): the same stone block with a branching
    black crack across it — NOT a crate. The crack is carried by the cell's
@@ -404,13 +415,13 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    dissolve every other furniture uses. `.furniture` stays on the cell —
    this rule is later, so its background wins. */
 .cell.cracked {
-  background-image: var(--wall-tile), var(--tile-floor, none);
+  background-image: var(--wall-tile), var(--debris), var(--tile-floor, none);
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.cracked { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
+.cell.dark.cracked { background-image: var(--wall-tile), var(--debris), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
 /* (background-size set again on the .dark variants on purpose: .cell.dark
    .furniture sets an explicit per-layer size list at higher specificity,
    and without this the wall tile painted at its natural 16 px in the
@@ -450,13 +461,13 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    killed it ("absurdly out of place — why not just use a cracked wall?"),
    the same look rounds 11–12 had already driven out of the ruin tile. */
 .cell.furniture.weak {
-  background-image: var(--wall-tile), var(--tile-floor, none);
+  background-image: var(--wall-tile), var(--debris), var(--tile-floor, none);
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.furniture.weak { background-image: var(--wall-tile), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
+.cell.dark.furniture.weak { background-image: var(--wall-tile), var(--debris), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
 .cell.furniture.weak .piece.neutral {
   width: 100%;
   height: 100%;
@@ -521,13 +532,13 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    floor, under whatever stands there — layered like a wall tile, and the
    .dark rule sets its own size (round 9's specificity bug). */
 .cell.ruin {
-  background-image: var(--ruin-tile, var(--sprite-rubble)), var(--tile-floor, none);
+  background-image: var(--ruin-tile, var(--sprite-rubble)), var(--debris), var(--tile-floor, none);
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
-.cell.dark.ruin { background-image: var(--ruin-tile, var(--sprite-rubble)), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
+.cell.dark.ruin { background-image: var(--ruin-tile, var(--sprite-rubble)), var(--debris), var(--shade), var(--tile-floor, none); background-size: 100% 100%; }
 /* A captured door SWINGS instead of dissolving (the doorway decor takes
    over on the commit). */
 .cell.skin-door .piece.neutral.fx-captured {
@@ -660,6 +671,21 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   z-index: 4; /* above the arrow layer, so a sliding piece is never occluded */
 }
 
+/* The debris FLIGHT (play/js/particles.mjs): one canvas over the whole
+   board at the board's own pixel grid (files×16 by ranks×16, scaled up
+   pixelated), where chunks fly from the thing that broke to the exact
+   pixels the painter lands them on. Cleared the moment they land. */
+.fx-debris {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+/* A sprite the flight is shattering: the chunks ARE the sprite now. */
+.cell .piece.fx-shattered { visibility: hidden; }
+
 /* font-size is pinned inline by animateSlide — see the note there. */
 .fx-piece {
   position: absolute;
@@ -700,7 +726,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    flash of light. Same crack as the committed tile, so the held end frame
    and the commit are one image. */
 .cell.cracking {
-  background-image: var(--tile-crack), var(--wall-tile), var(--tile-floor, none);
+  background-image: var(--tile-crack), var(--wall-tile), var(--debris), var(--tile-floor, none);
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
@@ -721,7 +747,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    flashes LIGHT and settles to bare floor. Never the pit vocabulary (it
    used to play "floor gives way" for an opening, the opposite meaning). */
 .cell.furniture.breaching,
-.cell.cracked.breaching { background-image: var(--tile-floor, none); background-size: 100% 100%; }
+.cell.cracked.breaching { background-image: var(--debris), var(--tile-floor, none); background-size: 100% 100%; }
 .cell.breaching { animation: burst-flash var(--fx-ms, .32s) ease-out forwards; }
 .cell.breaching .piece { animation: shard-burst var(--fx-ms, .32s) ease-out forwards; }
 

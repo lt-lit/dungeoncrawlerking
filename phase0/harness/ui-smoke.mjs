@@ -617,6 +617,122 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(deep.queued && deep.dd?.pre && deep.dd?.post && deep.dd.go && deep.line && deep.btnDisabled && deep.exported, `deep Δ landed on the last quake (${deep.dd?.go}: ${s(deep.dd?.beforeMove)} → ${s(deep.dd?.pre)} → ${s(deep.dd?.post)}), the panel says so, the export carries it`);
   await page.evaluate(() => { window.__DCK.options.godsDebug = false; window.__DCK.applyOptions(); });
 }
+// --- THE DEBRIS LAYER (2026-09-07): the floor remembers. A kill leaves
+// blood, a smashed crate its own pixels, a breach the wall's stone, a
+// displacement a skid, a crumble the floor's; the ledger is the STAGE's
+// (persisted under the stage id, an epoch per duel); toggles filter the
+// paint, never the record; an undo forgets the rewound plies' events. Every
+// painted square carries a 16×16 PNG data URL in its own --debris layer.
+{
+  const dz = await page.evaluate(() => {
+    const K = window.__DCK;
+    const d = K.app.duel;
+    K.debris.save();
+    const st = K.debris.stats();
+    const evs = K.debris.events();
+    const byKind = {};
+    for (const e of evs) byKind[e.k] = (byKind[e.k] ?? 0) + 1;
+    const want = { weaken: 0, breach: 0, crumble: 0, skid: 0 };
+    for (const q of d.record.quakes) {
+      for (const t of q.terrain ?? []) want[t.kind] = (want[t.kind] ?? 0) + 1;
+      want.skid += (q.displacements ?? []).length;
+      if (q.crumble) want.crumble++;
+    }
+    const painted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.style.getPropertyValue('--debris')).map((c) => c.dataset.square);
+    const urlsOk = painted.every((sq) => (K.debris.cell(sq).url ?? '').startsWith('url("data:image/png;base64,'));
+    const paintedOnFloor = painted.every((sq) => { const cl = K.marks.cell(sq); return !cl.includes('wall') && !cl.includes('hole') && !cl.includes('furniture'); });
+    const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square));
+    const breachPainted = breachSquares.filter((sq) => !!K.debris.cell(sq)?.url);
+    const captures = d.record.sans.filter((s) => s.includes('x')).length;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(K.debris.key + K.debris.env)); } catch { /* none */ }
+    return {
+      env: K.debris.env, stageId: d.record.deal?.stageId ?? K.app.session.deal.stageId, epoch: st.epoch, events: st.events, byKind, want, traffic: st.traffic, pending: st.pending,
+      attr: document.getElementById('board').dataset.debris, painted: painted.length, urlsOk, paintedOnFloor, breach: breachSquares.length, breachPainted: breachPainted.length,
+      captures, plyMax: Math.max(0, ...evs.map((e) => e.p)), ply: d.ply, samplerN: st.sampler,
+      savedEvents: saved?.events?.length ?? null, savedEpoch: saved?.epoch ?? null, savedId: saved?.id ?? null,
+    };
+  });
+  expect(dz.env === dz.stageId && dz.savedId === dz.env && dz.epoch >= 1, `the debris ledger is the stage's own (${dz.env}, epoch ${dz.epoch}), saved under its id`);
+  expect(dz.attr === 'destruction blood skid wear fx', `the board carries data-debris (${dz.attr})`);
+  expect((dz.byKind.kill ?? 0) + (dz.byKind.smash ?? 0) === dz.captures, `one kill or smash per capture on the record (${dz.byKind.kill ?? 0} kills + ${dz.byKind.smash ?? 0} smashes = ${dz.captures} captures)`);
+  expect((dz.byKind.weaken ?? 0) === dz.want.weaken && (dz.byKind.breach ?? 0) === dz.want.breach && (dz.byKind.skid ?? 0) === dz.want.skid && (dz.byKind.crumble ?? 0) === dz.want.crumble, `every quake rung left its event (weaken ${dz.byKind.weaken ?? 0}/${dz.want.weaken}, breach ${dz.byKind.breach ?? 0}/${dz.want.breach}, skid ${dz.byKind.skid ?? 0}/${dz.want.skid}, crumble ${dz.byKind.crumble ?? 0}/${dz.want.crumble})`);
+  expect(dz.events > 0 && dz.painted > 0 && dz.urlsOk && dz.paintedOnFloor && dz.pending === 0, `${dz.painted} squares wear a debris PNG, all on floor, nothing left in flight (${dz.events} events)`);
+  expect(dz.breach === 0 || dz.breachPainted > 0, `a breached wall's square wears its own stone (${dz.breachPainted}/${dz.breach})`);
+  expect(dz.plyMax <= dz.ply, `no event outlives the record after the undos (latest event ply ${dz.plyMax} ≤ ${dz.ply})`);
+  expect(dz.traffic > 0, `traffic wears the floor (${dz.traffic} cells visited)`);
+  expect(dz.savedEvents === dz.events && dz.savedEpoch === dz.epoch, `localStorage holds the ledger (${dz.savedEvents} events, epoch ${dz.savedEpoch})`);
+  expect(dz.samplerN > 0, `the sprite sampler decoded ${dz.samplerN} sprites off the board`);
+  // Toggles filter the paint, not the record.
+  const tog = await page.evaluate(() => {
+    const K = window.__DCK;
+    const count = () => document.querySelectorAll('#board .cell[data-square]').length && [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.style.getPropertyValue('--debris')).length;
+    const before = count();
+    K.options.debris = { ...K.options.debris, destruction: false, blood: false, skid: false, wear: false };
+    K.applyOptions();
+    const off = count();
+    const attrOff = document.getElementById('board').dataset.debris;
+    const eventsOff = K.debris.stats().events;
+    K.options.debris = { ...K.options.debris, destruction: true, blood: true, skid: true, wear: true };
+    K.applyOptions();
+    return { before, off, attrOff, eventsOff, after: count() };
+  });
+  expect(tog.before > 0 && tog.off === 0 && tog.attrOff === 'off' && tog.eventsOff === dz.events && tog.after === tog.before, `toggles hide the paint and keep the record (${tog.before} → ${tog.off} → ${tog.after} painted squares, ${tog.eventsOff} events)`);
+  await shot('debris');
+  // The scars persist: back to the preview of the same stage, then a new duel — epoch + 1, every event kept.
+  const again = await page.evaluate(async () => {
+    const K = window.__DCK;
+    const events = K.debris.stats().events, epoch = K.debris.stats().epoch;
+    K.preview();
+    await new Promise((r) => setTimeout(r, 300));
+    const previewPainted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.style.getPropertyValue('--debris')).length;
+    const previewPhase = K.app.phase;
+    await K.begin();
+    return { events, epoch, previewPainted, previewPhase, epochNow: K.debris.stats().epoch, eventsNow: K.debris.stats().events, phase: K.app.phase };
+  });
+  await page.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state === 'playing', null, { timeout: 60000 });
+  expect(again.previewPhase === 'preview' && again.previewPainted > 0, `the setup preview shows the stage's scars (${again.previewPainted} squares)`);
+  expect(again.epochNow === again.epoch + 1 && again.eventsNow === again.events && again.phase === 'playing', `a rematch is a new epoch on the same floor (epoch ${again.epoch} → ${again.epochNow}, ${again.eventsNow} events kept)`);
+}
+// --- THE FLIGHT: with motion on, the debris flies before it lands (the
+// canvas on the fx layer draws frames; the landing sets the cells' layer). ---
+{
+  const page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs2 = [];
+  page2.on('pageerror', (e) => errs2.push(String(e).split('\n')[0]));
+  const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', ...(THEME ? { theme: THEME } : {}) });
+  await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?${q2}`);
+  await page2.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page2.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const fl = await page2.evaluate(async () => {
+    const K = window.__DCK;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    let captures = 0, plies = 0;
+    for (; plies < 40 && K.app.duel.state === 'playing'; plies++) {
+      await K.playerMove(K.randomMove());
+      const t0 = Date.now();
+      while ((K.app.busy || K.debris.busy) && Date.now() - t0 < 30000) await wait(50);
+      captures = K.app.duel.record.sans.filter((s) => s.includes('x')).length;
+      if (captures >= 2 && K.debris.frames() > 0) break;
+    }
+    const t0 = Date.now();
+    while (K.debris.busy && Date.now() - t0 < 5000) await wait(50);
+    const canvas = document.querySelector('#board .fx-layer canvas.fx-debris');
+    let blank = true;
+    if (canvas) {
+      const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) { blank = false; break; }
+    }
+    const evs = K.debris.events();
+    const painted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.style.getPropertyValue('--debris')).length;
+    return { plies, captures, frames: K.debris.frames(), canvas: !!canvas, size: canvas ? [canvas.width, canvas.height] : null, blank, events: evs.length, painted, pending: K.debris.stats().pending, fx: K.debris.options.fx, files: K.app.boardUI.files, ranks: K.app.boardUI.ranks };
+  });
+  expect(fl.fx && fl.events > 0, `motion on: ${fl.events} events over ${fl.plies} plies (${fl.captures} captures)`);
+  expect(fl.frames > 0 && fl.canvas && fl.size[0] === fl.files * 16 && fl.size[1] === fl.ranks * 16, `the flight drew ${fl.frames} frames on a ${fl.size?.[0]}×${fl.size?.[1]} canvas at the board's pixel grid`);
+  expect(fl.blank && fl.pending === 0 && fl.painted > 0, `everything landed: canvas clear, nothing pending, ${fl.painted} squares painted`);
+  expect(errs2.length === 0, `no page errors with the flight on${errs2.length ? ` — ${errs2.join(' | ')}` : ''}`);
+  await page2.close();
+}
 await browser.close();
 server.close();
 

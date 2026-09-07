@@ -808,6 +808,86 @@ browser logs (the lab's line shape and the export are two shapes of one
 thing); mid-duel review (the in-game `before` / `deep Δ` cover the last
 quake).
 
+**THE DEBRIS LAYER ✅ built 2026-09-07 (designer: "a universal debris
+system, so traces of destruction can be seen everywhere… blood splatters
+for captured pieces… skid marks under displacements and worn paths sound
+awesome… actual particle effects… stick to the 16×16 tiles… persist after
+duels, dungeon maps are going to be 100×100").** The floor remembers.
+`play/js/debris.mjs` is a pure ledger + painter: every violent event —
+`smash` (a piece captures terrain), `breach`, `crumble`, `weaken`
+(the gods), `kill` (a piece captured) and `skid` (a displacement) — is
+recorded in ENVIRONMENT PIXEL SPACE (the base stage's own uncropped,
+unflipped grid, y down from its top rank; a duel contributes through
+`envTransform` — the deal's flip + crop + king-anchored auto-crop, ONE
+function for squares, pixels and direction vectors, round-trip tested)
+with its kind, material, origin, direction (away from the attacker; a god
+edit is a radial burst), the EPOCH (the duel count on that floor) and ply,
+and the SPRITE the broken thing wore (role + variant + wall case, never
+pixels). THE LEDGER IS THE TRUTH, PIXELS ARE A CACHE: the painter
+(`paintCell`) writes each env cell's 16×16 RGBA buffer from a PRNG seeded
+by the event alone, sampling chunks off the actual sprite (plank pixels off
+the crate, the brick face off the wall, a material palette when no sprite
+is decoded), so a theme switch or a toggle repaints the whole history; the
+buffer becomes a DETERMINISTIC data URL (`pngmini.mjs`, store-only zlib,
+no canvas — a canvas rounds translucent pixels through premultiplied
+alpha) painted as `var(--debris)` in EVERY cell background stack
+(style.css) above the floor and shade, under the wall / pit / ruin stub /
+sprites / pieces, at the floor tile's own 100%×100% pixelated scaling —
+THE 16×16 RULE: no debris pixel is ever a different size or alignment from
+a floor pixel. Persistence RIDES THE ENVIRONMENT, never the duel:
+main.mjs keeps one ledger per stage in localStorage (`dck.debris.v1:<stage
+id>`), opened when the stage is previewed, ticked an epoch by every
+`beginDuel` (Rematch included — same dungeon), saved after every event,
+on undo, on end and on pagehide; the setup preview paints the stage's
+scars. Growth is bounded twice (`CELL_CAP` 12 events per cell bucket,
+oldest evicted; `PIXEL_CAP` 112 opaque px per cell, the oldest event
+drops its smallest chunks first) and debris SETTLES (after an epoch the
+1-px flecks are gone, after three the 2-px chips; blood dries red→maroon
+after `DRY_PLIES` 20 or by the next duel; skids fade) — a 100×100 floor
+is the same code with more cells. WEAR is a dense traffic grid, not
+events: every move visits its landing square and, for a straight move,
+the squares it passes over (a slider wears the file it runs on, a shuffle
+draws its circle), three levels of translucent scuff at `WEAR_LEVELS`
+6/16/40 visits — the one debris that needs no palette. THE FLIGHT
+(`play/js/particles.mjs`): the debris does not appear, it flies — one
+canvas on the fx layer at the board's pixel grid (`fxCanvas`, files×16 by
+ranks×16, pixelated) draws every live chunk as integer-pixel rects on a
+~15-Hz pixel-art tick from the broken thing to the exact pixels the
+painter lands them on (the painter decided first; the last frame IS the
+persistent debris), stone hops short and bounces, wood flies far, the
+victim SPRITE SHATTERS into 2×2 blocks that fade in the air (`shatterOf`;
+a crumble's blocks fall INTO the pit), a skid draws progressively under
+the slide; captures fly while the engine thinks (never awaited; the event
+is `pending` until it lands, then its cells repaint through
+`setDebris`, which touches nothing else on a cell — a held quake frame
+stays held), quake rungs fly inside their beats. A capture's victim is
+the square whose occupant VANISHED (the landing square or the en-passant
+pawn), a shattering crate holds until the piece arrives (no dissolve),
+a piece still dissolves under the blow. Toggles filter the PAINT, never
+the record (Options → Debris: destruction / blood / skid / wear /
+particles, an amount slider 0–200% scaling counts and the cap, Clean this
+stage / every stage; `?debris=off|all|<list>`; `data-debris` on the
+board); an undo forgets this epoch's events past the rewound ply and
+recounts the traffic from the record. The RUIN autotile lost its baked
+chips (`RUIN.chips` 0 in the repack tool; the committed tiles rewritten
+by `phase0/harness/strip-ruin-chips.mjs`, which strips isolated ≤2-px
+components and refuses anything larger — every fleck on the floor is the
+debris layer's now, one set of dials). Gates: `phase0/harness/
+test-debris.mjs` (Node, 53 checks: the transform under flip/crop/auto-crop,
+buckets, cap, undo, traffic, serialize, determinism, sprite sampling,
+settling, drying, the shatter, the painter's cap and toggles, the PNG
+round-trip against png.mjs, the strip), ui-smoke (one event per capture
+and per quake rung, PNG layers on floor only, the saved ledger, toggles
+hide and keep, the preview shows the scars, a rematch is epoch + 1 with
+every event kept, and a second page with motion ON: frames drawn on a
+files×16 canvas, everything landed, no page errors), selftest 42/42,
+replay-smoke 63/63 unchanged. `__DCK.debris` = ledger / env / tx /
+options / stats / events / cell(sq) / paint(sq) / frames / busy / clean /
+save. Held for round two (designer): fallen props, bones, cobwebs on idle
+pieces, torches that gutter with tedium, hole craters, the promotion kit,
+per-side blood; the replay analyzer paints no debris yet (the painter is
+pure, so it can).
+
 **Phase 1.2.5's lab rig is SHELVED, deliberately** — the corpus programme it
 specified (58 stages × both orientations × both terrain arms × generated
 matchups × eleven arms) costs ~550 h of serial CPU and answers calibration
@@ -922,6 +1002,10 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
+- `play/js/debris.mjs` + `particles.mjs` + `pngmini.mjs` — THE DEBRIS LAYER
+  (2026-09-07): the environment's scar ledger + painter (pure), the flight
+  on the fx canvas, the deterministic PNG; wired in main.mjs (§ THE DEBRIS
+  LAYER), painted by board-ui setPosition's `debris` callback.
 - `play/` — the Phase 1 game (vanilla-JS ES modules, GitHub Pages). Phase 0
   modules are ported verbatim into `play/js/`; `play/vendor/` carries its own
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
@@ -968,6 +1052,8 @@ node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i
 node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots) + the replay log's export/undo branch
 node harness/log-report.mjs <dck-log_*.json> [quakes|branches|engine|all] [--ply N]  # a phone's exported replay log as a readable post-mortem (no engine needed; the rendering is play/js/logreport.mjs, shared with replay/)
 node harness/test-logreport.mjs      # the shared report module's Node gate on the committed sample log (replay/samples/)
+node harness/test-debris.mjs         # THE DEBRIS LAYER's Node gate: transform, ledger, painter, PNG, the ruin tiles' chip strip
+node harness/strip-ruin-chips.mjs --check  # the committed ruin tiles carry no baked chips (the debris layer owns the flecks)
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
 ```
