@@ -282,19 +282,21 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
    theme, so the plain look is untouched). */
 .cell { --tile-floor: var(--tile-floor-1); --wall-tile: var(--tile-wall); --shade: linear-gradient(var(--floor-shade, transparent), var(--floor-shade, transparent)); }
 /* THE DEBRIS LAYER (2026-09-07, play/js/debris.mjs): a square's debris is
-   a 16×16 CANVAS, the cell's first child, painted with putImageData
-   (board-ui setDebris) and scaled to the cell exactly like the floor tile
-   (100% × 100%, pixelated), so a debris pixel is never a different size or
-   alignment from a floor pixel. A canvas, not a background image: the
-   first cut swapped a data URL into every cell's background stack, and a
-   background that changes to an image the browser has not decoded yet
-   paints a frame without it — on Firefox that blinked every landing — and
-   touching a cell's inline style restyled the piece inside it. The canvas
-   paints OVER the cell's own background (the floor, and the wall / pit /
-   ruin tiles — debris is painted on floor squares only, so the one thing
-   it can cover is a ruin's stub, which reads as rubble on rubble) and
-   UNDER the sprites and pieces, which follow it in the cell. */
-.cell > canvas.debris {
+   a 16×16 IMAGE, the cell's first child (board-ui setDebris: a data URL,
+   decoded OFF the DOM and only then swapped in over the old one), scaled to
+   the cell exactly like the floor tile (100% × 100%, pixelated), so a
+   debris pixel is never a different size or alignment from a floor pixel.
+   A plain <img>, on purpose: a background image swapped to an undecoded
+   URL paints a frame without it (the first cut — Firefox blinked every
+   landing) and touching the cell's style restyles the piece inside it; a
+   per-cell <canvas> (the third cut) coincided with pieces vanishing for
+   whole seconds on a desktop Firefox while idle. An <img> is a decoded
+   bitmap to every compositor. It paints OVER the cell's own background
+   (the floor, and the wall / pit / ruin tiles — debris is painted on floor
+   squares only, so the one thing it can cover is a ruin's stub, which
+   reads as rubble on rubble) and UNDER the sprites and pieces, which
+   follow it in the cell. */
+.cell > img.debris {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -686,13 +688,13 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   z-index: 4; /* above the arrow layer, so a sliding piece is never occluded */
 }
 
-/* The debris FLIGHT (play/js/particles.mjs) has no layer of its own: every
-   chunk in the air is drawn into the debris canvas of the square it is
-   over (.cell > canvas.debris above), so it passes BEHIND the pieces and
-   a landed chunk is never drawn over one — the first cut flew them on the
-   fx layer above everything ("blood and debris rendered on top of the
-   piece layer"), the second stacked the pieces over a board-wide layer
-   with a z-index, which blinked in Firefox. */
+/* The debris FLIGHT (play/js/particles.mjs) is drawn on a second SVG over
+   the board — the arrow layer's twin (same class, same viewBox; above the
+   pieces, below the FLIP clones), every chunk a path of 16-grid pixels
+   with crisp edges. No canvas: three canvas cuts went before it (see the
+   header of particles.mjs). A chunk in the air passes in front of a
+   piece; the landed debris (the cell's own image) is under it. */
+.flight-layer .flight { shape-rendering: crispEdges; pointer-events: none; }
 /* A sprite the flight is shattering: the chunks ARE the sprite now. */
 .cell .piece.fx-shattered { visibility: hidden; }
 

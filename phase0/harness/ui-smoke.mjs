@@ -638,14 +638,14 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       want.skid += (q.displacements ?? []).length;
       if (q.crumble) want.crumble++;
     }
-    const painted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.querySelector(':scope > canvas.debris')).map((c) => c.dataset.square);
-    // every debris canvas is 16×16, the cell's FIRST child (under the sprites and pieces), and shows opaque pixels
-    const urlsOk = painted.every((sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const cv = c.querySelector(':scope > canvas.debris'); return cv.width === 16 && cv.height === 16 && c.firstElementChild === cv && K.debris.cell(sq).painted && K.debris.cell(sq).pixels > 0; });
+    const painted = [...document.querySelectorAll('#board .cell[data-square]')].filter((c) => c.querySelector(':scope > img.debris')).map((c) => c.dataset.square);
+    // every debris image is a decoded 16×16 PNG, the cell's FIRST child (under the sprites and pieces), with painted pixels behind it
+    const urlsOk = painted.every((sq) => { const c = document.querySelector(`#board [data-square="${sq}"]`); const im = c.querySelector(':scope > img.debris'); return im.naturalWidth === 16 && im.naturalHeight === 16 && im.complete && im.src.startsWith('data:image/png;base64,') && c.firstElementChild === im && K.debris.cell(sq).painted && K.debris.cell(sq).pixels > 0; });
     const paintedOnFloor = painted.every((sq) => { const cl = K.marks.cell(sq); return !cl.includes('wall') && !cl.includes('hole') && !cl.includes('furniture'); });
     const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square));
     const breachPainted = breachSquares.filter((sq) => !!K.debris.cell(sq)?.painted);
-    // No flight layer, no piece z-index (Firefox dropped z-indexed pieces for a frame): the pieces stack as they always did.
-    const layerOrder = (() => { const cs = (sel) => getComputedStyle(document.querySelector(sel)).zIndex; return { layer: !!document.querySelector('#board > .debris-layer'), piece: cs('#board .piece'), arrows: cs('#board .arrow-layer'), fx: cs('#board .fx-layer'), transient: K.app.boardUI.debrisTransient.size }; })();
+    // No canvas on the board, no piece z-index (Firefox dropped z-indexed pieces for a frame): the pieces stack as they always did.
+    const layerOrder = (() => { const cs = (sel) => getComputedStyle(document.querySelector(sel)).zIndex; return { canvases: document.querySelectorAll('#board canvas').length, piece: cs('#board .piece'), arrows: cs('#board .arrow-layer'), fx: cs('#board .fx-layer') }; })();
     const captures = d.record.sans.filter((s) => s.includes('x')).length;
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(K.debris.key + K.debris.env)); } catch { /* none */ }
@@ -661,16 +661,16 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect((dz.byKind.kill ?? 0) + (dz.byKind.smash ?? 0) === dz.captures, `one kill or smash per capture on the record (${dz.byKind.kill ?? 0} kills + ${dz.byKind.smash ?? 0} smashes = ${dz.captures} captures)`);
   expect((dz.byKind.weaken ?? 0) === dz.want.weaken && (dz.byKind.breach ?? 0) === dz.want.breach && (dz.byKind.skid ?? 0) === dz.want.skid && (dz.byKind.crumble ?? 0) === dz.want.crumble, `every quake rung left its event (weaken ${dz.byKind.weaken ?? 0}/${dz.want.weaken}, breach ${dz.byKind.breach ?? 0}/${dz.want.breach}, skid ${dz.byKind.skid ?? 0}/${dz.want.skid}, crumble ${dz.byKind.crumble ?? 0}/${dz.want.crumble})`);
   expect(dz.events > 0 && dz.painted > 0 && dz.urlsOk && dz.paintedOnFloor && dz.pending === 0, `${dz.painted} squares wear a 16×16 debris canvas as their first child, all on floor, nothing left in flight (${dz.events} events)`);
-  expect(dz.layerOrder.piece === 'auto' && dz.layerOrder.arrows === '3' && dz.layerOrder.fx === '4' && !dz.layerOrder.layer && dz.layerOrder.transient === 0, `the stack is untouched: pieces z ${dz.layerOrder.piece}, arrows ${dz.layerOrder.arrows}, clones ${dz.layerOrder.fx}, no flight layer, no transient canvas left`);
+  expect(dz.layerOrder.piece === 'auto' && dz.layerOrder.arrows === '3' && dz.layerOrder.fx === '4' && dz.layerOrder.canvases === 0, `the stack is untouched: pieces z ${dz.layerOrder.piece}, arrows ${dz.layerOrder.arrows}, clones ${dz.layerOrder.fx}, and not one canvas on the board`);
   expect(dz.breach === 0 || dz.breachPainted > 0, `a breached wall's square wears its own stone (${dz.breachPainted}/${dz.breach})`);
   expect(dz.plyMax <= dz.ply, `no event outlives the record after the undos (latest event ply ${dz.plyMax} ≤ ${dz.ply})`);
   expect(dz.traffic > 0, `traffic wears the floor (${dz.traffic} cells visited)`);
   expect(dz.savedEvents === dz.events && dz.savedEpoch === dz.epoch, `localStorage holds the ledger (${dz.savedEvents} events, epoch ${dz.savedEpoch})`);
   expect(dz.samplerN > 0, `the sprite sampler decoded ${dz.samplerN} sprites off the board`);
   // Toggles filter the paint, not the record.
-  const tog = await page.evaluate(() => {
+  const tog = await page.evaluate(async () => {
     const K = window.__DCK;
-    const count = () => document.querySelectorAll('#board .cell[data-square] > canvas.debris').length;
+    const count = () => document.querySelectorAll('#board .cell[data-square] > img.debris').length;
     const before = count();
     K.options.debris = { ...K.options.debris, destruction: false, blood: false, skid: false, wear: false };
     K.applyOptions();
@@ -679,9 +679,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const eventsOff = K.debris.stats().events;
     K.options.debris = { ...K.options.debris, destruction: true, blood: true, skid: true, wear: true };
     K.applyOptions();
-    return { before, off, attrOff, eventsOff, after: count() };
+    // the images come back once each is decoded (setDebris swaps off the DOM) — a few ms
+    const t0 = Date.now();
+    while (count() < before && Date.now() - t0 < 3000) await new Promise((r) => setTimeout(r, 20));
+    return { before, off, attrOff, eventsOff, after: count(), waited: Date.now() - t0 };
   });
-  expect(tog.before > 0 && tog.off === 0 && tog.attrOff === 'off' && tog.eventsOff === dz.events && tog.after === tog.before, `toggles hide the paint and keep the record (${tog.before} → ${tog.off} → ${tog.after} painted squares, ${tog.eventsOff} events)`);
+  expect(tog.before > 0 && tog.off === 0 && tog.attrOff === 'off' && tog.eventsOff === dz.events && tog.after === tog.before, `toggles hide the paint and keep the record (${tog.before} → ${tog.off} → ${tog.after} painted squares, ${tog.eventsOff} events; the images were back in ${tog.waited} ms)`);
   await shot('debris');
   // The scars persist: back to the preview of the same stage, then a new duel — epoch + 1, every event kept.
   const again = await page.evaluate(async () => {
@@ -689,7 +692,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const events = K.debris.stats().events, epoch = K.debris.stats().epoch;
     K.preview();
     await new Promise((r) => setTimeout(r, 300));
-    const previewPainted = document.querySelectorAll('#board .cell[data-square] > canvas.debris').length;
+    const previewPainted = document.querySelectorAll('#board .cell[data-square] > img.debris').length;
     const previewPhase = K.app.phase;
     await K.begin();
     return { events, epoch, previewPainted, previewPhase, epochNow: K.debris.stats().epoch, eventsNow: K.debris.stats().events, phase: K.app.phase };
@@ -722,16 +725,17 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const t0 = Date.now();
     while (K.debris.busy && Date.now() - t0 < 5000) await wait(50);
     const evs = K.debris.events();
-    const canvases = document.querySelectorAll('#board .cell[data-square] > canvas.debris').length;
+    const canvases = document.querySelectorAll('#board .cell[data-square] > img.debris').length;
     const st = K.debris.stats();
-    // every canvas left is a persistent one (the flight's transient frames are restored), and each is the cell's first child
+    // every image is a persistent one, the cell's first child; the flight's group is gone
     const persistent = st.painted;
-    const firstChild = [...document.querySelectorAll('#board .cell[data-square] > canvas.debris')].every((c) => c.parentElement.firstElementChild === c);
-    return { plies, captures, frames: K.debris.frames(), canvases, persistent, firstChild, transient: K.app.boardUI.debrisTransient.size, events: evs.length, pending: st.pending, flights: st.flights, fx: K.debris.options.fx };
+    const firstChild = [...document.querySelectorAll('#board .cell[data-square] > img.debris')].every((c) => c.parentElement.firstElementChild === c);
+    const transient = document.querySelectorAll('#board svg.flight-layer g.flight').length + document.querySelectorAll('#board canvas').length;
+    return { plies, captures, frames: K.debris.frames(), canvases, persistent, firstChild, transient, events: evs.length, pending: st.pending, flights: st.flights, fx: K.debris.options.fx };
   });
   expect(fl.fx && fl.events > 0, `motion on: ${fl.events} events over ${fl.plies} plies (${fl.captures} captures)`);
-  expect(fl.frames > 0, `the flight drew ${fl.frames} frames into the cells' own canvases`);
-  expect(fl.pending === 0 && fl.flights === 0 && fl.transient === 0 && fl.canvases === fl.persistent && fl.persistent > 0 && fl.firstChild, `everything landed: no flight held, nothing pending, no transient canvas, ${fl.persistent} squares keep their debris as the cell's first child`);
+  expect(fl.frames > 0, `the flight drew ${fl.frames} frames on the flight SVG`);
+  expect(fl.pending === 0 && fl.flights === 0 && fl.transient === 0 && fl.canvases === fl.persistent && fl.persistent > 0 && fl.firstChild, `everything landed: no flight held, nothing pending, the flight group gone, no canvas, ${fl.persistent} squares keep their debris image as the cell's first child`);
   expect(errs2.length === 0, `no page errors with the flight on${errs2.length ? ` — ${errs2.join(' | ')}` : ''}`);
   await page2.close();
 }

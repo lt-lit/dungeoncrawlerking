@@ -2126,8 +2126,9 @@ function debrisBufFor(sq, k, ctx) {
 }
 
 /** The painter board-ui setPosition calls per square: the buffer its debris
- *  canvas should show (setDebris paints it synchronously — no image to
- *  decode, nothing on the cell's own style — so nothing ever blinks). */
+ *  image should show (setDebris encodes it, decodes the new image off the
+ *  DOM and swaps it in over the old one — nothing on the cell's own style,
+ *  never a frame without its debris). */
 function debrisPainter() {
   const D = app.debris;
   if (!D.ledger || !D.tx) return null;
@@ -2201,22 +2202,25 @@ function debrisParticles() {
   return D.particles;
 }
 
-/** Land an event: its cells' debris canvases repaint directly and at once
- *  (a flight lands between paints; setDebris touches nothing else on the
- *  cell), so the held flight can be released in the same tick. */
-function debrisLand(ev) {
+/** Land an event: its cells' debris images are re-encoded, decoded and
+ *  swapped in (a flight lands between paints; setDebris touches nothing
+ *  else on the cell). Resolves when the swaps have landed — a few ms — so
+ *  a held flight is released only once the debris is really under it. */
+async function debrisLand(ev) {
   const D = app.debris;
   if (!ev || !D.ledger || !D.tx) return;
   D.pending.delete(ev.id);
   const painter = debrisPainter();
+  const swaps = [];
   for (const i of D.ledger.cellsOf(ev)) {
     D.urls.delete(i);
     const ef = i % D.ledger.files, er = (i - ef) / D.ledger.files;
     const sq = fromEnvCell(D.tx, ef, er);
     if (!sq || !app.boardUI?.cells.has(sq)) continue;
     const k = D.kinds?.get(sq);
-    app.boardUI.setDebris(sq, painter && k ? painter(sq, k) : null);
+    swaps.push(app.boardUI.setDebris(sq, painter && k ? painter(sq, k) : null));
   }
+  await Promise.race([Promise.all(swaps), wait(250)]);
 }
 
 /**
@@ -2226,12 +2230,20 @@ function debrisLand(ev) {
  * flight replaces. Never throws; with the flight off (option, ?fx=0,
  * reduced motion) the debris simply appears. Runs while the engine thinks.
  */
-async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 320 } = {}) {
+async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 320, after = null } = {}) {
   const D = app.debris;
   if (!ev) return;
   const o = debrisOpts();
   const fxMs = FX(ms);
-  if (!o.fx || !fxMs || !o[CATEGORY[ev.k]] || !app.boardUI) return debrisLand(ev);
+  if (!o.fx || !fxMs || !o[CATEGORY[ev.k]] || !app.boardUI) {
+    // No flight: the debris appears when the thing that made it is gone —
+    // after the rung's own animation (`after`), never before the wall has
+    // broken (the first cut dropped the stone on the floor at the start of
+    // the burst: "the transition is not smooth at all").
+    if (after) await after;
+    await debrisLand(ev);
+    return;
+  }
   D.pending.add(ev.id);
   for (const i of D.ledger.cellsOf(ev)) D.urls.delete(i);
   let flight = null;
@@ -2247,12 +2259,12 @@ async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 3
       const arc = Particles.arcFor(ev.m);
       flight = P.fly({ tx: D.tx, chunks, eph, origin: { x: ev.x, y: ev.y }, ms: fxMs, hop: arc.hop, bounce: arc.bounce });
     }
-    await flight.landed; // the chunks are down and HELD on the canvas
+    await flight.landed; // the chunks are down and HELD on the flight layer
   } catch (e) {
     console.warn('debris flight', e);
   }
-  debrisLand(ev); // the cells' canvases wear the debris under the held chunks…
-  if (flight) P.release(flight.id); // …and in the same tick the chunks leave the flight canvas
+  await debrisLand(ev); // the cells wear the debris under the held chunks…
+  if (flight) P.release(flight.id); // …and then the chunks leave the flight layer
 }
 
 /** The capture a move made, if any: the square whose occupant vanished
@@ -2587,25 +2599,22 @@ async function onQuake(ev) {
   for (const e of edits) {
     const src = debrisSrcOf(e.square, preKinds.get(e.square));
     const dzEv = e.kind === 'weaken' || e.kind === 'breach' ? await debrisEvent({ k: e.kind, sq: e.square, src }) : null;
-    await Promise.all([
-      ui.animateTerrain(e.square, e.kind, FX(e.kind === 'breach' ? 320 : 300), { hold: true }),
-      dzEv ? debrisFly(dzEv, { shatter: e.kind === 'breach' ? src : null, sq: e.square, ms: e.kind === 'breach' ? 340 : 300 }) : null,
-    ]);
+    const anim = ui.animateTerrain(e.square, e.kind, FX(e.kind === 'breach' ? 320 : 300), { hold: true });
+    await Promise.all([anim, dzEv ? debrisFly(dzEv, { shatter: e.kind === 'breach' ? src : null, sq: e.square, ms: e.kind === 'breach' ? 340 : 300, after: anim }) : null]);
   }
   if (app.duel !== duel) return;
   if (displacements.length) {
     const skids = [];
     for (const d of displacements) skids.push(await debrisEvent({ k: 'skid', sq: d.from, to: d.to }));
-    await Promise.all([
-      ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) }),
-      ...skids.map((sk, i) => (async () => { await wait(i * FX(120)); await debrisFly(sk, { ms: 340 }); })()),
-    ]);
+    const slides = ui.animateSlides(displacements, { ms: FX(340), stagger: FX(120) });
+    await Promise.all([slides, ...skids.map((sk, i) => (async () => { await wait(i * FX(120)); await debrisFly(sk, { ms: 340, after: slides }); })())]);
   }
   if (app.duel !== duel) return;
   if (crumble) {
     const src = debrisSrcOf(crumble.square, preKinds.get(crumble.square));
     const dzEv = await debrisEvent({ k: 'crumble', sq: crumble.square, src });
-    await Promise.all([ui.animateTerrain(crumble.square, 'crumble', FX(450), { hold: true }), dzEv ? debrisFly(dzEv, { shatter: src, inward: true, ms: 450 }) : null]);
+    const anim = ui.animateTerrain(crumble.square, 'crumble', FX(450), { hold: true });
+    await Promise.all([anim, dzEv ? debrisFly(dzEv, { shatter: src, inward: true, ms: 450, after: anim }) : null]);
   }
   if (app.duel !== duel) return; // user backed out mid-animation
 
@@ -3060,7 +3069,7 @@ window.__DCK = {
       const buf = app.boardUI?.debrisBuf(sq) ?? null;
       let opaque = 0, pixels = 0;
       if (buf) for (let i = 3; i < buf.length; i += 4) { if (buf[i]) pixels++; if (buf[i] === 255) opaque++; }
-      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), painted: !!cell?.querySelector(':scope > canvas.debris'), pixels, opaque };
+      return { ef, er, events: D.ledger.eventsAt(ef, er).map((e) => ({ id: e.id, k: e.k, m: e.m, e: e.e, p: e.p })), traffic: D.ledger.trafficAt(ef, er), wear: wearLevel(D.ledger.trafficAt(ef, er)), painted: !!cell?.querySelector(':scope > img.debris'), pixels, opaque };
     },
     /** The painter's raw buffer for a square (a Uint8ClampedArray or null). */
     paint: (sq) => {

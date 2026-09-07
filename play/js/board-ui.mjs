@@ -96,6 +96,7 @@
 // layer — the enemy's last move in red, the gods' displacements in their
 // blue, the oracle's hints by rank (round 13: no square tints for moves).
 import { splitFen, parseBoard, WALL, FURNITURE } from './fen.mjs';
+import { pngDataUrl } from './pngmini.mjs'; // THE DEBRIS LAYER: a square's debris image
 
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const FURNITURE_GLYPH = '▦';
@@ -361,8 +362,8 @@ export class BoardUI {
     }
     container.textContent = '';
     this.cells = new Map();
-    this.debrisBufs = new Map(); // square → the 16×16 RGBA buffer its debris canvas shows (never repainted when unchanged)
-    this.debrisTransient = new Set(); // squares whose canvas exists only for a flight frame (no persistent debris)
+    this.debrisBufs = new Map(); // square → the 16×16 RGBA buffer its debris image shows (never re-encoded when unchanged)
+    this.debrisSeq = new Map(); // square → the latest setDebris call, so an older decode never lands over a newer one
 
     const rankOrder = [];
     for (let r = ranks; r >= 1; r--) rankOrder.push(r);
@@ -417,68 +418,69 @@ export class BoardUI {
   }
 
   /**
-   * Paint one square's debris: `buf` a 16×16 RGBA buffer (debris.mjs
-   * paintCell) or null for a clean floor. The square's debris CANVAS (its
-   * first child, under the sprites and pieces) takes it with putImageData —
-   * synchronous, nothing to decode, nothing on the cell's own style — so a
-   * flight can land between paints and a held quake frame stays held. An
-   * unchanged buffer is left alone.
+   * Show one square's debris: `buf` a 16×16 RGBA buffer (debris.mjs
+   * paintCell) or null for a clean floor. The square's debris IMAGE — an
+   * <img>, the cell's first child, under the sprites and the pieces by
+   * document order, scaled to the cell like the floor tile — is a plain
+   * decoded bitmap to every compositor (no canvas surface: the per-cell
+   * canvases of an earlier cut coincided with pieces vanishing for whole
+   * seconds on a desktop Firefox). The buffer becomes a data URL
+   * (pngmini.mjs, deterministic), a NEW image is decoded OFF the DOM, and
+   * only then swapped in over the old one — the old stays until the new is
+   * ready, so nothing ever paints a frame without its debris. Nothing on
+   * the cell's own style is touched, so a held quake frame stays held. An
+   * unchanged buffer is left alone. Resolves when the swap has landed (or
+   * at once when there was nothing to do).
    */
-  setDebris(sq, buf) {
+  async setDebris(sq, buf) {
     const cell = this.cells.get(sq);
     if (!cell) return;
     const had = this.debrisBufs.get(sq) ?? null;
     if (!buf && !had) return;
     if (buf && had && buf.length === had.length && buf.every((v, i) => v === had[i])) return;
+    const seq = (this.debrisSeq.get(sq) ?? 0) + 1;
+    this.debrisSeq.set(sq, seq);
     if (!buf) {
       this.debrisBufs.delete(sq);
-      if (!this.debrisTransient.has(sq)) cell.querySelector(':scope > canvas.debris')?.remove();
+      cell.querySelector(':scope > img.debris')?.remove();
       return;
     }
-    this.#debrisCanvas(cell).getContext('2d').putImageData(new ImageData(buf, 16, 16), 0, 0);
     this.debrisBufs.set(sq, buf);
-    this.debrisTransient.delete(sq);
-  }
-
-  /** The square's debris canvas, made if it is missing (the cell's FIRST
-   *  child: under the sprites and the pieces by document order). */
-  #debrisCanvas(cell) {
-    let canvas = cell.querySelector(':scope > canvas.debris');
-    if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.className = 'debris';
-      canvas.width = 16;
-      canvas.height = 16;
-      cell.insertBefore(canvas, cell.firstChild);
+    const img = document.createElement('img');
+    img.className = 'debris';
+    img.decoding = 'sync';
+    img.alt = '';
+    img.src = pngDataUrl(16, 16, buf);
+    try {
+      await img.decode();
+    } catch {
+      /* an undecodable image is a clean square */
     }
-    return canvas;
+    if (this.debrisSeq.get(sq) !== seq || !this.cells.has(sq)) return; // superseded, or the board is gone
+    const old = cell.querySelector(':scope > img.debris');
+    if (old) cell.replaceChild(img, old);
+    else cell.insertBefore(img, cell.firstChild);
   }
 
-  /** A FLIGHT frame (play/js/particles.mjs): show `buf` on the square's
-   *  canvas for this frame only — the persistent debris is untouched and
-   *  restoreDebris brings it back. */
-  paintDebrisFrame(sq, buf) {
-    const cell = this.cells.get(sq);
-    if (!cell) return;
-    if (!this.debrisBufs.has(sq)) this.debrisTransient.add(sq);
-    this.#debrisCanvas(cell).getContext('2d').putImageData(new ImageData(buf, 16, 16), 0, 0);
-  }
-
-  /** The square back to its persistent debris (or to nothing). */
-  restoreDebris(sq) {
-    const cell = this.cells.get(sq);
-    if (!cell) return;
-    const buf = this.debrisBufs.get(sq) ?? null;
-    const canvas = cell.querySelector(':scope > canvas.debris');
-    if (buf) {
-      if (canvas) canvas.getContext('2d').putImageData(new ImageData(buf, 16, 16), 0, 0);
-    } else if (canvas) canvas.remove();
-    this.debrisTransient.delete(sq);
-  }
-
-  /** The 16×16 RGBA buffer a square's debris canvas shows, or null. */
+  /** The 16×16 RGBA buffer a square's debris image shows (or is about to), or null. */
   debrisBuf(sq) {
     return this.debrisBufs.get(sq) ?? null;
+  }
+
+  /** The FLIGHT's drawing surface (play/js/particles.mjs): a second SVG
+   *  over the board, same viewBox as the arrow layer and stacked with it
+   *  (above the pieces, below the FLIP clones), made on first use. No
+   *  canvas — every chunk in the air is a path of 16-grid pixels. */
+  get flightSvg() {
+    let svg = this.container.querySelector(':scope > svg.flight-layer');
+    if (!svg) {
+      svg = document.createElementNS(SVG_NS, 'svg');
+      svg.classList.add('arrow-layer', 'flight-layer');
+      svg.setAttribute('viewBox', `0 0 ${this.files * CELL} ${this.ranks * CELL}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      this.container.insertBefore(svg, this.fx);
+    }
+    return svg;
   }
 
   /** Hide a square's sprite while the flight shatters it (setPosition's next
@@ -618,9 +620,9 @@ export class BoardUI {
       const k = kinds.get(sq);
       // THE DEBRIS LAYER (2026-09-07): `debris(sq, kind)` answers the
       // square's 16×16 RGBA buffer — or null for a clean floor — and the
-      // cell's own debris canvas paints it (setDebris; unchanged buffers
-      // are left alone).
-      this.setDebris(sq, debris ? debris(sq, k) : null);
+      // cell's own debris image shows it (setDebris; unchanged buffers are
+      // left alone; the swap lands once the image is decoded).
+      void this.setDebris(sq, debris ? debris(sq, k) : null);
       const f = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq.slice(1), 10);
       const v = k.v;
@@ -928,7 +930,7 @@ export class BoardUI {
     this.container.classList.remove('board', 'inactive');
     this.cells.clear();
     this.debrisBufs.clear();
-    this.debrisTransient.clear();
+    this.debrisSeq.clear();
   }
 }
 
