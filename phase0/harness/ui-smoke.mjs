@@ -317,7 +317,12 @@ if (probe) {
   // board, so the readout climbs).
   const d0 = probe.depth;
   const climbed = await page.waitForFunction((d) => window.__DCK.cheat.depth > d, d0, { timeout: 3000 }).then(() => true).catch(() => false);
-  expect(climbed, `probe streamed a deeper paint after d${d0}`);
+  // A fast, decided position can spend its 400 ms and END at the very depth
+  // the first snapshot caught (seen once at d10, +10.9): the search is over
+  // and nothing deeper was ever coming — a finished probe, not a stalled
+  // stream. Accept that, and say which happened.
+  const ended = climbed ? null : await page.evaluate(() => ({ active: window.__DCK.cheat.active, depth: window.__DCK.cheat.depth }));
+  expect(climbed || (!!ended && !ended.active && ended.depth >= d0), climbed ? `probe streamed a deeper paint after d${d0}` : `probe finished at d${ended?.depth} with nothing deeper to stream after d${d0} (${JSON.stringify(ended)})`);
   await shot('01-hints');
   // The arrow dials (designer 2026-09-07: "make the arrows thinner. A thickness and opacity dial wouldn't hurt"):
   // width in floor pixels on both boards — the SVG stroke, or the gold pixels the rank-1 arrow lights in its
