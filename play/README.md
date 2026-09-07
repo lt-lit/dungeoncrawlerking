@@ -423,6 +423,24 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
+## The next renderer — the 16×16 grid (decided 2026-09-07)
+
+The designer committed to 16×16 for everything and Phase 2 opens with the
+rendering pipeline that makes it true (brief §2 item 5, §10). The board
+below is a CSS grid of fractional cells where every layer is a separate
+image the browser resamples on its own — which is why the tile-grid
+pieces of 2026-09-07 needed cell-sized boxes, measured row rectangles,
+positions baked into tiles and a two-browser gate to line up with the
+floor, why the debris image sits a sub-device-pixel off it, and why a
+slide shimmers off-grid. The replacement is one full-board buffer at 16
+px per tile, every layer written by the pure painters this page already
+has (`piecetiers.mjs`, `debris.mjs`, `classifyTerrain`, the autotile
+masks, the atlas), scaled to the screen once at an integer device-pixel
+factor, with a camera for the 100×100 floor. A spike on one board-sized
+canvas, judged for flicker on the designer's two Firefoxes, comes before
+anything is built on it. Until then everything under "Art themes" is the
+shipped, gated renderer, and nothing new is built on it.
+
 ## Art themes (2026-09-03)
 
 Designer decision after shopping free tilesets: use all three, make 16×16

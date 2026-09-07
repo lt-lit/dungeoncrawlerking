@@ -313,7 +313,46 @@ selftest (the fit fields, the clamp, the pure cut), ui-smoke (display
 box a whole multiple; tile box = the cell painted like the floor, head
 one cell up, the default lift baked into 36 inline tiers, lift 0 wears
 the stylesheet's, the px dials shown and the % dials hidden),
-replay-smoke, `gen-piece-halves --check`.
+replay-smoke, `gen-piece-halves --check`. **The designer's baseline, same
+day: lift +5, shift +1.**
+
+**PHASE 2 OPENS WITH THE 16×16 RENDERER — DECIDED 2026-09-07 (designer:
+"I can't help but feel like our whole graphics pipeline might be a bit
+janky. Especially if we want to commit to the 16x16 tile grid for
+everything… I want to commit to 16x16. Next session we'll start Phase 2
+proper, and get a proper rendering pipeline").** Brief §2 item 5 is the
+constraint: every drawn thing is 16×16 pixel art on ONE native-resolution
+grid, composed in ONE buffer and scaled to the screen ONCE, by a whole
+number where the screen allows it. THE DIAGNOSIS the tile-grid piece work
+produced: the DOM board is a CSS grid of FRACTIONAL cells and every layer
+is a separate image the browser resamples on its own, so a tile pixel is
+6.9 device pixels drawn 7,7,7,6,7 and every layer must re-earn alignment
+by construction (cell-sized boxes, measured row rectangles, positions
+baked into tiles, a two-browser gate); the debris `<img>` sits a
+sub-device-pixel off the floor; FLIP slides interpolate off-grid; a CSS
+trick cannot fix it (at dpr 3 a device pixel is not a multiple of
+Chromium's 1/64-px layout unit, so the row remainder comes straight
+back); and a DOM grid of 10,000 cells × 5 layers cannot carry the
+100×100 overworld, which needs a camera and sprite batching regardless.
+THE SHAPE: a full-board buffer at 16 px per tile plus headroom, every
+layer written by the existing pure painters, blitted at an integer
+device-pixel scale (k = ⌊available device px ÷ (16 × files)⌋: a 390-px
+phone at dpr 3 gets k 7, 1120 device px, a 17-CSS-px margin; the board
+steps in size and never fills exactly — the pixel-art norm), a camera for
+the overworld, hit-testing by division, labels as a DOM overlay. THE
+SPIKE FIRST: one board-sized canvas at integer scale running the existing
+painters, judged for flicker on the designer's Firefox/Windows and
+Android Firefox BEFORE anything is built on it — the "NO CANVAS on the
+board" rule (the debris layer's flicker rounds) was written against
+PER-CELL canvases mixed into DOM compositing, and one board-sized surface
+is a different animal, but the phone decides. CARRIES OVER: `piecetiers`,
+the debris ledger + painter, `classifyTerrain`, the autotile masks, the
+atlas + repack tool (one atlas PNG in place of 160 KB of data URIs), the
+rules, the Director, the replay log. REWRITTEN: board-ui's DOM painting,
+style.css's tile rules, the arrow/mark overlays, the FLIP slides and quake
+fx, the smoke suites' renderer checks; the replay analyzer shares the new
+renderer. Until it lands the DOM board carries the duel exactly as gated
+above; nothing else is built on the DOM renderer.
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
@@ -1092,7 +1131,9 @@ tail). Crumbles now take bare floor only; the debt-forced hole still
 lands (termination untouched), and the closed-endgame `terminal` crumble
 that ends a fully-locked board is unchanged (it immobilizes, it does not
 eat). The favored-seat model/edge for the live-regime
-arm still needs the designer. Then **Phase 2 — exploration slice**.
+arm still needs the designer. Then **Phase 2 — exploration slice —
+STARTS NEXT SESSION (designer 2026-09-07), and it opens with the 16×16
+renderer (see "PHASE 2 OPENS WITH THE 16×16 RENDERER" above).**
 
 **2026-09-04 — ARENA REFRESH: the test bed is now WAVE 6, s59–s94, thirty-six
 hand-authored 10×10 arenas** (designer: the small stages had become useless,
@@ -1322,3 +1363,17 @@ run one sweep at a time.
     2026-08-25; the natural venue would be FSF issue #609 if that ever
     changes). The walled-passer eval fix stays unshipped, documented in
     `engine/README.md`.
+18. **Browsers do not resample two images alike (2026-09-07,
+    `phase0/harness/piece-grid.mjs`).** On the DOM board, the ONLY thing
+    that lands on the floor tile's device-pixel grid in both Chromium and
+    Firefox is a 16×16 image painted exactly as the floor is — a
+    cell-sized box, `center / 100% 100%`. A box of another size, a 200%
+    background, a background offset by whole tile pixels, the same box
+    with `0 0` against a `center` floor, and a plain `<img>` (which
+    behaves like `0 0`) all drift by a device pixel somewhere; and
+    `top: -100%` is not the row above, because a CSS grid hands its
+    sub-pixel remainder to some rows (35.6875-px rows over 35.70313-px
+    ones) — measure the rows. Any position must be baked into the pixels.
+    This is the case for the Phase 2 renderer: one buffer, one resample,
+    nothing to align. Do not add another DOM layer that has to match the
+    floor; if one is unavoidable, run the gate.
