@@ -14,9 +14,9 @@
 // canvas board's buffer straight off __DCK.renderer.buffer(). Compared
 // on the start position and again after a run of seeded random plies with
 // the gods hot; the edge coordinates are masked (a font on one, a pixel
-// font on the other), the DOM's arrow layer is hidden (the same SVG rides
-// above the canvas, outside its buffer) and a per-channel tolerance of 2
-// absorbs alpha rounding.
+// font on the other), the arrows are left out on both (the DOM's SVG
+// hidden, the canvas's pixel arrows cleared) and a per-channel tolerance
+// of 2 absorbs alpha rounding.
 //
 // Usage (from phase0/): node harness/canvas-parity.mjs [--stage s59-hall-corner]
 //   [--seed 3] [--plies 14] [--k 3] [--theme hall|castle|crypt] [--shots]
@@ -101,6 +101,7 @@ async function domTiles(page) {
 async function canvasTiles(page) {
   const { squares, info } = await page.evaluate(() => {
     const K = window.__DCK;
+    K.app.boardUI.setArrows([]); // the arrows are pixels in this buffer; the DOM's SVG is hidden — compare the tiles alone
     K.renderer.paintNow();
     const ui = K.app.boardUI;
     const out = {};

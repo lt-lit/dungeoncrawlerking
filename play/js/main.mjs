@@ -3242,6 +3242,10 @@ window.__DCK = {
     square: (sq) => (app.boardUI?.kind === 'canvas' ? app.boardUI.squarePixels(sq) : null),
     buffer: () => (app.boardUI?.kind === 'canvas' ? app.boardUI.bufferPixels() : null),
     decor: (sq) => (app.boardUI?.kind === 'canvas' ? app.boardUI.decorOf(sq) : null),
+    /** The arrows the canvas board draws, in draw order (the DOM board's are its SVG). */
+    get arrows() {
+      return app.boardUI?.kind === 'canvas' ? app.boardUI.arrows.map((a) => ({ ...a })) : null;
+    },
     testPattern: (on) => app.boardUI?.setTestPattern?.(on),
     snapMode: (mode) => app.boardUI?.setSnapMode?.(mode),
     paintNow: () => app.boardUI?.paintNow?.(),

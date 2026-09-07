@@ -1305,7 +1305,8 @@ async function main() {
         if (dec !== cvs.decorOf(sq)) throw new Error(`${sq}: decor dom ${dec} vs canvas ${cvs.decorOf(sq)}`);
         if (dec) decor++;
       }
-      if (hostA.querySelectorAll('.arrow-layer g.arrow').length !== hostB.querySelectorAll('.arrow-layer g.arrow').length) throw new Error('both boards draw the same arrows');
+      if (hostA.querySelectorAll('.arrow-layer g.arrow').length !== cvs.arrows.length) throw new Error('both boards draw the same arrows');
+      if (hostB.querySelector('svg')) throw new Error('the canvas board carries no SVG overlay — its arrows are pixels in the buffer');
     }
     if (cvs.kind !== 'canvas' || dom.kind !== 'dom') throw new Error('kind');
     cvs.setPieceFit({ tileLift: 99, tileShift: -99 });

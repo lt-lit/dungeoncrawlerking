@@ -373,7 +373,11 @@ centred in whole device pixels; `fill` = the exact quotient), on-grid
 slides in whole native pixels, terrain fx with held end frames, the
 rumble as blit jitter (`rumble(ms)`), the flight through
 `particles.mjs`'s new sink (`ui.drawFlight`; SVG paths on the DOM board),
-the arrows still the shared SVG (`renderArrows`), the container still
+the ARROWS as PIXEL ART in the buffer (`pixelarrow.mjs`: shaft + head +
+one-pixel halo, the eval on a plate in the 3×5 font; the first build kept
+the SVG overlay above the canvas and the designer's first session saw "a
+big white rectangle flash" it was suspected of — nothing overlays the
+canvas now; the DOM board keeps `renderArrows`), the container still
 stamped `data-theme/-pieces/-doors` (the legend and the debris sampler
 read the cascade), a diagnostics line under the board (`#render-diag`:
 dpr, device-pixel size, k, integer/fill), `__DCK.renderer` (kind / info /
@@ -414,7 +418,16 @@ neutral through `__DCK.marks.cell` + `__DCK.renderer.decor`), selftest
 duel: 3.3 / 18.4 piece- / debris-scale blinks per 10 s vs the DOM board's
 8.5 / 48.2 on its own random duel, motion on; the s59 door and torch
 vanish 0 times; a 25-s idle turn with the probe streaming shows nothing
-beyond the arrows' repaints).
+beyond the arrows' repaints; no white frame mid-duel on the canvas
+recordings where the DOM recording has four). **THE DESIGNER'S VERDICT
+(2026-09-07, Zenfone 10 + Firefox/Windows 153): "works fine on both
+desktop and mobile" — k 3 on the desktop, k 6 on the phone — and the fill
+scaling "doesn't look bad either"; one "big white rectangle flash",
+suspected of the arrow overlay ("the arrows should probably be in the
+same rendering system, reworked to fit the 16x16 tile art") — done, the
+pixel arrows above; the replay log of that session (s60, 62 plies, 7
+quakes, 2 undos) had no anomalies.** Whether the DOM board goes is the
+next verdict.
 DECIDED the same session (brief §5.1, §10, §11): the DUEL IS A CAMERA
 VIEW OF THE SAME WORLD, zoomed (the largest integer step that fits the
 arena, the dungeon outside dimmed — small fights zoom in, no letterbox,

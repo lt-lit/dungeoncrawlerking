@@ -765,7 +765,6 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
   image-rendering: pixelated;
   touch-action: manipulation;
 }
-.board.board-canvas > .arrow-layer { inset: auto; }
 .board.board-canvas.inactive > canvas { cursor: default; }
 .board.board-canvas:not(.inactive) > canvas { cursor: pointer; }
 #board.board-canvas.quaking { animation: none; }

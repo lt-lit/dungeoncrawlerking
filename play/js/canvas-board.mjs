@@ -41,9 +41,14 @@
 //               is pixels in the buffer above the pieces. One
 //               requestAnimationFrame loop while anything moves; nothing
 //               otherwise.
-//   OVERLAYS    the arrows stay an SVG over the board rectangle (vector UI,
-//               shared with the DOM board — board-ui renderArrows); the
-//               diagnostics line main.mjs shows comes from `renderInfo`.
+//   ARROWS      the hint arrows, the enemy's last move and the gods'
+//               displacements are PIXEL ART in the buffer (pixelarrow.mjs:
+//               a chunky shaft and head with a one-pixel halo, the eval on
+//               a plate in the 3×5 font), drawn above the pieces — where
+//               the DOM board keeps its SVG overlay. No overlay element
+//               sits on the canvas at all (a designer's white flash on the
+//               first build pointed at the SVG; the diagnostics line
+//               main.mjs shows comes from `renderInfo`).
 //   INPUT       hit-testing by division: pointer → device px → tile.
 //
 // What it does NOT do (milestone 1, on purpose): the classic GLYPH pieces
@@ -53,13 +58,12 @@
 // pixel-art arrows (later), the overworld camera (later — this board is a
 // fixed-size viewport over one arena). The atlas is play/js/atlas.mjs.
 import { splitFen, parseBoard, WALL } from './fen.mjs';
-import { classifyTerrain, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, renderArrows, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './board-ui.mjs';
+import { classifyTerrain, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './board-ui.mjs';
+import { drawArrow, arrowColour, sortArrows } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
 
 const T = TILE;
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const CELL = 10; // the arrow layer's viewBox units per cell (board-ui)
 const EMPTY = new Set();
 const FX_KINDS = { weaken: 'cracking', breach: 'breaching', crumble: 'crumbling', terminal: 'crumbling' };
 /** The classic set's flat colours (style.css --cell-light / --cell-dark / --pit). */
@@ -165,12 +169,8 @@ export class CanvasBoard {
     this.ctx = this.canvas.getContext('2d', { alpha: true });
     this.buf = document.createElement('canvas');
     this.bctx = this.buf.getContext('2d', { willReadFrequently: true });
-    // Arrow overlay over the board rectangle (vector UI; renderArrows).
-    this.svg = document.createElementNS(SVG_NS, 'svg');
-    this.svg.classList.add('arrow-layer');
-    this.svg.setAttribute('viewBox', `0 0 ${files * CELL} ${ranks * CELL}`);
-    this.svg.setAttribute('preserveAspectRatio', 'none');
-    container.appendChild(this.svg);
+    this.arrows = []; // the arrows drawn in the buffer, in draw order (pixelarrow.mjs)
+    this.scratch = document.createElement('canvas'); // an arrow's opaque pixels before its alpha lands
     this.canvas.addEventListener('click', (e) => this.#onClick(e));
     this.#observe();
     this.#allocBuffer();
@@ -272,12 +272,6 @@ export class CanvasBoard {
       this.canvas.height = this.devH;
     }
     this.ctx.imageSmoothingEnabled = false;
-    // The arrow layer sits exactly on the board rectangle (CSS px).
-    const s = this.svg.style;
-    s.left = `${this.x0 / this.dpr}px`;
-    s.top = `${(this.y0 + this.headroom * k) / this.dpr}px`;
-    s.width = `${(this.boardW * k) / this.dpr}px`;
-    s.height = `${(this.boardH * k) / this.dpr}px`;
     this.invalidate();
     this.onResize?.(this.renderInfo);
   }
@@ -381,8 +375,11 @@ export class CanvasBoard {
     this.invalidate();
   }
 
+  /** The arrows to draw (BoardUI.setArrows' list): kept in draw order and
+   *  painted into the buffer above the pieces on the next frame. */
   setArrows(arrows) {
-    renderArrows(this.svg, arrows, { files: this.files, ranks: this.ranks, flipped: this.flipped });
+    this.arrows = sortArrows(arrows ?? []);
+    this.invalidate();
   }
 
   /**
@@ -659,18 +656,15 @@ export class CanvasBoard {
     if (Math.abs(sx - this.snapX) < 1e-4 && Math.abs(sy - this.snapY) < 1e-4) return;
     this.snapX = sx;
     this.snapY = sy;
-    const cs = this.canvas.style, ss = this.svg.style;
+    const cs = this.canvas.style;
     if (this.snapMode === 'transform') {
       cs.transform = sx || sy ? `translate(${sx.toFixed(5)}px, ${sy.toFixed(5)}px)` : '';
-      ss.transform = cs.transform; // the arrow layer rides the same correction
     } else {
       // 'margin': a layout offset (quantised to a layout unit, 1/64 css px —
       // a residual under dpr/128 device px), which a browser that snaps
       // untransformed layers to the device grid then snaps the rest of the way.
       cs.marginLeft = `${sx.toFixed(5)}px`;
       cs.marginTop = `${sy.toFixed(5)}px`;
-      ss.marginLeft = cs.marginLeft;
-      ss.marginTop = cs.marginTop;
     }
   }
 
@@ -680,8 +674,8 @@ export class CanvasBoard {
    *  the default is what measured exact in both browsers. */
   setSnapMode(mode) {
     if (!SNAP_MODES.includes(mode)) return;
-    const cs = this.canvas.style, ss = this.svg.style;
-    for (const st of [cs, ss]) { st.transform = ''; st.marginLeft = ''; st.marginTop = ''; }
+    const cs = this.canvas.style;
+    cs.transform = ''; cs.marginLeft = ''; cs.marginTop = '';
     this.snapX = 0;
     this.snapY = 0;
     this.snapMode = mode;
@@ -832,6 +826,8 @@ export class CanvasBoard {
     for (const s of squares) this.#paintMarksOver(s);
     // 4. coordinates
     this.#paintCoords();
+    // 4b. the arrows, above the pieces (the DOM's layer sits above the cells)
+    this.#paintArrows();
     // 5. the flight
     if (this.flight) {
       for (const p of this.flight) {
@@ -1049,6 +1045,24 @@ export class CanvasBoard {
         g.fillStyle = TARGET;
         g.fillRect(x + 6, y + 6, 4, 4);
       }
+    }
+  }
+
+  /** The arrows in the buffer: centre to centre, the shape and colour by
+   *  kind and rank, the opacity by strength (pixelarrow.mjs). */
+  #paintArrows() {
+    if (!this.arrows.length) return;
+    if (this.scratch.width !== this.bufW || this.scratch.height !== this.bufH) {
+      this.scratch.width = this.bufW;
+      this.scratch.height = this.bufH;
+    }
+    const sg = this.scratch.getContext('2d');
+    sg.imageSmoothingEnabled = false;
+    for (const a of this.arrows) {
+      if (!this.cells.has(a.from) || !this.cells.has(a.to)) continue;
+      const p = this.#origin(a.from), q = this.#origin(a.to);
+      const s = Math.max(0, Math.min(1, a.strength ?? 1));
+      drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, strength: s, alpha: 0.6 + 0.3 * s, scratch: sg });
     }
   }
 

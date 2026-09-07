@@ -298,10 +298,16 @@ if (probe) {
   expect(probe.arrows.every((a) => a.kind === 'hint' && a.rank >= 1), `arrows carry rank + kind: ${JSON.stringify(probe.arrows)}`);
   expect(probe.arrows[0].rank === 1, 'rank 1 is first in the arrow list');
   expect(/^1 /.test(probe.hintLine), `hint line starts with the rank-1 SAN: "${probe.hintLine}"`);
-  const labels = await page.evaluate(() => [...document.querySelectorAll('#board .arrow-layer g.arrow-hint text.label')].map((t) => t.textContent));
-  expect(labels.length === probe.arrows.length && labels.every((l) => /^(\+|−|-)?\d+\.\d$|^−?M\d+$/.test(l)), `every hint arrow carries an eval label: ${labels}`);
-  const domRanks = await page.evaluate(() => [...document.querySelectorAll('#board .arrow-layer g.arrow-hint')].map((g) => g.dataset.rank));
-  expect(domRanks.length === probe.arrows.length && domRanks[domRanks.length - 1] === '1', `DOM draws hints worst→best, best on top: ${domRanks}`);
+  // The drawn arrows: the DOM's SVG groups, or the canvas board's list (pixel art in its buffer), in draw order.
+  const drawn = await page.evaluate(() => {
+    const K = window.__DCK;
+    if (K.renderer.kind === 'canvas') return K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => ({ label: a.label ?? null, rank: String(a.rank) }));
+    return [...document.querySelectorAll('#board .arrow-layer g.arrow-hint')].map((g) => ({ label: g.querySelector('text.label')?.textContent ?? null, rank: g.dataset.rank }));
+  });
+  const labels = drawn.map((d) => d.label);
+  expect(labels.length === probe.arrows.length && labels.every((l) => l && /^(\+|−|-)?\d+\.\d$|^−?M\d+$/.test(l)), `every hint arrow carries an eval label: ${labels}`);
+  const domRanks = drawn.map((d) => d.rank);
+  expect(domRanks.length === probe.arrows.length && domRanks[domRanks.length - 1] === '1', `${CANVAS ? 'the buffer' : 'DOM'} draws hints worst→best, best on top: ${domRanks}`);
   // A streaming probe repaints: wait for the depth to move at least once
   // within the movetime (depth 12 is far past what 400 ms reaches on any
   // board, so the readout climbs).
@@ -415,8 +421,8 @@ for (let i = 0; i < PLIES; i++) {
         else if (residue.opened.includes(sq)) expect(dec === 'doorway' && !cells[sq]?.includes('ruin'), `${sq}: breached door keeps its open doorway (${dec})`);
         else expect(!cells[sq]?.includes('ruin') && dec === null && !['door', 'masonry'].includes(skinsNow[sq] ?? null), `${sq}: a burst crate leaves nothing (${skinsNow[sq]}, ${stub}, ${dec})`);
       }
-      const quakeArrows = await page.evaluate(() => document.querySelectorAll('#board .arrow-layer g.arrow-quake').length);
-      expect(quakeArrows >= wantFrom.length, `${quakeArrows} quake arrow(s) on the SVG layer for ${wantFrom.length} displacement(s)`);
+      const quakeArrows = await page.evaluate(() => (window.__DCK.renderer.kind === 'canvas' ? window.__DCK.renderer.arrows.filter((a) => a.kind === 'quake').length : document.querySelectorAll('#board .arrow-layer g.arrow-quake').length));
+      expect(quakeArrows >= wantFrom.length, `${quakeArrows} quake arrow(s) ${CANVAS ? 'in the buffer' : 'on the SVG layer'} for ${wantFrom.length} displacement(s)`);
       const godLogs = after.logTail.filter((l) => l.startsWith('gods|'));
       expect(godLogs.length >= fresh.length, `log has ${godLogs.length} gods line(s) for ${fresh.length} quake(s)`);
       for (const e of fresh) for (const t of e.terrain ?? []) expect(godLogs.some((l) => l.includes(t.square)), `log names the ${t.kind} at ${t.square}`);

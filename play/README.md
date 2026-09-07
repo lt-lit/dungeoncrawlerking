@@ -475,10 +475,17 @@ mid-slide last. Nothing in it has a fractional coordinate. **One blit**
 (`drawImage`, smoothing off) puts it on the screen canvas at scale k =
 ⌊device width ÷ (16 × files)⌋, the board centred in whole device pixels
 (`integer`) or at the exact quotient (`fill`: uneven pixel widths, every
-layer still aligned because they share the one resample). The arrows
-stay an SVG over the board rectangle (vector UI, `renderArrows` shared
-with the DOM board); the container keeps `data-theme` / `data-pieces` /
-`data-doors` (the legend and the debris sampler read the cascade off it).
+layer still aligned because they share the one resample). **The arrows
+are pixel art in the buffer** (`js/pixelarrow.mjs`: a chunky shaft and
+head with a one-pixel black halo, the eval on a plate in the 3×5 font at
+the shaft's midpoint, the colour by kind and rank as before, the opacity
+by strength through a scratch canvas so the halo never shows through) —
+the first build kept the DOM board's SVG overlay above the canvas, and
+the designer's first session on it saw "a big white rectangle flash"
+that pointed at the overlay, so nothing overlays the canvas at all now
+(the DOM board keeps `renderArrows`). The container keeps `data-theme` /
+`data-pieces` / `data-doors` (the legend and the debris sampler read the
+cascade off it).
 A slide moves its sprite in whole native pixels per frame; a terrain
 rung's fx (crack with jitter and a flash, burst, sink to the lone pit) is
 drawn in the buffer and its END FRAME held until setPosition commits; the
@@ -530,7 +537,9 @@ blood, the residue frames) and on the other two themes: **exact, 24 320 of
 DOM's arrow SVG hidden — the same SVG rides above the canvas). Two draw-
 order rules fell out of getting there: the debris paints OVER a ruin's
 stub (the DOM's image is above the cell background) and the open doorway
-paints over the debris (the decor span is above the image).
+paints over the debris (the decor span is above the image). The arrows
+are left out of the comparison on both boards (the DOM's SVG hidden, the
+canvas's pixel arrows cleared).
 `phase0/harness/canvas-grid.mjs` is the device-pixel gate (the test
 pattern, nine ratio × width cases, integer and fill, Chromium + Firefox).
 `ui-smoke.mjs --renderer canvas` runs the live smoke on this board (the
@@ -547,8 +556,12 @@ board's 8.5 and 48.2 on a duel of its own (motion on — slides, bursts
 and flights are transient by design; the games differ, the moves are
 random), the s59 door and torch vanishing 0 times on the canvas (0 and
 1 on the DOM), and a 25-s idle turn with the hint probe streaming showed
-no blink beyond the arrows' repaints. **The phone's verdict decides
-whether the DOM board goes** (CLAUDE.md § Phase 2).
+no blink beyond the arrows' repaints. **The designer's verdict (2026-09-07,
+Zenfone 10 + Firefox/Windows): "works fine on both desktop and mobile",
+k 3 on the desktop and k 6 on the phone, and the fill scaling "doesn't
+look bad either"; one "big white rectangle flash", suspected of the SVG
+arrow overlay — hence the pixel arrows above. Whether the DOM board goes
+is the next verdict** (CLAUDE.md § Phase 2).
 
 ## Art themes (2026-09-03)
 
