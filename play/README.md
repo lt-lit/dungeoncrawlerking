@@ -303,32 +303,94 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   set stands on ONE baseline and the box scaled to 0.96 cell never rises
   into the square above (designer: tall pieces overlapping the piece north
   of them read badly clustered; round 10: a taller box centred in the
-  square hung every foot below it — "chopped in half"). Dials then place
-  the box (Options → Look → **Piece size** / **lift** / **shift** and
-  **Pixel-perfect pieces**; `?piecescale=` / `?piecelift=` /
-  `?pieceshift=` / `?piecesnap=1`; `setPieceFit` → `--piece-scale` /
-  `--piece-lift` / `--piece-shift` and `data-piece-snap` on the board;
-  wide ranges — size 50–200%, lift −50…+100%, shift ±50% — because the
+  square hung every foot below it — "chopped in half"). **PIECE PIXELS
+  (2026-09-07)** — Options → Look → **Piece pixels** (`?piecepixels=`,
+  `setPieceFit({ pixels })` → `data-piece-pixels` on the board,
+  `PIECE_PIXELS`) picks how a sprite's pixels are sized, and the DEFAULT
+  is the **tile grid**: every sprite pixel is one floor pixel, the same
+  size and the same alignment as the 16×16 tile under it (designer: "the
+  pixels making up the pieces [must] exactly match the size and alignment
+  of the pixels making up the 16x16 tiles"; the old "Pixel-perfect"
+  checkbox had snapped the box to whole SCREEN pixels instead — a
+  different size from a tile pixel, on an unrelated grid). Measured in
+  Playwright's Chromium AND Firefox (`phase0/harness/piece-grid.mjs`, the
+  gate): the only construction that lands on the floor's device-pixel
+  grid in both browsers, at fractional cell sizes, is a 16×16 image
+  painted exactly as the floor is — a CELL-SIZED box with `center / 100%
+  100%`; a box of any other size (the 23-row sprite at 23/16 of a cell, a
+  two-cell box, a 200% background on the cell) drifts by a device pixel
+  on some rows in one browser or the other, and a background offset by
+  whole tile pixels drifts too — so a tile-grid piece is THREE such
+  boxes, one per square it can cover: its own square (`--piece-lo`), the
+  square north (`--piece-mid`, a `::before`; being later in the DOM than
+  that square, a nearer piece's head paints over the piece behind it, as
+  before) and the one above that (`--piece-hi`, a `::after`, for a lifted
+  piece) — and those two boxes are the north squares' MEASURED rectangles
+  (`layoutPieceRows` sets `--tier-mid-top/-h` / `--tier-hi-top/-h` on
+  every cell from `getBoundingClientRect`, re-measured on resize;
+  `piecetiers.mjs tierRowVars`): `top: -100%` of this cell is NOT the row
+  above once a grid hands its sub-pixel remainder to some rows (Chromium
+  at one width laid 35.6875-px rows over 35.70313-px ones, and the 1/32 px
+  flipped a device row in the gate); the percentages survive only as the
+  fallback above the top rank, where there is no floor to align with.
+  THE TIERS ARE THE POSITION: `play/js/piecetiers.mjs` (pure,
+  browser-safe) cuts a set's fitted sprite into the three 16×16 tiles with
+  its placement baked in — **Piece lift** / **Piece shift** in WHOLE TILE
+  PIXELS (Options, shown on the tile grid only; `?tilelift=` /
+  `?tileshift=`; `TILE_LIFT_RANGE` −4…+20, `TILE_SHIFT_RANGE` ±7; the
+  defaults `DEFAULT_PIECE_FIT.tileLift` 5 / `tileShift` 1 — the designer's settled numbers, after "the
+  foot of the piece should be roughly centered on the tile"). tiles.css
+  carries every set's lift-0 tiers (`--piece-<fen>-lo` / `-mid`, cut by
+  `phase0/lib/piecehalves.mjs` through the same function — the repack
+  tool emits them, and `phase0/harness/gen-piece-halves.mjs` writes the
+  same lines from the committed atlas when the packs are not on disk,
+  `--check` = are they stale); any other placement is BAKED AT RUNTIME by
+  `board-ui.layoutPieceTiers` — the set's sprites read off the board's
+  computed `--piece-<fen>` and decoded once, off the DOM, exactly as the
+  debris sampler does (a canvas never touches the board), re-cut per
+  (set, lift, shift) and cached, encoded by `pngmini.mjs`, and set inline
+  on the board as `--piece-<fen>-lo/-mid/-hi` over the stylesheet's; a
+  slider drag re-encodes twelve tiny PNGs per step, `boardUI.pieceBaked`
+  resolves when the board wears it, `--piece-tile-lift` feeds the
+  headroom. A wider box keeps the tile's 16 centre columns (deja-view's
+  knights lose one outline column); what a lift or shift pushes out of
+  the three tiles is cut. The size dial does not apply (the art's own
+  scale; NullTale 16×23 is one square wide, its head 7 + lift px into the
+  square above; the shadow is one tile pixel, `100cqh/16`, pinned in px on
+  the FLIP clone whose layer is no size container). The other two modes
+  keep the % dials: **screen pixels** (`display`, round 11's "pixel-perfect";
+  `layoutPieceSnap`, re-run by a ResizeObserver, measures a cell, reads
+  the set's native box from tiles.css (`--piece-fit` / `--piece-box`),
+  takes the largest whole device-pixel scale k that fits the size dial
+  and lands the box on whole device pixels — no sprite pixel wider than
+  its neighbour, at the cost of stepping between sizes as the board
+  resizes; `data-piece-snap`) and **free**. In those, dials place the box
+  (**Piece size** / **lift** / **shift**; `?piecescale=` / `?piecelift=` /
+  `?pieceshift=`; `--piece-scale` / `--piece-lift` / `--piece-shift`; wide
+  ranges — size 50–200%, lift −50…+100%, shift ±50% — because the
   designer's numbers hit the first caps): the box is scaled, centred in
-  the square, raised by the lift and moved by the shift. The defaults are
+  the square, raised by the lift and moved by the shift; the defaults are
   the designer's settled phone numbers, `DEFAULT_PIECE_FIT` = 146% / +22%
-  / +4% with pixel-perfect ON (board-ui, mirrored as style.css's
-  fallbacks): a piece stands on its square's bottom edge and rises well
-  into the one above — which is earlier in the DOM, so the nearer (lower)
-  piece paints in front, as it should. The board is OPEN at the top
+  / +4% (board-ui, mirrored as style.css's fallbacks): a piece stands on
+  its square's bottom edge and rises well into the one above — which is
+  earlier in the DOM, so the nearer (lower) piece paints in front, as it
+  should. (`?piecesnap=1` / `=0` are the old spellings of display / free;
+  a saved `pieceSnap` is no longer read — every player lands on the tile
+  grid.) The board is OPEN at the top
   (round 13: `overflow: visible` with a `clip-path` that still clips the
   sides and bottom), so a tall piece on the top row rises past the border
   instead of losing its head, and under a sprite set the board steps down
-  by that overhang (`.board[data-pieces] { margin-top }`, from the same
-  dials) so the heads never sit on the bar above. **Pixel-perfect** (`layoutPieceSnap`, re-run by a
-  ResizeObserver) measures a cell, reads the set's native box from
-  tiles.css (`--piece-fit` / `--piece-box`), takes the largest whole
-  device-pixel scale k that fits the size dial and lands the box on whole
-  device pixels — no sprite pixel wider than its neighbour, at the cost
-  of stepping between sizes as the board resizes (ui-smoke asserts the
-  king's box is a whole multiple of the set's height). The FLIP clone
-  copies the piece's own box, not the cell's; the promotion picker takes
-  the same set and shows sprite buttons. Options → Look → **Pieces**
+  by that overhang (`.board[data-pieces] { margin-top }` — from the dials,
+  or (fit − 16)/16 of a cell on the tile grid) so the heads never sit on
+  the bar above. ui-smoke asserts the display box is a whole multiple of
+  the set's height, the tile-grid king's box is its cell, painted like
+  the floor, with its head one cell up, and the default lift baked into
+  36 inline tiers (lift 0 wears the stylesheet's); `piece-grid.mjs`
+  measures the lift-0, default, hi-tier and clamp-edge placements exact
+  on the floor's grid in both browsers. The FLIP clone copies the piece's
+  own box, not the cell's (on the tile grid, the cell — the head rides
+  along as its `::before` / `::after`); the promotion picker takes the
+  same set and shows sprite buttons. Options → Look → **Pieces**
   (persisted, default NullTale classic) and `?pieces=` pick it,
   independently of the theme; **Doors** (`DOOR_SETS`: leaf / portcullis /
   gate, `data-doors` on the board, `?doors=`) picks a door set over any
@@ -360,6 +422,24 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   duel driving, win/loss.
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
+
+## The next renderer — the 16×16 grid (decided 2026-09-07)
+
+The designer committed to 16×16 for everything and Phase 2 opens with the
+rendering pipeline that makes it true (brief §2 item 5, §10). The board
+below is a CSS grid of fractional cells where every layer is a separate
+image the browser resamples on its own — which is why the tile-grid
+pieces of 2026-09-07 needed cell-sized boxes, measured row rectangles,
+positions baked into tiles and a two-browser gate to line up with the
+floor, why the debris image sits a sub-device-pixel off it, and why a
+slide shimmers off-grid. The replacement is one full-board buffer at 16
+px per tile, every layer written by the pure painters this page already
+has (`piecetiers.mjs`, `debris.mjs`, `classifyTerrain`, the autotile
+masks, the atlas), scaled to the screen once at an integer device-pixel
+factor, with a camera for the 100×100 floor. A spike on one board-sized
+canvas, judged for flicker on the designer's two Firefoxes, comes before
+anything is built on it. Until then everything under "Art themes" is the
+shipped, gated renderer, and nothing new is built on it.
 
 ## Art themes (2026-09-03)
 

@@ -44,7 +44,7 @@
 // game's) ?fx=0.
 //
 // E2E/console surface: window.__DCK.replay — see the bottom of this file.
-import { BoardUI, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, residueStep } from '../../play/js/board-ui.mjs';
+import { BoardUI, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, residueStep } from '../../play/js/board-ui.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '../../play/js/stage.mjs';
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
@@ -150,7 +150,12 @@ function applyLook() {
     scale: clampNum(params.get('piecescale') ?? options.pieceScale, 0.5, 2, DEFAULT_PIECE_FIT.scale),
     lift: clampNum(params.get('piecelift') ?? options.pieceLift, -0.5, 1, DEFAULT_PIECE_FIT.lift),
     shift: clampNum(params.get('pieceshift') ?? options.pieceShift, -0.5, 0.5, DEFAULT_PIECE_FIT.shift),
-    snap: params.has('piecesnap') ? params.get('piecesnap') !== '0' : options.pieceSnap ?? DEFAULT_PIECE_FIT.snap,
+    pixels: (() => {
+      const p = params.get('piecepixels') ?? (params.has('piecesnap') ? (params.get('piecesnap') !== '0' ? 'display' : 'free') : options.piecePixels);
+      return PIECE_PIXELS.includes(p) ? p : DEFAULT_PIECE_FIT.pixels;
+    })(),
+    tileLift: Math.round(clampNum(params.get('tilelift') ?? options.tileLift, TILE_LIFT_RANGE[0], TILE_LIFT_RANGE[1], DEFAULT_PIECE_FIT.tileLift)),
+    tileShift: Math.round(clampNum(params.get('tileshift') ?? options.tileShift, TILE_SHIFT_RANGE[0], TILE_SHIFT_RANGE[1], DEFAULT_PIECE_FIT.tileShift)),
   });
 }
 

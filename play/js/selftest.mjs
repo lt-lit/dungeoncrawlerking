@@ -21,7 +21,8 @@ import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalS
 import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
-import { BoardUI } from './board-ui.mjs';
+import { BoardUI, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE } from './board-ui.mjs';
+import { pieceTiers, CANVAS_ROWS } from './piecetiers.mjs';
 
 const out = document.getElementById('out');
 const summaryEl = document.getElementById('summary');
@@ -1341,13 +1342,46 @@ async function main() {
     if (at('a1') !== 'K' || at('d1') !== 'P' || at('a5') !== 'k') throw new Error(`pieces carry data-piece (${at('a1')}, ${at('d1')}, ${at('a5')})`);
     ui.setPieces('pixel-chess');
     if (ui.pieces !== 'pixel-chess' || host.dataset.pieces !== 'pixel-chess') throw new Error('setPieces must stamp data-pieces');
-    // The fit dials are published on the board; pixel-perfect stamps its
+    // The fit dials are published on the board; the display snap stamps its
     // attribute (the box itself needs a laid-out board — ui-smoke measures it).
     ui.setPieceFit({ scale: 1.2, lift: 0.25, shift: -0.1, snap: true });
     const pf = ui.pieceFit;
-    if (pf.scale !== 1.2 || pf.lift !== 0.25 || pf.shift !== -0.1 || !pf.snap || !('pieceSnap' in host.dataset)) throw new Error(`setPieceFit must publish the dials: ${JSON.stringify(pf)}`);
+    if (pf.scale !== 1.2 || pf.lift !== 0.25 || pf.shift !== -0.1 || !pf.snap || pf.pixels !== 'display' || !('pieceSnap' in host.dataset) || host.dataset.piecePixels !== 'display') throw new Error(`setPieceFit must publish the dials (snap = the display mode): ${JSON.stringify(pf)}`);
+    // The tile grid (2026-09-07): its own attribute, no display snap, the
+    // dials still published (they apply the moment the mode changes).
+    ui.setPieceFit({ scale: 1.2, lift: 0.25, shift: -0.1, pixels: 'tile', tileLift: 6, tileShift: -1 });
+    const pt = ui.pieceFit;
+    if (pt.pixels !== 'tile' || pt.snap || pt.box || host.dataset.piecePixels !== 'tile' || 'pieceSnap' in host.dataset || pt.scale !== 1.2) throw new Error(`setPieceFit pixels 'tile' must stamp data-piece-pixels alone: ${JSON.stringify(pt)} ${JSON.stringify(host.dataset)}`);
+    if (pt.tileLift !== 6 || pt.tileShift !== -1 || host.style.getPropertyValue('--piece-tile-lift') !== '6') throw new Error(`the tile grid's placement is published (${JSON.stringify(pt)}, lift ${host.style.getPropertyValue('--piece-tile-lift')})`);
+    await ui.pieceBaked; // a detached host has no stylesheet to decode from — nothing bakes, nothing breaks
+    if (ui.pieceFit.tiers !== 0) throw new Error('no tiers bake on a detached board');
+    ui.setPieceFit({ pixels: 'tile', tileLift: 99, tileShift: -99 });
+    if (ui.pieceFit.tileLift !== TILE_LIFT_RANGE[1] || ui.pieceFit.tileShift !== -7) throw new Error(`the placement clamps to its ranges (${ui.pieceFit.tileLift}, ${ui.pieceFit.tileShift})`);
+    if (DEFAULT_PIECE_FIT.pixels !== 'tile' || !PIECE_PIXELS.includes(DEFAULT_PIECE_FIT.pixels) || !(DEFAULT_PIECE_FIT.tileLift > 0)) throw new Error('the tile grid is the default piece pixel mode, the foot lifted off the edge');
+    // THE PURE CUT (piecetiers.mjs): a 16×23 sprite with its top-left pixel
+    // at (3, 0) and its foot's right corner at (12, 22) — at lift 0 the foot
+    // is the lo tier's bottom row and the head sits 7 rows into mid; lifted
+    // 6 and shifted +1 every pixel moves by exactly that; a tall lift
+    // reaches the hi tier; what leaves the three tiles is cut.
+    const sprite = { width: 16, height: 23, data: new Uint8Array(16 * 23 * 4) };
+    const put = (x, y) => { sprite.data[(y * 16 + x) * 4 + 3] = 255; };
+    put(3, 0); put(12, 22); put(3, 22);
+    const alpha = (tier, x, y) => (tier ? tier.data[(y * 16 + x) * 4 + 3] : -1);
+    const t0 = pieceTiers(sprite);
+    if (alpha(t0.lo, 12, 15) !== 255 || alpha(t0.lo, 3, 15) !== 255 || alpha(t0.mid, 3, 9) !== 255 || t0.hi !== null || CANVAS_ROWS !== 48) throw new Error('lift 0: the foot on lo\'s bottom row, the head 7 rows into mid, hi empty');
+    const t1 = pieceTiers(sprite, { lift: 6, shift: 1 });
+    if (alpha(t1.lo, 13, 9) !== 255 || alpha(t1.lo, 4, 9) !== 255 || alpha(t1.mid, 4, 3) !== 255 || alpha(t1.lo, 12, 15) !== 0 || t1.hi !== null) throw new Error('lift 6 shift 1 moves every pixel by exactly that');
+    const count = (tier) => (tier ? tier.data.filter((v, i) => i % 4 === 3 && v).length : 0);
+    const t2 = pieceTiers(sprite, { lift: 18, shift: 7 }); // canvas rows 7..29: the head in hi, the foot in mid, lo empty, the right corner cut
+    if (!t2.hi || alpha(t2.hi, 10, 7) !== 255 || alpha(t2.mid, 10, 13) !== 255 || t2.lo !== null || count(t2.hi) + count(t2.mid) !== 2) throw new Error(`a tall lift reaches hi and empties lo (${!!t2.hi}, ${!!t2.lo}, ${count(t2.hi)}+${count(t2.mid)})`);
+    const t3 = pieceTiers(sprite, { lift: 0, shift: 7 });
+    if (alpha(t3.lo, 10, 15) !== 255 || count(t3.lo) !== 1 || count(t3.mid) !== 1) throw new Error('a shift off the tile is cut, never wrapped');
+    const t4 = pieceTiers({ width: 18, height: 23, data: (() => { const d = new Uint8Array(18 * 23 * 4); d[(22 * 18 + 0) * 4 + 3] = 255; d[(22 * 18 + 17) * 4 + 3] = 255; d[(22 * 18 + 1) * 4 + 3] = 255; return d; })() });
+    if (alpha(t4.lo, 0, 15) !== 255 || alpha(t4.lo, 15, 15) !== 0 || count(t4.lo) !== 1) throw new Error('a wider box keeps the tile\'s 16 centre columns');
+    ui.setPieceFit({ pixels: 'no-such-mode', snap: false });
+    if (ui.pieceFit.pixels !== 'free' || 'piecePixels' in host.dataset) throw new Error('an unknown pixel mode is free');
     ui.setPieceFit({});
-    if (ui.pieceFit.scale !== null || ui.pieceFit.lift !== null || ui.pieceFit.snap || 'pieceSnap' in host.dataset) throw new Error('setPieceFit({}) clears to the CSS defaults');
+    if (ui.pieceFit.scale !== null || ui.pieceFit.lift !== null || ui.pieceFit.snap || ui.pieceFit.pixels !== 'free' || 'pieceSnap' in host.dataset || 'piecePixels' in host.dataset) throw new Error('setPieceFit({}) clears to the CSS defaults');
     ui.setPieces('no-such-set');
     if (ui.pieces !== null) throw new Error('an unknown piece set clears to the glyphs');
     ui.setDoors('castle');

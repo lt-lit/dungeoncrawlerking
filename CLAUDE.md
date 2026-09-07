@@ -136,7 +136,9 @@ which paints behind it by DOM order; ranges widened
 to 50–200% / −50…+100% / ±50% because the first caps were hit;
 pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
 device-pixel multiple of the set's native `--piece-fit`/`--piece-box`
-from tiles.css, landed on whole pixels); selftest 35/35, ui-smoke green
+from tiles.css, landed on whole pixels — **SUPERSEDED as the default by
+the TILE GRID, 2026-09-07 (see "PIECE PIXELS" below); it survives as the
+`display` mode**); selftest 35/35, ui-smoke green
 asserting the ruin / doorway / nothing per breached square, wall-face-only
 props and the pixel-perfect box; **round 12**: a ruin's stub case counts
 STANDING walls only (a wall, a cracked wall or a door — never another
@@ -249,6 +251,108 @@ overflow:hidden clipped at the padding box); with pixel-perfect on, the
 headroom margin can over-reserve by up to one sprite step; the pit
 outline is per tile, so it does not wrap the inner corner of an L of
 joined pits — see `play/README.md` § "Art themes");
+**PIECE PIXELS — THE TILE GRID ✅ built 2026-09-07 (designer: "the scale
+of the chess pieces themselves bothers me… I need the pixels making up
+the pieces to exactly match the size and alignment of the pixels making
+up the 16x16 tiles, just like the debris layer" — the round-11
+"pixel-perfect" checkbox had been a MISREAD: it snapped the fitted box to
+whole SCREEN pixels, a different size from a tile pixel on an unrelated
+grid).** Options → Look → **Piece pixels** (`?piecepixels=tile|display|
+free`, `setPieceFit({ pixels })`, `PIECE_PIXELS`, `data-piece-pixels` on
+the board; `tile` is the DEFAULT and a saved `pieceSnap` is no longer
+read): on the tile grid every sprite pixel is one floor pixel. THE
+MEASURED RULE (`phase0/harness/piece-grid.mjs`, Playwright Chromium +
+Firefox, coordinate-encoded floor and king compared per device pixel over
+18 fractional layouts each): the ONLY construction that lands on the
+floor's device-pixel grid in BOTH browsers is a 16×16 image painted
+exactly as the floor is — a CELL-SIZED box with `center / 100% 100%`. A
+box of any other size (the 23-row sprite at 23/16 of the cell, a two-cell
+box, a 200% background on the cell) drifts a device pixel on some rows in
+one browser or the other; a background offset by whole tile pixels drifts
+too; the same-shaped box with `0 0` matches a `0 0` floor but not the
+`center` one; and a plain `<img>` behaves like `0 0` — so the debris
+layer's per-cell `<img>` is a sub-device-pixel phase off the `center`
+floor in both browsers (invisible at phone scale; making every tile rule
+`0 0` would fix it — not done, the repack tool emits those rules). So a
+tile-grid piece is THREE cell-sized boxes, one per square it can cover:
+`--piece-lo` in its square, `--piece-mid` in a `::before` (later in the
+DOM than the north square, so a nearer head paints over the piece
+behind), `--piece-hi` in a `::after` — the upper boxes at the north
+squares' MEASURED rectangles (`layoutPieceRows` → per-cell
+`--tier-mid-top/-h`, `--tier-hi-top/-h`, re-measured on resize;
+`tierRowVars`): `top:-100%` is NOT the row above once the grid hands its
+sub-pixel remainder to some rows (Chromium: 35.6875-px rows over
+35.70313-px ones at one width — 1/32 px flipped a device row in the
+gate); the percentages are only the fallback above the top rank. **THE
+TIERS ARE THE POSITION (same day: "the pieces are now sitting right at
+the bottom of the cell… The foot of the piece should be roughly centered
+on the tile. I need sliders to adjust their position in tile grid
+mode")**: `play/js/piecetiers.mjs` (pure, browser-safe) cuts a set's
+fitted sprite into the three 16×16 tiles with its placement baked in —
+Options → **Piece lift** / **Piece shift** in WHOLE TILE PIXELS on the
+tile grid (`tileLift` −4…+20, default 5; `tileShift` ±7, default 1 — the designer's settled numbers;
+`?tilelift=` / `?tileshift=`). tiles.css carries the lift-0 tiers
+(`--piece-<fen>-lo` / `-mid`; `phase0/lib/piecehalves.mjs` is the Node
+adapter over the same function — the repack tool emits them,
+`gen-piece-halves.mjs` writes the same lines from the committed
+`img/pieces.png` without the packs, `--check` for staleness; a wider box
+keeps the 16 centre columns — deja-view's knights lose one outline
+column); every other placement is BAKED AT RUNTIME by
+`board-ui.layoutPieceTiers` (the set's sprites read off the computed
+`--piece-<fen>`, decoded once off the DOM as the debris sampler does,
+re-cut per (set, lift, shift) and cached, `pngmini` PNGs set inline as
+`--piece-<fen>-lo/-mid/-hi`; `pieceBaked` resolves when worn;
+`--piece-tile-lift` feeds the headroom, (fit − 16 + lift)/16 of a cell).
+The size dial does not apply (the art's scale); the shadow is one tile
+pixel (`100cqh/16`; the FLIP clone gets `--tpx` inline, its layer being
+no size container, and carries the tiers as its pseudo-elements).
+`display` (the old snap) and `free` keep the % dials. Gates: piece-grid
+4/4 (72/72 exact in each browser — 18 layouts × lift-0 / default / a
+hi-tier reach / the clamps' edge — the free-mode control off the grid),
+selftest (the fit fields, the clamp, the pure cut), ui-smoke (display
+box a whole multiple; tile box = the cell painted like the floor, head
+one cell up, the default lift baked into 36 inline tiers, lift 0 wears
+the stylesheet's, the px dials shown and the % dials hidden),
+replay-smoke, `gen-piece-halves --check`. **The designer's baseline, same
+day: lift +5, shift +1.**
+
+**PHASE 2 OPENS WITH THE 16×16 RENDERER — DECIDED 2026-09-07 (designer:
+"I can't help but feel like our whole graphics pipeline might be a bit
+janky. Especially if we want to commit to the 16x16 tile grid for
+everything… I want to commit to 16x16. Next session we'll start Phase 2
+proper, and get a proper rendering pipeline").** Brief §2 item 5 is the
+constraint: every drawn thing is 16×16 pixel art on ONE native-resolution
+grid, composed in ONE buffer and scaled to the screen ONCE, by a whole
+number where the screen allows it. THE DIAGNOSIS the tile-grid piece work
+produced: the DOM board is a CSS grid of FRACTIONAL cells and every layer
+is a separate image the browser resamples on its own, so a tile pixel is
+6.9 device pixels drawn 7,7,7,6,7 and every layer must re-earn alignment
+by construction (cell-sized boxes, measured row rectangles, positions
+baked into tiles, a two-browser gate); the debris `<img>` sits a
+sub-device-pixel off the floor; FLIP slides interpolate off-grid; a CSS
+trick cannot fix it (at dpr 3 a device pixel is not a multiple of
+Chromium's 1/64-px layout unit, so the row remainder comes straight
+back); and a DOM grid of 10,000 cells × 5 layers cannot carry the
+100×100 overworld, which needs a camera and sprite batching regardless.
+THE SHAPE: a full-board buffer at 16 px per tile plus headroom, every
+layer written by the existing pure painters, blitted at an integer
+device-pixel scale (k = ⌊available device px ÷ (16 × files)⌋: a 390-px
+phone at dpr 3 gets k 7, 1120 device px, a 17-CSS-px margin; the board
+steps in size and never fills exactly — the pixel-art norm), a camera for
+the overworld, hit-testing by division, labels as a DOM overlay. THE
+SPIKE FIRST: one board-sized canvas at integer scale running the existing
+painters, judged for flicker on the designer's Firefox/Windows and
+Android Firefox BEFORE anything is built on it — the "NO CANVAS on the
+board" rule (the debris layer's flicker rounds) was written against
+PER-CELL canvases mixed into DOM compositing, and one board-sized surface
+is a different animal, but the phone decides. CARRIES OVER: `piecetiers`,
+the debris ledger + painter, `classifyTerrain`, the autotile masks, the
+atlas + repack tool (one atlas PNG in place of 160 KB of data URIs), the
+rules, the Director, the replay log. REWRITTEN: board-ui's DOM painting,
+style.css's tile rules, the arrow/mark overlays, the FLIP slides and quake
+fx, the smoke suites' renderer checks; the replay analyzer shares the new
+renderer. Until it lands the DOM board carries the duel exactly as gated
+above; nothing else is built on the DOM renderer.
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
@@ -1027,7 +1131,9 @@ tail). Crumbles now take bare floor only; the debt-forced hole still
 lands (termination untouched), and the closed-endgame `terminal` crumble
 that ends a fully-locked board is unchanged (it immobilizes, it does not
 eat). The favored-seat model/edge for the live-regime
-arm still needs the designer. Then **Phase 2 — exploration slice**.
+arm still needs the designer. Then **Phase 2 — exploration slice —
+STARTS NEXT SESSION (designer 2026-09-07), and it opens with the 16×16
+renderer (see "PHASE 2 OPENS WITH THE 16×16 RENDERER" above).**
 
 **2026-09-04 — ARENA REFRESH: the test bed is now WAVE 6, s59–s94, thirty-six
 hand-authored 10×10 arenas** (designer: the small stages had become useless,
@@ -1107,6 +1213,8 @@ node harness/strip-ruin-chips.mjs --check  # the committed ruin tiles carry no b
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
 node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner (the debris layer's three flicker rounds); --idle 25000 for an idle turn; compare <dirs…>
 node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
+node harness/gen-piece-halves.mjs --check  # the tile-grid piece halves in tiles.css match the committed atlas (drop --check to rewrite them without the packs)
+node harness/piece-grid.mjs          # THE PIECE GRID gate: tile-grid pieces land on the floor's device-pixel grid in Chromium + Firefox (npx playwright install firefox once)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)
@@ -1255,3 +1363,17 @@ run one sweep at a time.
     2026-08-25; the natural venue would be FSF issue #609 if that ever
     changes). The walled-passer eval fix stays unshipped, documented in
     `engine/README.md`.
+18. **Browsers do not resample two images alike (2026-09-07,
+    `phase0/harness/piece-grid.mjs`).** On the DOM board, the ONLY thing
+    that lands on the floor tile's device-pixel grid in both Chromium and
+    Firefox is a 16×16 image painted exactly as the floor is — a
+    cell-sized box, `center / 100% 100%`. A box of another size, a 200%
+    background, a background offset by whole tile pixels, the same box
+    with `0 0` against a `center` floor, and a plain `<img>` (which
+    behaves like `0 0`) all drift by a device pixel somewhere; and
+    `top: -100%` is not the row above, because a CSS grid hands its
+    sub-pixel remainder to some rows (35.6875-px rows over 35.70313-px
+    ones) — measure the rows. Any position must be baked into the pixels.
+    This is the case for the Phase 2 renderer: one buffer, one resample,
+    nothing to align. Do not add another DOM layer that has to match the
+    floor; if one is unavoidable, run the gate.
