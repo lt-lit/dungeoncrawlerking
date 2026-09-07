@@ -43,8 +43,9 @@
 //               otherwise.
 //   ARROWS      the hint arrows, the enemy's last move and the gods'
 //               displacements are PIXEL ART in the buffer (pixelarrow.mjs:
-//               a chunky shaft and head with a one-pixel halo, the eval on
-//               a plate in the 3×5 font), drawn above the pieces — where
+//               a chunky shaft and head with a one-pixel halo, a hint's
+//               eval as a staircase of 3×5 digits inside the shaft), drawn
+//               above the pieces — where
 //               the DOM board keeps its SVG overlay. No overlay element
 //               sits on the canvas at all (a designer's white flash on the
 //               first build pointed at the SVG; the diagnostics line
@@ -55,8 +56,8 @@
 // (a piece set is always drawn — the glyphs are text, not pixel art; the
 // default set stands in), the % piece-fit dials (the tile grid is the only
 // mode here: the art's own scale, lift and shift in whole tile pixels),
-// pixel-art arrows (later), the overworld camera (later — this board is a
-// fixed-size viewport over one arena). The atlas is play/js/atlas.mjs.
+// the overworld camera (later — this board is a fixed-size viewport over
+// one arena). The atlas is play/js/atlas.mjs.
 import { splitFen, parseBoard, WALL } from './fen.mjs';
 import { classifyTerrain, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './board-ui.mjs';
 import { drawArrow, arrowColour, sortArrows } from './pixelarrow.mjs';

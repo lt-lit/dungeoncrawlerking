@@ -374,7 +374,11 @@ slides in whole native pixels, terrain fx with held end frames, the
 rumble as blit jitter (`rumble(ms)`), the flight through
 `particles.mjs`'s new sink (`ui.drawFlight`; SVG paths on the DOM board),
 the ARROWS as PIXEL ART in the buffer (`pixelarrow.mjs`: shaft + head +
-one-pixel halo, the eval on a plate in the 3×5 font; the first build kept
+one-pixel halo, a hint's eval as a STAIRCASE of upright 3×5 digits INSIDE
+the shaft, each stepping along the arrow's direction — a line, a column
+or a flight of steps — compacted to a tile: "12", "5.1", "M3"; a plate
+beside the shaft was "way too big", an axis-aligned band hung out of the
+diagonals; the first build kept
 the SVG overlay above the canvas and the designer's first session saw "a
 big white rectangle flash" it was suspected of — nothing overlays the
 canvas now; the DOM board keeps `renderArrows`), the container still
@@ -383,7 +387,7 @@ read the cascade), a diagnostics line under the board (`#render-diag`:
 dpr, device-pixel size, k, integer/fill), `__DCK.renderer` (kind / info /
 diag / square / buffer / decor / testPattern / snapMode / set). Not there
 on purpose: glyph pieces (the default set stands in), the % dials (tile
-grid only), pixel-art arrows, the camera. THREE MEASURED FACTS (rule 18
+grid only), the camera. THREE MEASURED FACTS (rule 18
 grows): (a) the screen canvas must be sized EXPLICITLY in whole device
 pixels from the container's `device-pixel-content-box` — a `100%` canvas
 is a fractional number of device pixels and gets resampled, a column
@@ -413,7 +417,8 @@ pattern at nine ratio × width cases, integer + fill, Chromium +
 Firefox), `ui-smoke.mjs --renderer canvas` (the DOM-only probes skipped,
 the geometry / diag / live remount checked; everything else renderer-
 neutral through `__DCK.marks.cell` + `__DCK.renderer.decor`), selftest
-43/43 (both boards classify, decorate and mark alike on detached boards),
+44/44 (both boards classify, decorate and mark alike on detached boards;
+the arrows' compact labels, the staircase's steps and its ink),
 `flicker-scan.mjs --renderer canvas` in Playwright's Firefox (a 48-s
 duel: 3.3 / 18.4 piece- / debris-scale blinks per 10 s vs the DOM board's
 8.5 / 48.2 on its own random duel, motion on; the s59 door and torch

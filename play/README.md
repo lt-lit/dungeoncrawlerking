@@ -477,9 +477,21 @@ mid-slide last. Nothing in it has a fractional coordinate. **One blit**
 (`integer`) or at the exact quotient (`fill`: uneven pixel widths, every
 layer still aligned because they share the one resample). **The arrows
 are pixel art in the buffer** (`js/pixelarrow.mjs`: a chunky shaft and
-head with a one-pixel black halo, the eval on a plate in the 3×5 font at
-the shaft's midpoint, the colour by kind and rank as before, the opacity
-by strength through a scratch canvas so the halo never shows through) —
+head with a one-pixel black halo; a hint's eval RIDES INSIDE THE SHAFT as
+a STAIRCASE of 3×5 digits — every glyph upright, each stepping along the
+arrow's own direction by the least advance that keeps the cells apart (4
+px of x or 6 px of y), so a horizontal arrow reads as a line, a vertical
+one as a column and a diagonal or a knight's move as a flight of steps,
+in the screen's reading order; each glyph's cell grown by a pixel is a
+pad the shaft bulges to; the run sits on the shaft's midpoint and backs
+off toward the tail when it would reach into the head; the label is
+compacted to a tile: no leading plus, one decimal under ten, whole pawns
+from ten — "12", "5.1", "-1.2", "M3". The first cut set the whole label
+on a plate beside the shaft and the designer found it "way too big"; the
+second put the digits in an axis-aligned band, which hung out of every
+diagonal in rectangular corners. The colour is by kind and rank as
+before, the opacity by strength through a scratch canvas so the halo
+never shows through) —
 the first build kept the DOM board's SVG overlay above the canvas, and
 the designer's first session on it saw "a big white rectangle flash"
 that pointed at the overlay, so nothing overlays the canvas at all now
@@ -496,8 +508,7 @@ moves, nothing otherwise. Hit-testing is division: pointer → device px →
 tile. Not here on purpose (milestone 1): the classic GLYPH pieces (a set
 is always drawn — glyphs are text, not pixel art; the default set stands
 in), the % piece-fit dials (the tile grid is the only mode: the art's own
-scale, lift and shift in whole tile pixels), pixel-art arrows, the
-overworld camera.
+scale, lift and shift in whole tile pixels), the overworld camera.
 
 **Landing on the device grid — what measured.** The screen canvas must
 be sized EXPLICITLY in whole device pixels (`ResizeObserver` on the
@@ -548,7 +559,9 @@ the live remount checked instead; every other check — tiles vs ledgers,
 residue, rungs, debris, the flight, the replay log — is renderer-neutral
 through `__DCK.marks.cell` and `__DCK.renderer.decor`), and the selftest
 asserts that both boards classify, decorate and mark every square alike
-on detached boards (no atlas: the data half). `flicker-scan.mjs` records
+on detached boards (no atlas: the data half), and that the pixel arrows'
+compact labels, staircase steps and ink land as the shape says (44/44).
+`flicker-scan.mjs` records
 either renderer (`--renderer canvas`): in Playwright's Firefox at the
 phone viewport, a 48-s canvas duel (25 quakes and captures) scanned at
 3.3 piece-scale and 18.4 debris-scale blinks per 10 s against the DOM

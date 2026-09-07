@@ -23,6 +23,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.m
 import { dealMatchup, campLineRank } from './armygen.mjs';
 import { BoardUI, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE } from './board-ui.mjs';
 import { CanvasBoard } from './canvas-board.mjs'; // Phase 2: the 16×16 canvas renderer, same surface
+import { arrowShape, glyphStep, compactLabel, drawArrow } from './pixelarrow.mjs'; // the canvas board's pixel-art arrows
 import { pieceTiers, CANVAS_ROWS } from './piecetiers.mjs';
 
 const out = document.getElementById('out');
@@ -1315,6 +1316,50 @@ async function main() {
     cvs.destroy();
     dom.destroy();
     return `${cells} squares over ${fens.length} positions classify alike (${decor} decor props / doorways), marks alike, arrows alike`;
+  });
+
+  await check('pixel arrows: compact labels, the digits a staircase inside the shaft', () => {
+    for (const [label, want] of [['+12.0', '12'], ['+5.1', '5.1'], ['−1.2', '-1.2'], ['−M3', '-M3'], ['M3', 'M3'], ['+0.8', '0.8'], ['-10.5', '-10'], ['+123.4', '123'], [null, null]]) {
+      if (compactLabel(label) !== want) throw new Error(`compactLabel(${label}) = ${compactLabel(label)}, want ${want}`);
+    }
+    // The step from glyph to glyph keeps the 3×5 cells a pixel apart along
+    // every direction and points the screen's reading way.
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, 2], [2, 1], [-1, 2], [1, -2], [1, 3], [-3, 1]]) {
+      const l = Math.hypot(dx, dy);
+      const { sx, sy } = glyphStep(dx / l, dy / l);
+      if (!(Math.abs(sx) >= 4 || Math.abs(sy) >= 6)) throw new Error(`step (${sx},${sy}) for (${dx},${dy}) lets glyphs overlap`);
+      if (Math.abs(dx) >= Math.abs(dy) ? sx <= 0 : sy <= 0) throw new Error(`step (${sx},${sy}) for (${dx},${dy}) reads backwards`);
+    }
+    let glyphs = 0;
+    for (const [x2, y2, label] of [[56, 8, '+5.6'], [8, 56, '-1.2'], [40, 24, '+12.3'], [24, 40, 'M3'], [40, 40, '+0.8'], [24, 8, '+12.0'], [8, 24, '+9.9']]) {
+      const s = arrowShape(8, 8, x2, y2, { label });
+      const cells = s.label.glyphs.map((g) => ({ x0: g.x, y0: g.y, x1: g.x + 3, y1: g.y + 5 }));
+      if (cells.length !== s.label.text.length) throw new Error(`${label}: ${cells.length} glyphs for "${s.label.text}"`);
+      for (let i = 1; i < cells.length; i++) {
+        const a = cells[i - 1], b = cells[i];
+        if (!(b.x0 >= a.x1 + 1 || a.x0 >= b.x1 + 1 || b.y0 >= a.y1 + 1 || a.y0 >= b.y1 + 1)) throw new Error(`${label} → ${x2},${y2}: glyphs ${i - 1} and ${i} touch`);
+      }
+      for (const p of s.label.pads) if (p.x < s.box.x0 || p.y < s.box.y0 || p.x + p.w > s.box.x1 || p.y + p.h > s.box.y1) throw new Error(`${label}: a pad outside the box`);
+      glyphs += cells.length;
+    }
+    // A one-square arrow backs the run off toward the tail: the digits end
+    // at the head's base, never over the head.
+    const one = arrowShape(8, 8, 24, 8, { label: '+12.0' });
+    const front = Math.max(...one.label.pads.map((p) => p.x + p.w));
+    if (front > one.shaft[2] + 1) throw new Error(`the run reaches ${front} past the head's base at ${one.shaft[2]}`);
+    if (arrowShape(8, 8, 24, 8, { strength: 1 }).label !== null) throw new Error('an unlabelled arrow carries no digits');
+    // Rasterised: the digits land in ink where the shape put them.
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 24;
+    const ctx = cv.getContext('2d');
+    drawArrow(ctx, 8, 8, 56, 8, { label: '+5.6' });
+    const shape = arrowShape(8, 8, 56, 8, { label: '+5.6' });
+    const px = ctx.getImageData(0, 0, 64, 24).data;
+    const ink = [];
+    for (let y = 0; y < 24; y++) for (let x = 0; x < 64; x++) { const i = (y * 64 + x) * 4; if (px[i] === 0x14 && px[i + 1] === 0x15 && px[i + 2] === 0x1a && px[i + 3] === 255) ink.push([x, y]); }
+    if (ink.length !== 24) throw new Error(`"5.6" is 24 ink pixels, drew ${ink.length}`);
+    for (const [x, y] of ink) if (!shape.label.glyphs.some((g) => x >= g.x && x < g.x + 3 && y >= g.y && y < g.y + 5)) throw new Error(`ink at ${x},${y} outside every glyph`);
+    return `${glyphs} glyphs over 7 arrows, 12 directions stepped, 24 ink pixels where the shape says`;
   });
 
   await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
