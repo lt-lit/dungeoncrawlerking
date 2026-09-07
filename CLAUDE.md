@@ -290,7 +290,7 @@ on the tile. I need sliders to adjust their position in tile grid
 mode")**: `play/js/piecetiers.mjs` (pure, browser-safe) cuts a set's
 fitted sprite into the three 16×16 tiles with its placement baked in —
 Options → **Piece lift** / **Piece shift** in WHOLE TILE PIXELS on the
-tile grid (`tileLift` −4…+20, default 6; `tileShift` ±7, default 0;
+tile grid (`tileLift` −4…+20, default 5; `tileShift` ±7, default 1 — the designer's settled numbers;
 `?tilelift=` / `?tileshift=`). tiles.css carries the lift-0 tiers
 (`--piece-<fen>-lo` / `-mid`; `phase0/lib/piecehalves.mjs` is the Node
 adapter over the same function — the repack tool emits them,

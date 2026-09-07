@@ -169,7 +169,7 @@ export const PIECE_PIXELS = ['tile', 'display', 'free'];
  *  the square's bottom edge (designer, same day: "the foot of the piece
  *  should be roughly centered on the tile") and `tileShift` columns east
  *  of centre, baked into the tiers (layoutPieceTiers). */
-export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, pixels: 'tile', tileLift: 6, tileShift: 0 };
+export const DEFAULT_PIECE_FIT = { scale: 1.46, lift: 0.22, shift: 0.04, pixels: 'tile', tileLift: 5, tileShift: 1 };
 
 /** Stable floor-texture variant for a square: f1 (the common stone) on
  *  ~70% of squares, f2…f6 scattered over the rest — a fixed hash of the

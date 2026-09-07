@@ -74,7 +74,7 @@ function html({ width, offx, offy, mode, show, lift = 0, shift = 0 }) {
 
 const LAYOUTS = [[75, 0.3, 0.7], [73.4, 0, 0], [80, 0, 0], [82.6, 10.55, 20.2], [66.66, 5.1, 2.9], [78.1, 0, 0]];
 const DPRS = [1, 2, 3];
-const PLACEMENTS = [[0, 0], [6, 0], [13, 2], [20, -3]]; // [lift, shift]: the tiles.css tiers, the default, a hi-tier reach, the clamps' edge
+const PLACEMENTS = [[0, 0], [5, 1], [13, 2], [20, -3]]; // [lift, shift]: the tiles.css tiers, the default, a hi-tier reach, the clamps' edge
 
 async function measure(page, cfg) {
   const shots = [];

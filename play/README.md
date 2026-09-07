@@ -338,7 +338,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   its placement baked in — **Piece lift** / **Piece shift** in WHOLE TILE
   PIXELS (Options, shown on the tile grid only; `?tilelift=` /
   `?tileshift=`; `TILE_LIFT_RANGE` −4…+20, `TILE_SHIFT_RANGE` ±7; the
-  defaults `DEFAULT_PIECE_FIT.tileLift` 6 / `tileShift` 0 — designer: "the
+  defaults `DEFAULT_PIECE_FIT.tileLift` 5 / `tileShift` 1 — the designer's settled numbers, after "the
   foot of the piece should be roughly centered on the tile"). tiles.css
   carries every set's lift-0 tiers (`--piece-<fen>-lo` / `-mid`, cut by
   `phase0/lib/piecehalves.mjs` through the same function — the repack
