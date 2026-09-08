@@ -263,9 +263,15 @@ duel-only then. A zoom step is a CUT like a turn — which makes the
 brief's snap-zoom for the tap-a-piece move free (phone k 4 tiles are
 under 4 mm, below a thumb: the d-pad carries the army, the individual
 move needs the zoom). Decide the SAVE SHAPE on the milestone's first
-day, before the first line (below). Settle the TRIGGER BAND as a RANGE
-before the hand-built map is drawn — the map's rooms are sized to it
-(below). The stage loader refuses anything outside 3–12 × 5–10 (the
+day, before the first line (below). THE DUEL TRIGGER IS A DESIGN
+CONVERSATION OF ITS OWN, NOT A NUMBER (designer 2026-09-08: "there's
+going to be a shit fuck ton of rules dictating how and when a duel is
+allowed to trigger. It's not just about the trigger band. We will get
+to it") — do NOT ask for the band again, do not build the trigger to
+§5.3's old numbers, and do not make the walk-around milestone wait on
+it: the first hand-built map is a WALK-AROUND FIXTURE, and the
+enemies + LOS + trigger milestone opens with that conversation when
+the designer is ready. The stage loader refuses anything outside 3–12 × 5–10 (the
 engine's caps); a world file is the same schema bigger, so that cap
 moves from the loader to the DEAL, where §4.2 says every guarantee
 lives. The §11 corners of the one rule (rotation free or a turn, the
