@@ -859,7 +859,8 @@ default zoom the largest whole k with 15 tiles across the short axis —
 a phone lands on k 4, `?zoom=` pins it), the king centred, the world
 SLIDING under him (the board's `panTo`) while the arrivals slide in
 whole native pixels (`animateArrivals`; a facing change is a CUT
-first); a 3×3 pad (the eight ways, wait in the middle), the two turns,
+first); a 3×3 pad (the eight ways, wait in the middle — replaced by the
+d-pad the same day, see milestone 4c's HUD note), the two turns,
 the zoom ± (a cut), Export save; WASD / arrows / numpad 1–9, Q E, space,
 + −, Escape; TAP A PIECE (not the king) for its own move: the zoom snaps
 to at least k 6 centred on it and its moves are marked (a capture red),

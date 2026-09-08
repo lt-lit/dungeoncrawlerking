@@ -269,7 +269,8 @@ on the king and the world slides under him, the default zoom fits
 fifteen tiles across the short axis, the 3×2 kit is the walk's army
 (`?army=setup` for the knobs), no undo on the walk, a start marker in
 the map file (`@`, digits reserved for the enemy spawns), a 3×3 pad
-with wait in the middle. THE ENVIRONMENT IS THE WORLD: the Phase 1
+with wait in the middle (superseded the same day by the d-pad — see the
+HUD note under 4c). THE ENVIRONMENT IS THE WORLD: the Phase 1
 page's world IS the dealt arena (its crop the identity, no mirror
 exists — a flip is how a lab world is built); a world duel is a crop
 with the army's facing (4c). THE FIXTURE (`play/worlds/w01-the-
@@ -386,7 +387,26 @@ wall's autotile can differ from the game's).** THE PHONE VERDICT IS THE
 GATE.
 
 
-**HANDOFF (end of 2026-09-08, after milestone 3): NEXT WAS THE WORLD +
+**NEXT (end of 2026-09-08, after 4c and the HUD): THE PHONE VERDICT on
+4c and the d-pad is the gate for this branch. Then ENEMIES ON THE MAP +
+LINE OF SIGHT + THE TRIGGER — and that milestone OPENS WITH THE TRIGGER
+CONVERSATION, on the designer's word (2026-09-08: "there's going to be a
+shit fuck ton of rules dictating how and when a duel is allowed to
+trigger. It's not just about the trigger band. We will get to it"). Do
+not ask for the band and do not build the trigger to a number; what the
+conversation now has in hand: the barrier by hand as the instrument
+(gap 4, the kings aligned on one file, the 10-file cap, the depth a
+fixed point of the molding), brief §5.2's hunt state machine and §5.3's
+old clauses as amended, the world file's enemy spawns (`1`…`9`, read by
+`loadWorld`, unused), and the stamp path built for either side (an
+enemy that walks the map carries its own pattern into the crop the way
+the player does). Held over, on purpose: per-theme edge-on door art; a
+phone height for the duel box (the dimmed dungeon shows beside the crop
+on a phone only); the analyzer mounting the whole world; the debris
+flight on the walk's smash (the splinters appear, they do not fly).**
+
+**HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
+reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
 THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
 buffer becomes the screen's device size ÷ k in tiles plus a one-tile
 margin and the headroom row, painted from a WORLD grid through the
