@@ -1354,6 +1354,123 @@ async function main() {
     return 'buffer 7×5 → 5×7 → 7×5, a1 at all four corners, kinds and floor unchanged by a turn, the debris pixel lands where pxToScreen says, hashCoords = the world square';
   });
 
+  // --- THE WORLD WINDOW (Phase 2 milestone 4, 2026-09-08): a board over a
+  // world bigger than its arena paints a WINDOW of the world's screen grid
+  // — viewport 'crop' is the arena alone (the Phase 1 page), 'screen' the
+  // screen's tiles centred on a focus — and every square, cell, pixel and
+  // hit-test crosses the crop transform and the camera.
+  await check('the world window: a crop in a bigger world, the screen viewport, lookAt, the dim, hit-tests', async () => {
+    const { World, cropTransform, arenaToWorld } = await import('./world.mjs');
+    const { toScreen } = await import('./camera.mjs');
+    const world = new World({ id: 'w', files: 24, ranks: 18 });
+    for (let f = 0; f < 24; f++) for (let r = 0; r < 18; r++) if ((f * 7 + r * 5) % 11 === 0) world.setTerrain(f, r, '*');
+    const fen = '*6/7/2k4/2^4/K5* w - - 0 1';
+    const results = [];
+    for (const facing of [0, 1, 2, 3]) {
+      const crop = cropTransform({ wf: 9, wr: 6, facing, files: 7, ranks: 5, worldFiles: 24, worldRanks: 18 });
+      // (1) viewport 'crop': the buffer is the crop alone, k from its width — as the Phase 1 page paints.
+      const host = document.createElement('div');
+      host.style.cssText = 'position:absolute;left:0;top:0;width:400px;height:300px;visibility:hidden';
+      document.body.appendChild(host); // attached: the client points are real
+      const ui = new CanvasBoard(host, { world, crop, facing, atlas: STUB_ATLAS, showCoords: false });
+      await ui.ready; // the atlas lands on a microtask; the painter needs it
+      ui.setPosition(fen, { holes: new Set(['g1']), skins: { c2: 'barrel' } });
+      const info0 = ui.setBox(700, 0);
+      if (ui.files !== 7 || ui.ranks !== 5 || ui.screenCols !== 7 || ui.screenRows !== 5 || info0.bufW !== 7 * 16 || info0.viewport !== 'crop') throw new Error(`facing ${facing}: viewport crop is the 7×5 arena north-up under the army's facing (${info0.screenCols}×${info0.screenRows}, buf ${info0.bufW})`);
+      const a1 = arenaToWorld(crop, 0, 0);
+      if (world.pieceAt(a1.f, a1.r) !== 'K' || ui.kinds.get('g1').hole !== true || ui.kinds.get('c2').skin !== 'barrel') throw new Error(`facing ${facing}: the FEN and the ledgers land in the world through the crop (${world.pieceAt(a1.f, a1.r)} / ${JSON.stringify(ui.kinds.get('g1'))} / ${ui.kinds.get('c2').skin})`);
+      // gridPos is the WORLD's screen tile; the crop's box is where the arena sits on it.
+      const g1 = ui.gridPos('a1'), cb = info0.crop;
+      if (g1.col - cb.col0 !== 0 || g1.row - cb.row0 !== 4 || cb.cols !== 7 || cb.rows !== 5) throw new Error(`facing ${facing}: a1 is the crop box's bottom-left when the camera faces with the army (${JSON.stringify(g1)} in ${JSON.stringify(cb)})`);
+      // The world's own cells outside the crop stayed what they were.
+      if (world.at(0, 0) !== '*' || world.at(1, 0) !== '.') throw new Error(`facing ${facing}: the world beyond the crop is untouched`);
+      // (2) viewport 'screen' at a fixed zoom in a box: the window covers the screen, the crop sits inside at an offset.
+      ui.setViewport('screen');
+      ui.setFit('window');
+      ui.setZoom(2);
+      const info = ui.setBox(400, 300); // 200×150 native px visible: 13×10 tiles, the world is 24×18 → a window with margins
+      if (!(ui.canvas.getBoundingClientRect().width > 0)) throw new Error('the attached canvas has a client rect');
+      if (info.fit !== 'window' || info.k !== 2 || info.viewport !== 'screen') throw new Error(`facing ${facing}: fit window at zoom 2 (${info.fit}, k ${info.k})`);
+      if (!(info.window.cols > 7 && info.window.cols <= 16 && info.window.rows > 5 && info.window.rows <= 13)) throw new Error(`facing ${facing}: the window is the screen's tiles plus a margin (${JSON.stringify(info.window)})`);
+      if (info.bufW !== info.window.cols * 16 || info.bufH !== info.window.rows * 16 + info.headroom) throw new Error(`facing ${facing}: the buffer is the window (${info.bufW}×${info.bufH})`);
+      const b = info.blit;
+      if (!(b.sw <= info.bufW && b.sh <= info.bufH && b.sw * info.k >= 400 - 2 && b.sh * info.k >= 300 - 2)) throw new Error(`facing ${facing}: the blit covers the canvas from inside the buffer (${JSON.stringify(b)})`);
+      // Every crop square's buffer origin = the crop box's origin + its arena position (north-up under the army's facing).
+      const o = ui.pointOfSquare('a1'), o2 = ui.pointOfSquare('g5');
+      if (!o || !o2 || !(o2.x > o.x) || !(o2.y < o.y)) throw new Error(`facing ${facing}: g5 is up and right of a1 on the screen (${JSON.stringify(o)} ${JSON.stringify(o2)})`);
+      // Hit-tests round-trip for every crop square and for visible world cells.
+      let round = 0;
+      for (const sq of ui.cells.keys()) { const p = ui.pointOfSquare(sq); if (ui.squareAtPoint(p.x, p.y) === sq) round++; }
+      if (round !== 35) throw new Error(`facing ${facing}: ${round}/35 crop squares hit-test back through the window`);
+      let cellRound = 0, cellTotal = 0;
+      for (let f = 0; f < 24; f++) for (let r = 0; r < 18; r++) {
+        const t = toScreen(f, r + 1, 24, 18, facing);
+        if (t.col < info.window.col0 || t.col >= info.window.col0 + info.window.cols || t.row < info.window.row0 || t.row >= info.window.row0 + info.window.rows) continue;
+        cellTotal++;
+        const p = ui.pointOfCell(f, r);
+        const c = ui.cellAtPoint(p.x, p.y);
+        if (c && c.f === f && c.r === r) cellRound++;
+      }
+      if (cellRound !== cellTotal || cellTotal < 35) throw new Error(`facing ${facing}: ${cellRound}/${cellTotal} window cells hit-test back`);
+      // Outside the crop is dimmed: a floor cell beyond the crop is darker than one inside.
+      // (8, 6) is floor just west of the crop's rectangle, inside the window at every facing.
+      const inside = ui.squarePixels('b2'), outside = ui.cellPixels(8, 6);
+      if (!inside || !outside) throw new Error(`facing ${facing}: pixels inside and outside the crop are on the buffer`);
+      const lum = (px) => { let s = 0; for (let i = 0; i < px.length; i += 4) s += px[i] + px[i + 1] + px[i + 2]; return s; };
+      if (!(lum(outside) < lum(inside) * 0.7)) throw new Error(`facing ${facing}: the world beyond the crop is dimmed (${lum(outside)} vs ${lum(inside)})`);
+      // lookAt: the window follows a focus cell — the cell lands near the canvas's centre
+      // (clamped at the world's edge: (2, 2) is two tiles in, so the edge clamps one axis).
+      ui.lookAt(6, 8);
+      const pc = ui.pointOfCell(6, 8);
+      const rr = ui.canvas.getBoundingClientRect();
+      const cx = (pc.x - rr.left) / rr.width, cy = (pc.y - rr.top) / rr.height;
+      if (!(Math.abs(cx - 0.5) < 0.12 && Math.abs(cy - 0.5) < 0.12)) throw new Error(`facing ${facing}: lookAt(6, 8) centres the cell (${cx.toFixed(2)}, ${cy.toFixed(2)})`);
+      const w2 = ui.renderInfo.window;
+      const t68 = toScreen(6, 9, 24, 18, facing);
+      if (!(t68.col >= w2.col0 && t68.col < w2.col0 + w2.cols && t68.row >= w2.row0 && t68.row < w2.row0 + w2.rows)) throw new Error(`facing ${facing}: lookAt(6, 8) brings the cell into the window (${JSON.stringify(w2)} vs ${JSON.stringify(t68)})`);
+      ui.lookAt(null);
+      results.push(`${info.window.cols}×${info.window.rows}`);
+      ui.destroy();
+      host.remove();
+    }
+    return `windows ${results.join(' / ')} over a 24×18 world at the four facings; 35/35 squares and every visible cell hit-test back; the outside dims; lookAt scrolls`;
+  });
+
+  // --- THE RUN SAVE (Phase 2 milestone 4b): one object per run — the floor,
+  // the army, the start, the turn list — round-trips; a stamp mismatch is
+  // refused with one line; the storage key holds one run.
+  await check('the run save: one object, a round trip, a refused stamp', async () => {
+    const { World, loadWorld } = await import('./world.mjs');
+    const { makePattern, spawnArmy, advance } = await import('./army.mjs');
+    const R = await import('./run.mjs');
+    const world = loadWorld({ schema: 2, id: 'w-run', map: ['########', '#......#', '#..@...#', '#..^...#', '########'], skin: ['........', '........', '........', '...K....', '........'], theme: 'hall', facing: 'n' });
+    const army = spawnArmy(world, makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }), world.start, world.start.facing, 'w');
+    const run = R.newRun({ seed: 7, worldId: world.id, world, army, build: 'selftest' });
+    if (run.schema !== R.RUN_SCHEMA || !run.start.world || !run.floors[world.id]) throw new Error('a new run carries the stamp, the start and the floor');
+    const plan = advance(world, army, { kind: 'step', dx: 1, dy: 0 });
+    if (!plan.ok) throw new Error('the step should plan');
+    R.recordTurn(run, { kind: 'step', dx: 1, dy: 0 }, 1);
+    R.updateRun(run, { world, army, turn: 1 });
+    const json = JSON.stringify(run);
+    const back = JSON.parse(json);
+    if (!R.checkRun(back).ok) throw new Error(`a saved run reads back: ${R.checkRun(back).reason}`);
+    const opened = R.openRun(back);
+    if (opened.army.king.f !== army.king.f || opened.army.king.r !== army.king.r || opened.army.facing !== army.facing || opened.world.rows().join() !== world.rows().join()) throw new Error('the floor and the army come back as they were');
+    if (back.turns.length !== 1 || back.turns[0].kind !== 'step' || back.turn !== 1) throw new Error('the turn list and the turn count ride along');
+    const bad = R.checkRun({ ...back, schema: 'dck-run/0', build: 'older' });
+    if (bad.ok || !/dck-run\/0/.test(bad.reason) || !/older/.test(bad.reason)) throw new Error(`a stamp mismatch is refused naming the build (${bad.reason})`);
+    if (R.checkRun(null).ok || R.checkRun({ schema: R.RUN_SCHEMA }).ok) throw new Error('nothing and a floorless object are refused');
+    const store = new Map();
+    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+    if (!R.saveRun(run, storage) || R.loadSavedRun(storage)?.id !== run.id) throw new Error('saveRun / loadSavedRun through the one key');
+    storage.setItem(R.RUN_KEY, '{"schema":"nope"}');
+    if (R.loadSavedRun(storage) !== null) throw new Error('a foreign object under the key reads as no run');
+    R.clearSavedRun(storage);
+    if (store.size !== 0) throw new Error('clearSavedRun clears');
+    void World;
+    return `${json.length} B round-trips; the stamp, the floor, the army, the start and the turn list all read back`;
+  });
+
   await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
     const host = document.createElement('div');
     const ui = new CanvasBoard(host, { files: 4, ranks: 5, atlas: STUB_ATLAS });

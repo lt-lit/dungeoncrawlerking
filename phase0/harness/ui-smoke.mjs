@@ -872,6 +872,150 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs2.length === 0, `no page errors with the flight on${errs2.length ? ` — ${errs2.join(' | ')}` : ''}`);
   await page2.close();
 }
+// --- THE WINDOW (Phase 2 milestone 4, 2026-09-08): `?zoom=12&viewport=screen`
+// on a phone puts the arena at a zoom the screen cannot hold whole, so the
+// board paints a WINDOW of it — a sub-rectangle of the buffer blitted, the
+// visible squares hit-testing back through the window, the diag naming the
+// fit — and the duel plays on unchanged.
+{
+  const page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs3 = [];
+  page3.on('pageerror', (e) => errs3.push(String(e).split('\n')[0]));
+  const q3 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', zoom: '12', viewport: 'screen', debris: 'off', fx: '0', ...(THEME ? { theme: THEME } : {}) });
+  await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?${q3}`);
+  await page3.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page3.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const win = await page3.evaluate(async () => {
+    const K = window.__DCK;
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    const info = K.renderer.info;
+    const inWin = (col, row) => col >= info.window.col0 && col < info.window.col0 + info.window.cols && row >= info.window.row0 && row < info.window.row0 + info.window.rows;
+    let visible = 0, round = 0, cells = 0, cellRound = 0;
+    for (const sq of K.app.boardUI.cells.keys()) {
+      const g = K.app.boardUI.gridPos(sq);
+      if (!inWin(g.col, g.row)) continue;
+      visible++;
+      const p = K.renderer.pointOfSquare(sq);
+      if (K.renderer.squareAtPoint(p.x, p.y) === sq) round++;
+      const c = K.app.boardUI.cells.get(sq).cell;
+      cells++;
+      const pc = K.renderer.pointOfCell(c.f, c.r);
+      const back = K.renderer.cellAtPoint(pc.x, pc.y);
+      if (back && back.f === c.f && back.r === c.r) cellRound++;
+    }
+    // Zoom out to 2 through the hook: the whole arena fits the width again (the window clips to the world).
+    K.renderer.zoom(2);
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    const info3 = K.renderer.info;
+    return { info, visible, round, cells, cellRound, diag: K.renderer.diagShown, info3, state: K.app.duel.state };
+  });
+  expect(win.info.fit === 'window' && win.info.k === 12 && win.info.viewport === 'screen', `?zoom=12&viewport=screen: fit window at k 12 (${win.info.fit}, k ${win.info.k}, ${win.info.viewport})`);
+  expect(win.info.window.cols < win.info.files && win.info.bufW === win.info.window.cols * 16 && win.info.blit.sw < win.info.bufW + 1 && win.info.blit.sw * win.info.k >= win.info.devW - 1, `the buffer is a ${win.info.window.cols}×${win.info.window.rows} window of the ${win.info.files}×${win.info.ranks} arena, the blit its visible ${win.info.blit.sw}×${win.info.blit.sh} px`);
+  expect(win.visible > 0 && win.round === win.visible && win.cellRound === win.cells, `${win.round}/${win.visible} visible squares and ${win.cellRound}/${win.cells} cells hit-test back through the window`);
+  expect(typeof win.diag === 'string' && win.diag.includes('fit window'), `the diagnostics line says fit window (${win.diag})`);
+  expect(win.info3.k === 2 && win.info3.window.cols === win.info3.files && win.info3.blit.sw === win.info3.bufW && win.state === 'playing', `zoom 2: the whole arena is the window again (${win.info3.window.cols} cols, blit ${win.info3.blit.sw} of ${win.info3.bufW}); the duel plays on`);
+  expect(errs3.length === 0, `no page errors on the window page${errs3.length ? ` — ${errs3.join(' | ')}` : ''}`);
+  await page3.close();
+}
+// --- THE WALK (Phase 2 milestone 4b, 2026-09-08): `?world=` begins a run on
+// the fixture; the pad's inputs move the army under the one rule, a turn
+// costs a move, a wall refuses, the run saves after every turn and exports
+// as one object, a tapped piece snaps the zoom and marks its moves, leaving
+// and resuming keep the turn, an import lands on the imported state.
+{
+  const page4 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs4 = [];
+  page4.on('pageerror', (e) => errs4.push(String(e).split('\n')[0]));
+  await page4.goto(`http://127.0.0.1:${PORT}/play/index.html?world=w01-the-undercroft&fx=0`);
+  await page4.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
+  const wk = await page4.evaluate(async () => {
+    const K = window.__DCK;
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    const out = {};
+    out.screen = { walk: !document.getElementById('screen-walk').hidden, duel: !document.getElementById('screen-duel').hidden, setup: !document.getElementById('screen-setup').hidden };
+    out.info = K.renderer.info;
+    out.start = K.walk.state;
+    out.saved0 = K.walk.saved();
+    // A forward step facing east is +f for every piece.
+    const p1 = await K.walk.input({ kind: 'step', dx: 0, dy: 1 });
+    out.step = { ok: p1.ok, moves: p1.moves.length, state: K.walk.state };
+    // A turn costs a move: facing east → south, the king stays, the turn counts.
+    const p2 = await K.walk.input({ kind: 'turn', dir: 1 });
+    out.turn = { ok: p2.ok, state: K.walk.state, facing: K.renderer.info.facing };
+    // A wait.
+    const p3 = await K.walk.input({ kind: 'wait' });
+    out.wait = { ok: p3.ok, turn: K.walk.state.turn };
+    // Walk into the wall behind the antechamber: facing south, "back" is north… step left (east when facing south? no: left of south is east).
+    // The antechamber's west wall is at f 1: facing south, RIGHT is west. Step right until refused.
+    let refused = null;
+    for (let i = 0; i < 8 && !refused; i++) { const p = await K.walk.input({ kind: 'step', dx: 1, dy: 0 }); if (!p.ok) refused = p.reason; }
+    out.refused = { reason: refused, turn: K.walk.state.turn, status: document.getElementById('walk-status').textContent };
+    // The save after every turn: the stored run's turn equals the state's; the export is one object of the schema with the turn list.
+    const saved = K.walk.saved();
+    const exp = K.walk.export();
+    out.save = { schema: exp.schema, turn: saved.turn, turns: exp.turns.length, worldId: exp.worldId, hasStart: !!exp.start?.world, hasFloor: !!exp.floors?.[exp.floor]?.world, key: localStorage.getItem('dck.run.v1') ? 1 : 0 };
+    // Tap a non-king piece: the zoom snaps up, its moves are marked; tap elsewhere: back.
+    const pc = K.walk.state.pieces.find((p) => p.ch !== 'K');
+    const z0 = K.walk.zoom();
+    K.walk.select(pc.f, pc.r);
+    out.tap = { z0, z1: K.renderer.info.k, selected: K.walk.state.selected, targets: K.walk.state.targets.length };
+    K.walk.select(-1, -1);
+    out.tap.z2 = K.renderer.info.k;
+    out.tap.cleared = K.walk.state.selected === null;
+    // The zoom buttons step k as a cut (in first: the headless phone sits at the floor, k 1).
+    document.getElementById('btnZoomIn').click();
+    out.zoomIn = K.renderer.info.k;
+    document.getElementById('btnZoomOut').click();
+    out.zoomOut = K.renderer.info.k;
+    // The pad and the keys drive inputs too.
+    const t0 = K.walk.state.turn;
+    document.querySelector('#walk-pad button[data-dx="0"][data-dy="-1"]').click();
+    await new Promise((r) => setTimeout(r, 50));
+    while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
+    out.pad = { turns: K.walk.state.turn - t0, facing: K.walk.state.facing };
+    // Leave: the setup shows the resume card; resume: the same turn and facing.
+    const snap = K.walk.state;
+    K.walk.leave();
+    out.leave = { phase: K.app.phase, resume: !document.getElementById('btnRunResume').hidden, resumeText: document.getElementById('btnRunResume').textContent };
+    K.walk.resume();
+    await K.renderer.ready();
+    const back = K.walk.state;
+    out.resume = { phase: K.app.phase, sameTurn: back.turn === snap.turn, sameFacing: back.facing === snap.facing, sameKing: back.king.f === snap.king.f && back.king.r === snap.king.r };
+    // Import: a copy of the export with the king moved one cell in the save lands on that state; a wrong stamp is refused.
+    const bad = { ...exp, schema: 'dck-run/0' };
+    const badOk = await K.walk.import(bad);
+    out.importBad = { ok: badOk, note: document.getElementById('run-note').textContent };
+    const copy = JSON.parse(JSON.stringify(K.walk.export()));
+    copy.turn = 99;
+    const okImport = await K.walk.import(copy);
+    out.importOk = { ok: okImport, turn: K.walk.state.turn, phase: K.app.phase };
+    return out;
+  });
+  expect(wk.screen.walk && !wk.screen.duel && !wk.screen.setup, 'the walk screen is up, the duel and setup screens down');
+  expect(wk.info.fit === 'window' && wk.info.viewport === 'screen' && Number.isInteger(wk.info.k) && wk.info.k >= 1 && wk.info.crop === null, `the board is a window over the world at k ${wk.info.k} with no crop`);
+  expect(wk.start.worldId === 'w01-the-undercroft' && wk.start.facing === 1 && wk.start.pieces.length === 6 && wk.start.turn === 0, `the run begins on the fixture facing east with the 3×2 kit (${wk.start.pieces.length} pieces, turn ${wk.start.turn})`);
+  expect(wk.saved0 && wk.saved0.turn === 0, 'the run is saved at turn 0');
+  expect(wk.step.ok && wk.step.moves === 6 && wk.step.state.king.f === wk.start.king.f + 1 && wk.step.state.turn === 1, `a forward step facing east moves all six +f (${wk.step.moves} moves, king ${wk.step.state.king.f})`);
+  expect(wk.turn.ok && wk.turn.state.facing === 2 && wk.turn.facing === 2 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.turn === 2, `a right turn faces south and costs a move; the camera turned with it (facing ${wk.turn.facing})`);
+  expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
+  expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status), `a step into a wall is refused and says so (${wk.refused.reason}, turn ${wk.refused.turn})`);
+  expect(wk.save.schema === 'dck-run/1' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'w01-the-undercroft' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
+  expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 >= wk.tap.z0 && wk.tap.z1 >= 6 && wk.tap.z2 === wk.tap.z0 && wk.tap.cleared, `a tapped piece snaps the zoom ${wk.tap.z0} → ${wk.tap.z1} with ${wk.tap.targets} moves marked; a tap elsewhere lets go and zooms back`);
+  expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom buttons step k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
+  expect(wk.pad.turns === 2 && wk.pad.facing === 1, `the pad and the keys drive turns (${wk.pad.turns} turns; q turned left to facing ${wk.pad.facing})`);
+  expect(wk.leave.phase === 'setup' && wk.leave.resume && /turn/.test(wk.leave.resumeText), `leaving keeps the run: the setup offers "${wk.leave.resumeText}"`);
+  expect(wk.resume.phase === 'walk' && wk.resume.sameTurn && wk.resume.sameFacing && wk.resume.sameKing, 'resuming lands on the same turn, facing and king');
+  expect(wk.importBad.ok === false && /dck-run\/0/.test(wk.importBad.note), `a save of another schema is refused with one line (${wk.importBad.note})`);
+  expect(wk.importOk.ok && wk.importOk.turn === 99 && wk.importOk.phase === 'walk', `an imported save is the run now (turn ${wk.importOk.turn})`);
+  expect(errs4.length === 0, `no page errors on the walk${errs4.length ? ` — ${errs4.join(' | ')}` : ''}`);
+  await page4.close();
+}
 await browser.close();
 server.close();
 

@@ -34,8 +34,51 @@
       <span class="saved-btns"><button id="btnSavedOpen" title="open in the replay analyzer">Open</button><button id="btnSavedExport">Export</button></span>
       <select id="savedLogSel" aria-label="saved replay logs"></select>
     </div>
+    <!-- THE WALK (Phase 2 milestone 4b, 2026-09-08): the worlds the army can
+         walk — one run at a time, saved after every turn, exportable and
+         importable as a file. The arenas below remain the duel at once. -->
+    <div id="world-list-wrap">
+      <h2 class="list-title">Worlds &#8212; take a walk</h2>
+      <div id="world-list"></div>
+      <div class="world-actions">
+        <button id="btnRunResume" hidden></button>
+        <button id="btnRunImport" title="load a saved run from a file">Import a save</button>
+        <input type="file" id="runFile" accept="application/json,.json" hidden>
+        <span id="run-note" class="opt-hint"></span>
+      </div>
+      <h2 class="list-title">Arenas &#8212; a duel at once</h2>
+    </div>
     <div id="stage-list"></div>
     <div id="boot-log" class="log"></div>
+  </section>
+
+  <!-- THE WALK SCREEN (milestone 4b): the board as a WINDOW over the world at
+       a fixed zoom, the king centred, the world sliding under him; a 3×3
+       pad (the eight ways, wait in the middle), the two turns, the zoom,
+       the save. Keyboard: WASD / arrows, Q E, space, numpad 1–9, + −. -->
+  <section id="screen-walk" class="screen" hidden>
+    <div id="walk-board"></div>
+    <div id="walk-diag" hidden aria-live="polite"></div>
+    <div id="walk-status" class="side-bar" aria-live="polite"></div>
+    <div id="walk-controls">
+      <div id="walk-pad" aria-label="move the army">
+        <button data-dx="-1" data-dy="1" aria-label="forward-left" title="forward-left (numpad 7)">&#8598;</button>
+        <button data-dx="0" data-dy="1" aria-label="forward" title="forward (W, up, numpad 8)">&#8593;</button>
+        <button data-dx="1" data-dy="1" aria-label="forward-right" title="forward-right (numpad 9)">&#8599;</button>
+        <button data-dx="-1" data-dy="0" aria-label="left" title="left (A, numpad 4)">&#8592;</button>
+        <button id="btnWalkWait" aria-label="wait" title="wait a turn (space, numpad 5)">&#183;</button>
+        <button data-dx="1" data-dy="0" aria-label="right" title="right (D, numpad 6)">&#8594;</button>
+        <button data-dx="-1" data-dy="-1" aria-label="back-left" title="back-left (numpad 1)">&#8601;</button>
+        <button data-dx="0" data-dy="-1" aria-label="back" title="back (S, down, numpad 2)">&#8595;</button>
+        <button data-dx="1" data-dy="-1" aria-label="back-right" title="back-right (numpad 3)">&#8600;</button>
+      </div>
+      <div id="walk-side">
+        <div class="walk-row"><button id="btnWalkTurnL" title="turn left (Q) — a move" aria-label="turn left">&#8634;</button><span id="walk-facing" class="opt-val">east</span><button id="btnWalkTurnR" title="turn right (E) — a move" aria-label="turn right">&#8635;</button></div>
+        <div class="walk-row"><button id="btnZoomOut" title="zoom out (&minus;)" aria-label="zoom out">&minus;</button><span id="walk-zoom" class="opt-val">k 4</span><button id="btnZoomIn" title="zoom in (+)" aria-label="zoom in">+</button></div>
+        <div class="walk-row"><button id="btnRunExport" title="share or download this run's save file">&#9873; Export save</button></div>
+      </div>
+    </div>
+    <p class="opt-hint" id="walk-hint">Step with WASD / the arrows or the pad; Q E turn (a move); space waits; + &minus; zoom. Tap a piece for its own move.</p>
   </section>
 
   <section id="screen-duel" class="screen" hidden>

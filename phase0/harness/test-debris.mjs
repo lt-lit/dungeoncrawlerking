@@ -16,40 +16,45 @@ const notes = [];
 const expect = (ok, what) => (ok ? notes.push(`ok  ${what}`) : failures.push(what));
 const T = D.T;
 
-// --- the transform: arena ↔ env under flip, crop and auto-crop ---------------
+// --- the transform: arena ↔ env is world.mjs's crop (re-exported); the identity and a turned crop
 {
-  const base = { files: 10, ranks: 10 };
-  const deals = [
-    { flip: false, cropTop: 0, cropBottom: 0, autoCrop: { top: 0, bottom: 0 }, files: 10, ranks: 10 },
-    { flip: true, cropTop: 0, cropBottom: 0, autoCrop: { top: 0, bottom: 0 }, files: 10, ranks: 10 },
-    { flip: false, cropTop: 1, cropBottom: 2, autoCrop: { top: 1, bottom: 0 }, files: 10, ranks: 6 },
-    { flip: true, cropTop: 2, cropBottom: 1, autoCrop: { top: 0, bottom: 1 }, files: 10, ranks: 6 },
+  const cases = [
+    { name: 'identity 10×10', tx: D.identityTransform(10, 10), files: 10, ranks: 10, worldRanks: 10 },
+    { name: 'a 10×6 crop facing north at (2, 3) in a 20×16 world', tx: D.cropTransform({ wf: 2, wr: 3, facing: 0, files: 10, ranks: 6, worldFiles: 20, worldRanks: 16 }), files: 10, ranks: 6, worldRanks: 16 },
+    { name: 'a 10×6 crop facing east at (2, 3) in a 20×16 world', tx: D.cropTransform({ wf: 2, wr: 3, facing: 1, files: 10, ranks: 6, worldFiles: 20, worldRanks: 16 }), files: 10, ranks: 6, worldRanks: 16 },
+    { name: 'a 10×6 crop facing south at (2, 3) in a 20×16 world', tx: D.cropTransform({ wf: 2, wr: 3, facing: 2, files: 10, ranks: 6, worldFiles: 20, worldRanks: 16 }), files: 10, ranks: 6, worldRanks: 16 },
+    { name: 'a 10×6 crop facing west at (2, 3) in a 20×16 world', tx: D.cropTransform({ wf: 2, wr: 3, facing: 3, files: 10, ranks: 6, worldFiles: 20, worldRanks: 16 }), files: 10, ranks: 6, worldRanks: 16 },
   ];
-  for (const deal of deals) {
-    const tx = D.envTransform(deal, base);
+  for (const c of cases) {
+    const { tx } = c;
     let ok = true, seen = new Set();
-    for (let r = 1; r <= deal.ranks && ok; r++) for (let f = 0; f < 10; f++) {
+    for (let r = 1; r <= c.ranks && ok; r++) for (let f = 0; f < c.files; f++) {
       const sq = String.fromCharCode(97 + f) + r;
       const { ef, er } = D.toEnvCell(tx, sq);
-      if (ef < 0 || ef >= 10 || er < 0 || er >= 10) { ok = false; break; }
-      const key = ef * 100 + er;
+      if (ef < 0 || ef >= tx.worldFiles || er < 0 || er >= tx.worldRanks) { ok = false; break; }
+      const key = ef * 1000 + er;
       if (seen.has(key)) { ok = false; break; }
       seen.add(key);
       if (D.fromEnvCell(tx, ef, er) !== sq) { ok = false; break; }
       const px = D.toEnvPx(tx, sq, 3, 5);
+      if (D.cellOfPx(tx, px.x, px.y).ef !== ef || D.cellOfPx(tx, px.x, px.y).er !== er) { ok = false; break; }
       const back = D.toArenaPx(tx, px.x, px.y);
-      if (!back || back.sq !== sq || back.x !== f * T + 3 || back.y !== (deal.ranks - r) * T + 5) { ok = false; break; }
+      if (!back || back.sq !== sq || back.x !== f * T + 3 || back.y !== (c.ranks - r) * T + 5) { ok = false; break; }
     }
-    expect(ok, `transform round-trips every arena square (flip ${deal.flip}, crop ${deal.cropTop}t/${deal.cropBottom}b + auto ${deal.autoCrop.top}t/${deal.autoCrop.bottom}b)`);
+    expect(ok, `transform round-trips every arena square and pixel (${c.name})`);
     // Outside the arena is null, not a wrong square.
-    const outside = deal.ranks < 10 ? D.fromEnvCell(tx, 0, deal.flip ? 9 - (deal.cropBottom + deal.autoCrop.bottom - 1) : 0) : null;
-    if (deal.ranks < 10) expect(outside === null, 'a cropped-away env cell maps to no arena square');
+    expect(D.fromEnvCell(tx, tx.wf - 1, tx.wr) === null && D.fromEnvCell(tx, tx.wf, tx.wr + tx.h) === null, `a cell outside the crop maps to no arena square (${c.name})`);
   }
-  const tx = D.envTransform(deals[0], base), txf = D.envTransform(deals[1], base);
-  expect(D.toEnvCell(tx, 'a1').er === 0 && D.toEnvCell(tx, 'a10').er === 9, 'unflipped: arena rank 1 is env rank 0');
-  expect(D.toEnvCell(txf, 'a1').er === 9 && D.toEnvCell(txf, 'a10').er === 0, 'flipped: arena rank 1 is env rank 9');
-  expect(D.envDir(txf, 1, 1).dy === -1 && D.envDir(tx, 1, 1).dy === 1, 'a direction flips its dy under a flipped stage');
-  expect(D.toEnvPx(tx, 'a10', 0, 0).y === 0 && D.toEnvPx(tx, 'a1', 0, 0).y === 9 * T, 'env pixel rows run from the top of the stage');
+  const tx = cases[0].tx, east = cases[2].tx, south = cases[3].tx;
+  expect(D.toEnvCell(tx, 'a1').er === 0 && D.toEnvCell(tx, 'a10').er === 9, 'identity: arena rank 1 is env rank 0');
+  expect(D.toEnvCell(south, 'a1').er === 3 + 5 && D.toEnvCell(south, 'a6').er === 3, 'facing south: arena rank 1 is the crop\'s top row');
+  expect(D.toEnvCell(east, 'a1').ef === 2 && D.toEnvCell(east, 'a6').ef === 2 + 5, 'facing east: the arena\'s ranks run along the world\'s files');
+  expect(D.envDir(south, 1, 1).dy === -1 && D.envDir(south, 1, 1).dx === -1 && D.envDir(tx, 1, 1).dy === 1, 'a direction turns with the crop');
+  expect(D.envDir(east, 0, -1).dx === 1 && D.envDir(east, 0, -1).dy === 0, 'facing east: up the arena is +x in the env');
+  expect(D.toEnvPx(tx, 'a10', 0, 0).y === 0 && D.toEnvPx(tx, 'a1', 0, 0).y === 9 * T, 'env pixel rows run from the top of the world');
+  // The ledger reads the env through the same cell rule (cellOfPx on the ledger itself).
+  const L0 = new D.DebrisLedger({ id: 'tx', files: 20, ranks: 16 });
+  expect(D.cellOfPx(L0, 3 * T + 1, 2 * T + 1).er === 13 && D.cellOfPx(L0, 3 * T + 1, 2 * T + 1).ef === 3, 'cellOfPx reads a ledger\'s ranks');
 }
 
 // --- the ledger: add, buckets, cap, undo, traffic, serialize ------------------

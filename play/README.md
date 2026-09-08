@@ -62,6 +62,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   harness/canvas-grid.mjs` (the blit on the device-pixel grid, Chromium +
   Firefox; § "The canvas board" below). THE CAMERA's gates (2026-09-08,
   milestone 3): `node harness/test-camera.mjs` (the geometry, Node only),
+  `node harness/test-world.mjs` (the world and the crop transform, Node only),
+  `node harness/test-army.mjs` (the army rule on the brief's cases, Node only),
+  `node harness/gen-worlds.mjs` (the walk-around fixtures + their manifest),
+  `node harness/world-shots.mjs` (each world painted whole + the walk screen, for the eye),
   `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
   the turned camera equals the world itself rotated), `node
   harness/camera-guard.mjs dump|compare <dir> [--allow door,turned]`
@@ -727,6 +731,165 @@ back). replay-smoke 63, test-logreport 47, test-debris 53,
 strip-ruin-chips, canvas-grid `none` 4/4 Chromium + 18/18 Firefox.
 `camera-shots.mjs` takes the desktop, the four phone facings and a door
 crop for the eye.
+
+**Milestone 4a — THE WORLD AND THE WINDOW (2026-09-08).** Brief §1 read
+literally (decided 2026-09-07): the duel is a camera view of the same
+world, zoomed. `js/world.mjs` is the world's data — a `World` of cells
+(terrain `.` `*` `O` `^`, a piece, the authored skin), the Director's and
+the residue's layers (`godCrates`, `opened`, `rubble`) as cell sets, the
+player's `start` and the enemy `spawns` a world file marks (`@`, `1`…`9`
+on the map; `loadWorld`: stage schema 2, ANY size — the 3–12 × 5–10 cap
+is the deal's, an arena must fit the engine), `serialize` / `load` — and
+THE CROP TRANSFORM: where an arena's squares land in the world's cells.
+A crop is `{ wf, wr, facing, files, ranks }` — the world cell of its
+south-west corner in world axes and the ARMY's facing: arena-north is
+the world direction the player faces, so under a camera at that facing
+the arena reads north-up on the screen at one offset (`arenaToWorld` /
+`worldToArena`; the pixels turn with the squares, `arenaPxToEnv`,
+`toArenaPx`; a direction, `envDir`). THE ENVIRONMENT IS THE WORLD: the
+debris ledger keys on its cells (debris.mjs re-exports the transform
+under the ledger's names — `toEnvCell`, `toEnvPx`, `cellOfPx`…), the
+cosmetic hashes and the checker key on the world cell, so a crop or a
+turn never reshuffles the floor. No mirror exists any more: this page's
+world IS the dealt arena (a stage flipped and cropped BEFORE it became a
+world — a flip is how a lab world is built, never a runtime transform),
+its crop the identity, its ledger one per transformed stage in the
+arena's own grid (until the run save takes it over); the deal's flip and
+crop no longer feed `hashCoords` (gone from main.mjs and the replay page;
+the option survives on the board for the facing-walk gate's inverse map).
+THE BOARD'S ONE MODEL IS THE WORLD (`canvas-board.mjs`): `setPosition`
+WRITES the FEN and the ledgers into the crop's cells (`World.writeArena`
+— a `skins` map replaces the crop's skins, so a repaint without skins
+drops them; the door pairs re-read off the skin grid each write) and the
+painter reads the world; the terrain rule runs per cell, lazily, cached
+until the next write (`board-ui.mjs classifyCell` + `pairDoors` are the
+core; `classifyTerrain(fen, …)` is the same rule on a FEN, verified
+identical on 144 random boards); `kinds` is a square-keyed view over the
+crop; a board built with `files` / `ranks` alone makes a bare world of
+that size (every old caller), `world` + `crop` mount a real one
+(`setWorld`, `setCrop`). THE WINDOW: the buffer is a window of the
+world's screen grid — `viewport: 'crop'` (the default, this page) exactly
+the crop's rectangle, blitted whole, as it always was; `'screen'` the
+screen's tiles at k plus a one-tile margin, clipped to the world,
+centred on a FOCUS (`lookAt(f, r, dx, dy)` — a world cell plus a pixel
+offset, the world sliding under the king on a walk; null = the crop's
+centre), the visible part blitted, the world outside the crop DIMMED
+under the marks, the crop's frame drawn as a ring over it; per axis a
+world that fits the screen is centred whole. Fit `'window'` is a fixed
+integer zoom (`setZoom`, `ZOOM_RANGE` 1–12, a CUT) in the container's
+box — the walk's fit; `?zoom=N` (implies `?viewport=screen`) puts this
+page on it as a test surface, `__DCK.renderer.zoom / viewport / lookAt /
+cellAtPoint / pointOfCell`. `#origin(sq)` is the world cell's screen tile
+minus the window's corner; `squareAtPoint` inverts the blit, the window
+and the crop; `cellAtPoint` stops at the cell (a walk's tap);
+`renderInfo` adds `viewport`, `zoom`, `window`, `crop`, `world`, `blit`.
+Full repaint of the window on every change (about 600 cells at a phone's
+k 4); no dirty rectangles until something needs them. GATED BYTE FOR
+BYTE: `camera-guard.mjs` (the six cases × fifteen plies recorded on the
+build before, replayed on this one: 172/172 identical, no allowances),
+`facing-walk.mjs` 108/108, `test-camera.mjs` 80, `test-debris.mjs` 60
+(the transform's cases are now the identity and a turned crop at the
+four facings), `test-world.mjs` 125 (the crop against brute force at
+every facing, the crop agreeing with the camera, the identity, a stage
+becoming a world, an arena written through a turned crop reading back as
+the same FEN, a world file with its start and spawns, a save round trip),
+selftest 45/45 (+ the world window: a 7×5 crop in a 24×18 world at the
+four facings, the screen viewport at a fixed zoom, every square and every
+visible cell hit-testing back, the outside dimmed, lookAt centring),
+ui-smoke (+ the page at `?zoom=12&viewport=screen`: a window of the arena,
+the visible squares round-tripping, zoom 2 the whole arena again),
+replay-smoke 63, test-logreport 47, canvas-grid `none` 4/4 Chromium.
+NOT in this milestone: the army (4b), the barrier by hand (4c).
+
+**Milestone 4b — THE ARMY AND THE WALK (2026-09-08).** Brief §5.1's ONE
+MOVEMENT RULE on a hand-built floor: the walk-around build the phone
+judges, before any enemy exists. `js/army.mjs` is the rule, pure and
+Node-gated (`phase0/harness/test-army.mjs`, 57 checks on the brief's own
+cases): THE PATTERN is body-relative (`dx` right of the king, `dy` ahead,
+a letter per slot; slot 0 the king; `makePattern` lays a dealt army's
+W×2 molding on open ground — royal rearmost, pawns in front per file —
+`rotateBody` / `toBody` turn it with the FACING); a turn is one INPUT —
+`{ kind: 'step', dx, dy }` (a body-relative king step), `{ kind:
+'turn', dir }` (A ROTATION COSTS A MOVE, designer 2026-09-08: it is a
+wait with a turned pattern), `{ kind: 'wait' }`, or `{ kind: 'move', id,
+to }` (one piece's own move, captures allowed; the king never) —
+`planTurn` is pure (the king first: onto floor that is empty or held by
+a comrade, who is then evicted; terrain or an enemy refuses, and a
+refusal costs nothing), then every other piece's ONE move — a king step
+or its own chess move on the world grid (`pieceMoves`: sliders stopped
+by terrain and any piece, a comrade's cell a landing only for the
+planner and never passed through, knights hop, pawns one step forward
+along the facing, never a capture by a push) — that STRICTLY reduces its
+BFS distance (`distanceField`, 8-connected king steps over floor, friends
+passable, enemies and terrain not) to its TARGET: its slot when that is
+reachable floor, else the nearest reachable floor cell to the slot by
+Chebyshev, ties toward the king (`targetOf` — molding on the move);
+precedence is nearest-to-target then id, in passes (three at most) so a
+piece can step into a cell a comrade is leaving (one claim per piece,
+its destination; an evicted piece must move and takes its nearest cell
+even if farther from home; a turn nobody can complete is refused — "the
+way is held", a safety net the swap makes nearly unreachable);
+`applyTurn` writes the army and the world's piece grid (a smash turns
+the furniture to floor); `spawnArmy` puts an army down molded to the
+ground. Measured on the fixtures: unison on open floor in every
+direction, the about-face onto the turned slots within four turns, the
+blob flowing round a pillar and reforming, a rook home in one, a knight
+hopping, a bishop on the wrong colour on foot, a pawn king-stepping
+back, a file of four stepping as one, a 5-wide line squeezed into a
+3-wide corridor, a crate never smashed by an automatic move, the
+individual move smashing one, a pawn capturing diagonally only. THE RUN
+(`js/run.mjs`): one object per run and nothing else (designer: no meta
+progression; export and import as files; no backward compatibility) —
+the stamp `dck-run/1`, the seed, the world id, `floors` keyed by floor
+id (one for now; Phase 3 adds entries) holding the floor
+(`World.serialize` — the whole terrain grid, the pieces, the skins, the
+layers) and the army, the `start` (both as the run began), the turn
+count and THE TURN LIST (every input, so a run replays from its seed
+and its inputs: the rule is pure, and a save is a bug report); ONE
+localStorage key (`dck.run.v1`, the newest run wins), saved after every
+turn; `checkRun` refuses a stamp mismatch with one line naming the build
+that wrote it. THE WALK SCREEN (`#screen-walk`, main.mjs § THE WALK):
+the setup screen lists the worlds (`play/worlds/manifest.json`; a
+thumbnail per card, the resume card when a run is saved, "Import a
+save"); a world card begins a run — the 3×2 opening kit (K + R + N and
+three pawns, brief §4.2; `?army=setup` takes the setup screen's White
+knobs) spawned at the map's `@` facing its `facing`, the board a WINDOW
+over the world (`crop: false`, fit `window`, viewport `screen`, the
+default zoom the largest whole k with 15 tiles across the short axis —
+a phone lands on k 4, `?zoom=` pins it), the king centred, the world
+SLIDING under him (the board's `panTo`) while the arrivals slide in
+whole native pixels (`animateArrivals`; a facing change is a CUT
+first); a 3×3 pad (the eight ways, wait in the middle), the two turns,
+the zoom ± (a cut), Export save; WASD / arrows / numpad 1–9, Q E, space,
++ −, Escape; TAP A PIECE (not the king) for its own move: the zoom snaps
+to at least k 6 centred on it and its moves are marked (a capture red),
+tap a target to move, tap elsewhere to let go and zoom back; the status
+line (turn, facing, pieces, the king's cell, a note — "blocked" on a
+refused step); Back leaves the run saved, Resume picks it up; `?world=
+<id>` begins, `?run=resume` resumes, `?save=<url>` imports at boot.
+THE WORLDS (`play/worlds/`, `phase0/harness/gen-worlds.mjs`): `w01-the-
+undercroft`, the hand-built 60×40 walk-around fixture carved from a
+written plan — an antechamber where the walk begins facing east, a
+3-wide corridor with pillars and a stub, a great hall with a colonnade
+and four pillars entered by double doors, a north-west store and its
+2-wide crawlspace, a north-east chapel with a choir screen and a weak
+spot, an east corridor, two quarters with a door between, a cave, an
+alcove, a dead end, a back way, nothing symmetric; `w02-stress-100`, a
+seeded 100×100 of sixty rooms for the frame budget; every floor cell
+reachable from the start; `world-shots.mjs` renders each world whole
+and the walk screen on a phone and a desktop for the designer's eye.
+Gates: `test-army.mjs` 57, selftest 46/46 (+ the run save's round trip
+and refused stamp), ui-smoke (+ the walk: the screen, the window with
+no crop, the kit facing east, a forward step +f for all six, a turn that
+costs a move and turns the camera, a wait, a refused wall step, the save
+after every turn, the tap's snap-zoom and targets, the zoom buttons,
+the pad and the keys, leave / resume, a refused stamp, an import), the
+4a gates unchanged. THE VERDICT (designer,
+2026-09-08): "Seems to work fine on mobile and desktop." NOT here, on
+purpose: enemies, line of sight, the
+trigger (a design conversation of its own), the barrier by hand (4c),
+debris on a walk's smash (the ledger is the floor's; the walk's captures
+will feed it with 4c), a replay of a run's turn list in the analyzer.
 
 ## Art themes (2026-09-03)
 
