@@ -82,8 +82,7 @@ that still bind the art: no numbers on hint arrows (the hint LIST under
 the board carries rank swatch + SAN + eval + depth), one 3-px light-blue
 frame for every god action, arrows in the player's own width / opacity
 (Options → Arrow width / opacity), the enemy's last move a red arrow, a
-displacement its blue arrow alone.**The designer's baseline, same
-day: lift +5, shift +1.**
+displacement its blue arrow alone.**
 
 **PHASE 2 OPENS WITH THE 16×16 RENDERER — DECIDED 2026-09-07 (designer:
 "I can't help but feel like our whole graphics pipeline might be a bit
