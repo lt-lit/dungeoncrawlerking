@@ -233,86 +233,118 @@ export function classifyTerrain(fen, { holes = EMPTY, godCrates = EMPTY, skins =
   const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
   const grid = parseBoard(boardField); // [rankFromTop][file]
   const name = (ff, rr) => String.fromCharCode(97 + ff) + rr;
-  const at = (ff, rr) => (ff < 0 || ff >= files || rr < 1 || rr > ranks ? undefined : grid[ranks - rr]?.[ff] ?? null);
+  const ctx = {
+    files,
+    ranks,
+    cell: (ff, rr) => {
+      if (ff < 0 || ff >= files || rr < 1 || rr > ranks) return undefined;
+      const sq = name(ff, rr);
+      return { v: grid[ranks - rr]?.[ff] ?? null, hole: holes.has(sq), crate: godCrates.has(sq), skin: skins[sq] ?? null, opened: opened.has(sq), rubble: rubble.has(sq) };
+    },
+    key: name,
+  };
+  ctx.pairs = pairDoors(ctx);
+  const out = new Map();
+  for (let rank = 1; rank <= ranks; rank++) {
+    for (let f = 0; f < files; f++) out.set(name(f, rank), classifyCell(ctx, f, rank));
+  }
+  return out;
+}
+
+/**
+ * THE CORE of the terrain rule on any grid (Phase 2 milestone 4, 2026-09-08
+ * — the world: the canvas board classifies the world's cells through this,
+ * lazily, and classifyTerrain above is the same rule on a FEN). `ctx` is
+ * { files, ranks, cell(f, rank) → { v, hole, crate, skin, opened, rubble }
+ * or undefined off the grid, key(f, rank) → a Map key, pairs: pairDoors(ctx) }.
+ * Ranks are 1-based here, as the FEN's are.
+ */
+export function classifyCell(ctx, f, rank) {
+  const { cell } = ctx;
+  const at = (ff, rr) => cell(ff, rr);
   const standing = (ff, rr) => {
-    const t = at(ff, rr);
-    if (t === undefined) return false;
-    if (t === FURNITURE) return godCrates.has(name(ff, rr)) || skins[name(ff, rr)] === 'door' || skins[name(ff, rr)] === 'masonry';
-    if (t === WALL) return !holes.has(name(ff, rr));
+    const c = at(ff, rr);
+    if (c === undefined) return false;
+    if (c.v === FURNITURE) return c.crate || c.skin === 'door' || c.skin === 'masonry';
+    if (c.v === WALL) return !c.hole;
     return false;
   };
-  const isHole = (ff, rr) => at(ff, rr) === WALL && holes.has(name(ff, rr));
+  const isHole = (ff, rr) => {
+    const c = at(ff, rr);
+    return !!c && c.v === WALL && c.hole;
+  };
   const solid = (ff, rr) => {
     if (standing(ff, rr)) return true;
-    const t = at(ff, rr);
-    if (t === undefined || t === FURNITURE || t === WALL) return false;
-    return rubble.has(name(ff, rr)) || opened.has(name(ff, rr));
+    const c = at(ff, rr);
+    if (c === undefined || c.v === FURNITURE || c.v === WALL) return false;
+    return c.rubble || c.opened;
   };
-  // DOUBLE DOORS (round 16): two door skins side by side along their wall
-  // line are one two-wide door. Paired on the AUTHORED skin grid (round
-  // 17: "if one opens or is destroyed, the closed door next to it suddenly
-  // becomes a normal door"), so a leaf keeps its half after its partner is
-  // captured, burst or god-cracked — the half is painted only on a leaf
-  // that still stands. Pairs along a rank first (west leaf 'l', east 'r'),
-  // then, among the leaves still single, along a file (south 's', north
-  // 'n' — the camera, 2026-09-08: a stack in a file is the same double
-  // door seen from its side, and turns into a rank pair under a quarter
-  // turn).
-  const isDoor = (ff, rr) => skins[name(ff, rr)] === 'door';
-  const pairEnd = new Map(); // square → 'l' | 'r' | 'n' | 's'
+  const me = at(f, rank);
+  const v = me?.v ?? null;
+  const isWall = v === WALL;
+  const furniture = v === FURNITURE;
+  const wallTile = isWall && !me.hole;
+  const hole = isWall && !!me.hole;
+  const cracked = furniture && !!me.crate;
+  const skin = furniture && !cracked ? me.skin ?? null : null;
+  const door2 = skin === 'door' ? ctx.pairs.get(ctx.key(f, rank)) ?? null : null;
+  // WEAK SPOTS wear the crack (2026-09-04): authored masonry, which
+  // paints the wall block with THE crack exactly like a god-weakened
+  // wall — the same capturable '^'. A DOOR is a door wherever it stands
+  // (the camera, 2026-09-08): its wall LINE is recorded here in world
+  // space, and the board decides on the screen whether the leaf shows
+  // or the door stands edge-on (camera.mjs edgeOn). (Until then a door
+  // in a north–south line was a weak spot, for want of edge-on art.)
+  const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
+  const weak = skin === 'masonry';
+  const doorLine = skin === 'door' ? ((N || S) && !(E || W) ? 'ns' : 'ew') : null;
+  const floor = !isWall && !furniture;
+  const ruin = floor && !!me?.rubble;
+  const doorway = floor && !ruin && !!me?.opened;
+  // A door always carries its wall case: edge-on it paints the wall's
+  // band, and which way it stands is the camera's call, not this one.
+  const mask = wallTile || cracked || weak || skin === 'door'
+    ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
+    : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
+    : doorway ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
+    : hole ? (isHole(f, rank + 1) ? 1 : 0) | (isHole(f + 1, rank) ? 2 : 0) | (isHole(f, rank - 1) ? 4 : 0) | (isHole(f - 1, rank) ? 8 : 0)
+    : -1;
+  return { v, wallTile, hole, furniture, cracked, skin, door2, doorLine, weak, ruin, doorway, mask };
+}
+
+/**
+ * DOUBLE DOORS (round 16): two door skins side by side along their wall
+ * line are one two-wide door. Paired on the AUTHORED skin grid (round 17:
+ * "if one opens or is destroyed, the closed door next to it suddenly
+ * becomes a normal door"), so a leaf keeps its half after its partner is
+ * captured, burst or god-cracked — the half is painted only on a leaf
+ * that still stands. Pairs along a rank first (west leaf 'l', east 'r'),
+ * then, among the leaves still single, along a file (south 's', north
+ * 'n' — the camera, 2026-09-08: a stack in a file is the same double door
+ * seen from its side, and turns into a rank pair under a quarter turn).
+ * Returns Map(key → end) over the whole grid.
+ */
+export function pairDoors(ctx) {
+  const { files, ranks, cell, key } = ctx;
+  const isDoor = (ff, rr) => cell(ff, rr)?.skin === 'door';
+  const pairEnd = new Map();
   for (let rr = 1; rr <= ranks; rr++) {
     for (let ff = 0; ff < files - 1; ff++) {
       if (!isDoor(ff, rr) || !isDoor(ff + 1, rr)) continue;
-      pairEnd.set(name(ff, rr), 'l');
-      pairEnd.set(name(ff + 1, rr), 'r');
+      pairEnd.set(key(ff, rr), 'l');
+      pairEnd.set(key(ff + 1, rr), 'r');
       ff++; // the pair is spoken for
     }
   }
   for (let ff = 0; ff < files; ff++) {
     for (let rr = 1; rr < ranks; rr++) {
-      if (!isDoor(ff, rr) || !isDoor(ff, rr + 1) || pairEnd.has(name(ff, rr)) || pairEnd.has(name(ff, rr + 1))) continue;
-      pairEnd.set(name(ff, rr), 's');
-      pairEnd.set(name(ff, rr + 1), 'n');
+      if (!isDoor(ff, rr) || !isDoor(ff, rr + 1) || pairEnd.has(key(ff, rr)) || pairEnd.has(key(ff, rr + 1))) continue;
+      pairEnd.set(key(ff, rr), 's');
+      pairEnd.set(key(ff, rr + 1), 'n');
       rr++;
     }
   }
-  const out = new Map();
-  for (let rank = 1; rank <= ranks; rank++) {
-    for (let f = 0; f < files; f++) {
-      const sq = name(f, rank);
-      const v = grid[ranks - rank]?.[f] ?? null;
-      const isWall = v === WALL;
-      const furniture = v === FURNITURE;
-      const wallTile = isWall && !holes.has(sq);
-      const hole = isWall && holes.has(sq);
-      const cracked = furniture && godCrates.has(sq);
-      const skin = furniture && !cracked ? skins[sq] ?? null : null;
-      const door2 = skin === 'door' ? pairEnd.get(sq) ?? null : null;
-      // WEAK SPOTS wear the crack (2026-09-04): authored masonry, which
-      // paints the wall block with THE crack exactly like a god-weakened
-      // wall — the same capturable '^'. A DOOR is a door wherever it stands
-      // (the camera, 2026-09-08): its wall LINE is recorded here in world
-      // space, and the board decides on the screen whether the leaf shows
-      // or the door stands edge-on (camera.mjs edgeOn). (Until then a door
-      // in a north–south line was a weak spot, for want of edge-on art.)
-      const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
-      const weak = skin === 'masonry';
-      const doorLine = skin === 'door' ? ((N || S) && !(E || W) ? 'ns' : 'ew') : null;
-      const floor = !isWall && !furniture;
-      const ruin = floor && rubble.has(sq);
-      const doorway = floor && !ruin && opened.has(sq);
-      // A door always carries its wall case: edge-on it paints the wall's
-      // band, and which way it stands is the camera's call, not this one.
-      const mask = wallTile || cracked || weak || skin === 'door'
-        ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
-        : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
-        : doorway ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
-        : hole ? (isHole(f, rank + 1) ? 1 : 0) | (isHole(f + 1, rank) ? 2 : 0) | (isHole(f, rank - 1) ? 4 : 0) | (isHole(f - 1, rank) ? 8 : 0)
-        : -1;
-      out.set(sq, { v, wallTile, hole, furniture, cracked, skin, door2, doorLine, weak, ruin, doorway, mask });
-    }
-  }
-  return out;
+  return pairEnd;
 }
 
 /**

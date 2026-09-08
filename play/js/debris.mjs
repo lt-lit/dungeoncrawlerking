@@ -98,81 +98,20 @@ export function hex(s) {
 }
 
 // -------------------------------------------------------------- transform
-
-/**
- * The arena → environment transform of a deal (armygen.dealMatchup output:
- * `flip`, `cropBottom`, `cropTop`, `autoCrop`, `files`, `ranks`) on the base
- * stage it was dealt from (`base`: { files, ranks }). Env cell (ef, er) is
- * the base stage's file and 0-based rank; env pixels run x right, y DOWN,
- * with row 0 the TOP of the base stage (its highest rank) — the screen's
- * orientation of an unflipped view, which is the only view the game has
- * (the player is always white at the bottom).
- */
-export function envTransform(deal, base = deal.stage) {
-  const files = base?.files ?? deal.files;
-  const ranks = base?.ranks ?? deal.ranks;
-  const cropBottom = (deal.cropBottom ?? 0) + (deal.autoCrop?.bottom ?? 0);
-  const cropTop = (deal.cropTop ?? 0) + (deal.autoCrop?.top ?? 0);
-  return { files, ranks, flip: !!deal.flip, cropBottom, cropTop, arenaRanks: deal.ranks ?? ranks - cropBottom - cropTop, arenaFiles: deal.files ?? files };
-}
-
-/** The identity transform: an env painted as itself (the setup preview of an
- *  uncropped stage, a test). */
-export function identityTransform(files, ranks) {
-  return { files, ranks, flip: false, cropBottom: 0, cropTop: 0, arenaRanks: ranks, arenaFiles: files };
-}
+//
+// THE ENVIRONMENT IS THE WORLD (Phase 2 milestone 4, 2026-09-08): the
+// transform from an arena's squares and pixels to the world's cells and
+// pixels lives in world.mjs (the crop: an origin cell and the army's
+// facing; the identity on the Phase 1 page, whose world IS the dealt
+// arena) and is re-exported here under the names the ledger's callers
+// use. Env cell (ef, er) is the world's file and 0-based rank; env pixels
+// run x right, y DOWN, with row 0 the TOP of the world (its highest rank).
+import { cellOfPx } from './world.mjs';
+export { cropTransform, identityTransform, isIdentity, arenaToWorld, worldToArena, toEnvCell, fromEnvCell, toEnvPx, envDir, cellOfPx, toArenaPx } from './world.mjs';
 
 export function parseSquare(sq) {
   return { f: sq.charCodeAt(0) - 97, r: parseInt(sq.slice(1), 10) - 1 };
 }
-
-/** Arena square → env cell. */
-export function toEnvCell(tx, sq) {
-  const { f, r } = parseSquare(sq);
-  const rf = r + tx.cropBottom; // rank on the (flipped-or-not) full stage
-  return { ef: f, er: tx.flip ? tx.ranks - 1 - rf : rf };
-}
-
-/** Env cell → arena square, or null when the cell lies outside the arena. */
-export function fromEnvCell(tx, ef, er) {
-  const rf = tx.flip ? tx.ranks - 1 - er : er;
-  const r = rf - tx.cropBottom;
-  if (ef < 0 || ef >= tx.arenaFiles || r < 0 || r >= tx.arenaRanks) return null;
-  return String.fromCharCode(97 + ef) + (r + 1);
-}
-
-/** Env pixel of a point inside an arena square (x, y in tile pixels, y down). */
-export function toEnvPx(tx, sq, x = T / 2, y = T / 2) {
-  const { ef, er } = toEnvCell(tx, sq);
-  // Inside a flipped stage the square's own tile is not mirrored (the tiles
-  // never are), so the offset within the cell stays.
-  return { x: ef * T + x, y: (tx.ranks - 1 - er) * T + y };
-}
-
-/** A direction in arena screen space (dx right, dy down) → env space. */
-export function envDir(tx, dx, dy) {
-  return { dx, dy: tx.flip ? -dy : dy };
-}
-
-/** The env cell an env pixel falls in. */
-export function cellOfPx(tx, x, y) {
-  return { ef: Math.floor(x / T), er: tx.ranks - 1 - Math.floor(y / T) };
-}
-
-/** Env pixel → arena pixel (col*16 + x, rowFromTop*16 + y in the arena's own
- *  unflipped screen space), or null outside the arena. */
-export function toArenaPx(tx, x, y) {
-  const { ef, er } = cellOfPx(tx, x, y);
-  const sq = fromEnvCell(tx, ef, er);
-  if (!sq) return null;
-  const { f, r } = parseSquare(sq);
-  const row = tx.arenaRanks - 1 - r;
-  const ox = x - ef * T, oy = y - (tx.ranks - 1 - er) * T;
-  return { x: f * T + ox, y: row * T + oy, sq };
-}
-
-/** The CSS custom property a source sprite lives under (the sampler resolves
- *  it on the board, with the theme's fallbacks). */
 export function spriteVar(src) {
   if (!src) return null;
   if (src.role === 'wall' || src.role === 'masonry') return src.mask >= 0 ? `--tile-wall-${src.mask}` : '--tile-wall';

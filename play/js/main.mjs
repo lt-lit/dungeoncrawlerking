@@ -49,7 +49,7 @@ import { normFacing, facingName } from './camera.mjs'; // THE CAMERA's facing (2
 import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
-import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
+import { DebrisLedger, identityTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
@@ -431,9 +431,26 @@ function layoutFor() {
   return wideMQ?.matches ? 'wide' : 'stack';
 }
 
-/** The board's fit for the layout (canvas-board fit). */
+/** The board's fit for the layout (canvas-board fit): `?zoom=N` pins a
+ *  fixed zoom (fit 'window' — the walk's fit, a test surface on this page). */
 function fitFor() {
+  if (zoomFor()) return 'window';
   return layoutFor() === 'wide' ? 'box' : 'width';
+}
+
+/** `?zoom=N` (1–12): the board at a fixed integer zoom, or null. */
+function zoomFor() {
+  const z = parseInt(params.get('zoom') ?? '', 10);
+  return Number.isFinite(z) && z >= 1 ? Math.min(12, z) : null;
+}
+
+/** THE VIEWPORT (milestone 4): 'crop' — the buffer is the arena (this
+ *  page's default) — or 'screen', the screen's tiles with the world around
+ *  the arena (`?viewport=screen`; a zoom implies it). */
+function viewportFor() {
+  const v = params.get('viewport');
+  if (v === 'screen' || v === 'crop') return v;
+  return zoomFor() ? 'screen' : 'crop';
 }
 
 /** Stamp the layout on the body and refit the mounted board. Runs at boot
@@ -472,23 +489,21 @@ function syncFacingUI() {
   if (el) el.textContent = `${facingName(app.view.facing)} up`;
 }
 
-/** The world coordinates a square's cosmetic hashes key on (canvas-board
- *  `hashCoords`): the ENVIRONMENT's cell — the base stage's own uncropped,
- *  unflipped grid, the debris ledger's space (debris.mjs envTransform) —
- *  so a crop, a flip or a turn never reshuffles the floor. Read at paint
- *  time, since the deal's transform can change under a mounted board (a
- *  re-deal of the same dims). The identity until a transform is bound. */
-function hashCoordsLive(f, rank) {
-  const tx = app.debris.tx;
-  if (!tx) return [f, rank];
-  const { ef, er } = toEnvCell(tx, String.fromCharCode(97 + f) + rank);
-  return [ef, er + 1];
+/** The world coordinates a square's cosmetic hashes key on: the board's
+ *  WORLD CELL for the square (Phase 2 milestone 4 — the environment is the
+ *  world, the debris ledger's space; on this page the world is the dealt
+ *  arena, so the cell is the square itself). The identity until a board
+ *  is mounted. */
+function hashCoordsOf(sq) {
+  const c = app.boardUI?.cells.get(sq);
+  if (c?.cell) return [c.cell.f, c.cell.r + 1];
+  return [sq.charCodeAt(0) - 97, parseInt(sq.slice(1), 10)];
 }
 
 /** Mount the board on `el` (canvas-board.mjs — the one renderer). It
  *  reports its geometry to the diagnostics line under the board. */
 function createBoard(el, opts) {
-  const ui = new CanvasBoard(el, { ...opts, facing: facingFor(), fit: fitFor(), hashCoords: hashCoordsLive, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+  const ui = new CanvasBoard(el, { ...opts, facing: facingFor(), fit: fitFor(), viewport: viewportFor(), zoom: zoomFor() ?? 4, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
   app.view.facing = ui.facing;
   syncFacingUI();
   void ui.ready.then(() => renderDiag(ui.renderInfo));
@@ -2152,14 +2167,16 @@ async function driveTurn() {
 // the flight; this is the game's wiring.) The floor remembers: a capture
 // leaves blood, a smashed crate its splinters, a broken wall its stone, a
 // displacement its skid, and every square wears down with traffic. The
-// LEDGER BELONGS TO THE ENVIRONMENT — one per stage, in the stage's own
-// uncropped, unflipped grid, saved in localStorage under the stage id and
-// kept across duels (designer: never tie it to a duel) — and a duel only
-// contributes through its deal's transform (debris.mjs envTransform). Each
-// duel is an EPOCH on the floor (blood dries, flecks settle). Toggles filter
-// at paint time, never at record time, so a toggle flipped mid-game shows
-// the whole history. Undo forgets this epoch's events past the rewound ply
-// and recounts the traffic from the record.
+// LEDGER BELONGS TO THE ENVIRONMENT, AND THE ENVIRONMENT IS THE WORLD
+// (Phase 2 milestone 4, 2026-09-08; world.mjs): on this page the world IS
+// the dealt arena — the stage as flipped and cropped for the deal — so the
+// ledger is one per arena (keyed by the transformed stage's id), in the
+// arena's own grid, the transform the identity, saved in localStorage and
+// kept across duels on the same arena until the run save (milestone 4b)
+// takes it over. Each duel is an EPOCH on the floor (blood dries, flecks
+// settle). Toggles filter at paint time, never at record time, so a toggle
+// flipped mid-game shows the whole history. Undo forgets this epoch's
+// events past the rewound ply and recounts the traffic from the record.
 
 const DEBRIS_KEY = 'dck.debris.v1:';
 const DEBRIS_DEFAULTS = { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 };
@@ -2177,9 +2194,18 @@ function debrisOpts() {
   return { ...o, destruction: set.has('destruction'), blood: set.has('blood'), skid: set.has('skid'), wear: set.has('wear'), fx: set.has('fx') };
 }
 
-/** The base stage a deal was dealt from (its ledger's environment). */
+/** The ARENA a deal stands on — the world of this page (its ledger's
+ *  environment): the deal's transformed stage, or the setup's transformed
+ *  terrain when nothing deals. */
 function debrisStageOf(deal) {
-  return (deal && app.stages.find((s) => s.id === deal.stageId)) ?? currentStage();
+  if (deal?.ok && deal.stage) return deal.stage;
+  const stage = currentStage();
+  if (!stage) return null;
+  try {
+    return cropStage(setup.flip ? flipStageVertical(stage) : stage, setup.cropTop | 0, setup.cropBottom | 0);
+  } catch {
+    return setup.flip ? flipStageVertical(stage) : stage;
+  }
 }
 
 /** Open (load or create) the environment's ledger. */
@@ -2204,14 +2230,14 @@ function debrisEnvOpen(stage) {
   return D.ledger; // applyTheme warms the sampler once the board wears its theme
 }
 
-/** Bind the current deal's transform (arena → the stage's own grid). A
- *  failed deal (the terrain-only preview) binds the setup's flip and crop. */
+/** Bind the ledger of the arena the board shows (the world of this page)
+ *  and the identity transform into it. A failed deal (the terrain-only
+ *  preview) binds the setup's transformed terrain. */
 function debrisBind(deal) {
   const stage = debrisStageOf(deal);
   if (!stage) return;
   debrisEnvOpen(stage);
-  const d = deal?.ok ? deal : { flip: !!setup.flip, cropTop: setup.cropTop | 0, cropBottom: setup.cropBottom | 0, files: stage.files, ranks: stage.ranks - (setup.cropTop | 0) - (setup.cropBottom | 0) };
-  app.debris.tx = envTransform(d, stage);
+  app.debris.tx = identityTransform(stage.files, stage.ranks);
   app.debris.urls.clear();
 }
 
@@ -2311,8 +2337,7 @@ async function debrisWarm() {
  *  environment's coordinates, the same the board hashes on). */
 function debrisSrcOf(sq, k) {
   if (!k) return null;
-  const f = sq.charCodeAt(0) - 97, rank = parseInt(sq.slice(1), 10);
-  const [hf, hr] = hashCoordsLive(f, rank);
+  const [hf, hr] = hashCoordsOf(sq);
   if (k.wallTile || k.cracked || k.weak) return { role: 'wall', v: 0, mask: k.mask };
   if (k.hole) return null;
   if (k.skin === 'door') {
@@ -3362,6 +3387,12 @@ window.__DCK = {
     /** The hit-test and its inverse, for the round trip under a turn. */
     squareAtPoint: (x, y) => app.boardUI?.squareAtPoint?.(x, y) ?? null,
     pointOfSquare: (sq) => app.boardUI?.pointOfSquare?.(sq) ?? null,
+    /** THE WINDOW (milestone 4): the world cell under a point and back; the viewport, the zoom, the focus. */
+    cellAtPoint: (x, y) => app.boardUI?.cellAtPoint?.(x, y) ?? null,
+    pointOfCell: (f, r) => app.boardUI?.pointOfCell?.(f, r) ?? null,
+    viewport: (v = null) => (v === null ? app.boardUI?.viewport ?? null : app.boardUI?.setViewport?.(v) ?? null),
+    zoom: (k = null) => (k === null ? app.boardUI?.zoom ?? null : (app.boardUI?.setFit?.('window'), app.boardUI?.setZoom?.(k) ?? null)),
+    lookAt: (f = null, r = null, dx = 0, dy = 0) => app.boardUI?.lookAt?.(f, r, dx, dy),
     /** The atlas's pixels for a role under the board's theme / door set, and the crack drawings — { w, h, data } or null. */
     tile: (role) => { const a = app.boardUI?.atlas; const t = a?.tileOf(app.boardUI.theme, role, { doors: app.boardUI.doors }); return t ? Atlas.pixelsOf(t) : null; },
     crack: (n) => { const t = app.boardUI?.atlas?.crack(n); return t ? Atlas.pixelsOf(t) : null; },

@@ -872,6 +872,53 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs2.length === 0, `no page errors with the flight on${errs2.length ? ` — ${errs2.join(' | ')}` : ''}`);
   await page2.close();
 }
+// --- THE WINDOW (Phase 2 milestone 4, 2026-09-08): `?zoom=12&viewport=screen`
+// on a phone puts the arena at a zoom the screen cannot hold whole, so the
+// board paints a WINDOW of it — a sub-rectangle of the buffer blitted, the
+// visible squares hit-testing back through the window, the diag naming the
+// fit — and the duel plays on unchanged.
+{
+  const page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs3 = [];
+  page3.on('pageerror', (e) => errs3.push(String(e).split('\n')[0]));
+  const q3 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', zoom: '12', viewport: 'screen', debris: 'off', fx: '0', ...(THEME ? { theme: THEME } : {}) });
+  await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?${q3}`);
+  await page3.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page3.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const win = await page3.evaluate(async () => {
+    const K = window.__DCK;
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    const info = K.renderer.info;
+    const inWin = (col, row) => col >= info.window.col0 && col < info.window.col0 + info.window.cols && row >= info.window.row0 && row < info.window.row0 + info.window.rows;
+    let visible = 0, round = 0, cells = 0, cellRound = 0;
+    for (const sq of K.app.boardUI.cells.keys()) {
+      const g = K.app.boardUI.gridPos(sq);
+      if (!inWin(g.col, g.row)) continue;
+      visible++;
+      const p = K.renderer.pointOfSquare(sq);
+      if (K.renderer.squareAtPoint(p.x, p.y) === sq) round++;
+      const c = K.app.boardUI.cells.get(sq).cell;
+      cells++;
+      const pc = K.renderer.pointOfCell(c.f, c.r);
+      const back = K.renderer.cellAtPoint(pc.x, pc.y);
+      if (back && back.f === c.f && back.r === c.r) cellRound++;
+    }
+    // Zoom out to 2 through the hook: the whole arena fits the width again (the window clips to the world).
+    K.renderer.zoom(2);
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    const info3 = K.renderer.info;
+    return { info, visible, round, cells, cellRound, diag: K.renderer.diagShown, info3, state: K.app.duel.state };
+  });
+  expect(win.info.fit === 'window' && win.info.k === 12 && win.info.viewport === 'screen', `?zoom=12&viewport=screen: fit window at k 12 (${win.info.fit}, k ${win.info.k}, ${win.info.viewport})`);
+  expect(win.info.window.cols < win.info.files && win.info.bufW === win.info.window.cols * 16 && win.info.blit.sw < win.info.bufW + 1 && win.info.blit.sw * win.info.k >= win.info.devW - 1, `the buffer is a ${win.info.window.cols}×${win.info.window.rows} window of the ${win.info.files}×${win.info.ranks} arena, the blit its visible ${win.info.blit.sw}×${win.info.blit.sh} px`);
+  expect(win.visible > 0 && win.round === win.visible && win.cellRound === win.cells, `${win.round}/${win.visible} visible squares and ${win.cellRound}/${win.cells} cells hit-test back through the window`);
+  expect(typeof win.diag === 'string' && win.diag.includes('fit window'), `the diagnostics line says fit window (${win.diag})`);
+  expect(win.info3.k === 2 && win.info3.window.cols === win.info3.files && win.info3.blit.sw === win.info3.bufW && win.state === 'playing', `zoom 2: the whole arena is the window again (${win.info3.window.cols} cols, blit ${win.info3.blit.sw} of ${win.info3.bufW}); the duel plays on`);
+  expect(errs3.length === 0, `no page errors on the window page${errs3.length ? ` — ${errs3.join(' | ')}` : ''}`);
+  await page3.close();
+}
 await browser.close();
 server.close();
 

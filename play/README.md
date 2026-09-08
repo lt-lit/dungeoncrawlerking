@@ -62,6 +62,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   harness/canvas-grid.mjs` (the blit on the device-pixel grid, Chromium +
   Firefox; § "The canvas board" below). THE CAMERA's gates (2026-09-08,
   milestone 3): `node harness/test-camera.mjs` (the geometry, Node only),
+  `node harness/test-world.mjs` (the world and the crop transform, Node only),
   `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
   the turned camera equals the world itself rotated), `node
   harness/camera-guard.mjs dump|compare <dir> [--allow door,turned]`
@@ -727,6 +728,75 @@ back). replay-smoke 63, test-logreport 47, test-debris 53,
 strip-ruin-chips, canvas-grid `none` 4/4 Chromium + 18/18 Firefox.
 `camera-shots.mjs` takes the desktop, the four phone facings and a door
 crop for the eye.
+
+**Milestone 4a — THE WORLD AND THE WINDOW (2026-09-08).** Brief §1 read
+literally (decided 2026-09-07): the duel is a camera view of the same
+world, zoomed. `js/world.mjs` is the world's data — a `World` of cells
+(terrain `.` `*` `O` `^`, a piece, the authored skin), the Director's and
+the residue's layers (`godCrates`, `opened`, `rubble`) as cell sets, the
+player's `start` and the enemy `spawns` a world file marks (`@`, `1`…`9`
+on the map; `loadWorld`: stage schema 2, ANY size — the 3–12 × 5–10 cap
+is the deal's, an arena must fit the engine), `serialize` / `load` — and
+THE CROP TRANSFORM: where an arena's squares land in the world's cells.
+A crop is `{ wf, wr, facing, files, ranks }` — the world cell of its
+south-west corner in world axes and the ARMY's facing: arena-north is
+the world direction the player faces, so under a camera at that facing
+the arena reads north-up on the screen at one offset (`arenaToWorld` /
+`worldToArena`; the pixels turn with the squares, `arenaPxToEnv`,
+`toArenaPx`; a direction, `envDir`). THE ENVIRONMENT IS THE WORLD: the
+debris ledger keys on its cells (debris.mjs re-exports the transform
+under the ledger's names — `toEnvCell`, `toEnvPx`, `cellOfPx`…), the
+cosmetic hashes and the checker key on the world cell, so a crop or a
+turn never reshuffles the floor. No mirror exists any more: this page's
+world IS the dealt arena (a stage flipped and cropped BEFORE it became a
+world — a flip is how a lab world is built, never a runtime transform),
+its crop the identity, its ledger one per transformed stage in the
+arena's own grid (until the run save takes it over); the deal's flip and
+crop no longer feed `hashCoords` (gone from main.mjs and the replay page;
+the option survives on the board for the facing-walk gate's inverse map).
+THE BOARD'S ONE MODEL IS THE WORLD (`canvas-board.mjs`): `setPosition`
+WRITES the FEN and the ledgers into the crop's cells (`World.writeArena`
+— a `skins` map replaces the crop's skins, so a repaint without skins
+drops them; the door pairs re-read off the skin grid each write) and the
+painter reads the world; the terrain rule runs per cell, lazily, cached
+until the next write (`board-ui.mjs classifyCell` + `pairDoors` are the
+core; `classifyTerrain(fen, …)` is the same rule on a FEN, verified
+identical on 144 random boards); `kinds` is a square-keyed view over the
+crop; a board built with `files` / `ranks` alone makes a bare world of
+that size (every old caller), `world` + `crop` mount a real one
+(`setWorld`, `setCrop`). THE WINDOW: the buffer is a window of the
+world's screen grid — `viewport: 'crop'` (the default, this page) exactly
+the crop's rectangle, blitted whole, as it always was; `'screen'` the
+screen's tiles at k plus a one-tile margin, clipped to the world,
+centred on a FOCUS (`lookAt(f, r, dx, dy)` — a world cell plus a pixel
+offset, the world sliding under the king on a walk; null = the crop's
+centre), the visible part blitted, the world outside the crop DIMMED
+under the marks, the crop's frame drawn as a ring over it; per axis a
+world that fits the screen is centred whole. Fit `'window'` is a fixed
+integer zoom (`setZoom`, `ZOOM_RANGE` 1–12, a CUT) in the container's
+box — the walk's fit; `?zoom=N` (implies `?viewport=screen`) puts this
+page on it as a test surface, `__DCK.renderer.zoom / viewport / lookAt /
+cellAtPoint / pointOfCell`. `#origin(sq)` is the world cell's screen tile
+minus the window's corner; `squareAtPoint` inverts the blit, the window
+and the crop; `cellAtPoint` stops at the cell (a walk's tap);
+`renderInfo` adds `viewport`, `zoom`, `window`, `crop`, `world`, `blit`.
+Full repaint of the window on every change (about 600 cells at a phone's
+k 4); no dirty rectangles until something needs them. GATED BYTE FOR
+BYTE: `camera-guard.mjs` (the six cases × fifteen plies recorded on the
+build before, replayed on this one: 172/172 identical, no allowances),
+`facing-walk.mjs` 108/108, `test-camera.mjs` 80, `test-debris.mjs` 60
+(the transform's cases are now the identity and a turned crop at the
+four facings), `test-world.mjs` 125 (the crop against brute force at
+every facing, the crop agreeing with the camera, the identity, a stage
+becoming a world, an arena written through a turned crop reading back as
+the same FEN, a world file with its start and spawns, a save round trip),
+selftest 45/45 (+ the world window: a 7×5 crop in a 24×18 world at the
+four facings, the screen viewport at a fixed zoom, every square and every
+visible cell hit-testing back, the outside dimmed, lookAt centring),
+ui-smoke (+ the page at `?zoom=12&viewport=screen`: a window of the arena,
+the visible squares round-tripping, zoom 2 the whole arena again),
+replay-smoke 63, test-logreport 47, canvas-grid `none` 4/4 Chromium.
+NOT in this milestone: the army (4b), the barrier by hand (4c).
 
 ## Art themes (2026-09-03)
 

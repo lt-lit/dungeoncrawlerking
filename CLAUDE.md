@@ -1117,8 +1117,22 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
+- `play/js/world.mjs` — THE WORLD (Phase 2 milestone 4a, 2026-09-08): the
+  floor's data (any size, stage schema 2 with `@` the start and digits the
+  enemy spawns; terrain / pieces / skins / the Director's layers; a save
+  round trip) and THE CROP TRANSFORM (an origin cell + the army's facing:
+  where an arena's squares, pixels and directions land in the world —
+  debris.mjs re-exports it as the ledger's env transform; the Phase 1
+  page's world IS the dealt arena, its crop the identity, no mirror
+  exists). Node gate `phase0/harness/test-world.mjs`.
 - `play/js/canvas-board.mjs` + `camera.mjs` + `atlas.mjs` +
-  `pixelarrow.mjs` + `pixelfont.mjs` — THE BOARD (Phase 2, 2026-09-07):
+  `pixelarrow.mjs` + `pixelfont.mjs` — THE BOARD (Phase 2, 2026-09-07;
+  A WINDOW OVER THE WORLD since milestone 4a, 2026-09-08 — its one model
+  is a World, setPosition writes the FEN into the crop's cells, the
+  buffer is a window of the world's screen grid: viewport 'crop' the
+  arena alone as always, 'screen' the screen's tiles centred on a focus
+  with the world outside the crop dimmed, fit 'window' a fixed zoom;
+  `play/README.md` § "The canvas board", milestone 4a):
   one 16×16 buffer scaled once, its art off `play/img/` (the atlas;
   `phase0/lib/inhouse.mjs` draws the classic row), painted through THE
   CAMERA (`camera.mjs`, 2026-09-08: the facing's pure geometry — squares,
@@ -1184,6 +1198,7 @@ node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node h
 node harness/repack-tiles.mjs       # rebuild play/img/tileset.png + tileset.json + CREDITS.md (+ pieces.png) from the packs in assets-src/ (gitignored) — or, without them, read back from the committed atlas (the classic row is always regenerated)
 node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy (./node_modules/.bin/playwright install firefox once)
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
+node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/facing-walk.mjs --shots # every arena × facings 1–3 on the bare lab page: the camera's paint must equal the world itself rotated, painted north-up
 node harness/camera-guard.mjs dump <dir> && node harness/camera-guard.mjs compare <dir> --allow door,turned  # the renderer's paint before/after a change: record the inputs + hashes on the build before (a pristine worktree), replay them on the build after
 node harness/camera-shots.mjs        # the desktop layout at 1920×1080 / 1280×720, the phone at the four facings, a door crop — for the eye
