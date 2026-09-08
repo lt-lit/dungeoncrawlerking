@@ -1,10 +1,11 @@
-// THE CANVAS BOARD — Phase 2's 16×16 renderer, milestone 1 (2026-09-07).
+// THE CANVAS BOARD — the 16×16 renderer (Phase 2 milestone 1, 2026-09-07;
+// the ONE board since the DOM board's retirement the same day).
 //
 // Brief §2 item 5: every drawn thing is 16×16 pixel art on ONE native-
 // resolution grid, composed in ONE buffer and scaled to the screen ONCE,
-// by a whole number where the screen allows it. This class is that, with
-// the DOM board's method surface (board-ui.mjs BoardUI) so main.mjs and
-// the replay page drive either without knowing which:
+// by a whole number where the screen allows it. This class is that. Its
+// method surface is the one the DOM board had (main.mjs and the replay
+// page drive it; the selftest and the smokes read it):
 //
 //   THE BUFFER  an offscreen canvas at 16 px per tile — files×16 wide,
 //               ranks×16 tall plus HEADROOM for the top rank's tall
@@ -13,7 +14,7 @@
 //               square's DEBRIS (debris.mjs paintCell's 16×16 buffer, put
 //               straight in — no PNG, no <img>), terrain by kind
 //               (board-ui classifyTerrain — the one terrain rule, shared
-//               with the DOM board and the replay analyzer), the marks
+//               with the replay analyzer), the marks
 //               under the pieces, then row by row from the far rank to the
 //               near one the TALL things — furniture props (16×32) and
 //               pieces (their sprite at its native size, lifted and
@@ -46,11 +47,10 @@
 //               a shaft and head with a one-pixel halo, the width and
 //               opacity the player's dials — setArrowStyle; no number on a
 //               hint, the hint line lists the evals), drawn above the
-//               pieces — where
-//               the DOM board keeps its SVG overlay. No overlay element
-//               sits on the canvas at all (a designer's white flash on the
-//               first build pointed at the SVG; the diagnostics line
-//               main.mjs shows comes from `renderInfo`).
+//               pieces. No overlay element sits on the canvas at all (a
+//               designer's white flash on the first build pointed at the
+//               SVG overlay it then had; the diagnostics line main.mjs
+//               shows comes from `renderInfo`).
 //   INPUT       hit-testing by division: pointer → device px → tile.
 //
 // What it does NOT do (milestone 1, on purpose): the classic GLYPH pieces
@@ -70,7 +70,7 @@ const EMPTY = new Set();
 const FX_KINDS = { weaken: 'cracking', breach: 'breaching', crumble: 'crumbling', terminal: 'crumbling' };
 /** The classic set's flat colours (style.css --cell-light / --cell-dark / --pit). */
 const CLASSIC = { light: '#4a4a42', dark: '#3a3a33', pit: '#0a0a0e', pitLip: '#000000' };
-const SHADE = 'rgba(0,0,0,0.22)'; // the dark square's checker shade under a theme (tiles.css --floor-shade #00000038)
+const SHADE = 'rgba(0,0,0,0.22)'; // the dark square's checker shade under a theme (#00000038)
 const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
@@ -100,10 +100,11 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 const ease = (p) => 1 - (1 - p) ** 2.2; // ≈ the FLIP clone's cubic-bezier(.3,.8,.35,1)
 const squareName = (f, rank) => String.fromCharCode(97 + f) + rank;
 
-/** One atlas per page: loaded on the first board, warmed with the in-house SVGs. */
+/** One atlas per page: loaded on the first board (the PNGs + the index; the
+ *  in-house drawings are its classic row — nothing is read off the CSS). */
 let atlasPromise = null;
-export function loadAtlas(el) {
-  if (!atlasPromise) atlasPromise = Atlas.load().then(async (a) => { await a.warmCss(el ?? document.body); return a; });
+export function loadAtlas() {
+  if (!atlasPromise) atlasPromise = Atlas.load();
   return atlasPromise;
 }
 /** Test hook: forget the shared atlas (a page that swaps art). */
@@ -122,8 +123,6 @@ export class CanvasBoard {
     this.interactive = false;
     this.scaling = scaling === 'fill' ? 'fill' : 'integer';
     this.atlas = null;
-    // (The in-house SVGs are warmed off <body>, never off the board: under a
-    // theme the board's --sprite-* resolve to the pack's PNGs.)
     this.ready = (atlas ? Promise.resolve(atlas) : loadAtlas()).then((a) => { this.atlas = a; this.#resize(); this.invalidate(); return a; });
     this.tileLift = DEFAULT_PIECE_FIT.tileLift;
     this.tileShift = DEFAULT_PIECE_FIT.tileShift;
@@ -135,7 +134,7 @@ export class CanvasBoard {
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
     this.debrisBufs = new Map(); // sq → 16×16 RGBA (the test surface: the buffer the square wears)
     this.debrisCanvas = new Map(); // sq → a 16×16 canvas of it
-    this.cells = new Map(); // sq → { f, rank } (BoardUI compatibility: .has / .get)
+    this.cells = new Map(); // sq → { f, rank } (.has / .get: the surface the callers read)
     for (let rank = 1; rank <= ranks; rank++) for (let f = 0; f < files; f++) this.cells.set(squareName(f, rank), { f, rank });
     this.fx = new Map(); // sq → { kind, t0, ms, hold, done }
     this.slides = []; // { from, to, letter, t0, ms, fade, victimLetter }
@@ -279,7 +278,7 @@ export class CanvasBoard {
     this.onResize?.(this.renderInfo);
   }
 
-  /** Which renderer this is (main.mjs picks by option). */
+  /** Which renderer this is (the smokes read it; 'canvas' is the only one). */
   get kind() {
     return 'canvas';
   }
@@ -350,7 +349,7 @@ export class CanvasBoard {
 
   // ------------------------------------------------------------ state
 
-  /** Render pieces + terrain from a FEN and the ledgers (BoardUI.setPosition). */
+  /** Render pieces + terrain from a FEN and the ledgers. */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY, debris = null } = {}) {
     this.fen = fen;
     const boardField = fen.includes(' ') ? splitFen(fen).board : fen;
@@ -363,7 +362,7 @@ export class CanvasBoard {
     this.invalidate();
   }
 
-  /** Replace ALL marks (BoardUI.setMarks). */
+  /** Replace ALL marks. */
   setMarks({ selected = null, targets = [], check = null, arrows = [], pit = null, pits = [], cracked = [], breached = [], heat = {} } = {}) {
     this.marks = {
       selected,
@@ -378,7 +377,7 @@ export class CanvasBoard {
     this.invalidate();
   }
 
-  /** The arrows to draw (BoardUI.setArrows' list): kept in draw order and
+  /** The arrows to draw: kept in draw order and
    *  painted into the buffer above the pieces on the next frame. */
   setArrows(arrows) {
     this.arrows = sortArrows(arrows ?? []);
@@ -491,12 +490,9 @@ export class CanvasBoard {
   get piecePixels() {
     return 'tile';
   }
-  layoutPieceRows() {}
-  layoutPieceSnap() {}
-  async layoutPieceTiers() {}
-
-  /** The classes the DOM board would put on this cell — the shared test
-   *  surface (selftest, ui-smoke): terrain kinds and marks, from data. */
+  /** The classes this cell wears, by name — the shared test surface
+   *  (selftest, ui-smoke, the replay page): terrain kinds and marks, from
+   *  data (board-ui.mjs lists the names). */
   cellClasses(sq) {
     const c = this.cells.get(sq);
     if (!c) return null;
@@ -556,7 +552,7 @@ export class CanvasBoard {
 
   // ------------------------------------------------------------ motion
 
-  /** Terrain fx for one edited square (BoardUI.animateTerrain): drawn in
+  /** Terrain fx for one edited square: drawn in
    *  the buffer; with `hold` the end frame stays until setPosition. */
   async animateTerrain(square, kind, ms, { hold = false } = {}) {
     const cls = FX_KINDS[kind];
@@ -590,7 +586,7 @@ export class CanvasBoard {
     this.#run();
     await wait(ms);
     this.slides = this.slides.filter((x) => x !== s);
-    this.hidden.delete(from); // before the caller's setPosition, as the DOM board does
+    this.hidden.delete(from); // before the caller's setPosition
     this.invalidate();
   }
 
@@ -603,8 +599,7 @@ export class CanvasBoard {
   }
 
   /** The quake's rumble: the blit jitters by whole native pixels for `ms`
-   *  (the DOM board's CSS shake; main.mjs calls this as well as adding the
-   *  class, which the canvas CSS ignores). */
+   *  (main.mjs calls it on the quake's first beat). */
   rumble(ms) {
     if (!ms) return;
     this.rumbling = { t0: now(), ms };

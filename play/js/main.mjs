@@ -40,11 +40,12 @@ import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { BoardUI, pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, PIECE_PIXELS, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, classifyTerrain, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
-// PHASE 2 — THE 16×16 RENDERER, milestone 1 (2026-09-07): one native buffer
-// scaled once to the screen, behind the Renderer option (`?renderer=canvas`)
-// while the phone judges it. Same method surface as the DOM board.
-import { CanvasBoard } from './canvas-board.mjs';
+import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
+// THE 16×16 RENDERER (Phase 2, 2026-09-07): one native buffer scaled once to
+// the screen — the one board since the DOM board's retirement the same day
+// (CLAUDE.md § Phase 2). The atlas is its art and the debris sampler's.
+import { CanvasBoard, loadAtlas } from './canvas-board.mjs';
+import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { DebrisLedger, envTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
@@ -89,7 +90,7 @@ const app = {
   // stays open, the rubble stays, under whatever stands there. Derived by
   // diffing the furniture squares of consecutive paints (so an undo that
   // brings the '^' back clears it); reset per duel.
-  residue: { opened: new Set(), rubble: new Set(), lastFen: null },
+  residue: { opened: new Set(), rubble: new Set(), lastFen: null, lastHoles: null, lastCrates: null },
   // THE DEBRIS LAYER (2026-09-07): the environment's ledger (one per stage,
   // persisted), the live deal's transform into it, the per-cell paint cache
   // (env cell index → 16×16 RGBA buffer | null), events still in flight,
@@ -252,13 +253,11 @@ function makeSession(deal) {
 // ------------------------------------------------------- options (cheat mode)
 
 const OPT_KEY = 'dck.options.v1';
-/** The board renderers (Phase 2 milestone 1): the DOM board, or the 16×16
- *  canvas board; and the canvas board's scaling — an integer step (the
- *  default: even pixels, the board centred in the width it gets) or a fill
- *  of the width (the fallback: uneven pixel widths, every layer aligned). */
-const RENDERERS = ['dom', 'canvas'];
+/** The canvas board's scaling — an integer step (the default: even pixels,
+ *  the board centred in the width it gets) or a fill of the width (the
+ *  fallback: uneven pixel widths, every layer still aligned). */
 const SCALINGS = ['integer', 'fill'];
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, renderer: 'dom', scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', pieceScale: DEFAULT_PIECE_FIT.scale, pieceLift: DEFAULT_PIECE_FIT.lift, pieceShift: DEFAULT_PIECE_FIT.shift, piecePixels: DEFAULT_PIECE_FIT.pixels, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -278,11 +277,6 @@ function godConfig() {
   return options.godLadder ? { ...base, ...options.godLadder } : base;
 }
 
-// The piece-fit dials' ranges (index.html's sliders carry the same) —
-// wide on purpose (round 11: the designer's numbers hit the old caps).
-const PIECE_SCALE_RANGE = [0.5, 2];
-const PIECE_LIFT_RANGE = [-0.5, 1];
-const PIECE_SHIFT_RANGE = [-0.5, 0.5];
 function clampNum(v, [lo, hi], dflt) {
   const n = typeof v === 'string' ? parseFloat(v) : v;
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n * 100) / 100)) : dflt;
@@ -294,20 +288,14 @@ function loadOptions() {
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
-    if (!RENDERERS.includes(options.renderer)) options.renderer = 'dom';
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
     options.arrowAlpha = clampNum(options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
-    if (!['classic', ...PIECE_SETS].includes(options.pieces)) options.pieces = 'nulltale';
+    if (!PIECE_SETS.includes(options.pieces)) options.pieces = 'nulltale'; // (a saved 'classic' — the glyph set, retired with the DOM board — lands here)
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
-    options.pieceScale = clampNum(options.pieceScale, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale);
-    options.pieceLift = clampNum(options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
-    options.pieceShift = clampNum(options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
-    // (2026-09-07: the old `pieceSnap` boolean is not read — every saved
-    // setting lands on the tile grid, which is what was asked for.)
-    if (!PIECE_PIXELS.includes(options.piecePixels)) options.piecePixels = DEFAULT_PIECE_FIT.pixels;
+    // (A saved renderer / piece-pixel mode / % dial from the DOM era is not read.)
     options.tileLift = Math.round(clampNum(options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
     options.tileShift = Math.round(clampNum(options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
     // The debris toggles (2026-09-07): five booleans and a clamped amount.
@@ -368,35 +356,16 @@ function syncOptionsUI() {
   }
   $('btnLadderReset').disabled = !options.godLadder;
   $('optGodsDebug').checked = options.godsDebug;
-  $('optRenderer').value = rendererFor();
   $('optScaling').value = scalingFor();
-  $('optScaling').closest('.opt').hidden = rendererFor() !== 'canvas';
   $('optTheme').value = options.theme;
   $('optPieces').value = options.pieces;
   $('optDoors').value = options.doors;
   const fit = pieceFitFor();
-  const pct = (v, signed) => `${signed && v >= 0 ? '+' : ''}${Math.round(v * 100)}%`;
-  $('optPieceScale').value = String(fit.scale);
-  $('optPieceScaleV').textContent = pct(fit.scale);
-  $('optPieceLift').value = String(fit.lift);
-  $('optPieceLiftV').textContent = pct(fit.lift, true);
-  $('optPieceShift').value = String(fit.shift);
-  $('optPieceShiftV').textContent = pct(fit.shift, true);
-  $('optPiecePixels').value = fit.pixels;
-  // The % dials place the fitted box; on the tile grid there is no box to
-  // place, and the whole-pixel lift / shift dials take their place.
-  for (const id of ['optPieceScale', 'optPieceLift', 'optPieceShift']) $(id).closest('.opt').hidden = fit.pixels === 'tile';
-  for (const id of ['optTileLift', 'optTileShift']) $(id).closest('.opt').hidden = fit.pixels !== 'tile';
   const pxv = (v) => `${v > 0 ? '+' : ''}${v} px`;
   $('optTileLift').value = String(fit.tileLift);
   $('optTileLiftV').textContent = pxv(fit.tileLift);
   $('optTileShift').value = String(fit.tileShift);
   $('optTileShiftV').textContent = pxv(fit.tileShift);
-  $('optPiecePixelsHint').textContent = fit.pixels === 'tile'
-    ? 'Every sprite pixel is one floor pixel, on the floor\u2019s own grid, at the art\u2019s scale; lift and shift move a piece by whole floor pixels.'
-    : fit.pixels === 'display'
-      ? 'The dials place the piece; its box is a whole multiple of the sprite in screen pixels.'
-      : 'The dials place the piece at any scale.';
   const ar = arrowStyleFor();
   $('optArrowWidth').value = String(ar.width);
   $('optArrowWidthV').textContent = `${ar.width} px`;
@@ -412,24 +381,17 @@ function syncOptionsUI() {
   $('optDebrisIntensityV').textContent = `${Math.round(dz.intensity * 100)}%`;
 }
 
-/** The piece-fit dials (board-ui setPieceFit): `?piecepixels=tile|display|
- *  free` (`?piecesnap=1` / `=0` are the old spellings of display / free),
- *  `?tilelift=` / `?tileshift=` (whole tile pixels, the tile grid's own
- *  placement), `?piecescale=` / `?piecelift=` / `?pieceshift=` (feel-check
- *  overrides, never saved) > the Options. */
+/** The piece placement (canvas-board setPieceFit): `?tilelift=` /
+ *  `?tileshift=` (whole tile pixels; feel-check overrides, never saved) >
+ *  the Options. */
 function pieceFitFor() {
-  const pixels = params.get('piecepixels') ?? (params.has('piecesnap') ? (params.get('piecesnap') !== '0' ? 'display' : 'free') : options.piecePixels);
   return {
-    scale: clampNum(params.get('piecescale') ?? options.pieceScale, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale),
-    lift: clampNum(params.get('piecelift') ?? options.pieceLift, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift),
-    shift: clampNum(params.get('pieceshift') ?? options.pieceShift, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift),
-    pixels: PIECE_PIXELS.includes(pixels) ? pixels : DEFAULT_PIECE_FIT.pixels,
     tileLift: Math.round(clampNum(params.get('tilelift') ?? options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift)),
     tileShift: Math.round(clampNum(params.get('tileshift') ?? options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift)),
   };
 }
 
-/** The arrows' style (both boards' setArrowStyle): `?arrowwidth=` (the
+/** The arrows' style (canvas-board setArrowStyle): `?arrowwidth=` (the
  *  shaft in floor pixels, 1–5) / `?arrowalpha=` (0.2–1) > the Options. */
 function arrowStyleFor() {
   return {
@@ -438,40 +400,28 @@ function arrowStyleFor() {
   };
 }
 
-/** The board renderer: `?renderer=dom|canvas` (never saved) > the Options. */
-function rendererFor() {
-  const pick = params.get('renderer') ?? options.renderer;
-  return RENDERERS.includes(pick) ? pick : 'dom';
-}
-
 /** The canvas board's scaling: `?scaling=integer|fill` > the Options. */
 function scalingFor() {
   const pick = params.get('scaling') ?? options.scaling;
   return SCALINGS.includes(pick) ? pick : 'integer';
 }
 
-/** Mount a board of the chosen renderer on `el` (BoardUI or CanvasBoard —
- *  one method surface). The canvas board reports its geometry to the
- *  diagnostics line under the board. */
+/** Mount the board on `el` (canvas-board.mjs — the one renderer). It
+ *  reports its geometry to the diagnostics line under the board. */
 function createBoard(el, opts) {
-  const arrowStyle = arrowStyleFor();
-  if (rendererFor() === 'canvas') {
-    const ui = new CanvasBoard(el, { ...opts, arrowStyle, scaling: scalingFor(), onResize: (info) => renderDiag(info) });
-    void ui.ready.then(() => renderDiag(ui.renderInfo));
-    return ui;
-  }
-  renderDiag(null);
-  return new BoardUI(el, { ...opts, arrowStyle });
+  const ui = new CanvasBoard(el, { ...opts, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+  void ui.ready.then(() => renderDiag(ui.renderInfo));
+  return ui;
 }
 
-/** The diagnostics line under the board (the canvas board only): device
- *  pixel ratio, the canvas's device-pixel size, the scale and whether it is
- *  the integer step or the fill fallback. */
+/** The diagnostics line under the board: device pixel ratio, the canvas's
+ *  device-pixel size, the scale and whether it is the integer step or the
+ *  fill fallback. */
 function renderDiag(info) {
   const el = $('render-diag');
   if (!el) return;
   const ui = app.boardUI;
-  if (!info || !ui || ui.kind !== 'canvas') {
+  if (!info || !ui) {
     el.hidden = true;
     el.textContent = '';
     return;
@@ -480,15 +430,13 @@ function renderDiag(info) {
   el.textContent = ui.diag;
 }
 
-/** The mounted board no longer matches the options (renderer or scaling
- *  changed): mount a fresh one of the same dims and repaint what was
- *  showing — the preview, or the live duel with its marks. */
+/** The mounted board no longer matches the options (the scaling changed):
+ *  mount a fresh one of the same dims and repaint what was showing — the
+ *  preview, or the live duel with its marks. */
 function remountBoard() {
   const ui = app.boardUI;
   if (!ui) return;
-  const want = rendererFor();
-  const scaling = scalingFor();
-  if (ui.kind === want && (want !== 'canvas' || ui.scaling === scaling)) return;
+  if (ui.scaling === scalingFor()) return;
   if (app.busy && (app.phase === 'playing')) return; // never under an animation; the next mount takes it
   const { files, ranks } = ui;
   if (app.phase === 'preview' && app.previewPaint) {
@@ -515,24 +463,24 @@ function doorsFor() {
 }
 
 /** The piece-sprite set (board-ui PIECE_SETS): `?pieces=` > the Pieces
- *  option; 'classic' (or anything unknown) is the Unicode glyphs. */
+ *  option; anything unknown is the board's default set. */
 function piecesFor() {
   const pick = params.get('pieces') ?? options.pieces;
   return PIECE_SETS.includes(pick) ? pick : null;
 }
 
-/** The art theme the board wears right now (stage.mjs THEMES; the repacked
- *  tilesets in tiles.css): `?theme=` (a feel-check override, never saved) >
- *  the Art-set option > the stage's own `theme`. 'classic' — or a stage
- *  with no theme — is the in-house drawn set (no data-theme). */
+/** The art theme the board wears right now (stage.mjs THEMES; the atlas's
+ *  rows): `?theme=` (a feel-check override, never saved) > the Art-set
+ *  option > the stage's own `theme`. 'classic' — or a stage with no theme —
+ *  is the in-house drawn set (no data-theme; the atlas's classic row). */
 function themeFor(stage) {
   const pick = params.get('theme') ?? options.theme;
   if (pick && pick !== 'auto') return THEMES.includes(pick) ? pick : null;
   return stage?.theme ?? null;
 }
 
-/** Stamp the current theme on the board and the options legend (the legend
- *  is built from the board's own tile classes, so it follows the art). */
+/** Stamp the current theme on the board and repaint the options legend
+ *  (drawn off the same atlas, so it follows the art). */
 function applyTheme() {
   const theme = themeFor(app.session?.deal?.stage ?? currentStage());
   app.boardUI?.setTheme(theme);
@@ -541,10 +489,61 @@ function applyTheme() {
   app.boardUI?.setPieceFit(pieceFitFor());
   app.boardUI?.setArrowStyle?.(arrowStyleFor());
   void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
-  const legend = document.querySelector('.legend');
-  if (legend) {
-    if (theme) legend.dataset.theme = theme;
-    else delete legend.dataset.theme;
+  void paintLegend(theme);
+}
+
+/** The options legend (index.html .legend): five tiles as the board draws
+ *  them — a wall, a hole, a crate, a door, a cracked wall — off the atlas
+ *  under the theme and door set the board wears (atlas.mjs tileOf, the
+ *  board's own resolver), so it cannot drift from the board. The DOM legend
+ *  was five real cells under tiles.css; these are five 16×16 canvases. */
+async function paintLegend(theme) {
+  const cells = document.querySelectorAll('.legend canvas[data-legend]');
+  if (!cells.length) return;
+  const seq = (app.legendSeq = (app.legendSeq ?? 0) + 1);
+  const atlas = await loadAtlas();
+  if (seq !== app.legendSeq) return; // a later theme owns the paint
+  const doors = doorsFor();
+  const tile = (role) => atlas.tileOf(theme, role, { doors });
+  const T = 16;
+  for (const c of cells) {
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.clearRect(0, 0, T, T);
+    const draw = (t, y = 0) => { if (t) g.drawImage(t.src, t.sx, t.sy, t.w, t.h, 0, y, t.w, t.h); };
+    // the floor under everything: the theme's common flagstone, or the classic flat colour
+    g.fillStyle = '#4a4a42';
+    g.fillRect(0, 0, T, T);
+    draw(theme ? tile('floor-1') : null);
+    const kind = c.dataset.legend;
+    if (kind === 'wall') draw(tile('wall'));
+    else if (kind === 'cracked') {
+      // the wall block with the crack masked to its pixels, as the board composes it
+      const wall = tile('wall'), crack = atlas.crack(1);
+      const scratch = document.createElement('canvas');
+      scratch.width = T;
+      scratch.height = T;
+      const sg = scratch.getContext('2d');
+      sg.imageSmoothingEnabled = false;
+      if (wall) sg.drawImage(wall.src, wall.sx, wall.sy, wall.w, wall.h, 0, 0, T, T);
+      if (crack) {
+        sg.globalCompositeOperation = 'source-atop';
+        sg.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, 0, T, T);
+      }
+      g.drawImage(scratch, 0, 0);
+    } else if (kind === 'hole') {
+      const pit = theme ? tile('hole-0') : null;
+      if (pit) draw(pit);
+      else {
+        g.fillStyle = '#0a0a0e';
+        g.fillRect(0, 0, T, T);
+        g.fillStyle = '#000';
+        g.fillRect(0, 0, T, 3);
+      }
+    } else if (kind === 'crate') {
+      const t = tile('crate');
+      draw(t, t && t.h === 2 * T ? -T : 0); // a prop's lower half is its square
+    } else if (kind === 'door') draw(tile('door'));
   }
 }
 
@@ -563,7 +562,7 @@ function applyOptions() {
   syncOptionsUI();
   refreshCheatUI();
   refreshGodsUI();
-  remountBoard(); // a renderer or scaling change mounts the other board
+  remountBoard(); // a scaling change remounts the board
   applyTheme();
   applyDebrisOptions(); // after the theme: the debris is that theme's pixels
   if (!cheatHints()) {
@@ -1805,7 +1804,7 @@ const randomSeed = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
 
 /** (Re)mount the board for the given dims and show a position on it. */
 function mountPreviewBoard(files, ranks, fen, skins = {}) {
-  const stale = app.boardUI && (app.boardUI.kind !== rendererFor() || (app.boardUI.kind === 'canvas' && app.boardUI.scaling !== scalingFor()));
+  const stale = app.boardUI && app.boardUI.scaling !== scalingFor();
   if (!app.boardUI || stale || app.boardUI.files !== files || app.boardUI.ranks !== ranks) {
     if (app.boardUI) app.boardUI.destroy();
     app.boardUI = createBoard($('board'), {
@@ -1988,7 +1987,7 @@ async function beginDuel() {
   };
   clearHints();
   app.quakeMarks = null;
-  app.residue = { opened: new Set(), rubble: new Set(), lastFen: null };
+  app.residue = { opened: new Set(), rubble: new Set(), lastFen: null, lastHoles: null, lastCrates: null };
   // The debris layer: this duel is a new EPOCH on the stage's floor (its
   // scars stay; blood dries, flecks settle).
   debrisBind(deal);
@@ -2151,70 +2150,45 @@ function debrisSave(now = false) {
   else D.saveTimer = setTimeout(write, 300);
 }
 
-/** Sprite pixels by CSS custom property, read off the board (so the theme
- *  cascade applies), decoded once each. `get` is synchronous — the painter
- *  is — so `ensure` warms what an event needs before it is recorded. */
+/** Sprite pixels by the debris layer's sprite NAME (debris.mjs spriteVar —
+ *  the custom-property spelling of the DOM era, kept as the ledger's key),
+ *  read off THE ATLAS for the theme and door set the board wears (atlas.mjs
+ *  tileOf: the cascade the board paints by, on data), decoded once each.
+ *  `get` is synchronous — the painter is — so `ensure` warms what an event
+ *  needs before it is recorded. (Until 2026-09-07 the sampler decoded the
+ *  sprites off the board's computed style, tiles.css's data URIs; the DOM
+ *  board's retirement made the atlas the one art source.) */
 function debrisSampler() {
   const D = app.debris;
   if (D.sampler) return D.sampler;
-  // Keyed by THEME + name: the same property is a different sprite under
-  // each art set, and the board's theme can change under a warm-up.
+  // Keyed by THEME + DOOR SET + name: the same name is a different sprite
+  // under each art set, and the board's theme can change under a warm-up.
   const cache = new Map();
-  const inflight = new Map();
-  const themeKey = () => `${$('board').dataset.theme ?? ''}|`;
-  const fallback = (name) => (name.startsWith('--tile-wall') ? '--tile-wall' : name.startsWith('--tile-floor') ? '--tile-floor-1' : name.startsWith('--sprite-door2') ? '--sprite-door' : name.startsWith('--sprite-') ? '--sprite-crate' : null);
-  const resolve = (name) => {
-    const cs = getComputedStyle($('board'));
-    let v = cs.getPropertyValue(name).trim();
-    if (!v) {
-      const fb = fallback(name);
-      v = fb && fb !== name ? cs.getPropertyValue(fb).trim() : '';
-    }
-    const m = v.match(/url\(\s*["']?(.*?)["']?\s*\)/);
-    return m ? m[1] : null;
-  };
-  const decode = async (src) => {
-    const img = new Image();
-    img.src = src;
-    await img.decode();
-    const w = img.naturalWidth || 16, h = img.naturalHeight || 16;
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.imageSmoothingEnabled = false;
-    g.drawImage(img, 0, 0, w, h);
-    return { w, h, data: g.getImageData(0, 0, w, h).data };
-  };
+  const themeKey = () => `${$('board').dataset.theme ?? ''}|${$('board').dataset.doors ?? ''}|`;
+  // --tile-wall-<m> → wall-<m> · --tile-wall → wall · --tile-floor-<v> → floor-<v> · --sprite-<role>[-N] → <role>[-N]
+  const roleOf = (name) => (name.startsWith('--tile-') ? name.slice(7) : name.startsWith('--sprite-') ? name.slice(9) : null);
   D.sampler = {
     get: (name) => (name ? cache.get(themeKey() + name) ?? null : null),
     has: (name) => cache.has(themeKey() + name),
-    /** Decode what is not cached yet (awaiting decodes already in the air);
-     *  returns how many sprites are NEW, so a warm-up knows whether to repaint. */
+    /** Decode what is not cached yet; returns how many sprites are NEW, so
+     *  a warm-up knows whether to repaint. */
     async ensure(names) {
+      const want = [...new Set(names.filter(Boolean))];
+      if (!want.some((n) => !cache.has(themeKey() + n))) return 0;
+      const atlas = await loadAtlas();
+      const board = $('board');
+      const theme = board.dataset.theme ?? null, doors = board.dataset.doors ?? null;
       const tk = themeKey();
       let fresh = 0;
-      await Promise.all(
-        [...new Set(names.filter(Boolean))].map(async (n) => {
-          const key = tk + n;
-          if (cache.has(key)) return;
-          if (inflight.has(key)) return inflight.get(key);
-          const job = (async () => {
-            let img = null;
-            try {
-              const src = resolve(n);
-              if (src) img = await decode(src);
-            } catch {
-              /* the material palette stands in */
-            }
-            cache.set(key, img);
-            inflight.delete(key);
-            if (img) fresh++;
-          })();
-          inflight.set(key, job);
-          return job;
-        })
-      );
+      for (const n of want) {
+        const key = tk + n;
+        if (cache.has(key)) continue;
+        const role = roleOf(n);
+        const tile = role ? atlas.tileOf(theme, role, { doors }) : null;
+        const px = tile ? Atlas.pixelsOf(tile) : null; // null: the material palette stands in
+        cache.set(key, px);
+        if (px) fresh++;
+      }
       return fresh;
     },
     invalidate: () => cache.clear(),
@@ -2524,28 +2498,26 @@ function paintBoard(fen) {
   const dir = app.duel?.director;
   const skins = stageSkins(app.session?.deal?.stage);
   const res = app.residue;
+  const holes = new Set(dir?.holes ?? []), godCrates = new Set(dir?.godCrates ?? []);
   if (res.lastFen && res.lastFen !== fen) {
-    // Terrain that stood on the last paint and is gone now — a wall can
-    // crack AND break in one quake budget, so walls count, not only '^'.
-    const before = new Set(findSquares(res.lastFen, (c) => isTerrain(c)).map((s) => s.name));
-    const after = new Set(findSquares(fen, (c) => isTerrain(c)).map((s) => s.name));
-    for (const sq of before) {
-      if (after.has(sq) || dir?.holes.has(sq)) continue;
-      // What stood there is read off the LAST paint's cell classes. A door
-      // in an east–west line leaves its OPEN DOORWAY; a weak-spot door (the
-      // crack in a north–south line — round 10: "cracked walls turning into
-      // open doors doesn't make any sense"), a wall, a cracked wall or
-      // authored masonry leaves the RUIN stub; any other furniture (a crate, a
-      // barrel, a table…) leaves nothing — it never continued a wall line.
-      const was = app.boardUI.cellClasses(sq) ?? [];
-      const wasDoor = skins[sq] === 'door' && !dir?.godCrates.has(sq);
-      if (wasDoor && !was.includes('weak')) res.opened.add(sq);
-      else if (wasDoor || was.includes('wall') || was.includes('cracked') || was.includes('skin-masonry')) res.rubble.add(sq);
-    }
-    for (const sq of after) { res.opened.delete(sq); res.rubble.delete(sq); } // undo brought it back
+    // Terrain that stood on the LAST paint and is gone now leaves its residue
+    // (board-ui residueStep — the one rule, on data, shared with the replay
+    // analyzer; until 2026-09-07 this read the last paint's cell classes):
+    // an east–west door its OPEN DOORWAY; a weak-spot door (the crack in a
+    // north–south line — round 10: "cracked walls turning into open doors
+    // doesn't make any sense"), a wall, a cracked wall or authored masonry
+    // the RUIN stub; any other furniture (a crate, a barrel, a chest…)
+    // nothing — it never continued a wall line. Judged on the last paint's
+    // OWN ledgers (a wall can crack and then break; undo brings terrain
+    // back and clears its residue).
+    const step = residueStep({ fen: res.lastFen, holes: res.lastHoles, godCrates: res.lastCrates, opened: res.opened, rubble: res.rubble }, { fen, holes }, skins, app.boardUI.files, app.boardUI.ranks);
+    res.opened = step.opened;
+    res.rubble = step.rubble;
   }
   res.lastFen = fen;
-  paintWithDebris(fen, { holes: dir?.holes ?? new Set(), godCrates: dir?.godCrates ?? new Set(), skins, opened: res.opened, rubble: res.rubble });
+  res.lastHoles = holes;
+  res.lastCrates = godCrates;
+  paintWithDebris(fen, { holes, godCrates, skins, opened: res.opened, rubble: res.rubble });
 }
 
 /** Compose all in-play board marks (selection, check, the gods' terrain
@@ -2617,7 +2589,7 @@ async function playPlayerMove(from, to, matches) {
     // Promotion (§4.4): several suffixed moves for one from-to pair.
     const letters = [...new Set(matches.map((m) => (m.match(UCI_MOVE_RE) ?? [])[3]).filter(Boolean))];
     if (letters.length) {
-      const choice = await pickPromotion(letters, { pieces: piecesFor() });
+      const choice = await pickPromotion(letters, { pieces: piecesFor(), atlas: app.boardUI?.atlas ?? null });
       uci = from + to + choice;
     }
   }
@@ -2717,7 +2689,6 @@ async function onQuake(ev) {
   const { displacements, crumble, terrain, endedGame, postFen } = ev;
   const duel = app.duel;
   const ui = app.boardUI;
-  const board = $('board');
   // Eval delta (Phase 1.2): queue the pre/post probe for the player's idle
   // window — `ev` IS the record.quakes entry, so the result lands on the
   // ledger. Ended duels are not probed (the probe only runs while playing),
@@ -2745,12 +2716,8 @@ async function onQuake(ev) {
   );
 
   // Beat 1 — the rumble, alone, so the eye is on the board before anything moves.
-  board.style.setProperty('--fx-ms', `${FX(280)}ms`);
-  board.classList.add('quaking');
-  ui.rumble?.(FX(280)); // the canvas board shakes its blit (its CSS ignores the class)
+  ui.rumble(FX(280)); // the board shakes its blit by whole native pixels
   await wait(FX(280));
-  board.classList.remove('quaking');
-  board.style.removeProperty('--fx-ms');
   if (app.duel !== duel) return;
 
   // Beat 2 — the motion, each edited tile held on its end frame. THE DEBRIS
@@ -2958,10 +2925,6 @@ $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
 });
-$('optRenderer').addEventListener('change', (e) => {
-  options.renderer = RENDERERS.includes(e.target.value) ? e.target.value : 'dom';
-  applyOptions();
-});
 $('optScaling').addEventListener('change', (e) => {
   options.scaling = SCALINGS.includes(e.target.value) ? e.target.value : 'integer';
   applyOptions();
@@ -2978,26 +2941,9 @@ $('optDoors').addEventListener('change', (e) => {
   options.doors = e.target.value;
   applyOptions();
 });
-// The piece-fit dials apply live as they drag (input), so the designer can
-// settle the feel on the phone and read the numbers off the labels.
-$('optPieceScale').addEventListener('input', (e) => {
-  options.pieceScale = clampNum(e.target.value, PIECE_SCALE_RANGE, DEFAULT_PIECE_FIT.scale);
-  applyOptions();
-});
-$('optPieceLift').addEventListener('input', (e) => {
-  options.pieceLift = clampNum(e.target.value, PIECE_LIFT_RANGE, DEFAULT_PIECE_FIT.lift);
-  applyOptions();
-});
-$('optPieceShift').addEventListener('input', (e) => {
-  options.pieceShift = clampNum(e.target.value, PIECE_SHIFT_RANGE, DEFAULT_PIECE_FIT.shift);
-  applyOptions();
-});
-$('optPiecePixels').addEventListener('change', (e) => {
-  options.piecePixels = PIECE_PIXELS.includes(e.target.value) ? e.target.value : DEFAULT_PIECE_FIT.pixels;
-  applyOptions();
-});
-// The tile grid's own placement, in whole tile pixels (baked into the
-// piece tiers on every step — a drag re-cuts the set from a decoded cache).
+// The piece placement, in whole tile pixels — applied live as the dials
+// drag (input), so the designer can settle the feel on the phone and read
+// the numbers off the labels.
 $('optTileLift').addEventListener('input', (e) => {
   options.tileLift = Math.round(clampNum(e.target.value, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
   applyOptions();
@@ -3278,45 +3224,53 @@ window.__DCK = {
     clean: (all = false) => debrisClean(all),
     save: () => debrisSave(true),
     key: DEBRIS_KEY,
+    /** The sampler's pixels for a sprite name (decoded off the atlas if not yet) — { w, h, data } or null. */
+    sample: async (name) => {
+      await debrisSampler().ensure([name]);
+      return debrisSampler().get(name);
+    },
   },
   /** The piece-fit dials as applied to the live board. */
   get pieceFit() {
     return app.boardUI?.pieceFit ?? null;
   },
-  /** PHASE 2 (2026-09-07): which board is mounted and, on the canvas board,
-   *  its geometry (device pixel ratio, device-pixel size, the scale k,
-   *  integer or fill), the buffer's pixels and the device-pixel gate's
-   *  test pattern. */
+  /** The renderer's geometry (device pixel ratio, device-pixel size, the
+   *  scale k, integer or fill), the buffer's pixels, the arrows it draws,
+   *  the atlas's tiles and the device-pixel gate's test pattern. `kind` is
+   *  always 'canvas' since the DOM board's retirement (2026-09-07). */
   renderer: {
     get kind() {
       return app.boardUI?.kind ?? null;
     },
     get info() {
-      return app.boardUI?.kind === 'canvas' ? app.boardUI.renderInfo : { renderer: app.boardUI?.kind ?? null };
+      return app.boardUI?.renderInfo ?? null;
     },
     get diag() {
-      return app.boardUI?.kind === 'canvas' ? app.boardUI.diag : '';
+      return app.boardUI?.diag ?? '';
     },
     get diagShown() {
       return !$('render-diag').hidden ? $('render-diag').textContent : null;
     },
-    square: (sq) => (app.boardUI?.kind === 'canvas' ? app.boardUI.squarePixels(sq) : null),
-    buffer: () => (app.boardUI?.kind === 'canvas' ? app.boardUI.bufferPixels() : null),
-    decor: (sq) => (app.boardUI?.kind === 'canvas' ? app.boardUI.decorOf(sq) : null),
-    /** The arrows the canvas board draws, in draw order (the DOM board's are its SVG). */
+    square: (sq) => app.boardUI?.squarePixels(sq) ?? null,
+    buffer: () => app.boardUI?.bufferPixels() ?? null,
+    decor: (sq) => app.boardUI?.decorOf(sq) ?? null,
+    /** The arrows the board draws, in draw order. */
     get arrows() {
-      return app.boardUI?.kind === 'canvas' ? app.boardUI.arrows.map((a) => ({ ...a })) : null;
+      return app.boardUI?.arrows.map((a) => ({ ...a })) ?? null;
     },
     testPattern: (on) => app.boardUI?.setTestPattern?.(on),
     snapMode: (mode) => app.boardUI?.setSnapMode?.(mode),
     paintNow: () => app.boardUI?.paintNow?.(),
+    /** The atlas's pixels for a role under the board's theme / door set, and the crack drawings — { w, h, data } or null. */
+    tile: (role) => { const a = app.boardUI?.atlas; const t = a?.tileOf(app.boardUI.theme, role, { doors: app.boardUI.doors }); return t ? Atlas.pixelsOf(t) : null; },
+    crack: (n) => { const t = app.boardUI?.atlas?.crack(n); return t ? Atlas.pixelsOf(t) : null; },
     ready: () => app.boardUI?.ready ?? Promise.resolve(),
-    set: (renderer, scaling = null) => {
-      // A driver's choice beats the URL's (`?renderer=` pins the option otherwise).
-      params.delete('renderer');
+    /** Set the scaling (`set('fill')`; the old two-argument `set('canvas', 'fill')` still reads).
+     *  A driver's choice beats the URL's (`?scaling=` pins the option otherwise). */
+    set: (a, b = null) => {
+      const scaling = b ?? a;
       params.delete('scaling');
-      options.renderer = RENDERERS.includes(renderer) ? renderer : options.renderer;
-      if (scaling) options.scaling = SCALINGS.includes(scaling) ? scaling : options.scaling;
+      if (SCALINGS.includes(scaling)) options.scaling = scaling;
       applyOptions();
       return app.boardUI?.kind;
     },

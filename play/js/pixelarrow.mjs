@@ -4,7 +4,7 @@
 // gods' displacements are drawn INTO the canvas board's native buffer as
 // chunky 16-grid pixels — a shaft, a head, a one-pixel black halo, and the
 // eval label in the 3×5 pixel font INSIDE the shaft — where the DOM board
-// draws them as an SVG overlay (board-ui renderArrows). Pure: rasterises
+// drew them as an SVG overlay (retired with it, 2026-09-07). Pure: rasterises
 // onto any 2D context whose transform is the pixel grid.
 //
 // Geometry, in native pixels: the shaft runs from the origin square's
@@ -82,7 +82,7 @@ export function compactLabel(label) {
 }
 
 /** Draw order: quake arrows first (underneath), the last move, then hints
- *  worst to best so the best is on top — board-ui renderArrows' order. */
+ *  worst to best so the best is on top. */
 export function sortArrows(arrows) {
   const key = (a) => (a.kind === 'quake' ? -100 : a.kind === 'last' ? -90 : -(a.rank ?? 2 - (a.strength ?? 1)));
   return [...arrows].sort((a, b) => key(a) - key(b));

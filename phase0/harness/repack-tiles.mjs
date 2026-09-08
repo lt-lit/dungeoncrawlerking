@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Repack the third-party tilesets into the game's own atlas + CSS.
+// Repack the third-party tilesets into the game's own atlas.
 //
 // The board's art comes from three FREE 16×16 packs (designer decision
 // 2026-09-03: "use them all, 16×16 is the standard, mix and match, repack
@@ -10,29 +10,38 @@
 //   play/img/tileset.png   the repacked atlas (one row per theme, one
 //                          column per role) — the human-readable record of
 //                          what was taken
-//   play/img/tileset.json  atlas index + per-tile provenance
-//   play/tiles.css         the runtime: every tile as a data-URI custom
-//                          property scoped to [data-theme="<theme>"], so a
-//                          board (or the legend) switches art by attribute
-//                          and any cell size stays pixel-exact (no sheet
-//                          bleed at fractional scales)
+//   play/img/tileset.json  atlas index + per-tile provenance — the
+//                          runtime's ONE source (play/js/atlas.mjs draws
+//                          straight off the PNG; play/tiles.css, the same
+//                          pixels as data URIs for the DOM board, retired
+//                          with it on 2026-09-07)
+//   play/img/pieces.png    the piece sets, one row per set
 //   play/CREDITS.md        attribution, generated from PACKS + the picks
+//
+// WITHOUT THE PACKS (2026-09-07): a tile pack that is not on disk is read
+// BACK from the committed atlas — every tile of every theme at the cell the
+// last run wrote it, with the provenance the index recorded — exactly as a
+// missing piece pack has been since 2026-09-04. So the in-house `classic`
+// row (lib/inhouse.mjs: the drawn wall / crate / door / barrel / chest /
+// rubble and the four CRACKS every theme wears) can be regenerated, roles
+// added and the index rewritten on a machine that has never seen the packs;
+// only a NEW pack tile needs the pack.
 //
 // THEMES: `hall` (pixel-poem's purple-and-timber keep), `castle` (Dungeon
 // Gathering's cold blue-grey stone), `crypt` (Szadi art's dark catacombs).
 // Where a pack lacks a role the theme borrows from another pack; where no
-// pack has it (the hole, the crack) the theme falls
-// back to the in-house sprites (gen-sprites.mjs) — that is what "no
-// override" in a theme block means. Roles are the renderer's names
-// (style.css --tile-* / --sprite-*).
+// pack has it (the hole, the crack) the theme falls back to the in-house
+// drawings (lib/inhouse.mjs, the `classic` row) — that is what "no
+// override" in a theme block means. Roles are the atlas's names (the
+// renderer's, play/js/atlas.mjs tileOf).
 //
 // Usage (from phase0/): node harness/repack-tiles.mjs
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
-import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS } from '../../play/js/board-ui.mjs';
-import { pieceHalves, halvesDecl, halvesRule } from '../lib/piecehalves.mjs';
+import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS, CRACK_VARIANTS } from '../../play/js/board-ui.mjs';
+import { inhouseTiles } from '../lib/inhouse.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -159,7 +168,7 @@ for (const name of PIECE_SETS) if (!PIECE_SHEETS[name]) throw new Error(`piece s
 // floor-1..N are the floor's texture variants (N = board-ui FLOOR_VARIANTS;
 // f1 is the common one). A door skin in a north–south wall line is a WEAK
 // SPOT: the column's own wall case under the in-house crack overlay
-// (gen-sprites --tile-crack, the same one a god-weakened wall wears).
+// (lib/inhouse.mjs crack-1…4, the same one a god-weakened wall wears).
 const ROLES = {
   wall: '--tile-wall',
   door: '--sprite-door',
@@ -594,7 +603,7 @@ function recolourHue(tile, target, force = false) {
  *  them overlap the tile to the north"): trimmed to its pixels and centred
  *  left–right; a prop that fits a cell is centred in the LOWER cell, a
  *  taller one stands on the cell's bottom edge and rises into the cell
- *  above. tiles.css gives the sprite element the same 1×2-cell box. */
+ *  above. The canvas board draws a prop as a 1×2-cell box. */
 function placeProp(tile) {
   const sprite = trim(tile);
   const box = blank(T, 2 * T);
@@ -761,26 +770,30 @@ const THEMES = {
 
 // ---- load sheets
 const sheets = {};
-// The TILE packs are required. A PIECE pack that is not on disk is tolerated
-// (2026-09-04, so tile work does not need the chess packs to hand): that
-// set's fitted sprites are read back from the committed play/img/pieces.png
-// — the atlas holds exactly the tiles this tool wrote, at known cells — and
-// its CSS, index and credit rows still come from the spec, unchanged.
+// A pack that is not on disk is tolerated: a PIECE pack's fitted sprites are
+// read back from the committed play/img/pieces.png (2026-09-04, so tile work
+// does not need the chess packs to hand), and since 2026-09-07 a TILE pack's
+// tiles are read back from the committed play/img/tileset.png — the atlas
+// holds exactly the tiles this tool wrote, at the cells the index records —
+// and the index and credit rows still come from the record, unchanged.
+// (Every theme is read back together: the themes share the packs.)
 const pieceOnlySheets = new Set(Object.values(PIECE_SHEETS).flatMap((set) => [...Object.values(set.white), ...Object.values(set.black)].map((c) => c[0])));
 let oldPieces = null;
+let readBack = false;
 for (const [key, [pack, file]] of Object.entries(SHEETS)) {
   const p = join(SRC, pack, file);
   if (!existsSync(p)) {
-    if (!pieceOnlySheets.has(key)) {
-      console.error(`missing ${p}\n  download ${PACKS[pack].title} from ${PACKS[pack].url} and put "${file}" there`);
-      process.exit(2);
+    if (!pieceOnlySheets.has(key)) readBack = true;
+    else {
+      oldPieces ??= decodePng(readFileSync(join(PLAY, 'img', 'pieces.png')));
+      console.error(`(${pack}/${file} not on disk — its piece sprites are read back from play/img/pieces.png)`);
     }
-    oldPieces ??= decodePng(readFileSync(join(PLAY, 'img', 'pieces.png')));
-    console.error(`(${pack}/${file} not on disk — its piece sprites are read back from play/img/pieces.png)`);
     continue;
   }
   sheets[key] = decodePng(readFileSync(p));
 }
+const old = readBack ? { png: decodePng(readFileSync(join(PLAY, 'img', 'tileset.png'))), index: JSON.parse(readFileSync(join(PLAY, 'img', 'tileset.json'), 'utf8')) } : null;
+if (readBack) console.error(`(a tile pack is not on disk — every theme's tiles are read back from play/img/tileset.png; put the packs under ${SRC} to change a pack tile)`);
 
 // SKIN VARIANTS (round 16, 2026-09-05): a theme may list several crops for
 // a furniture role. The first is the role's own tile, the rest are
@@ -796,28 +809,44 @@ for (const [role, k] of Object.entries(variantCount)) {
   if (k > SKIN_VARIANTS) throw new Error(`${role}: ${k} variants, board-ui SKIN_VARIANTS is ${SKIN_VARIANTS}`);
   for (let n = 2; n <= k; n++) ROLES[`${role}-${n}`] = `${ROLES[role]}-${n}`;
 }
+// THE CRACK (2026-09-07, in the atlas): four drawings every theme wears on a
+// weakened wall (board-ui CRACK_VARIANTS, ck1…ck4 by a stable hash of the
+// square), in the `classic` row — appended after the variants so every
+// pack tile keeps its column.
+for (let n = 1; n <= CRACK_VARIANTS; n++) ROLES[`crack-${n}`] = `--tile-crack-${n}`;
 
 // ---- crop + atlas
 const roleNames = Object.keys(ROLES);
 const themeNames = Object.keys(THEMES);
-const atlas = blank(roleNames.length * T, themeNames.length * 2 * T); // a theme row is two tiles tall: furniture props are 16×32 boxes
+const atlas = blank(roleNames.length * T, (themeNames.length + 1) * 2 * T); // a theme row is two tiles tall: furniture props are 16×32 boxes; + the classic row
 const index = { tile: T, row: 2 * T, roles: roleNames, themes: {}, packs: PACKS };
-const css = ['/* --- generated by phase0/harness/repack-tiles.mjs — do not hand-edit; art credits in play/CREDITS.md --- */'];
 const provenance = [];
-const doorSets = {};
+/** The emitter for one atlas row: blit the tile, record its cell + provenance. */
+const emitter = (theme, row) => (role, tile, prov) => {
+  if (!(role in ROLES)) throw new Error(`${theme}: unknown role ${role}`);
+  const col = roleNames.indexOf(role);
+  blit(atlas, tile, col * T, row * 2 * T);
+  index.themes[theme].tiles[role] = { col, ...prov };
+  if (!prov.composed) provenance.push({ theme, role, ...prov });
+};
 themeNames.forEach((theme, row) => {
-  const decl = [];
   index.themes[theme] = { row, title: THEMES[theme].title, tiles: {} };
-  const emit = (role, tile, prov) => {
-    if (!(role in ROLES)) throw new Error(`${theme}: unknown role ${role}`);
-    const col = roleNames.indexOf(role);
-    blit(atlas, tile, col * T, row * 2 * T);
-    const b64 = encodePng(tile).toString('base64');
-    decl.push(`  ${ROLES[role]}: url("data:image/png;base64,${b64}");`);
-    index.themes[theme].tiles[role] = { col, ...prov };
-    if (!prov.composed) provenance.push({ theme, role, ...prov });
-  };
-  const tiles = {};
+  const emit = emitter(theme, row);
+  if (readBack) {
+    // Every tile of this theme, in the order the last run wrote it, with the
+    // provenance it recorded (a composed case carries `composed` + `mask`).
+    const was = old.index.themes[theme];
+    if (!was) throw new Error(`${theme}: not in the committed atlas — the packs are needed to build a new theme`);
+    for (const [role, cell] of Object.entries(was.tiles)) {
+      const { col, ...prov } = cell;
+      if (role === 'wall') {
+        const fs = THEMES[theme].wall.face;
+        provenance.push({ theme, role: 'wall face (brick rows under every south edge)', pack: SHEETS[fs.sheet][0], sheet: SHEETS[fs.sheet][1], x: fs.x, y: fs.y });
+      }
+      emit(role, crop(old.png, col * T, was.row * 2 * T, T, 2 * T), prov);
+    }
+    return;
+  }
   for (const [role, spec] of Object.entries(THEMES[theme].tiles)) {
     const crops = Array.isArray(spec[0]) ? spec : [spec];
     const prop = SKIN_ROLES.includes(role);
@@ -828,26 +857,20 @@ themeNames.forEach((theme, row) => {
       const tint = typeof spec === 'string' ? spec : spec?.to;
       if (tint) tile = recolourHue(tile, hex(tint), !!spec?.whole);
       if (prop) tile = placeProp(tile); // 16×32: centred small, standing tall
-      if (!i) tiles[role] = tile;
       emit(i ? `${role}-${i + 1}` : role, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x: w ? x / T : x, y: w ? y / T : y, recoloured: tint ? `${spec?.whole ? 'all' : 'wood'} to ${tint}` : undefined });
     });
-    // Fewer variants than SKIN_VARIANTS: wrap around, so sv4 on a role with
-    // three sprites is its first again, sv5 its second.
-    if (crops.length > 1) for (let n = crops.length + 1; n <= SKIN_VARIANTS; n++) {
-      const v = ((n - 1) % crops.length) + 1;
-      decl.push(`  ${ROLES[role]}-${n}: var(${ROLES[role]}${v > 1 ? `-${v}` : ''});`);
-    }
+    // (Fewer variants than SKIN_VARIANTS wrap around at runtime — atlas.mjs
+    // tileOf: sv4 on a role with three sprites is its first again.)
   }
-  // The door — also collected as a selectable DOOR SET (Options → Doors,
-  // board-ui DOOR_SETS: every theme's leaf, on any theme) — and its DOUBLE
+  // The door — also a selectable DOOR SET at runtime (Options → Doors,
+  // board-ui DOOR_SETS: every theme's leaf, on any theme — atlas.mjs tileOf
+  // takes the door and double from the chosen theme's row) — and its DOUBLE
   // (round 16): two door skins side by side wear the halves. Round 17:
   // pixel-poem's leaf and double for every theme, the wood recoloured for
   // the castle and the crypt ("the doors on Castle and Crypt suck").
-  const door = tiles.door;
   const tint2 = THEMES[theme].tint?.door2;
   const door2 = THEMES[theme].door2.map(([sheet, x, y]) => { const t = crop(sheets[sheet], x * T, y * T, T, T); return tint2 ? recolourHue(t, hex(tint2)) : t; });
   door2.forEach((half, i) => emit(i ? 'door2-r' : 'door2-l', half, { pack: SHEETS[THEMES[theme].door2[i][0]][0], sheet: SHEETS[THEMES[theme].door2[i][0]][1], x: THEMES[theme].door2[i][1], y: THEMES[theme].door2[i][2], recoloured: tint2 ? `wood to ${tint2}` : undefined }));
-  doorSets[THEMES[theme].doorSet] = { door, door2 };
   for (const [role, sides] of [['doorway', 10], ['doorway-8', 8], ['doorway-2', 2]]) emit(role, doorwayTile(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 10 ? 'posts in the door material at both edges, floor between' : `one post in the door material at the ${sides === 8 ? 'west' : 'east'} edge, floor between`, mask: sides });
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
@@ -868,55 +891,18 @@ themeNames.forEach((theme, row) => {
   for (const [role, tile] of Object.entries(cases)) emit(role, tile, { composed: 'blob in the pack palette + its face', mask: +role.slice(5) });
   for (const [role, tile] of Object.entries(ruinBlob(ws, sheets))) emit(role, tile, { composed: 'ruin blob: the broken wall stub in the pack palette + its face', mask: +role.slice(5) });
   for (const [role, tile] of Object.entries(holeBlob(ws))) emit(role, tile, { composed: 'hole blob: the pit in the pack palette, rimmed where floor meets it', mask: +role.slice(5) });
-
-  css.push(`[data-theme="${theme}"] {\n${decl.join('\n')}\n}`);
 });
-// Pack tiles fill their 16×16 cell edge to edge; the in-house sprites carry
-// their own margins, so under a theme every furniture sprite is full-size.
-// Door sets (Options → Doors): the same attribute-selector specificity as
-// the theme blocks, emitted AFTER them so a chosen door beats the theme's.
-// (The doorway stays the theme's own: it is drawn in the theme's wall.)
-for (const name of DOOR_SETS) {
-  if (!doorSets[name]) throw new Error(`door set ${name} was not produced by any theme`);
-  const decl = [`  --sprite-door: url("data:image/png;base64,${encodePng(doorSets[name].door).toString('base64')}");`];
-  if (doorSets[name].door2) decl.push(...doorSets[name].door2.map((half, i) => `  --sprite-door2-${i ? 'r' : 'l'}: url("data:image/png;base64,${encodePng(half).toString('base64')}");`));
-  css.push(`[data-doors="${name}"] {\n${decl.join('\n')}\n}`);
+// THE CLASSIC ROW (2026-09-07): the in-house drawings (lib/inhouse.mjs) —
+// what a stage without a theme wears (one wall block for every case, its
+// crate / door / barrel / chest, the rubble heap as its ruin) and the four
+// CRACKS every theme masks onto a weakened wall. Generated every run, never
+// read back; provenance `composed`, so the credits table skips them.
+{
+  const row = themeNames.length;
+  index.themes.classic = { row, title: 'The classic set — drawn in-house (a stage without a theme; the crack every theme wears)', inhouse: true, tiles: {} };
+  const emit = emitter('classic', row);
+  for (const [role, tile] of Object.entries(inhouseTiles())) emit(role, tile, { composed: 'drawn in-house (lib/inhouse.mjs)' });
 }
-// SKIN VARIANTS + DOUBLE DOORS (round 16): svN on a skin → the theme's Nth
-// sprite for that role, the base as the fallback (the in-house set has no
-// variants, so it paints its one sprite); a paired door leaf → its half of
-// the theme's (or the chosen door set's) double, else the leaf.
-for (const role of SKIN_ROLES) for (let n = 2; n <= SKIN_VARIANTS; n++) css.push(`.cell.sv${n}.skin-${role} .piece.neutral { background-image: var(--sprite-${role}-${n}, var(--sprite-${role})); }`);
-css.push('.cell.skin-door.door2-l .piece.neutral { background-image: var(--sprite-door2-l, var(--sprite-door)); }');
-css.push('.cell.skin-door.door2-r .piece.neutral { background-image: var(--sprite-door2-r, var(--sprite-door)); }');
-// The autotile classes → the theme's case, the plain wall as the fallback
-// (so the in-house set, with no per-case tiles, paints its one block).
-for (const code of WALL_MASK_CODES) css.push(`.cell.wm-${code} { --wall-tile: var(--tile-wall-${code}, var(--tile-wall)); }`);
-// A ruin cell (board-ui .ruin, wm-<mask> = the 4-bit mask of its STANDING
-// wall neighbours) → the theme's stub case; the in-house set paints its
-// rubble sprite.
-for (let m = 0; m < 16; m++) css.push(`.cell.ruin.wm-${m} { --ruin-tile: var(--tile-ruin-${m}, var(--sprite-rubble)); }`);
-// An opened doorway (board-ui decor-doorway on a floor cell, wm-<mask> =
-// which of its west (8) / east (2) neighbours still STANDS): the full frame
-// between two walls, one post beside a break, nothing between two breaks
-// (round 12). The in-house set has no doorway at all.
-css.push('.cell.wm-8 > .decor-doorway { --decor-img: var(--decor-doorway-8, var(--decor-doorway)); }');
-css.push('.cell.wm-2 > .decor-doorway { --decor-img: var(--decor-doorway-2, var(--decor-doorway)); }');
-css.push('.cell.wm-0 > .decor-doorway { --decor-img: none; }');
-// A hole (board-ui .hole, wm-<mask> = the 4-bit mask of its HOLE neighbours)
-// → the theme's pit case; the in-house set keeps style.css's gradient pit.
-for (let m = 0; m < 16; m++) css.push(`.cell.hole.wm-${m} { --hole-tile: var(--tile-hole-${m}); }`);
-css.push('[data-theme] .cell.furniture .piece.neutral { width: 100%; height: 100%; }');
-// Furniture PROPS (crate / chest / barrel / wreckage — not a door, not a crack)
-// are 16×32 boxes (placeProp): the sprite element spans its cell AND the
-// one above, anchored to the cell's bottom, so a small prop sits centred in
-// its square and a tall urn rises into the square north (which paints
-// behind it by DOM order, as a tall piece does). On the board only — the
-// options legend shows a prop's lower half instead.
-css.push('#board[data-theme] .cell.furniture:not(.skin-door):not(.weak):not(.cracked) .piece.neutral { position: absolute; left: 0; bottom: 0; width: 100%; height: 200%; }');
-css.push('.legend[data-theme] .cell.furniture:not(.skin-door) .piece.neutral { background-size: 100% 200%; background-position: center bottom; }');
-css.push('[data-theme] { --floor-shade: #00000038; }');
-
 // ---- pieces: one row per set (32-px atlas cells), white p n r b q k then black.
 const PA = 32;
 const pieceNames = Object.keys(PIECE_SHEETS);
@@ -925,11 +911,6 @@ index.pieces = { order: PIECE_ORDER, cell: PA, sets: {} };
 pieceNames.forEach((name, row) => {
   const set = PIECE_SHEETS[name];
   const bw = set.box, bh = set.fit;
-  const scale = 0.96 / set.fit; // cells per sprite px: the box (the tallest piece) stands 0.96 cell before the Options size dial
-  // --piece-fit / --piece-box: the box's native pixels, read back by
-  // board-ui's pixel-perfect layout (setPieceFit snap) to size every
-  // piece in whole device-pixel multiples of the sprite.
-  const decl = [`  --piece-w: ${(bw * scale).toFixed(3)};`, `  --piece-h: ${(bh * scale).toFixed(3)};`, `  --piece-fit: ${bh};`, `  --piece-box: ${bw};`];
   index.pieces.sets[name] = { row, title: set.title, pack: set.pack, box: [bw, bh], sheets: [...new Set([...Object.values(set.white), ...Object.values(set.black)].map((c) => SHEETS[c[0]][1]))] };
   [...PIECE_ORDER].forEach((letter, i) => {
     for (const side of ['white', 'black']) {
@@ -947,41 +928,29 @@ pieceNames.forEach((name, row) => {
         tile = crop(oldPieces, col * PA, row * PA + (PA - bh), bw, bh); // the pack is not on disk: the committed atlas holds this exact tile
       }
       blit(piecesAtlas, tile, col * PA, row * PA + (PA - bh));
-      const fen = side === 'white' ? letter.toUpperCase() : letter;
-      decl.push(`  --piece-${fen}: url("data:image/png;base64,${encodePng(tile).toString('base64')}");`);
-      // The TILE-GRID tiers (2026-09-07): the fitted sprite cut into 16×16
-      // tiles, one per square it covers at lift 0 (its own and the one
-      // above), painted one per cell-sized box (lib/piecehalves.mjs →
-      // play/js/piecetiers.mjs; gen-piece-halves.mjs writes the same lines
-      // from the committed atlas when the packs are not on disk).
-      decl.push(...halvesDecl(fen, pieceHalves(tile)));
     }
   });
-  css.push(`[data-pieces="${name}"] {\n${decl.join('\n')}\n}`);
   provenance.push({ theme: 'pieces', role: name, pack: set.pack, sheet: index.pieces.sets[name].sheets.join(' + '), x: '—', y: '—' });
 });
-for (const letter of [...PIECE_ORDER]) for (const fen of [letter.toUpperCase(), letter]) css.push(`[data-pieces] [data-piece="${fen}"] { --piece-img: var(--piece-${fen}); }`, halvesRule(fen));
-
 mkdirSync(join(PLAY, 'img'), { recursive: true });
 writeFileSync(join(PLAY, 'img', 'pieces.png'), encodePng(piecesAtlas));
 const atlasPng = encodePng(atlas);
 if (!samePixels(decodePng(atlasPng), atlas)) throw new Error('atlas round-trip failed');
 writeFileSync(join(PLAY, 'img', 'tileset.png'), atlasPng);
 writeFileSync(join(PLAY, 'img', 'tileset.json'), JSON.stringify(index, null, 1) + '\n');
-writeFileSync(join(PLAY, 'tiles.css'), css.join('\n') + '\n');
 
 // ---- credits
 const md = [];
 md.push('# Art credits');
 md.push('');
-md.push('The board tiles in `play/img/tileset.png` and the piece sprites in `play/img/pieces.png` (the same pixels inlined in `play/tiles.css`) are repacked from six free pixel-art packs. Only the tiles and sprites the game uses are included; the packs themselves are not redistributed here — get them from their authors:');
+md.push('The board tiles in `play/img/tileset.png` and the piece sprites in `play/img/pieces.png` are repacked from six free pixel-art packs. Only the tiles and sprites the game uses are included; the packs themselves are not redistributed here — get them from their authors:');
 md.push('');
 for (const [key, p] of Object.entries(PACKS)) {
   md.push(`- **${p.title}** by ${p.author} — <${p.url}>  `);
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (the hole, the crack, and every role a theme does not override) are drawn in-house by `phase0/harness/gen-sprites.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas), the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) and the HOLE autotile (16 cases, `hole-<mask>` — the pit the gods leave, rimmed where floor meets it) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber for the hall, the same leaf\'s slate and oak stains for the castle and the crypt) at each edge where a wall still stands, the floor between.');
+md.push('The remaining sprites (the crack, and the `classic` row — the drawn set a stage without a theme wears) are drawn in-house by `phase0/lib/inhouse.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas), the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) and the HOLE autotile (16 cases, `hole-<mask>` — the pit the gods leave, rimmed where floor meets it) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber for the hall, the same leaf\'s slate and oak stains for the castle and the crypt) at each edge where a wall still stands, the floor between.');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');
@@ -993,4 +962,4 @@ for (const p of provenance) md.push(`| ${p.theme} | ${p.role} | ${PACKS[p.pack].
 md.push('');
 writeFileSync(join(PLAY, 'CREDITS.md'), md.join('\n'));
 
-console.log(`tileset.png ${atlas.width}×${atlas.height} (${atlasPng.length} B), pieces.png ${piecesAtlas.width}×${piecesAtlas.height} (${pieceNames.length} sets), tiles.css ${css.join('\n').length} B, ${provenance.length} provenance rows over ${themeNames.length} themes; CREDITS.md written`);
+console.log(`tileset.png ${atlas.width}×${atlas.height} (${atlasPng.length} B), pieces.png ${piecesAtlas.width}×${piecesAtlas.height} (${pieceNames.length} sets), ${provenance.length} provenance rows over ${themeNames.length} themes${readBack ? ' (read back)' : ''}; CREDITS.md written`);

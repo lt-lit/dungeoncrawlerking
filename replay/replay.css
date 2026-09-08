@@ -1,5 +1,5 @@
 /* The replay analyzer's own chrome (2026-09-07). The board, the tiles, the
-   topbar, the log and the eval bar come from ../play/style.css + tiles.css;
+   topbar, the log and the eval bar come from ../play/style.css;
    this file adds the load panel, the scrub strip, the sections and the
    report blocks. Same dark theme, same variables. */
 

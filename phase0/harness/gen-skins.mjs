@@ -20,7 +20,7 @@
 //
 // THEMES (2026-09-03): the same tool assigns each stage its art theme
 // (stage.mjs THEMES — hall / castle / crypt, the repacked tilesets in
-// play/tiles.css): the notes' vocabulary picks one (a crypt has tombs and
+// play/img/tileset.png): the notes' vocabulary picks one (a crypt has tombs and
 // rubble, a castle has gates and parapets, a hall has pantries and
 // banquets); stages that say nothing go round-robin by number so
 // neighbouring floors differ; THEME_OVERRIDES settle the rest. Cosmetic —

@@ -167,11 +167,14 @@ const T = D.T;
 // --- the ruin tiles carry no chips any more -----------------------------------
 {
   const clean = stripCheck({ check: true });
-  expect(clean, 'every --tile-ruin-<mask> in tiles.css is free of isolated chips');
-  const css = fs.readFileSync(path.join(ROOT, 'play/tiles.css'), 'utf8');
-  const m = css.match(/--tile-ruin-0: url\("data:image\/png;base64,([^"]+)"\)/);
-  const img = decodePng(Buffer.from(m[1], 'base64'));
-  expect([...img.data].filter((v, i) => i % 4 === 3 && v).length === 0, 'the lone-break ruin case (mask 0) is fully transparent — the chips were all it had');
+  expect(clean, 'every ruin-<mask> tile in the atlas is free of isolated chips');
+  const atlas = decodePng(fs.readFileSync(path.join(ROOT, 'play/img/tileset.png')));
+  const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'play/img/tileset.json'), 'utf8'));
+  const hall = index.themes.hall;
+  const cell = hall.tiles['ruin-0'];
+  let opaque = 0;
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (atlas.data[((hall.row * index.row + y) * atlas.width + cell.col * T + x) * 4 + 3]) opaque++;
+  expect(opaque === 0, 'the lone-break ruin case (mask 0) is fully transparent — the chips were all it had');
   const repack = fs.readFileSync(path.join(ROOT, 'phase0/harness/repack-tiles.mjs'), 'utf8');
   expect(/const RUIN = \{[^}]*chips: 0/.test(repack), 'the repack tool generates chip-free ruins');
 }

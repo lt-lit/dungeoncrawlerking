@@ -54,17 +54,30 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   board and asserts the tiles, the per-rung residue marks and arrows, the
   gods line, the log, the streaming hint probe, and the art themes (the
   stage's own on the live board and legend, the Art-set override, classic
-  stripping back to the in-house SVG), with screenshots in
+  stripping back to the in-house drawings), with screenshots in
   `phase0/results/ui-smoke/` for the eye (`00-theme-*.png` is the same
-  opening board in every theme). `window.__DCK.cheat`, `window.__DCK.marks`
-  and `window.__DCK.theme` are the read-only surfaces it uses;
-  `--renderer canvas` runs it on the Phase 2 canvas board (§ "The canvas
-  board" below), whose own gates are `node harness/canvas-parity.mjs`
-  (tile-for-tile against the DOM board) and `node harness/canvas-grid.mjs`
-  (the blit on the device-pixel grid, Chromium + Firefox).
+  opening board in every theme). `window.__DCK.cheat`, `window.__DCK.marks`,
+  `window.__DCK.theme` and `window.__DCK.renderer` are the read-only
+  surfaces it uses; the board's own device-pixel gate is `node
+  harness/canvas-grid.mjs` (the blit on the device-pixel grid, Chromium +
+  Firefox; § "The canvas board" below).
 
 ## Layout
 
+- **THE DOM BOARD IS RETIRED (2026-09-07).** The board is `js/canvas-board.mjs`
+  (one 16×16 buffer, scaled once — § "The canvas board" below) drawing off
+  `js/atlas.mjs` (`img/tileset.png` + `img/pieces.png` + `img/tileset.json`,
+  the ONE art source); `js/board-ui.mjs` is the pure half that survived —
+  `classifyTerrain`, `residueStep`, `decorFor`, the variant hashes, the
+  masks, the set lists, `DEFAULT_PIECE_FIT` and the promotion picker.
+  `tiles.css`, `piecetiers.mjs`, the FLIP slides, the arrow SVG, the
+  per-cell debris `<img>`, the % piece dials, the piece-pixel modes and the
+  classic glyph piece set are gone. The bullets below that speak of cells,
+  `.piece` elements, CSS custom properties and `tiles.css` describe the
+  retired board's IMPLEMENTATION and stand as the record of the decisions;
+  the class names they use survive verbatim as the canvas board's
+  `cellClasses()` test surface, and every look they settled is painted the
+  same by the canvas board (the retirement was gated pixel for pixel).
 - `js/fen.mjs`, `js/prng.mjs`, `js/crumbleFilter.mjs` — verbatim ports of the
   validated Phase 0 modules (import paths only). (`js/crumble.mjs` — the old
   repetition+pacing controller — is deleted; `phase0/harness/legacy/crumble.mjs`
@@ -427,26 +440,26 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 - `vendor/` — fairy-stockfish-nnue.wasm 1.1.11 largeboard + ffish 0.7.9,
   the exact builds Phase 0 validated.
 
-## The canvas board — Phase 2 milestone 1 (2026-09-07)
+## The canvas board — Phase 2 milestone 1 (2026-09-07), the one board since milestone 2
 
 The designer committed to 16×16 for everything and Phase 2 opens with the
 rendering pipeline that makes it true (brief §2 item 5, §10). The DOM
-board under "Art themes" is a CSS grid of fractional cells where every
+board under "Art themes" was a CSS grid of fractional cells where every
 layer is a separate image the browser resamples on its own — which is why
 the tile-grid pieces needed cell-sized boxes, measured row rectangles,
 positions baked into tiles and a two-browser gate to line up with the
-floor, why the debris image sits a sub-device-pixel off it, and why a
-slide shimmers off-grid. **The replacement is built, behind a switch,
-while the phone judges it**: `js/canvas-board.mjs` (`CanvasBoard`, the
-same method surface as `BoardUI` — main.mjs and the replay page drive
-either), `js/atlas.mjs` (the art, straight off `img/tileset.png` +
-`img/pieces.png` + `img/tileset.json` — no data URIs; the in-house SVGs,
-the cracks and the classic set, are decoded off style.css's properties
-until the repack tool moves them into the PNG) and `js/pixelfont.mjs` (a
-3×5 font for the edge coordinates). Options → Look → **Renderer** (`dom` /
-`canvas`; `?renderer=canvas`; `options.renderer`) and **Scaling**
-(`integer` / `fill`; `?scaling=`); the change remounts the board live on
-the same position. While the canvas board is on, a diagnostics line under
+floor, why the debris image sat a sub-device-pixel off it, and why a
+slide shimmered off-grid. **The replacement was built behind a switch
+(milestone 1), the phone judged it fine on desktop and mobile, integer
+scaling included, and the DOM board was RETIRED the same day (milestone
+2, below).** `js/canvas-board.mjs` (`CanvasBoard` — main.mjs and the
+replay page drive it), `js/atlas.mjs` (the art, straight off
+`img/tileset.png` + `img/pieces.png` + `img/tileset.json` — no data URIs,
+no CSS; the in-house drawings, the cracks and the classic set, are the
+atlas's `classic` row, drawn by `phase0/lib/inhouse.mjs`) and
+`js/pixelfont.mjs` (a 3×5 font for the edge coordinates). Options → Look
+→ **Scaling** (`integer` / `fill`; `?scaling=`); the change remounts the
+board live on the same position. A diagnostics line underWhile the canvas board is on, a diagnostics line under
 the board says what the screen got — `canvas · dpr 2.625 · 1012×1032
 device px · k 6 (integer) · 96 px/tile · 36.6 css px` — and
 `__DCK.renderer` exposes it (`kind`, `info`, `diag`, `square(sq)`,
@@ -545,33 +558,21 @@ its backing size — the emulator, not the browser; the gate runs Chromium
 at ratio 1 only and says so. The real phone's screenshot is the final
 word for that path.
 
-**Gates.** `phase0/harness/canvas-parity.mjs` drives the game twice in
-headless Chromium at ratio 1 — the DOM board forced to an exact integer
-cell, the canvas board's buffer read straight off `__DCK.renderer` — and
-compares every square's 16×16 on the start position, after fourteen seeded
-plies with the gods hot (holes, cracks, breaches, ruins, doorways, debris,
-blood, the residue frames) and on the other two themes: **exact, 24 320 of
-24 320 tile pixels per snapshot** (the coordinate corners masked, the
-DOM's arrow SVG hidden — the same SVG rides above the canvas). Two draw-
-order rules fell out of getting there: the debris paints OVER a ruin's
-stub (the DOM's image is above the cell background) and the open doorway
-paints over the debris (the decor span is above the image). The arrows
-are left out of the comparison on both boards (the DOM's SVG hidden, the
-canvas's pixel arrows cleared).
-`phase0/harness/canvas-grid.mjs` is the device-pixel gate (the test
-pattern, nine ratio × width cases, integer and fill, Chromium + Firefox).
-`ui-smoke.mjs --renderer canvas` runs the live smoke on this board (the
-DOM-only probes skipped, the canvas's geometry, the diagnostics line and
-the live remount checked instead; every other check — tiles vs ledgers,
-residue, rungs, debris, the flight, the replay log — is renderer-neutral
-through `__DCK.marks.cell` and `__DCK.renderer.decor`), and the selftest
-asserts that both boards classify, decorate and mark every square alike
-on detached boards (no atlas: the data half), that the pixel arrows'
+**Gates.** `phase0/harness/canvas-grid.mjs` is the device-pixel gate (the
+test pattern, nine ratio × width cases, integer and fill, Chromium +
+Firefox). `ui-smoke.mjs` runs the live smoke on this board (every check
+reads the board through `__DCK.marks.cell`, `__DCK.renderer.decor` and
+the buffer's pixels; the board's geometry, the diagnostics line, the live
+Scaling remount, the atlas legend and the cracked wall's ink are checked
+directly), and the selftest asserts on detached boards (a stub atlas,
+nothing drawn) that the board classifies, decorates and marks every square
+as `classifyTerrain` says, orders its arrows quake < last < hints 3→2→1,
+clamps its placement dials and flips its geometry; the pixel arrows'
 compact labels, staircase steps and ink land as the shape says and a
-straight shaft is exactly the dial's width in rows (1–5), and that the
-DOM board's arrows take the width / opacity dials and re-render (44/44).
+straight shaft is exactly the dial's width in rows (1–5). (The parity gate
+against the DOM board and the piece-grid gate retired with that board.)
 `flicker-scan.mjs` records
-either renderer (`--renderer canvas`): in Playwright's Firefox at the
+the board: in Playwright's Firefox at the
 phone viewport, a 48-s canvas duel (25 quakes and captures) scanned at
 3.3 piece-scale and 18.4 debris-scale blinks per 10 s against the DOM
 board's 8.5 and 48.2 on a duel of its own (motion on — slides, bursts
@@ -585,12 +586,50 @@ look bad either"; one "big white rectangle flash", suspected of the SVG
 arrow overlay — hence the pixel arrows above.** **The second verdict
 (2026-09-07, the next session): "looks fine with canvas rendering on both
 desktop and mobile, including integer scaling" — THE DOM BOARD GOES.**
-The retirement is the next build and the camera the PR after it; what
-dies, what stays and the camera's shape are in CLAUDE.md § Phase 2's
-handoff. Until that PR lands, this section and "Art themes" describe
-both boards.
+
+**Milestone 2 — THE RETIREMENT (2026-09-07, the same session).** One PR
+of deletion plus one move, gated pixel for pixel: a guard script dumped
+the debris sampler's decoded sprites and the buffer's every square on six
+cases (the three themes, classic, a door set, another piece set; the
+start position and fourteen hot plies) before and after — every pack
+theme identical to the byte, zero page errors. What moved: the in-house
+drawings (the classic set + the four cracks) into the atlas as its
+`classic` row (`phase0/lib/inhouse.mjs` paints the same rects
+gen-sprites.mjs drew; exact against the browser's 16×16 decode of the
+SVGs), the repack tool reading back a missing pack from the committed
+atlas, the debris SAMPLER reading the atlas (`atlas.tileOf`, the board's
+own resolver, under the theme and door set the board wears; the ledger's
+sprite names are the old custom-property spellings, kept as keys), the
+options LEGEND as five 16×16 canvases painted off the atlas (main.mjs
+`paintLegend`), the promotion picker drawing the set's sprites, the
+residue ledger on `residueStep` (the replay page's rule, on the last
+paint's own ledgers) and the replay page mounting the canvas board. What
+went: `BoardUI` and `renderArrows`, `tiles.css` (160 KB), the tile rules
+and the `@sprites` block in `style.css`, `piecetiers.mjs` and the tier
+CSS, `gen-sprites.mjs`, `gen-piece-halves.mjs`, `lib/piecehalves.mjs`,
+`canvas-parity.mjs`, `piece-grid.mjs`, the flight's SVG sink, the
+Renderer option, the Piece-pixels modes and the three % dials, and the
+classic GLYPH piece set (text, not pixel art — an unknown set draws the
+default). One fix fell out: the canvas board had drawn the classic set's
+SVGs at their 150-px decode size (a viewBox-only SVG's intrinsic size),
+so a classic wall block spilled over nine squares; the atlas row is 16×16
+and the classic theme paints right. The `.board` container keeps its
+width formula and `data-theme` / `-pieces` / `-doors` (the atlas resolves
+the look from them); `renderer.set` takes the scaling alone (the old
+two-argument spelling still reads). Options saved by the DOM board
+(`renderer`, `piecePixels`, the % dials, `pieces: 'classic'`) are simply
+not read.
 
 ## Art themes (2026-09-03)
+
+> **Read with the Layout note above (2026-09-07):** the LOOKS below — the
+> packs, the palettes, the autotile cases, the skins and their variants,
+> the double doors, the props, the piece sets and the designer's verdicts
+> round by round — are canon and are what the canvas board paints, off the
+> atlas. The MECHANICS below — `tiles.css` custom properties, `[data-theme]`
+> cascades, cell classes as CSS selectors, `::before` tiers, measured row
+> rectangles, the piece-grid gate — are the retired DOM board's, kept as
+> the record of how each look was arrived at.
 
 Designer decision after shopping free tilesets: use all three, make 16×16
 the standard, mix and match, repack and credit. The board wears one of
@@ -616,9 +655,12 @@ the game uses are repacked by `phase0/harness/repack-tiles.mjs` from
 author's page named in `CREDITS.md` and drop the sheets there) into
 `img/tileset.png` (one row per theme, one column per role — the
 human-readable record of what was taken) + `img/tileset.json` (per-tile
-provenance) + `tiles.css` (the runtime: each tile as a PNG data-URI custom
-property under `[data-theme="…"]`, so any cell size stays pixel-exact —
-a background-position sheet bleeds at fractional scales) + `CREDITS.md`.
+provenance — the runtime's one source since 2026-09-07; `tiles.css`, the
+same pixels as data URIs for the DOM board, retired with it) +
+`CREDITS.md`. Without the packs on disk the tool READS BACK every theme's
+tiles from the committed atlas (as it has read back a missing piece pack
+since 2026-09-04), so the in-house `classic` row and new roles can be
+regenerated anywhere; only a new pack tile needs the pack.
 Every theme's floor is the same six bevelled flagstones from the Catacombs
 brown set (the designer's verdict: the only floor tiles that look good) —
 crypt wears them as drawn, hall and castle wear them RECOLOURED into their
@@ -894,7 +936,7 @@ painted URL), `paint(sq)` (the raw buffer), `frames()`, `busy`,
 **The ruin tiles lost their chips.** The stone flecks the ruin autotile used
 to bake in are the debris layer's now (a breach scatters the wall's own
 pixels, under the same dials as everything else): `RUIN.chips` is 0 in the
-repack tool and the committed `tiles.css` / `img/tileset.png` were rewritten
+repack tool and the committed `img/tileset.png` was rewritten
 by `phase0/harness/strip-ruin-chips.mjs` (isolated components of at most
 two pixels; it refuses anything larger; `--check` is part of the Node gate).
 The stubs, their faces and the open doorways are untouched.
