@@ -1436,6 +1436,41 @@ async function main() {
     return `windows ${results.join(' / ')} over a 24×18 world at the four facings; 35/35 squares and every visible cell hit-test back; the outside dims; lookAt scrolls`;
   });
 
+  // --- THE RUN SAVE (Phase 2 milestone 4b): one object per run — the floor,
+  // the army, the start, the turn list — round-trips; a stamp mismatch is
+  // refused with one line; the storage key holds one run.
+  await check('the run save: one object, a round trip, a refused stamp', async () => {
+    const { World, loadWorld } = await import('./world.mjs');
+    const { makePattern, spawnArmy, advance } = await import('./army.mjs');
+    const R = await import('./run.mjs');
+    const world = loadWorld({ schema: 2, id: 'w-run', map: ['########', '#......#', '#..@...#', '#..^...#', '########'], skin: ['........', '........', '........', '...K....', '........'], theme: 'hall', facing: 'n' });
+    const army = spawnArmy(world, makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }), world.start, world.start.facing, 'w');
+    const run = R.newRun({ seed: 7, worldId: world.id, world, army, build: 'selftest' });
+    if (run.schema !== R.RUN_SCHEMA || !run.start.world || !run.floors[world.id]) throw new Error('a new run carries the stamp, the start and the floor');
+    const plan = advance(world, army, { kind: 'step', dx: 1, dy: 0 });
+    if (!plan.ok) throw new Error('the step should plan');
+    R.recordTurn(run, { kind: 'step', dx: 1, dy: 0 }, 1);
+    R.updateRun(run, { world, army, turn: 1 });
+    const json = JSON.stringify(run);
+    const back = JSON.parse(json);
+    if (!R.checkRun(back).ok) throw new Error(`a saved run reads back: ${R.checkRun(back).reason}`);
+    const opened = R.openRun(back);
+    if (opened.army.king.f !== army.king.f || opened.army.king.r !== army.king.r || opened.army.facing !== army.facing || opened.world.rows().join() !== world.rows().join()) throw new Error('the floor and the army come back as they were');
+    if (back.turns.length !== 1 || back.turns[0].kind !== 'step' || back.turn !== 1) throw new Error('the turn list and the turn count ride along');
+    const bad = R.checkRun({ ...back, schema: 'dck-run/0', build: 'older' });
+    if (bad.ok || !/dck-run\/0/.test(bad.reason) || !/older/.test(bad.reason)) throw new Error(`a stamp mismatch is refused naming the build (${bad.reason})`);
+    if (R.checkRun(null).ok || R.checkRun({ schema: R.RUN_SCHEMA }).ok) throw new Error('nothing and a floorless object are refused');
+    const store = new Map();
+    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+    if (!R.saveRun(run, storage) || R.loadSavedRun(storage)?.id !== run.id) throw new Error('saveRun / loadSavedRun through the one key');
+    storage.setItem(R.RUN_KEY, '{"schema":"nope"}');
+    if (R.loadSavedRun(storage) !== null) throw new Error('a foreign object under the key reads as no run');
+    R.clearSavedRun(storage);
+    if (store.size !== 0) throw new Error('clearSavedRun clears');
+    void World;
+    return `${json.length} B round-trips; the stamp, the floor, the army, the start and the turn list all read back`;
+  });
+
   await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
     const host = document.createElement('div');
     const ui = new CanvasBoard(host, { files: 4, ranks: 5, atlas: STUB_ATLAS });

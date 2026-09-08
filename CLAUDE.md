@@ -247,8 +247,49 @@ step of the next milestone; per-theme edge-on door ART. **THE DESKTOP
 LOOK IS THE DESIGNER'S TO JUDGE ON THIS BUILD** (a 1920×1080 shot: the
 board 800×860 device px at k 5 in the left column, the panels a narrow
 text column on the right — functional, not designed).
-**HANDOFF (end of 2026-09-08, after milestone 3): NEXT IS THE WORLD +
-THE ARMY RULE — the third PR.** Its first step is the viewport: the
+**MILESTONE 4a + 4b ✅ built 2026-09-08 — THE WORLD, THE WINDOW, THE ARMY,
+THE WALK** (`play/README.md` § "The canvas board", milestones 4a and 4b;
+the layout list below names the modules). DECIDED WITH THE DESIGNER the
+same day, before the first line: EACH RUN HAS ITS OWN SAVE, one object
+(`play/js/run.mjs`, `dck-run/1`: the floor whole, the army, the start,
+the turn list — a run replays from its seed and inputs; ONE localStorage
+key; export / import as a file through the replay log's delivery path,
+`?save=<url>`), NO META PROGRESSION, NO BACKWARD COMPATIBILITY ("assume I
+do not give a single shit about backwards compatibility" — a stamp
+mismatch is refused with one line, no migrations; the replay log's own
+duel shape is untouched because the committed sample and its gates run
+on it); A ROTATION COSTS A MOVE (a wait with a turned pattern; the
+camera cuts to the new facing and the army reforms over the following
+turns); the rest of the discussion's defaults stood: the king never
+moves alone, a slot on blocked ground sends its piece to the nearest
+reachable floor cell (ties toward the king), friends pass the BFS and
+enemies and terrain do not, a diagonal king step between wall corners is
+allowed and watched, pawns push one square on a walk, the camera locks
+on the king and the world slides under him, the default zoom fits
+fifteen tiles across the short axis, the 3×2 kit is the walk's army
+(`?army=setup` for the knobs), no undo on the walk, a start marker in
+the map file (`@`, digits reserved for the enemy spawns), a 3×3 pad
+with wait in the middle. THE ENVIRONMENT IS THE WORLD: the Phase 1
+page's world IS the dealt arena (its crop the identity, no mirror
+exists — a flip is how a lab world is built); a world duel is a crop
+with the army's facing (4c). THE FIXTURE (`play/worlds/w01-the-
+undercroft`, 60×40, `phase0/harness/gen-worlds.mjs` carves it from a
+written plan) IS THE DESIGNER'S TO APPROVE from `world-shots.mjs`'s
+render; the phone verdict on the walk is the milestone's gate.
+**NEXT: 4c, THE BARRIER BY HAND** — a debug button drops the barrier on
+the army as it stands: the crop of the world under the army's facing
+(`world.mjs cropTransform` + `arenaFen`), the carried formation stamped
+in place (the pattern as it stands, molded to the crop; `dealMatchup`
+keeps dealing random armies for the setup screen and the labs), a
+dealt enemy army across the gap, the engine booted at page load, the
+duel's board written into the world's crop every ply (the board's one
+model), the walk resuming on the scarred floor; the debris ledger moves
+into the run save (today the walk's smash leaves no debris and the
+duel page's ledger is still per-stage in localStorage); no trigger rule
+and no band — the trigger is the conversation after that.
+
+**HANDOFF (end of 2026-09-08, after milestone 3): NEXT WAS THE WORLD +
+THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
 buffer becomes the screen's device size ÷ k in tiles plus a one-tile
 margin and the headroom row, painted from a WORLD grid through the
 camera's origin (canvas-board's `#origin(sq)` gains the origin offset;
@@ -1117,6 +1158,16 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
+- `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
+  (Phase 2 milestone 4b, 2026-09-08): brief §5.1's one movement rule as
+  a pure module (the pattern, the move generator on the world grid, the
+  BFS targets, the turn planner; Node gate `test-army.mjs`), the run save
+  (one object per run, `dck-run/1`, export / import as a file, no
+  backward compatibility), and the walk-around fixtures (`w01-the-
+  undercroft` hand-built 60×40, `w02-stress-100` seeded); main.mjs § THE
+  WALK is the page (`#screen-walk`: the pad, the turns, the zoom, the
+  save; `?world=` / `?run=resume` / `?save=`); `play/README.md` § "The
+  canvas board", milestone 4b.
 - `play/js/world.mjs` — THE WORLD (Phase 2 milestone 4a, 2026-09-08): the
   floor's data (any size, stage schema 2 with `@` the start and digits the
   enemy spawns; terrain / pieces / skins / the Director's layers; a save
@@ -1199,6 +1250,9 @@ node harness/repack-tiles.mjs       # rebuild play/img/tileset.png + tileset.jso
 node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy (./node_modules/.bin/playwright install firefox once)
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
+node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
+node harness/gen-worlds.mjs          # the walk-around fixtures in play/worlds/ (w01 hand-built 60×40, w02 a seeded 100×100) + their manifest; every floor cell must be reachable
+node harness/world-shots.mjs         # each world painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (for the eye)
 node harness/facing-walk.mjs --shots # every arena × facings 1–3 on the bare lab page: the camera's paint must equal the world itself rotated, painted north-up
 node harness/camera-guard.mjs dump <dir> && node harness/camera-guard.mjs compare <dir> --allow door,turned  # the renderer's paint before/after a change: record the inputs + hashes on the build before (a pristine worktree), replay them on the build after
 node harness/camera-shots.mjs        # the desktop layout at 1920×1080 / 1280×720, the phone at the four facings, a door crop — for the eye

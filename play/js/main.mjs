@@ -49,6 +49,9 @@ import { normFacing, facingName } from './camera.mjs'; // THE CAMERA's facing (2
 import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
+import { loadWorld } from './world.mjs';
+import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves } from './army.mjs';
+import { newRun, updateRun, recordTurn, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
 import { DebrisLedger, identityTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
@@ -110,9 +113,14 @@ const app = {
   // saved: the turn buttons wait for the army (brief §5.1), so today only
   // the debug turn buttons and `?facing=` move it.
   view: { facing: 0 },
+  // THE WALK (Phase 2 milestone 4b, 2026-09-08): the live run — { run, world,
+  // army, zoom, selected, targets, snapped, busy, turn } — and the world
+  // files the setup screen lists (play/worlds/manifest.json).
+  walk: null,
+  worlds: [],
   duel: null,
   selectedSquare: null, // during play: player's selected from-square
-  phase: 'boot', // boot | setup | preview | playing | ended | error
+  phase: 'boot', // boot | setup | preview | playing | ended | walk | error
   busy: false, // gates input while the engine thinks / animations run
   enginePending: null, // whenQuiet() of an abandoned duel's in-flight search
   duelsOnEngine: 0, // rule 6: recycle the instance well before ~40 games
@@ -503,7 +511,7 @@ function hashCoordsOf(sq) {
 /** Mount the board on `el` (canvas-board.mjs — the one renderer). It
  *  reports its geometry to the diagnostics line under the board. */
 function createBoard(el, opts) {
-  const ui = new CanvasBoard(el, { ...opts, facing: facingFor(), fit: fitFor(), viewport: viewportFor(), zoom: zoomFor() ?? 4, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+  const ui = new CanvasBoard(el, { facing: facingFor(), fit: fitFor(), viewport: viewportFor(), zoom: zoomFor() ?? 4, ...opts, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
   app.view.facing = ui.facing;
   syncFacingUI();
   void ui.ready.then(() => renderDiag(ui.renderInfo));
@@ -514,7 +522,7 @@ function createBoard(el, opts) {
  *  device-pixel size, the scale and whether it is the integer step or the
  *  fill fallback. */
 function renderDiag(info) {
-  const el = $('render-diag');
+  const el = app.phase === 'walk' ? $('walk-diag') : $('render-diag');
   if (!el) return;
   const ui = app.boardUI;
   if (!info || !ui) {
@@ -524,6 +532,7 @@ function renderDiag(info) {
   }
   el.hidden = false;
   el.textContent = ui.diag;
+  if (app.phase === 'walk') walkStatus();
 }
 
 /** The mounted board no longer matches the options (the scaling changed):
@@ -533,6 +542,7 @@ function remountBoard() {
   const ui = app.boardUI;
   if (!ui) return;
   if (ui.scaling === scalingFor()) return;
+  if (app.phase === 'walk') return void mountWalkBoard();
   if (app.busy && (app.phase === 'playing')) return; // never under an animation; the next mount takes it
   const { files, ranks } = ui;
   if (app.phase === 'preview' && app.previewPaint) {
@@ -578,7 +588,7 @@ function themeFor(stage) {
 /** Stamp the current theme on the board and repaint the options legend
  *  (drawn off the same atlas, so it follows the art). */
 function applyTheme() {
-  const theme = themeFor(app.session?.deal?.stage ?? currentStage());
+  const theme = themeFor(app.phase === 'walk' && app.walk ? app.walk.world : app.session?.deal?.stage ?? currentStage());
   app.boardUI?.setTheme(theme);
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
@@ -1738,12 +1748,48 @@ async function boot() {
     app.phase = 'error';
     return;
   }
+  try {
+    const res = await fetch('worlds/manifest.json');
+    if (res.ok) {
+      const manifest = await res.json();
+      app.worlds = (manifest.worlds ?? []).filter((w) => { try { loadWorld(w); return true; } catch (e) { log(bootLog, `world ${w.id}: ${e.message}`, 'bad'); return false; } });
+      log(bootLog, `${app.worlds.length} worlds loaded`, 'ok');
+    }
+  } catch (e) {
+    log(bootLog, `worlds manifest: ${e.message}`, 'bad');
+  }
   applySetupParams();
   renderStageList();
+  renderWorldList();
   renderSidePanels();
   syncStagePicker();
   app.phase = 'setup';
   setStatus('pick a stage');
+
+  // THE WALK's doors: `?save=<url>` imports a run file, `?run=resume` picks up
+  // the saved run, `?world=<id>` begins a run on that world.
+  const saveUrl = params.get('save');
+  if (saveUrl) {
+    try {
+      const res = await fetch(saveUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await importRun(await res.json());
+      return;
+    } catch (e) {
+      log(bootLog, `?save=: ${e.message}`, 'bad');
+    }
+  }
+  if (params.get('run') === 'resume') {
+    const saved = loadSavedRun();
+    if (saved) return void beginRun(null, { resume: saved });
+    log(bootLog, 'no saved run to resume', 'bad');
+  }
+  const wantedWorld = params.get('world');
+  if (wantedWorld) {
+    const w = app.worlds.find((x) => x.id === wantedWorld);
+    if (w) return void beginRun(w);
+    log(bootLog, `?world=${wantedWorld}: no such world`, 'bad');
+  }
 
   const wantedStage = params.get('stage');
   if (wantedStage) {
@@ -2016,6 +2062,7 @@ function redeal() {
 function showScreen(name) {
   $('screen-setup').hidden = name !== 'setup';
   $('screen-duel').hidden = name !== 'duel';
+  $('screen-walk').hidden = name !== 'walk';
   $('btnBack').hidden = name === 'setup';
 }
 
@@ -2998,6 +3045,7 @@ $('supSeed').addEventListener('change', (e) => {
   refreshLiveDeal();
 });
 $('btnBack').addEventListener('click', () => {
+  if (app.phase === 'walk') return void walkLeave();
   const probesQuiet = cancelIdleProbes(); // cheat + eval probes are in-flight searches too
   evalProbe.queue.length = 0;
   autosaveLog(); // an abandoned duel is still a saved log
@@ -3216,6 +3264,339 @@ $('btnMenu').addEventListener('click', () => {
   $('btnBack').click();
 });
 
+// ------------------------------------------------------------------ THE WALK
+// (Phase 2 milestone 4b, 2026-09-08 — brief §5.1's one movement rule on a
+// hand-built floor; play/js/army.mjs is the rule, world.mjs the floor,
+// run.mjs the save; the board is a WINDOW over the world at a fixed zoom,
+// the king centred, the world sliding under him.) The army IS the avatar:
+// the pad or the keys step the king, the two turns cost a move, a wait
+// passes one, a tapped piece makes its own move after a snap-zoom. Every
+// turn saves the run; the save exports and imports as a file. No enemies,
+// no line of sight, no trigger yet — the walk-around build the phone judges.
+
+const WALK_STEP_MS = 140; // one turn's slide and pan
+const WALK_MIN_TILES = 15; // the default zoom fits at least this many tiles across the short axis
+const WALK_TAP_ZOOM_MIN = 6; // the snap-zoom on a tapped piece: at least this k
+const PIECE_NAMES = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+const WALK_KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] }; // the opening kit (brief §4.2), the walk's default army
+
+/** The default zoom for the walk's box: the largest whole step that fits
+ *  WALK_MIN_TILES across the shorter axis (a phone lands on k 4). */
+function walkZoomDefault() {
+  const el = $('walk-board');
+  const dpr = window.devicePixelRatio || 1;
+  const r = el.getBoundingClientRect();
+  const short = Math.min(r.width || 360, r.height || r.width || 360) * dpr;
+  return Math.max(1, Math.min(12, Math.floor(short / (WALK_MIN_TILES * 16))));
+}
+
+/** The first floor cell, for a world without a start marker. */
+function firstFloor(world) {
+  for (let r = world.ranks - 1; r >= 0; r--) for (let f = 0; f < world.files; f++) if (world.isFloor(f, r)) return { f, r, facing: 0 };
+  throw new Error('a world with no floor');
+}
+
+/**
+ * Begin a run on a world file (the setup screen's knobs deal the player's
+ * army: the White side's width / budget / pieces / archetype, the master
+ * seed) or resume a saved one.
+ */
+function beginRun(worldJson, { resume = null } = {}) {
+  let world, army, run;
+  try {
+    if (resume) {
+      run = resume;
+      ({ world, army } = openRun(run));
+    } else {
+      world = loadWorld(worldJson);
+      const seed = setup.seed | 0 || 1;
+      // The player's army: the 3×2 opening kit (brief §4.2: K + R + N and
+      // three pawns) unless `?army=setup` asks for the setup screen's White
+      // knobs (any width, budget or pieces, archetype).
+      const spec = params.get('army') === 'setup' ? sideSpec('white') : { spec: WALK_KIT, archetype: 'heavies-deep' };
+      const pattern = makePattern(spec.spec, { archetype: spec.archetype, seed });
+      const at = world.start ?? firstFloor(world);
+      army = spawnArmy(world, pattern, { f: at.f, r: at.r }, at.facing ?? 0, 'w');
+      run = newRun({ seed, worldId: world.id, world, army, build: APP_BUILD, options: { army: params.get('army') === 'setup' ? { ...setup.white } : 'kit' } });
+      saveRun(run);
+    }
+  } catch (e) {
+    $('run-note').textContent = `✗ ${e.message}`;
+    setStatus('the run could not begin');
+    return null;
+  }
+  if (app.boardUI) { app.boardUI.destroy(); app.boardUI = null; }
+  app.walk = { run, world, army, zoom: zoomFor() ?? null, selected: null, targets: [], snapped: null, busy: false, turn: run.turn | 0, note: '' };
+  app.phase = 'walk';
+  app.busy = false;
+  showScreen('walk');
+  $('title').textContent = world.title || world.id;
+  mountWalkBoard();
+  setStatus(resume ? `resumed at turn ${run.turn}` : 'walk');
+  walkStatus();
+  return app.walk;
+}
+
+/** Mount the board on the walk screen: the world, no crop, fit window,
+ *  the screen viewport, the king centred. */
+function mountWalkBoard() {
+  const W = app.walk;
+  if (!W) return;
+  if (app.boardUI) app.boardUI.destroy();
+  app.boardUI = createBoard($('walk-board'), { world: W.world, crop: false, fit: 'window', viewport: 'screen', zoom: W.zoom ?? 4, facing: W.army.facing, showCoords: false, onCellTap: onWalkCellTap });
+  app.view.facing = W.army.facing;
+  syncFacingUI();
+  if (!W.zoom) {
+    W.zoom = walkZoomDefault();
+    app.boardUI.setZoom(W.zoom);
+  }
+  app.boardUI.dimOutside = false;
+  app.boardUI.lookAt(W.army.king.f, W.army.king.r);
+  app.boardUI.setInteractive(true);
+  applyTheme();
+  void app.boardUI.ready.then(() => app.boardUI?.lookAt(W.army.king.f, W.army.king.r));
+}
+
+function walkPieceName(ch) {
+  return PIECE_NAMES[ch.toLowerCase()] ?? ch;
+}
+
+/** The walk's status line: the turn, the facing, the zoom, a note. */
+function walkStatus(note = null) {
+  const W = app.walk;
+  if (!W) return;
+  if (note !== null) W.note = note;
+  const facing = ['north', 'east', 'south', 'west'][W.army.facing];
+  $('walk-facing').textContent = facing;
+  $('walk-zoom').textContent = `k ${app.boardUI?.zoom ?? W.zoom ?? '?'}`;
+  $('walk-status').textContent = `turn ${W.turn} · facing ${facing} · ${W.army.pieces.length} pieces · king ${W.army.king.f},${W.army.king.r}${W.note ? ` · ${W.note}` : ''}`;
+}
+
+/** Save the run as it stands (after every turn; on leaving). */
+function walkSave() {
+  const W = app.walk;
+  if (!W) return;
+  updateRun(W.run, { world: W.world, army: W.army, turn: W.turn });
+  saveRun(W.run);
+}
+
+/**
+ * One input → one turn: plan (army.mjs), apply, record, then the motion —
+ * a facing change is a CUT, the arrivals slide in whole native pixels
+ * while the camera glides to the king — and the save. A refused input
+ * (a wall, a held way) costs nothing and says why.
+ */
+async function walkInput(input) {
+  const W = app.walk;
+  if (!W || app.phase !== 'walk' || W.busy) return null;
+  const plan = planTurn(W.world, W.army, input);
+  if (!plan.ok) {
+    walkStatus(plan.reason === 'blocked' ? 'blocked' : plan.reason);
+    return plan;
+  }
+  W.busy = true;
+  try {
+    const before = new Map(W.army.pieces.map((p) => [p.id, p.ch]));
+    applyTurn(W.world, W.army, plan);
+    W.turn += 1;
+    recordTurn(W.run, input, W.turn);
+    walkClearSelection(false);
+    const ui = app.boardUI;
+    if (plan.facing !== ui.facing) {
+      ui.setFacing(plan.facing);
+      app.view.facing = plan.facing;
+      syncFacingUI();
+    }
+    ui.refresh();
+    const ms = FX(WALK_STEP_MS);
+    const arrivals = plan.moves.map((m) => ({ from: m.from, to: m.to, ch: W.army.letter(before.get(m.id) ?? 'P') }));
+    const king = W.army.king;
+    await Promise.all([ui.animateArrivals(arrivals, { ms }), ui.panTo(king.f, king.r, ms)]);
+    const smashed = plan.moves.find((m) => m.capture === 'furniture');
+    walkStatus(plan.individual ? `${walkPieceName(before.get(plan.moves[0].id) ?? 'p')} ${smashed ? 'smashes the crate' : 'moves'}` : input.kind === 'turn' ? `turned ${input.dir < 0 ? 'left' : 'right'}` : '');
+    walkSave();
+  } finally {
+    W.busy = false;
+  }
+  return plan;
+}
+
+/** A tap on the world: select one of our pieces (a snap-zoom onto it, its
+ *  moves marked), tap a target to move it, tap elsewhere to let go. */
+function onWalkCellTap(f, r) {
+  const W = app.walk;
+  if (!W || W.busy) return;
+  const ui = app.boardUI;
+  if (W.selected) {
+    const t = W.targets.find((x) => x.f === f && x.r === r);
+    if (t) {
+      const id = W.selected;
+      walkClearSelection(true);
+      void walkInput({ kind: 'move', id, to: { f, r } });
+      return;
+    }
+  }
+  const p = W.army.pieceAt(f, r);
+  if (p && p !== W.army.king && p.id !== W.selected) {
+    W.selected = p.id;
+    W.targets = pieceMoves(W.world, W.army, p, { captures: true });
+    ui.setCellMarks({ selected: { f, r }, targets: W.targets });
+    if (W.snapped === null) {
+      W.snapped = W.zoom;
+      ui.setZoom(Math.max(W.zoom, WALK_TAP_ZOOM_MIN));
+    }
+    ui.lookAt(f, r);
+    walkStatus(`${walkPieceName(p.ch)}: ${W.targets.length} moves — tap one`);
+    return;
+  }
+  walkClearSelection(true);
+  walkStatus('');
+}
+
+function walkClearSelection(recentre) {
+  const W = app.walk;
+  const ui = app.boardUI;
+  if (!W || !ui) return;
+  W.selected = null;
+  W.targets = [];
+  ui.setCellMarks({});
+  if (W.snapped !== null) {
+    ui.setZoom(W.snapped);
+    W.snapped = null;
+  }
+  if (recentre) ui.lookAt(W.army.king.f, W.army.king.r);
+}
+
+/** The zoom in whole steps (a CUT), the king kept centred. */
+function walkZoom(delta) {
+  const W = app.walk;
+  if (!W || !app.boardUI) return;
+  walkClearSelection(false);
+  W.zoom = Math.max(1, Math.min(12, (W.zoom ?? 4) + delta));
+  app.boardUI.setZoom(W.zoom);
+  app.boardUI.lookAt(W.army.king.f, W.army.king.r);
+  walkStatus();
+}
+
+/** Leave the walk for the setup screen; the run stays saved. */
+function walkLeave() {
+  if (!app.walk) return;
+  walkSave();
+  app.walk = null;
+  if (app.boardUI) { app.boardUI.destroy(); app.boardUI = null; }
+  app.phase = 'setup';
+  showScreen('setup');
+  $('title').textContent = 'Dungeon Crawler King';
+  renderWorldList();
+  setStatus('pick a stage');
+}
+
+/** The run's save file, delivered the replay log's way (share / download / clipboard). */
+async function exportRun() {
+  const W = app.walk;
+  const run = W ? (walkSave(), W.run) : loadSavedRun();
+  if (!run) return null;
+  const how = await deliverLog(run, { filename: runFileName(run) });
+  if (W) walkStatus(how === 'downloaded' ? 'save downloaded' : how === 'shared' ? 'save shared' : how === 'copied' ? 'save copied' : how);
+  return how;
+}
+
+/** A parsed save file → the saved run → the walk. Refused with one line on a stamp mismatch. */
+async function importRun(obj) {
+  const check = checkRun(obj);
+  if (!check.ok) {
+    $('run-note').textContent = `✗ ${check.reason}`;
+    setStatus('not a save this build reads');
+    return false;
+  }
+  saveRun(obj);
+  if (app.phase === 'walk') walkLeave();
+  return !!beginRun(null, { resume: obj });
+}
+
+/** The setup screen's worlds: a card per world file (a thumbnail of its
+ *  terrain), the resume card when a run is saved, the import button. */
+function renderWorldList() {
+  const list = $('world-list');
+  if (!list) return;
+  list.textContent = '';
+  for (const json of app.worlds) {
+    const card = document.createElement('button');
+    card.className = 'world-card';
+    card.dataset.worldId = json.id;
+    const cv = document.createElement('canvas');
+    cv.width = json.map[0].length;
+    cv.height = json.map.length;
+    const g = cv.getContext('2d');
+    json.map.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        g.fillStyle = ch === '#' || ch === '*' ? '#6d6a63' : ch === '^' ? '#9a6a3a' : ch === '@' ? '#f2c14e' : '#26262c';
+        g.fillRect(x, y, 1, 1);
+      }
+    });
+    const title = document.createElement('span');
+    title.className = 'world-title';
+    title.textContent = json.title ?? json.id;
+    const dims = document.createElement('span');
+    dims.className = 'world-dims';
+    dims.textContent = `${json.map[0].length}×${json.map.length} · ${json.theme ?? 'classic'}`;
+    card.append(cv, title, dims);
+    card.title = json.notes ?? '';
+    card.addEventListener('click', () => beginRun(json));
+    list.appendChild(card);
+  }
+  const saved = loadSavedRun();
+  const resume = $('btnRunResume');
+  resume.hidden = !saved;
+  if (saved) resume.textContent = `Resume: ${saved.worldId} · turn ${saved.turn}`;
+  $('world-list-wrap').hidden = !app.worlds.length && !saved;
+}
+
+$('btnRunResume').addEventListener('click', () => {
+  const saved = loadSavedRun();
+  if (saved) beginRun(null, { resume: saved });
+});
+$('btnRunImport').addEventListener('click', () => $('runFile').click());
+$('runFile').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    await importRun(JSON.parse(await file.text()));
+  } catch (err) {
+    $('run-note').textContent = `✗ ${err.message}`;
+  }
+});
+$('btnRunExport').addEventListener('click', () => void exportRun());
+for (const b of $('walk-pad').querySelectorAll('button[data-dx]')) {
+  b.addEventListener('click', () => void walkInput({ kind: 'step', dx: parseInt(b.dataset.dx, 10), dy: parseInt(b.dataset.dy, 10) }));
+}
+$('btnWalkWait').addEventListener('click', () => void walkInput({ kind: 'wait' }));
+$('btnWalkTurnL').addEventListener('click', () => void walkInput({ kind: 'turn', dir: -1 }));
+$('btnWalkTurnR').addEventListener('click', () => void walkInput({ kind: 'turn', dir: 1 }));
+$('btnZoomIn').addEventListener('click', () => walkZoom(1));
+$('btnZoomOut').addEventListener('click', () => walkZoom(-1));
+document.addEventListener('keydown', (e) => {
+  if (app.phase !== 'walk' || !app.walk) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  if (!$('options').hidden) return;
+  const k = e.key;
+  const steps = { ArrowUp: [0, 1], w: [0, 1], W: [0, 1], ArrowDown: [0, -1], s: [0, -1], S: [0, -1], ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0], ArrowRight: [1, 0], d: [1, 0], D: [1, 0], 7: [-1, 1], 8: [0, 1], 9: [1, 1], 4: [-1, 0], 6: [1, 0], 1: [-1, -1], 2: [0, -1], 3: [1, -1] };
+  let input = null;
+  if (steps[k]) input = { kind: 'step', dx: steps[k][0], dy: steps[k][1] };
+  else if (k === 'q' || k === 'Q') input = { kind: 'turn', dir: -1 };
+  else if (k === 'e' || k === 'E') input = { kind: 'turn', dir: 1 };
+  else if (k === ' ' || k === '5' || k === 'x' || k === 'X') input = { kind: 'wait' };
+  else if (k === '+' || k === '=') { walkZoom(1); e.preventDefault(); return; }
+  else if (k === '-' || k === '_') { walkZoom(-1); e.preventDefault(); return; }
+  else if (k === 'Escape') { walkClearSelection(true); walkStatus(''); return; }
+  if (!input) return;
+  e.preventDefault();
+  void walkInput(input);
+});
+
 // Test hook (Playwright E2E drives the game through this).
 window.__DCK = {
   get app() {
@@ -3355,6 +3736,28 @@ window.__DCK = {
    *  scale k, integer or fill), the buffer's pixels, the arrows it draws,
    *  the atlas's tiles and the device-pixel gate's test pattern. `kind` is
    *  always 'canvas' since the DOM board's retirement (2026-09-07). */
+  /** THE WALK (milestone 4b): drive a run — begin(worldId) / resume / input / select / zoom / export / import / leave; read its state. */
+  walk: {
+    begin: (worldId) => { const w = app.worlds.find((x) => x.id === worldId); return w ? !!beginRun(w) : false; },
+    resume: () => { const saved = loadSavedRun(); return saved ? !!beginRun(null, { resume: saved }) : false; },
+    input: (input) => walkInput(input),
+    select: (f, r) => onWalkCellTap(f, r),
+    zoom: (k = null) => (k === null ? app.walk?.zoom ?? null : (walkZoom(k - (app.walk?.zoom ?? 0)), app.walk?.zoom ?? null)),
+    export: () => (app.walk ? (walkSave(), JSON.parse(JSON.stringify(app.walk.run))) : loadSavedRun()),
+    import: (obj) => importRun(obj),
+    leave: () => walkLeave(),
+    saved: () => loadSavedRun(),
+    clear: () => clearSavedRun(),
+    get state() {
+      const W = app.walk;
+      if (!W) return null;
+      return { worldId: W.world.id, turn: W.turn, facing: W.army.facing, king: { ...W.army.king }, pieces: W.army.pieces.map((p) => ({ ...p })), zoom: W.zoom, selected: W.selected, targets: W.targets.map((t) => ({ ...t })), busy: W.busy, rows: W.world.rows() };
+    },
+    get busy() {
+      return !!app.walk?.busy;
+    },
+    schema: RUN_SCHEMA,
+  },
   renderer: {
     get kind() {
       return app.boardUI?.kind ?? null;

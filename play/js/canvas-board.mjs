@@ -205,11 +205,15 @@ export class CanvasBoard {
     // The board's state, all data: the world, the crop, what marks it wears.
     this.fen = null;
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
+    this.cellMarks = { selected: null, targets: new Map() }; // the walk's (setCellMarks)
     this.debrisBufs = new Map(); // cell index → 16×16 RGBA in WORLD orientation (the test surface: the buffer the cell wears)
     this.debrisCanvas = new Map(); // cell index → a 16×16 canvas of it, turned to the screen
     this.fx = new Map(); // sq → { kind, t0, ms, hold, done }
     this.slides = []; // { from, to, letter, t0, ms, fade, victimLetter }
     this.hidden = new Set(); // squares whose sprite is hidden (a shatter, a slide's source)
+    this.hiddenCells = new Set(); // world cells whose sprite is hidden (an arrival in flight)
+    this.cellSlides = []; // the walk's arrivals: { from, to, ch, t0, ms }
+    this.pan = null; // the camera gliding: { from, to, t0, ms, cell }
     this.flight = null; // the flight's pixels this frame: [{ rgb, a, x, y }]
     this.rumbling = null; // { t0, ms }
     this.testPattern = false;
@@ -259,11 +263,12 @@ export class CanvasBoard {
    *  world's size when none). Rebuilds the square table and the layout. */
   #setWorld(world, crop) {
     this.world = world;
-    this.crop = crop ?? identityTransform(world.files, world.ranks);
-    this.files = this.crop.files;
-    this.ranks = this.crop.ranks;
-    this.container.style.setProperty('--files', this.files);
-    this.container.style.setProperty('--ranks', this.ranks);
+    // `crop: false` — no arena at all (the walk); undefined / null the identity.
+    this.crop = crop === false ? null : crop ?? identityTransform(world.files, world.ranks);
+    this.files = this.crop ? this.crop.files : 0;
+    this.ranks = this.crop ? this.crop.ranks : 0;
+    this.container.style.setProperty('--files', this.files || world.files);
+    this.container.style.setProperty('--ranks', this.ranks || world.ranks);
     // sq → { f, rank, cell: { f, r }, idx } for the crop's squares (.has / .get: the surface the callers read).
     this.cells = new Map();
     for (let rank = 1; rank <= this.ranks; rank++) {
@@ -290,7 +295,10 @@ export class CanvasBoard {
     this.debrisCanvas.clear();
     this.fx.clear();
     this.hidden.clear();
+    this.hiddenCells.clear();
     this.slides = [];
+    this.cellSlides = [];
+    this.pan = null;
     this.#setWorld(world, crop);
     this.#allocBuffer();
     this.#resize();
@@ -299,7 +307,7 @@ export class CanvasBoard {
 
   /** The crop alone (the same world): where the arena sits and which way. */
   setCrop(crop) {
-    this.#setWorld(this.world, crop ? cropTransform({ ...crop, worldFiles: this.world.files, worldRanks: this.world.ranks }) : null);
+    this.#setWorld(this.world, crop === false ? false : crop ? cropTransform({ ...crop, worldFiles: this.world.files, worldRanks: this.world.ranks }) : null);
     this.#allocBuffer();
     this.#resize();
     this.invalidate();
@@ -424,7 +432,7 @@ export class CanvasBoard {
 
   /** The crop's rectangle on the screen grid: the bounding box of its four corners. */
   #layout() {
-    const tx = this.crop;
+    const tx = this.crop ?? { wf: 0, wr: 0, w: this.world.files, h: this.world.ranks };
     const corners = [[tx.wf, tx.wr], [tx.wf + tx.w - 1, tx.wr], [tx.wf, tx.wr + tx.h - 1], [tx.wf + tx.w - 1, tx.wr + tx.h - 1]].map(([f, r]) => this.#tileOf(f, r));
     const col0 = Math.min(...corners.map((c) => c.col)), col1 = Math.max(...corners.map((c) => c.col));
     const row0 = Math.min(...corners.map((c) => c.row)), row1 = Math.max(...corners.map((c) => c.row));
@@ -531,7 +539,7 @@ export class CanvasBoard {
     if (!(w > 0)) return;
     this.headroom = this.#headroomFor();
     const cropW = this.boardW, cropH = this.boardH + this.headroom;
-    const windowFit = this.fit === 'window' && h > 0;
+    const windowFit = (this.fit === 'window' || !this.crop) && h > 0;
     const boxMode = windowFit || (this.fit === 'box' && h >= cropH);
     this.boxMode = boxMode;
     let k;
@@ -618,7 +626,7 @@ export class CanvasBoard {
       viewport: this.viewport,
       zoom: this.zoom,
       window: { ...this.win }, // the buffer's tiles on the world's screen grid
-      crop: { ...this.cropBox, wf: this.crop.wf, wr: this.crop.wr, facing: this.crop.facing },
+      crop: this.crop ? { ...this.cropBox, wf: this.crop.wf, wr: this.crop.wr, facing: this.crop.facing } : null,
       world: { files: this.world.files, ranks: this.world.ranks, cols: this.worldCols, rows: this.worldRows },
       blit: { ...this.blitRect },
       ready: !!this.atlas,
@@ -658,7 +666,7 @@ export class CanvasBoard {
   /** The arena square on a screen tile, or null (off the world, outside the crop). */
   #squareAt(col, row) {
     const c = this.#cellAt(col, row);
-    if (!c) return null;
+    if (!c || !this.crop) return null;
     const a = worldToArena(this.crop, c.f, c.r);
     return a ? squareName(a.f, a.r + 1) : null;
   }
@@ -684,7 +692,7 @@ export class CanvasBoard {
   /** The square under a client point (the inverse of #origin), or null. */
   squareAtPoint(clientX, clientY) {
     const c = this.cellAtPoint(clientX, clientY);
-    if (!c) return null;
+    if (!c || !this.crop) return null;
     const a = worldToArena(this.crop, c.f, c.r);
     return a ? squareName(a.f, a.r + 1) : null;
   }
@@ -795,6 +803,7 @@ export class CanvasBoard {
   /** Render pieces + terrain from a FEN and the ledgers: written into the
    *  world through the crop, then the window repaints. */
   setPosition(fen, { holes = EMPTY, godCrates = EMPTY, skins = {}, opened = EMPTY, rubble = EMPTY, debris = null } = {}) {
+    if (!this.crop) return; // no arena on a walk: the world is written by the army (refresh)
     this.fen = fen;
     this.world.writeArena(this.crop, fen, { holes, godCrates, opened, rubble, skins });
     this.#reclassify();
@@ -807,6 +816,12 @@ export class CanvasBoard {
   /** The world changed under the board (a walk's turn, an edit): reclassify and repaint. */
   refresh() {
     this.#reclassify();
+    this.invalidate();
+  }
+
+  /** Cell-keyed marks for the walk: the selected cell, its targets [{ f, r, capture }]. */
+  setCellMarks({ selected = null, targets = [] } = {}) {
+    this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])) };
     this.invalidate();
   }
 
@@ -1072,6 +1087,40 @@ export class CanvasBoard {
     }));
   }
 
+  /**
+   * THE WALK's motion (milestone 4b): the world already holds the pieces on
+   * their NEW cells; each arrival slides from its old cell to the new one
+   * in whole native pixels while the new cell's sprite is hidden. `moves`
+   * = [{ from: { f, r }, to: { f, r }, ch }]. Resolves when they land.
+   */
+  async animateArrivals(moves, { ms = 200 } = {}) {
+    if (!ms || !moves.length) return;
+    const t0 = now();
+    const list = moves.map((m) => ({ ...m, t0, ms }));
+    this.cellSlides = [...(this.cellSlides ?? []), ...list];
+    for (const m of list) this.hiddenCells.add(this.world.idx(m.to.f, m.to.r));
+    this.#run();
+    await wait(ms);
+    this.cellSlides = this.cellSlides.filter((x) => !list.includes(x));
+    for (const m of list) this.hiddenCells.delete(this.world.idx(m.to.f, m.to.r));
+    this.invalidate();
+  }
+
+  /** Glide the focus to a world cell over `ms` (the world sliding under the
+   *  king on a walk); 0 ms is a cut. Resolves when it lands. */
+  async panTo(f, r, ms = 200) {
+    const to = this.#focusOf({ f, r });
+    if (!ms || !this.focus) {
+      this.lookAt(f, r);
+      return;
+    }
+    this.pan = { from: { ...this.focus }, to, t0: now(), ms, cell: { f, r } };
+    this.#run();
+    await wait(ms);
+    this.pan = null;
+    this.lookAt(f, r);
+  }
+
   /** The quake's rumble: the blit jitters by whole native pixels for `ms`
    *  (main.mjs calls it on the quake's first beat). */
   rumble(ms) {
@@ -1090,7 +1139,7 @@ export class CanvasBoard {
 
   get animating() {
     const t = now();
-    if (this.slides.length || this.flight) return true;
+    if (this.slides.length || this.flight || this.cellSlides.length || this.pan) return true;
     if (this.rumbling && t < this.rumbling.t0 + this.rumbling.ms) return true;
     for (const f of this.fx.values()) if (!f.done && t < f.t0 + f.ms) return true;
     return false;
@@ -1162,6 +1211,12 @@ export class CanvasBoard {
 
   #frame() {
     if (this.destroyed) return;
+    if (this.pan) {
+      const u = Math.min(1, (now() - this.pan.t0) / this.pan.ms);
+      const e = ease(u);
+      this.focus = { x: Math.round(this.pan.from.x + (this.pan.to.x - this.pan.from.x) * e), y: Math.round(this.pan.from.y + (this.pan.to.y - this.pan.from.y) * e) };
+      this.#fitWindow();
+    }
     this.#snap();
     this.#paint();
     this.#blit();
@@ -1200,7 +1255,9 @@ export class CanvasBoard {
     const cropY = y + (this.headroom + (this.cropBox.row0 - this.win.row0) * T - b.sy) * k;
     const cw = this.boardW * k, ch = this.boardH * k;
     g.fillStyle = '#000';
-    if (this.#cropIsWindow) {
+    if (!this.crop) {
+      g.drawImage(this.buf, b.sx, b.sy, b.sw, b.sh, x, y, b.sw * k, b.sh * k);
+    } else if (this.#cropIsWindow) {
       // The buffer is the crop: the frame under it, showing at its rim.
       g.fillRect(cropX - fw, cropY - fw, cw + 2 * fw, ch + 2 * fw);
       g.drawImage(this.buf, b.sx, b.sy, b.sw, b.sh, x, y, b.sw * k, b.sh * k);
@@ -1433,7 +1490,7 @@ export class CanvasBoard {
 
   /** Is a world cell inside the crop? */
   #inCrop(f, r) {
-    return worldToArena(this.crop, f, r) !== null;
+    return !!this.crop && worldToArena(this.crop, f, r) !== null;
   }
 
   #paint() {
@@ -1457,9 +1514,9 @@ export class CanvasBoard {
       for (let col = 0; col < cols; col++) {
         const cell = this.#cellAt(col0 + col, row0 + row);
         if (!cell) continue;
-        const a = worldToArena(this.crop, cell.f, cell.r);
+        const a = this.crop ? worldToArena(this.crop, cell.f, cell.r) : null;
         const sq = a ? squareName(a.f, a.r + 1) : null;
-        if (!sq) outside++;
+        if (!sq && this.crop) outside++;
         list.push({ sq, cell, idx: this.world.idx(cell.f, cell.r), x: col * T, y: H + row * T, k: this.#kindAt(cell.f, cell.r), row, h: this.#hc(cell, sq) });
       }
       byRow.push(list);
@@ -1473,8 +1530,9 @@ export class CanvasBoard {
       g.fillStyle = DIM;
       for (const list of byRow) for (const s of list) if (!s.sq) g.fillRect(s.x, s.y, T, T);
     }
-    // 3. marks over the pieces
+    // 3. marks over the pieces (the arena's by square, the walk's by cell)
     for (const list of byRow) for (const s of list) if (s.sq) this.#paintMarksOver(s);
+    if (this.cellMarks.selected !== null || this.cellMarks.targets.size) for (const list of byRow) for (const s of list) this.#paintCellMarks(s);
     // 4. coordinates
     this.#paintCoords();
     // 4b. the arrows, above the pieces (the DOM's layer sits above the cells)
@@ -1492,13 +1550,25 @@ export class CanvasBoard {
     }
     // 6. pieces in mid-slide, on top
     for (const s of this.slides) this.#paintSlide(s, t);
+    for (const s of this.cellSlides) this.#paintCellSlide(s, t);
+  }
+
+  /** A walk's arrival: the letter drawn between its old and new cells. */
+  #paintCellSlide(s, t) {
+    const u = Math.min(1, (t - s.t0) / s.ms);
+    const a = this.#tileOf(s.from.f, s.from.r), b = this.#tileOf(s.to.f, s.to.r);
+    const oa = this.#originOfTile(a.col, a.row), ob = this.#originOfTile(b.col, b.row);
+    const e = ease(u);
+    const x = Math.round(oa.x + (ob.x - oa.x) * e), y = Math.round(oa.y + (ob.y - oa.y) * e);
+    if (x < -2 * T || y < -2 * T || x > this.bufW + T || y > this.bufH + T) return;
+    this.#paintPiece(s.ch, x, y);
   }
 
   /** Arena px (the arena's own north-up view, y down from its top rank) →
    *  buffer px: into the world through the crop (world.mjs), onto the
    *  screen through the camera (camera.mjs pxToScreen), minus the window. */
   #arenaToBuf(x, y) {
-    const e = arenaPxToEnv(this.crop, x, y);
+    const e = this.crop ? arenaPxToEnv(this.crop, x, y) : { x, y };
     const p = pxToScreen(e.x, e.y, this.world.files * T, this.world.ranks * T, this.facing);
     return { x: p.x - this.win.col0 * T, y: this.headroom + p.y - this.win.row0 * T };
   }
@@ -1604,8 +1674,8 @@ export class CanvasBoard {
     if (m.pits.has(sq) || m.cracked.has(sq) || m.breached.has(sq)) this.#frame1(x, y, GODS);
   }
 
-  #paintTall({ sq, x, y, k, h }, t) {
-    if (!k || (sq && this.hidden.has(sq))) return;
+  #paintTall({ sq, idx, x, y, k, h }, t) {
+    if (!k || (sq && this.hidden.has(sq)) || this.hiddenCells.has(idx)) return;
     const g = this.bctx;
     const fx = sq ? this.fx.get(sq) : null;
     const u = fx ? (fx.done ? 1 : Math.min(1, (t - fx.t0) / fx.ms)) : 0;
@@ -1715,6 +1785,20 @@ export class CanvasBoard {
     this.#paintPiece(s.letter, x, y);
   }
 
+  #paintCellMarks({ idx, x, y, k }) {
+    const g = this.bctx;
+    const cm = this.cellMarks;
+    if (cm.selected === idx) this.#frame1(x, y, GOLD);
+    if (cm.targets.has(idx)) {
+      const capture = cm.targets.get(idx);
+      if (capture || (k?.v && k.v !== WALL)) this.#frame1(x, y, capture ? BAD : TARGET, 1);
+      else {
+        g.fillStyle = TARGET;
+        g.fillRect(x + 6, y + 6, 4, 4);
+      }
+    }
+  }
+
   #paintMarksOver({ sq, x, y, k }) {
     const g = this.bctx;
     const m = this.marks;
@@ -1752,7 +1836,7 @@ export class CanvasBoard {
    *  what varies across the screen's columns — file letters north / south
    *  up, rank numbers east / west up — and down its left column the other. */
   #paintCoords() {
-    if (!this.showCoords) return;
+    if (!this.showCoords || !this.crop) return;
     const g = this.bctx;
     const b = this.cropBox;
     const edges = coordEdges(this.facing);

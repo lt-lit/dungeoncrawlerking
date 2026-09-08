@@ -517,3 +517,37 @@ body.layout-wide #preview-controls { justify-content: flex-start; }
 /* Options → Replay log: the two buttons side by side. */
 .opt-row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .2rem 0 .6rem; }
 .opt-row button { font-size: .85rem; padding: .4rem .8rem; }
+
+/* ---------- THE WALK (Phase 2 milestone 4b, 2026-09-08) ---------- */
+
+.list-title { font-size: .85rem; color: var(--muted); font-weight: 600; letter-spacing: .02em; margin: .3rem 0 .4rem; }
+#world-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .5rem; margin-bottom: .5rem; }
+.world-card {
+  display: flex; flex-direction: column; gap: .3rem; align-items: stretch;
+  padding: .45rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel);
+  color: var(--fg); text-align: left; cursor: pointer;
+}
+.world-card:active { background: var(--panel-2); }
+.world-card canvas { width: 100%; image-rendering: pixelated; border-radius: .25rem; background: #000; }
+.world-card .world-title { font-weight: 600; font-size: .85rem; }
+.world-card .world-dims { font-size: .7rem; color: var(--muted); }
+.world-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .8rem; }
+.world-actions button { font-size: .8rem; padding: .3rem .7rem; }
+#run-note { margin: 0; }
+
+#screen-walk { display: flex; flex-direction: column; gap: .35rem; }
+#walk-board.board { width: 100%; height: calc(100dvh - 17.5rem); min-height: 200px; margin: 0; }
+#walk-status { min-height: 1.4rem; font-family: ui-monospace, monospace; font-size: .78rem; }
+#walk-controls { display: flex; gap: .9rem; justify-content: center; align-items: center; }
+#walk-pad { display: grid; grid-template-columns: repeat(3, 3rem); grid-auto-rows: 3rem; gap: .25rem; }
+#walk-pad button { font-size: 1.35rem; padding: 0; line-height: 1; }
+#walk-side { display: flex; flex-direction: column; gap: .4rem; }
+.walk-row { display: flex; gap: .3rem; align-items: center; justify-content: center; }
+.walk-row .opt-val { min-width: 3.2rem; text-align: center; font-size: .8rem; }
+#walk-hint { text-align: center; margin: .2rem 0 0; }
+#walk-diag { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--muted); text-align: center; }
+#walk-diag[hidden] { display: none; }
+body.layout-wide #screen-walk { display: grid; grid-template-columns: minmax(0, 1fr) 23rem; column-gap: 1rem; align-items: start; }
+body.layout-wide #screen-walk > * { grid-column: 2; min-width: 0; }
+body.layout-wide #screen-walk > #walk-board.board { grid-column: 1; grid-row: 1 / span 40; height: calc(100dvh - 4.2rem); position: sticky; top: 3.2rem; }
+#screen-walk[hidden], body.layout-wide #screen-walk[hidden] { display: none; }

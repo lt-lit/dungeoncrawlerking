@@ -63,6 +63,9 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   Firefox; § "The canvas board" below). THE CAMERA's gates (2026-09-08,
   milestone 3): `node harness/test-camera.mjs` (the geometry, Node only),
   `node harness/test-world.mjs` (the world and the crop transform, Node only),
+  `node harness/test-army.mjs` (the army rule on the brief's cases, Node only),
+  `node harness/gen-worlds.mjs` (the walk-around fixtures + their manifest),
+  `node harness/world-shots.mjs` (each world painted whole + the walk screen, for the eye),
   `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
   the turned camera equals the world itself rotated), `node
   harness/camera-guard.mjs dump|compare <dir> [--allow door,turned]`
@@ -797,6 +800,94 @@ ui-smoke (+ the page at `?zoom=12&viewport=screen`: a window of the arena,
 the visible squares round-tripping, zoom 2 the whole arena again),
 replay-smoke 63, test-logreport 47, canvas-grid `none` 4/4 Chromium.
 NOT in this milestone: the army (4b), the barrier by hand (4c).
+
+**Milestone 4b — THE ARMY AND THE WALK (2026-09-08).** Brief §5.1's ONE
+MOVEMENT RULE on a hand-built floor: the walk-around build the phone
+judges, before any enemy exists. `js/army.mjs` is the rule, pure and
+Node-gated (`phase0/harness/test-army.mjs`, 57 checks on the brief's own
+cases): THE PATTERN is body-relative (`dx` right of the king, `dy` ahead,
+a letter per slot; slot 0 the king; `makePattern` lays a dealt army's
+W×2 molding on open ground — royal rearmost, pawns in front per file —
+`rotateBody` / `toBody` turn it with the FACING); a turn is one INPUT —
+`{ kind: 'step', dx, dy }` (a body-relative king step), `{ kind:
+'turn', dir }` (A ROTATION COSTS A MOVE, designer 2026-09-08: it is a
+wait with a turned pattern), `{ kind: 'wait' }`, or `{ kind: 'move', id,
+to }` (one piece's own move, captures allowed; the king never) —
+`planTurn` is pure (the king first: onto floor that is empty or held by
+a comrade, who is then evicted; terrain or an enemy refuses, and a
+refusal costs nothing), then every other piece's ONE move — a king step
+or its own chess move on the world grid (`pieceMoves`: sliders stopped
+by terrain and any piece, a comrade's cell a landing only for the
+planner and never passed through, knights hop, pawns one step forward
+along the facing, never a capture by a push) — that STRICTLY reduces its
+BFS distance (`distanceField`, 8-connected king steps over floor, friends
+passable, enemies and terrain not) to its TARGET: its slot when that is
+reachable floor, else the nearest reachable floor cell to the slot by
+Chebyshev, ties toward the king (`targetOf` — molding on the move);
+precedence is nearest-to-target then id, in passes (three at most) so a
+piece can step into a cell a comrade is leaving (one claim per piece,
+its destination; an evicted piece must move and takes its nearest cell
+even if farther from home; a turn nobody can complete is refused — "the
+way is held", a safety net the swap makes nearly unreachable);
+`applyTurn` writes the army and the world's piece grid (a smash turns
+the furniture to floor); `spawnArmy` puts an army down molded to the
+ground. Measured on the fixtures: unison on open floor in every
+direction, the about-face onto the turned slots within four turns, the
+blob flowing round a pillar and reforming, a rook home in one, a knight
+hopping, a bishop on the wrong colour on foot, a pawn king-stepping
+back, a file of four stepping as one, a 5-wide line squeezed into a
+3-wide corridor, a crate never smashed by an automatic move, the
+individual move smashing one, a pawn capturing diagonally only. THE RUN
+(`js/run.mjs`): one object per run and nothing else (designer: no meta
+progression; export and import as files; no backward compatibility) —
+the stamp `dck-run/1`, the seed, the world id, `floors` keyed by floor
+id (one for now; Phase 3 adds entries) holding the floor
+(`World.serialize` — the whole terrain grid, the pieces, the skins, the
+layers) and the army, the `start` (both as the run began), the turn
+count and THE TURN LIST (every input, so a run replays from its seed
+and its inputs: the rule is pure, and a save is a bug report); ONE
+localStorage key (`dck.run.v1`, the newest run wins), saved after every
+turn; `checkRun` refuses a stamp mismatch with one line naming the build
+that wrote it. THE WALK SCREEN (`#screen-walk`, main.mjs § THE WALK):
+the setup screen lists the worlds (`play/worlds/manifest.json`; a
+thumbnail per card, the resume card when a run is saved, "Import a
+save"); a world card begins a run — the 3×2 opening kit (K + R + N and
+three pawns, brief §4.2; `?army=setup` takes the setup screen's White
+knobs) spawned at the map's `@` facing its `facing`, the board a WINDOW
+over the world (`crop: false`, fit `window`, viewport `screen`, the
+default zoom the largest whole k with 15 tiles across the short axis —
+a phone lands on k 4, `?zoom=` pins it), the king centred, the world
+SLIDING under him (the board's `panTo`) while the arrivals slide in
+whole native pixels (`animateArrivals`; a facing change is a CUT
+first); a 3×3 pad (the eight ways, wait in the middle), the two turns,
+the zoom ± (a cut), Export save; WASD / arrows / numpad 1–9, Q E, space,
++ −, Escape; TAP A PIECE (not the king) for its own move: the zoom snaps
+to at least k 6 centred on it and its moves are marked (a capture red),
+tap a target to move, tap elsewhere to let go and zoom back; the status
+line (turn, facing, pieces, the king's cell, a note — "blocked" on a
+refused step); Back leaves the run saved, Resume picks it up; `?world=
+<id>` begins, `?run=resume` resumes, `?save=<url>` imports at boot.
+THE WORLDS (`play/worlds/`, `phase0/harness/gen-worlds.mjs`): `w01-the-
+undercroft`, the hand-built 60×40 walk-around fixture carved from a
+written plan — an antechamber where the walk begins facing east, a
+3-wide corridor with pillars and a stub, a great hall with a colonnade
+and four pillars entered by double doors, a north-west store and its
+2-wide crawlspace, a north-east chapel with a choir screen and a weak
+spot, an east corridor, two quarters with a door between, a cave, an
+alcove, a dead end, a back way, nothing symmetric; `w02-stress-100`, a
+seeded 100×100 of sixty rooms for the frame budget; every floor cell
+reachable from the start; `world-shots.mjs` renders each world whole
+and the walk screen on a phone and a desktop for the designer's eye.
+Gates: `test-army.mjs` 57, selftest 46/46 (+ the run save's round trip
+and refused stamp), ui-smoke (+ the walk: the screen, the window with
+no crop, the kit facing east, a forward step +f for all six, a turn that
+costs a move and turns the camera, a wait, a refused wall step, the save
+after every turn, the tap's snap-zoom and targets, the zoom buttons,
+the pad and the keys, leave / resume, a refused stamp, an import), the
+4a gates unchanged. NOT here, on purpose: enemies, line of sight, the
+trigger (a design conversation of its own), the barrier by hand (4c),
+debris on a walk's smash (the ledger is the floor's; the walk's captures
+will feed it with 4c), a replay of a run's turn list in the analyzer.
 
 ## Art themes (2026-09-03)
 
