@@ -388,9 +388,11 @@ GATE.
 
 
 **NEXT (end of 2026-09-08, after 4c and the HUD): THE PHONE VERDICT on
-4c and the d-pad is the gate for this branch. Then ENEMIES ON THE MAP +
-LINE OF SIGHT + THE TRIGGER — and that milestone OPENS WITH THE TRIGGER
-CONVERSATION, on the designer's word (2026-09-08: "there's going to be a
+4c and the d-pad is the gate for this branch. Then PHASE 2 MILESTONE 5 —
+ENEMIES ON THE MAP + LINE OF SIGHT + THE TRIGGER (brief §10 Phase 2:
+visible enemy armies, §5.2's hunt / pursuit state machine, §5.4's threat
+display, the trigger → barrier → FEN pipeline end to end; Phase 3 is the
+loop) — and that milestone OPENS WITH THE TRIGGER CONVERSATION, on the designer's word (2026-09-08: "there's going to be a
 shit fuck ton of rules dictating how and when a duel is allowed to
 trigger. It's not just about the trigger band. We will get to it"). Do
 not ask for the band and do not build the trigger to a number; what the
