@@ -369,11 +369,96 @@ export class World {
     for (let r = 0; r < tx.ranks; r++) {
       for (let f = 0; f < tx.files; f++) {
         const c = arenaToWorld(tx, f, r);
-        board[tx.ranks - 1 - r][f] = c ? this.v(c.f, c.r) ?? null : null;
+        // A square that hangs off the map is the barrier's own wall (4c):
+        // the engine must never see open floor where the world has none.
+        board[tx.ranks - 1 - r][f] = c && this.inBounds(c.f, c.r) ? this.v(c.f, c.r) ?? null : WALL;
       }
     }
     return `${serializeBoard(board)} ${turn} - - 0 1`;
   }
+
+  /**
+   * THE BARRIER (Phase 2 milestone 4c): a crop of this world as a STAGE —
+   * the shape the deal molds onto (stage.mjs: grid[rankFromBottom][file]
+   * of '*' / '^' / null, skin[r][f]) — its id naming the crop. A hole is
+   * '*' to the deal (a wall to molding), a square off the map is '*' (the
+   * barrier), and the skin grid is read off the world's skins whatever
+   * stands on the cell now, so a door whose leaf fell still pairs its
+   * twin. Pieces are NOT part of a stage: the deal composes them.
+   */
+  arenaStage(tx, { id = null, title = null } = {}) {
+    const grid = Array.from({ length: tx.ranks }, () => Array(tx.files).fill(null));
+    const skin = Array.from({ length: tx.ranks }, () => Array(tx.files).fill(null));
+    for (let r = 0; r < tx.ranks; r++) {
+      for (let f = 0; f < tx.files; f++) {
+        const c = arenaToWorld(tx, f, r);
+        if (!c || !this.inBounds(c.f, c.r)) {
+          grid[r][f] = WALL;
+          continue;
+        }
+        const t = this.at(c.f, c.r);
+        grid[r][f] = t === FLOOR ? null : t === FURNITURE ? FURNITURE : WALL;
+        skin[r][f] = this.skinAt(c.f, c.r);
+      }
+    }
+    const fc = ['n', 'e', 's', 'w'][tx.facing] ?? 'n';
+    return { schema: 2, id: id ?? `${this.id}@${tx.wf},${tx.wr}${fc}${tx.files}x${tx.ranks}`, title: title ?? this.title ?? this.id, files: tx.files, ranks: tx.ranks, grid, skin, theme: this.theme ?? null, notes: `a crop of ${this.id} at (${tx.wf}, ${tx.wr}) facing ${fc}` };
+  }
+
+  /**
+   * The Director's and the residue's layers inside a crop, by arena
+   * square: `holes` (a pit from an earlier duel — never weakened, never
+   * counted — AND every square off the map, which the barrier walls and
+   * the gods must never touch), `godCrates`, `opened`, `rubble`.
+   */
+  cropLayers(tx) {
+    const out = { holes: [], godCrates: [], opened: [], rubble: [] };
+    for (let r = 0; r < tx.ranks; r++) {
+      for (let f = 0; f < tx.files; f++) {
+        const sq = squareName(f, r);
+        const c = arenaToWorld(tx, f, r);
+        if (!c || !this.inBounds(c.f, c.r)) {
+          out.holes.push(sq);
+          continue;
+        }
+        const i = this.idx(c.f, c.r);
+        if (this.terrain[i] === HOLE) out.holes.push(sq);
+        if (this.godCrates.has(i)) out.godCrates.push(sq);
+        if (this.opened.has(i)) out.opened.push(sq);
+        if (this.rubble.has(i)) out.rubble.push(sq);
+      }
+    }
+    return out;
+  }
+
+  /** Drop every piece letter `pred(ch, i)` accepts (the army's letters
+   *  before the barrier stamps the formation; every letter in a crop when
+   *  the army walks out). Returns how many went. */
+  clearPieces(pred) {
+    let n = 0;
+    for (let i = 0; i < this.pieces.length; i++) {
+      if (this.pieces[i] && pred(this.pieces[i], i)) {
+        this.pieces[i] = null;
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Every piece letter inside a crop, by arena square, with its world cell. */
+  cropPieces(tx) {
+    const out = [];
+    for (let r = 0; r < tx.ranks; r++) {
+      for (let f = 0; f < tx.files; f++) {
+        const c = arenaToWorld(tx, f, r);
+        if (!c || !this.inBounds(c.f, c.r)) continue;
+        const ch = this.pieces[this.idx(c.f, c.r)];
+        if (ch) out.push({ sq: squareName(f, r), ch, f: c.f, r: c.r });
+      }
+    }
+    return out;
+  }
+
 
   /** The skins of a crop by arena square (stage.mjs stageSkins' shape). */
   arenaSkins(tx) {

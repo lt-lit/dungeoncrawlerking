@@ -46,9 +46,12 @@ export function newRun({ id = null, seed, worldId, world, army, build = null, op
   };
 }
 
-/** Write the live floor and army into the run (before a save). */
-export function updateRun(run, { world, army, turn = null }) {
-  run.floors[run.floor] = { world: world.serialize(), army: army.serialize() };
+/** Write the live floor and army into the run (before a save). The floor's
+ *  DEBRIS ledger (4c: one per floor, debris.mjs serialize) rides along when
+ *  given and is kept when not. */
+export function updateRun(run, { world, army, turn = null, debris = undefined }) {
+  const kept = run.floors[run.floor]?.debris ?? null;
+  run.floors[run.floor] = { world: world.serialize(), army: army.serialize(), debris: debris === undefined ? kept : debris };
   if (turn !== null) run.turn = turn;
   run.savedAt = new Date().toISOString();
   return run;
@@ -60,12 +63,35 @@ export function recordTurn(run, input, turn) {
   run.turn = turn;
 }
 
-/** The live floor and army out of a run: { world, army }. */
+/**
+ * THE BARRIER (4c): a duel in the turn list is its RESULT, never its plies
+ * (the engine's time-limited searches do not replay from inputs; the
+ * replay log holds the plies) — `{ kind: 'duel', t, crop, seed, turn,
+ * result, winner, termination, plies, quakes, fen, logId }`. It costs no
+ * walk turn: `run.turn` counts inputs alone.
+ */
+export function recordDuel(run, entry) {
+  run.turns.push({ kind: 'duel', t: run.turn, ...entry });
+}
+
+/** The inputs of a run (the duel entries are results, not inputs). */
+export function inputsOf(run) {
+  return (run.turns ?? []).filter((t) => t.kind !== 'duel');
+}
+
+/** A run whose last duel was lost is over: it stays exportable, resume refuses it. */
+export function runEnded(run) {
+  return !!run?.ended;
+}
+
+/** The live floor and army out of a run: { world, army, debris } (the
+ *  ledger serialized, or null for a clean floor). */
 export function openRun(run) {
   const fl = run.floors?.[run.floor];
   if (!fl) throw new Error(`run ${run.id}: no floor "${run.floor}"`);
-  return { world: World.load(fl.world), army: Army.load(fl.army) };
+  return { world: World.load(fl.world), army: Army.load(fl.army), debris: fl.debris ?? null };
 }
+
 
 /**
  * Check a parsed object is a run this build can read: the schema stamp,

@@ -76,6 +76,11 @@
         <div class="walk-row"><button id="btnWalkTurnL" title="turn left (Q) — a move" aria-label="turn left">&#8634;</button><span id="walk-facing" class="opt-val">east</span><button id="btnWalkTurnR" title="turn right (E) — a move" aria-label="turn right">&#8635;</button></div>
         <div class="walk-row"><button id="btnZoomOut" title="zoom out (&minus;)" aria-label="zoom out">&minus;</button><span id="walk-zoom" class="opt-val">k 4</span><button id="btnZoomIn" title="zoom in (+)" aria-label="zoom in">+</button></div>
         <div class="walk-row"><button id="btnRunExport" title="share or download this run's save file">&#9873; Export save</button></div>
+        <!-- THE BARRIER BY HAND (Phase 2 milestone 4c): a debug button drops
+             the barrier on the army as it stands — the crop of the floor
+             under the army's facing, gap 4, the kings aligned. -->
+        <div class="walk-row"><button id="btnWalkBarrier" title="drop the barrier here (B) — gap 4, the kings aligned; the enemy from Options → Setup's Black knobs">&#9876; Barrier</button><select id="walkInitiative" title="initiative: who moves first (the player is always White)"><option value="w">you move first</option><option value="b">the enemy moves first</option></select></div>
+
       </div>
     </div>
     <p class="opt-hint" id="walk-hint">Step with WASD / the arrows or the pad; Q E turn (a move); space waits; + &minus; zoom. Tap a piece for its own move.</p>
@@ -182,8 +187,11 @@
          reads the same autosave ring, so Review just navigates there. -->
     <button id="btnOverlayReview" title="open this duel in the replay analyzer">&#9654; Review</button>
     <button id="btnMenu">Back to setup</button>
+    <!-- THE BARRIER (4c): a duel on the walk's floor ends in the walk. -->
+    <button id="btnWalkOut" class="primary" hidden>&#8594; Walk on</button>
   </div>
 </div>
+
 
 <div id="options" hidden>
   <div id="options-card">

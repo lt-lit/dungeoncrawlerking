@@ -49,9 +49,12 @@ import { normFacing, facingName } from './camera.mjs'; // THE CAMERA's facing (2
 import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
-import { loadWorld } from './world.mjs';
-import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves } from './army.mjs';
-import { newRun, updateRun, recordTurn, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
+import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
+import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves, Army } from './army.mjs';
+import { newRun, updateRun, recordTurn, recordDuel, runEnded, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
+import { planBarrier } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08)
+import { childSeed } from './prng.mjs';
+
 import { DebrisLedger, identityTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
 import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
@@ -544,7 +547,20 @@ function remountBoard() {
   if (ui.scaling === scalingFor()) return;
   if (app.phase === 'walk') return void mountWalkBoard();
   if (app.busy && (app.phase === 'playing')) return; // never under an animation; the next mount takes it
+  if (app.session?.kind === 'world' && app.duel?.board) {
+    // A barrier duel's board is a window over the run's world: remount it
+    // on the same world and crop, never on a bare arena (which would take
+    // every later paint away from the floor the walk resumes on).
+    mountDuelBoard(app.session);
+    app.residue.lastFen = null;
+    paintBoard(app.duel.fen());
+    renderPlayMarks();
+    app.boardUI.setInteractive(app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.session.playerColor);
+    applyTheme();
+    return;
+  }
   const { files, ranks } = ui;
+
   if (app.phase === 'preview' && app.previewPaint) {
     const p = app.previewPaint;
     mountPreviewBoard(p.files, p.ranks, p.fen, p.skins);
@@ -2098,13 +2114,28 @@ function intParam(name, fallback, min) {
 async function beginDuel() {
   const session = app.session;
   if (!session) return;
-  const deal = session.deal;
   $('preview-controls').hidden = true;
   $('setup-panel').hidden = true;
+  await startDuel(session);
+}
+
+/**
+ * Start the duel a session describes — the setup screen's (the arena IS
+ * the world, the crop the identity, the board already mounted by the
+ * preview) or THE BARRIER's (4c: `kind: 'world'`, a crop of the walk's
+ * floor, the board mounted on the world by mountDuelBoard). One path after
+ * the deal: the engine, the deal's variant, the Director (seeded with the
+ * world's holes and god crates on a barrier), the residue, the debris
+ * epoch, the controller, the first paint, the first turn.
+ */
+async function startDuel(session) {
+  const deal = session.deal;
+  const onWorld = session.kind === 'world';
   $('duel-log').textContent = '';
   app.phase = 'playing';
   app.selectedSquare = null;
   await ensureEngineReady();
+
   // Camp-line double-step (spike 14): every deal rides its own variant
   // (double-step region = each side's camp, home edge up to its mode
   // pawn rank). Append it to the cumulative ini — recycle paths reload
@@ -2131,10 +2162,19 @@ async function beginDuel() {
   clearHints();
   app.quakeMarks = null;
   app.residue = { opened: new Set(), rubble: new Set(), lastFen: null, lastHoles: null, lastCrates: null };
-  // The debris layer: this duel is a new EPOCH on the stage's floor (its
-  // scars stay; blood dries, flecks settle).
-  debrisBind(deal);
+  if (onWorld) {
+    // The floor's own residue inside the crop (an earlier duel's doorways
+    // and ruins) — the first paint would erase whatever these sets lack.
+    for (const sq of session.layers.opened) app.residue.opened.add(sq);
+    for (const sq of session.layers.rubble) app.residue.rubble.add(sq);
+  }
+  // The debris layer: this duel is a new EPOCH on the floor (its scars
+  // stay; blood dries, flecks settle) — the run's ledger through the crop
+  // on a barrier, the stage's own ledger on this page's arena.
+  if (onWorld) debrisBindCrop(session);
+  else debrisBind(deal);
   app.debris.ledger?.beginEpoch();
+
   app.debris.dryPly = -1;
   app.debris.urls.clear();
   debrisSave();
@@ -2175,8 +2215,13 @@ async function beginDuel() {
     mateGo: params.get('mateprobe') === 'off' ? null : (params.get('mateprobe') ?? undefined),
     // v4.3: the eval gate — `?evalgate=off` to let every composition land.
     evalGate: params.get('evalgate') === 'off' ? null : undefined,
+    // THE BARRIER (4c): the world's pits and cracks inside the crop are the
+    // gods' own ledgers from ply 0 (seeded before the terrain anchor).
+    holes: onWorld ? session.layers.holes : undefined,
+    godCrates: onWorld ? session.layers.godCrates : undefined,
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
+
   await app.duel.start();
   paintBoard(app.duel.fen());
   applyTheme();
@@ -2294,12 +2339,20 @@ function debrisSave(now = false) {
   clearTimeout(D.saveTimer);
   const write = () => {
     D.saveTimer = null;
+    if (app.walk) {
+      // THE RUN'S LEDGER (4c): one per floor, saved inside the run — after a
+      // walk turn, never mid-duel (the walk-out writes the duel's scars; a
+      // reload mid-duel re-drops the same duel on the floor as it was).
+      if (!app.walk.duel && app.debris.envId === debrisRunEnvId(app.walk)) walkSave();
+      return;
+    }
     try {
       localStorage.setItem(DEBRIS_KEY + D.ledger.id, JSON.stringify(D.ledger.serialize()));
     } catch {
       /* QoL only */
     }
   };
+
   if (now) write();
   else D.saveTimer = setTimeout(write, 300);
 }
@@ -2318,7 +2371,8 @@ function debrisSampler() {
   // Keyed by THEME + DOOR SET + name: the same name is a different sprite
   // under each art set, and the board's theme can change under a warm-up.
   const cache = new Map();
-  const themeKey = () => `${$('board').dataset.theme ?? ''}|${$('board').dataset.doors ?? ''}|`;
+  const themeKey = () => { const el = app.boardUI?.container ?? $('board'); return `${el.dataset.theme ?? ''}|${el.dataset.doors ?? ''}|`; };
+
   // --tile-wall-<m> → wall-<m> · --tile-wall → wall · --tile-floor-<v> → floor-<v> · --sprite-<role>[-N] → <role>[-N]
   const roleOf = (name) => (name.startsWith('--tile-') ? name.slice(7) : name.startsWith('--sprite-') ? name.slice(9) : null);
   D.sampler = {
@@ -2999,11 +3053,25 @@ async function onEnd({ result, winner, termination }) {
           earthquake: playerWon
             ? 'The gods end it — the arena collapses around the enemy king.'
             : 'The gods end it — the arena collapses around your king. The run is over.',
+          concede: playerWon ? 'The enemy concedes.' : 'You concede. The run is over.',
         }[termination] ?? `${result}`;
+
   $('overlay-title').textContent = title;
   $('overlay-detail').textContent = detail;
-  $('btnOverlayUndo').hidden = !cheatUndo();
+  // THE BARRIER (4c): a duel on the walk's floor ends in the walk — one
+  // button walks out (a win: the army walks on; a loss: the run is over; an
+  // engine error: the floor as it was). Rematch, Re-deal, Back-to-setup and
+  // the cheat Undo are the setup page's — a rematch would re-stamp the
+  // start position over a scarred floor, and an undo would un-end a loss.
+  const onWorld = app.session?.kind === 'world';
+  $('btnOverlayUndo').hidden = !cheatUndo() || onWorld;
+  $('btnAgain').hidden = onWorld;
+  $('btnOverlayRedeal').hidden = onWorld;
+  $('btnMenu').hidden = onWorld;
+  $('btnWalkOut').hidden = !onWorld;
+  $('btnWalkOut').textContent = termination === 'error' ? '← Back to the walk' : playerWon ? '→ Walk on' : 'The run is over';
   $('overlay').hidden = false;
+
   refreshCheatUI();
   refreshGodsUI(); // the panel survives the end screen — post-mortems welcome
   setStatus(result ? `${result} · ${termination}` : 'error');
@@ -3306,8 +3374,10 @@ function beginRun(worldJson, { resume = null } = {}) {
   try {
     if (resume) {
       run = resume;
+      if (runEnded(run)) throw new Error(`this run is over (${run.ended.termination ?? 'defeat'} at turn ${run.ended.turn}) — export it, or begin a new one`);
       ({ world, army } = openRun(run));
     } else {
+
       world = loadWorld(worldJson);
       const seed = setup.seed | 0 || 1;
       // The player's army: the 3×2 opening kit (brief §4.2: K + R + N and
@@ -3326,16 +3396,21 @@ function beginRun(worldJson, { resume = null } = {}) {
     return null;
   }
   if (app.boardUI) { app.boardUI.destroy(); app.boardUI = null; }
-  app.walk = { run, world, army, zoom: zoomFor() ?? null, selected: null, targets: [], snapped: null, busy: false, turn: run.turn | 0, note: '' };
+  app.walk = { run, world, army, zoom: zoomFor() ?? null, selected: null, targets: [], snapped: null, busy: false, turn: run.turn | 0, note: '', duel: null, snapshot: null };
   app.phase = 'walk';
   app.busy = false;
   showScreen('walk');
   $('title').textContent = world.title || world.id;
+  debrisBindRun(app.walk); // the floor's scars, from the run
   mountWalkBoard();
   setStatus(resume ? `resumed at turn ${run.turn}` : 'walk');
   walkStatus();
+  // A duel was in flight when the run was last saved: the barrier drops
+  // again on the same seed — the same crop, the same enemy — from move one.
+  if (run.pending) void app.boardUI.ready.then(() => walkBarrier({ seed: run.pending.seed, turn: run.pending.turn, knobs: run.pending.enemy }));
   return app.walk;
 }
+
 
 /** Mount the board on the walk screen: the world, no crop, fit window,
  *  the screen viewport, the king centred. */
@@ -3354,8 +3429,10 @@ function mountWalkBoard() {
   app.boardUI.lookAt(W.army.king.f, W.army.king.r);
   app.boardUI.setInteractive(true);
   applyTheme();
+  debrisPaintWalk();
   void app.boardUI.ready.then(() => app.boardUI?.lookAt(W.army.king.f, W.army.king.r));
 }
+
 
 function walkPieceName(ch) {
   return PIECE_NAMES[ch.toLowerCase()] ?? ch;
@@ -3372,13 +3449,19 @@ function walkStatus(note = null) {
   $('walk-status').textContent = `turn ${W.turn} · facing ${facing} · ${W.army.pieces.length} pieces · king ${W.army.king.f},${W.army.king.r}${W.note ? ` · ${W.note}` : ''}`;
 }
 
-/** Save the run as it stands (after every turn; on leaving). */
+/** Save the run as it stands (after every turn; on leaving) — the floor,
+ *  the army, and the floor's debris ledger when it is the run's. */
 function walkSave() {
   const W = app.walk;
   if (!W) return;
-  updateRun(W.run, { world: W.world, army: W.army, turn: W.turn });
+  if (W.duel) return void saveRun(W.run); // mid-duel the floor is the duel's: the save keeps the pre-drop floor and the pending entry
+  const D = app.debris;
+
+  const debris = D.ledger && D.envId === debrisRunEnvId(W) ? D.ledger.serialize() : undefined;
+  updateRun(W.run, { world: W.world, army: W.army, turn: W.turn, debris });
   saveRun(W.run);
 }
+
 
 /**
  * One input → one turn: plan (army.mjs), apply, record, then the motion —
@@ -3397,11 +3480,16 @@ async function walkInput(input) {
   W.busy = true;
   try {
     const before = new Map(W.army.pieces.map((p) => [p.id, p.ch]));
+    // What a smash breaks, read BEFORE the crate is gone (the debris layer
+    // records the sprite the broken thing wore).
+    const smashes = plan.moves.filter((m) => m.capture === 'furniture').map((m) => ({ m, k: app.boardUI?.kindAtCell?.(m.to.f, m.to.r) ?? null }));
     applyTurn(W.world, W.army, plan);
     W.turn += 1;
     recordTurn(W.run, input, W.turn);
     walkClearSelection(false);
+    await debrisWalkTurn(plan, smashes);
     const ui = app.boardUI;
+
     if (plan.facing !== ui.facing) {
       ui.setFacing(plan.facing);
       app.view.facing = plan.facing;
@@ -3414,7 +3502,9 @@ async function walkInput(input) {
     await Promise.all([ui.animateArrivals(arrivals, { ms }), ui.panTo(king.f, king.r, ms)]);
     const smashed = plan.moves.find((m) => m.capture === 'furniture');
     walkStatus(plan.individual ? `${walkPieceName(before.get(plan.moves[0].id) ?? 'p')} ${smashed ? 'smashes the crate' : 'moves'}` : input.kind === 'turn' ? `turned ${input.dir < 0 ? 'left' : 'right'}` : '');
+    debrisPaintWalk();
     walkSave();
+
   } finally {
     W.busy = false;
   }
@@ -3514,9 +3604,360 @@ async function importRun(obj) {
   return !!beginRun(null, { resume: obj });
 }
 
+// ------------------------------------------------- THE BARRIER BY HAND (4c)
+// (Phase 2 milestone 4c, 2026-09-08 — play/js/barrier.mjs is the pure
+// half: where the barrier drops and the deal it stamps.) A debug button on
+// the walk drops the barrier on the army as it stands: the crop of the
+// floor under the army's facing becomes the arena, the carried formation
+// is stamped into it, an enemy is dealt across the gap (gap 4, the kings
+// aligned), the duel runs ON THE WORLD — the board's one model — so every
+// ply writes the crop's cells, and the walk resumes on the scarred floor.
+// The run records the duel as its RESULT (run.mjs recordDuel); a PENDING
+// entry written before the floor changes makes a reload re-drop the same
+// seeded duel; a loss ends the run (the save stays exportable); an engine
+// error restores the floor from a snapshot. Nothing here is a trigger.
+
+/** The enemy's spec from setup-shaped knobs (the Black knobs, or the ones a pending duel saved). */
+function enemySpecOf(knobs) {
+  const saved = setup.black;
+  setup.black = { ...saved, ...(knobs ?? {}) };
+  try {
+    return sideSpec('black');
+  } finally {
+    setup.black = saved;
+  }
+}
+
+/** The debris ledger's environment id for a run's floor. */
+function debrisRunEnvId(W) {
+  return `run:${W.run.id}:${W.world.id}`;
+}
+
+/** Bind the run's floor ledger (loaded from the save, or a clean floor of
+ *  the world's size) at the identity transform — the walk's binding. */
+function debrisBindRun(W) {
+  const D = app.debris;
+  const envId = debrisRunEnvId(W);
+  if (!(D.ledger && D.envId === envId)) {
+    D.envId = envId;
+    D.ledger = null;
+    const saved = W.run.floors?.[W.run.floor]?.debris ?? null;
+    try {
+      if (saved && saved.v === 1 && saved.files === W.world.files && saved.ranks === W.world.ranks) D.ledger = DebrisLedger.load(saved);
+    } catch {
+      /* a corrupt ledger is a clean floor */
+    }
+    if (!D.ledger) D.ledger = new DebrisLedger({ id: W.world.id, files: W.world.files, ranks: W.world.ranks });
+  }
+  D.tx = identityTransform(W.world.files, W.world.ranks);
+  D.kinds = null;
+  D.urls.clear();
+  D.pending.clear();
+}
+
+/** A barrier duel's binding: the same ledger, the crop as the transform
+ *  (every duel event lands in the floor's own pixels through it). */
+function debrisBindCrop(session) {
+  const D = app.debris;
+  D.tx = session.crop;
+  D.kinds = null;
+  D.urls.clear();
+  D.pending.clear();
+}
+
+/** What a world cell's terrain wears, as the debris layer records it (the
+ *  walk's smash; debrisSrcOf's rule on a cell instead of a square). */
+function debrisSrcOfCell(f, r, k) {
+  if (!k) return null;
+  if (k.wallTile || k.cracked || k.weak) return { role: 'wall', v: 0, mask: k.mask };
+  if (k.hole) return null;
+  if (k.skin === 'door') return { role: 'door', v: 1, mask: -1 };
+  if (k.furniture) return { role: k.skin ?? 'crate', v: skinVariantIndex(f, r + 1), mask: -1 };
+  return { role: 'floor', v: floorVariantIndex(f, r + 1), mask: -1 };
+}
+
+/** Record an event on a WORLD cell of the run's floor (the walk has no
+ *  squares): env pixels are the floor's own, y down from its top rank;
+ *  (dx, dy) a world delta (df, dr) turned to env space. */
+async function debrisEventCell({ k, f, r, df = 0, dr = 0, src = null, n = 1 }) {
+  const D = app.debris;
+  if (!D.ledger || !D.ledger.inBounds(f, r)) return null;
+  const len = Math.hypot(df, dr) || 1;
+  const ev = { k, x: f * 16 + 8, y: (D.ledger.ranks - 1 - r) * 16 + 8, dx: df / len, dy: -dr / len, p: 0, s: D.ledger.next, src, n };
+  if (src) await debrisSampler().ensure([spriteVar(src)]);
+  const stored = D.ledger.add(ev);
+  for (const i of D.ledger.cellsOf(stored)) D.urls.delete(i);
+  return stored;
+}
+
+/** The walk's turn on the floor: every move wears its landing cell and, on
+ *  a straight move, the cells it passed; a smash leaves the crate's own
+ *  splinters (recorded before the crate went, see walkInput). */
+async function debrisWalkTurn(plan, smashes) {
+  const D = app.debris;
+  const W = app.walk;
+  if (!D.ledger || !W || !plan?.ok) return;
+  const visit = (f, r) => {
+    if (!D.ledger.inBounds(f, r)) return;
+    const before = wearLevel(D.ledger.trafficAt(f, r));
+    D.ledger.visit(f, r);
+    if (wearLevel(D.ledger.trafficAt(f, r)) !== before) D.urls.delete(D.ledger.cellIndex(f, r));
+  };
+  for (const m of plan.moves) {
+    visit(m.to.f, m.to.r);
+    const df = Math.sign(m.to.f - m.from.f), dr = Math.sign(m.to.r - m.from.r);
+    const straight = m.from.f === m.to.f || m.from.r === m.to.r || Math.abs(m.to.f - m.from.f) === Math.abs(m.to.r - m.from.r);
+    if (straight) for (let f = m.from.f + df, r = m.from.r + dr; f !== m.to.f || r !== m.to.r; f += df, r += dr) visit(f, r);
+  }
+  for (const { m, k } of smashes) {
+    await debrisEventCell({ k: 'smash', f: m.to.f, r: m.to.r, df: m.to.f - m.from.f, dr: m.to.r - m.from.r, src: debrisSrcOfCell(m.to.f, m.to.r, k) });
+  }
+  debrisSave();
+}
+
+/** Paint the floor's scars on the walk's board: every cell the ledger
+ *  touches (an event's reach, worn traffic), floor only, through the same
+ *  painter the duel uses — the cell's buffer by the world's index (the
+ *  ledger's index is the world's: same files). */
+function debrisPaintWalk() {
+  const D = app.debris;
+  const W = app.walk;
+  const ui = app.boardUI;
+  if (!D.ledger || !W || !ui || app.phase !== 'walk' || D.envId !== debrisRunEnvId(W)) return;
+  const o = debrisOpts();
+  const on = o.destruction || o.blood || o.skid || o.wear;
+  const ctx = on ? debrisPaintCtx(o) : null;
+  const cells = new Set();
+  for (const ev of D.ledger.events) for (const i of D.ledger.cellsOf(ev)) cells.add(i);
+  for (let i = 0; i < D.ledger.traffic.length; i++) if (D.ledger.traffic[i]) cells.add(i);
+  for (const i of D.ledger.trafficEpoch.keys()) cells.add(i);
+  for (const i of cells) {
+    const ef = i % D.ledger.files, er = (i - ef) / D.ledger.files;
+    if (!on || W.world.at(ef, er) !== FLOOR) {
+      void ui.setCellDebris(i, null);
+      continue;
+    }
+    let buf = D.urls.get(i);
+    if (buf === undefined) {
+      buf = paintCell(D.ledger, ef, er, ctx);
+      D.urls.set(i, buf);
+    }
+    void ui.setCellDebris(i, buf);
+  }
+}
+
+/** The session a barrier plan makes — makeSession's exact shape (every
+ *  reader of app.session — the log, the recycle path, the theme, the
+ *  skins — reads a deal) plus the world, the crop and the floor's layers. */
+function makeWorldSession(plan, W, enemyKnobs = setup.black) {
+  const deal = plan.deal;
+  const layers = W.world.cropLayers(plan.crop);
+  const stage = plan.stage;
+
+  return {
+    id: `${W.world.id}:t${W.turn}:${deal.seed}`,
+    title: `${W.world.title ?? W.world.id} · the barrier`,
+    files: deal.files,
+    ranks: deal.ranks,
+    variantName: deal.variantName,
+    playerColor: 'white', // the player ALWAYS holds White; initiative is the deal's turn field
+    enemyColor: 'black',
+    deal,
+    specs: { white: { ...setup.white }, black: { ...enemyKnobs } },
+    kind: 'world',
+
+    world: W.world,
+    crop: plan.crop,
+    layers,
+    // The replay log's `world` block (replaylog.mjs): the analyzer paints a
+    // barrier duel from this alone — no stage manifest holds a crop.
+    worldLog: {
+      id: W.world.id,
+      title: W.world.title ?? null,
+      theme: W.world.theme ?? null,
+      runId: W.run.id,
+      walkTurn: W.turn,
+      crop: { wf: plan.crop.wf, wr: plan.crop.wr, facing: plan.crop.facing, files: plan.crop.files, ranks: plan.crop.ranks, worldFiles: plan.crop.worldFiles, worldRanks: plan.crop.worldRanks },
+      kingFile: plan.kingFile,
+      stage: { id: stage.id, title: stage.title, files: stage.files, ranks: stage.ranks, theme: stage.theme, grid: stage.grid, skin: stage.skin },
+      layers,
+    },
+  };
+}
+
+/** Mount the duel screen's board as a WINDOW over the run's world: the
+ *  crop the arena sits in, the camera at the army's facing (the arena reads
+ *  north-up), the dungeon outside the crop dimmed, the crop centred. */
+function mountDuelBoard(session) {
+  if (app.boardUI) app.boardUI.destroy();
+  const crop = session.crop;
+  app.boardUI = createBoard($('board'), { world: session.world, crop, facing: crop.facing, viewport: 'screen', onSquareTap });
+  app.boardUI.dimOutside = true;
+  app.boardUI.lookAt(null);
+  app.boardUI.setInteractive(false);
+  app.residue.lastFen = null;
+}
+
+/**
+ * DROP THE BARRIER on the army as it stands. `seed` / `turn` / `knobs`
+ * replay a pending duel (a reload mid-duel); by default the seed derives
+ * from the run's and the walk turn, the initiative from the walk's toggle,
+ * the enemy from the setup screen's Black knobs. Returns the plan (ok or
+ * refused with one line).
+ */
+async function walkBarrier({ seed = null, turn = null, knobs = null } = {}) {
+  const W = app.walk;
+  if (!W || app.phase !== 'walk' || W.busy || app.duel) return null;
+  if (!app.ffish || !app.engine) {
+    walkStatus('the engine is not ready');
+    return null;
+  }
+  W.busy = true;
+  try {
+    walkClearSelection(false);
+    const run = W.run;
+    const dealSeed = seed ?? childSeed(run.seed >>> 0, `barrier:${run.turns.length}:${W.turn}`);
+    const initiative = turn ?? (params.get('initiative') === 'b' || $('walkInitiative')?.value === 'b' ? 'b' : 'w');
+    const enemyKnobs = knobs ?? { ...setup.black };
+    let enemy;
+    try {
+      enemy = enemySpecOf(enemyKnobs);
+    } catch (e) {
+      walkStatus(`✗ ${e.message}`);
+      return { ok: false, error: e.message };
+    }
+    // THE PENDING ENTRY: the run is saved with the floor as it stands and
+    // the duel's seed, BEFORE the floor changes — a reload re-drops it.
+    walkSave();
+    run.pending = { seed: dealSeed, turn: initiative, enemy: enemyKnobs, at: W.turn };
+    saveRun(run);
+    const plan = planBarrier(W.world, W.army, { enemy, seed: dealSeed, turn: initiative, ffish: app.ffish });
+    if (!plan.ok) {
+      run.pending = null;
+      saveRun(run);
+      walkStatus(`✗ ${plan.error}`);
+      return plan;
+    }
+    // The floor as it was, for an engine error mid-duel.
+    W.snapshot = { world: W.world.serialize(), army: W.army.serialize(), debris: app.debris.ledger && app.debris.envId === debrisRunEnvId(W) ? app.debris.ledger.serialize() : null };
+    // THE SUMMONING: the army's letters leave the world (the walk's
+    // positions — a straggler two cells back snaps into his slot) and the
+    // deal's FEN puts the formation down through the first paint.
+    W.world.clearPieces((ch) => W.army.owns(ch));
+    const session = makeWorldSession(plan, W, enemyKnobs);
+
+    app.session = session;
+    W.duel = { plan, seed: dealSeed, turn: initiative, startedAt: Date.now() };
+    showScreen('duel');
+    $('btnBack').hidden = true; // there is no leaving a duel
+    $('title').textContent = session.title;
+    mountDuelBoard(session);
+    await startDuel(session);
+    return plan;
+  } finally {
+    W.busy = false;
+  }
+}
+
+/**
+ * WALK OUT of an ended barrier duel. A WIN: every letter inside the crop
+ * goes (the enemy is gone from the floor), the pattern re-spawns whole
+ * around the king's final cell, facing kept — promotions revert, captured
+ * pieces return (brief §8, no attrition) — and the walk resumes on the
+ * scarred floor. A LOSS: the run is over (the save stays exportable; resume
+ * refuses it). An ENGINE ERROR: the floor, the army and the ledger as they
+ * were before the drop. The duel goes into the turn list as its result.
+ */
+async function walkOut() {
+  const W = app.walk;
+  const d = app.duel;
+  const session = app.session;
+  if (!W || !d || session?.kind !== 'world' || d.state === 'playing') return null;
+  $('overlay').hidden = true;
+  const run = W.run;
+  const r = d.record;
+  const playerWon = r.winner === session.playerColor;
+  const termination = r.termination;
+  // The crop's cells must hold the FINAL board (the debug "before" view
+  // paints a pre-quake position into them; nothing else ever should).
+  if (app.godsBefore) godsBeforeOff({ repaint: false });
+  if (d.board) {
+    app.residue.lastFen = null;
+    paintBoard(d.fen());
+  }
+  autosaveLog(); // the final position and the verdict
+
+  refreshSavedLogs();
+  const finalFen = d.fen();
+  const entry = { crop: { ...session.crop }, seed: W.duel?.seed ?? session.deal.seed, turn: W.duel?.turn ?? session.deal.turn, stage: session.deal.stageId, result: r.result, winner: r.winner, termination, plies: d.ply, quakes: r.quakes?.length ?? 0, fen: finalFen, logId: logId(), at: new Date().toISOString() };
+  // The duel comes down (as Back does on the setup page).
+  const probesQuiet = cancelIdleProbes();
+  evalProbe.queue.length = 0;
+  app.duel = null;
+  d.destroy();
+  app.enginePending = Promise.all([probesQuiet, d.whenQuiet()]).then(() => {});
+  app.session = null;
+  app.godsBefore = null;
+  app.quakeMarks = null;
+  app.busy = false;
+  refreshGodsUI();
+  refreshCheatUI();
+  let note;
+  if (termination === 'error') {
+    const snap = W.snapshot;
+    if (snap) {
+      W.world = World.load(snap.world);
+      W.army = Army.load(snap.army);
+      app.debris.ledger = null; // rebound below from the run's saved ledger
+      app.debris.envId = null;
+      run.floors[run.floor] = { ...run.floors[run.floor], debris: snap.debris };
+    }
+    run.pending = null;
+    note = 'the arena faltered — the walk resumes as it was';
+  } else if (playerWon) {
+    const world = W.world;
+    const kingSq = findSquares(finalFen, (c) => c === 'K')[0]?.name ?? null;
+    const kingCell = kingSq ? arenaToWorld(session.crop, parseSquare(kingSq).file, parseSquare(kingSq).rankFromBottom) : { f: W.army.king.f, r: W.army.king.r };
+    for (const p of world.cropPieces(session.crop)) world.pieces[world.idx(p.f, p.r)] = null;
+    W.army = spawnArmy(world, W.army.pattern, kingCell, W.army.facing, 'w', { lenient: true });
+    recordDuel(run, entry);
+    run.pending = null;
+    note = `victory — the army walks on (${entry.plies} plies, ${entry.quakes} quakes)`;
+  } else {
+    recordDuel(run, entry);
+    run.pending = null;
+    run.ended = { at: entry.at, turn: W.turn, termination, result: r.result };
+    W.duel = null;
+    W.snapshot = null;
+    updateRun(run, { world: W.world, army: W.army, turn: W.turn, debris: app.debris.ledger?.serialize() ?? null });
+    saveRun(run);
+    app.walk = null;
+    if (app.boardUI) { app.boardUI.destroy(); app.boardUI = null; }
+    app.phase = 'setup';
+    showScreen('setup');
+    $('title').textContent = 'Dungeon Crawler King';
+    renderWorldList();
+    setStatus('the run is over');
+    return entry;
+  }
+  W.duel = null;
+  W.snapshot = null;
+  app.phase = 'walk';
+  showScreen('walk');
+  $('title').textContent = W.world.title || W.world.id;
+  debrisBindRun(W);
+  app.debris.ledger?.settleTraffic();
+  mountWalkBoard();
+  walkSave();
+  walkStatus(note);
+  setStatus('walk');
+  return entry;
+}
+
 /** The setup screen's worlds: a card per world file (a thumbnail of its
  *  terrain), the resume card when a run is saved, the import button. */
 function renderWorldList() {
+
   const list = $('world-list');
   if (!list) return;
   list.textContent = '';
@@ -3549,7 +3990,8 @@ function renderWorldList() {
   const saved = loadSavedRun();
   const resume = $('btnRunResume');
   resume.hidden = !saved;
-  if (saved) resume.textContent = `Resume: ${saved.worldId} · turn ${saved.turn}`;
+  if (saved) resume.textContent = runEnded(saved) ? `Run over: ${saved.worldId} · turn ${saved.turn} (${saved.ended.termination ?? 'defeat'}) — export only` : `Resume: ${saved.worldId} · turn ${saved.turn}${saved.pending ? ' · a duel in flight' : ''}`;
+
   $('world-list-wrap').hidden = !app.worlds.length && !saved;
 }
 
@@ -3577,6 +4019,9 @@ $('btnWalkTurnL').addEventListener('click', () => void walkInput({ kind: 'turn',
 $('btnWalkTurnR').addEventListener('click', () => void walkInput({ kind: 'turn', dir: 1 }));
 $('btnZoomIn').addEventListener('click', () => walkZoom(1));
 $('btnZoomOut').addEventListener('click', () => walkZoom(-1));
+$('btnWalkBarrier').addEventListener('click', () => void walkBarrier());
+$('btnWalkOut').addEventListener('click', () => void walkOut());
+
 document.addEventListener('keydown', (e) => {
   if (app.phase !== 'walk' || !app.walk) return;
   const t = e.target;
@@ -3589,7 +4034,9 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'q' || k === 'Q') input = { kind: 'turn', dir: -1 };
   else if (k === 'e' || k === 'E') input = { kind: 'turn', dir: 1 };
   else if (k === ' ' || k === '5' || k === 'x' || k === 'X') input = { kind: 'wait' };
+  else if (k === 'b' || k === 'B') { void walkBarrier(); e.preventDefault(); return; }
   else if (k === '+' || k === '=') { walkZoom(1); e.preventDefault(); return; }
+
   else if (k === '-' || k === '_') { walkZoom(-1); e.preventDefault(); return; }
   else if (k === 'Escape') { walkClearSelection(true); walkStatus(''); return; }
   if (!input) return;
@@ -3748,6 +4195,23 @@ window.__DCK = {
     leave: () => walkLeave(),
     saved: () => loadSavedRun(),
     clear: () => clearSavedRun(),
+    /** THE BARRIER (4c): drop it on the army as it stands; walk out of the ended duel; the crop's FEN read off the world (must equal the duel's). */
+    barrier: (opts = {}) => walkBarrier(opts),
+    walkOut: () => walkOut(),
+    /** Test-only: end the live barrier duel by concession (`loser` 'white' | 'black'). */
+    concede: async (loser) => (app.duel && app.session?.kind === 'world' ? (await app.duel.adjudicate({ loser }), app.duel?.state ?? null) : null),
+
+    get crop() {
+      return app.session?.kind === 'world' ? { ...app.session.crop } : null;
+    },
+    arenaFen: (turn = 'w') => (app.session?.kind === 'world' && app.walk ? app.walk.world.arenaFen(app.session.crop, turn) : null),
+    get duel() {
+      const W = app.walk;
+      return W?.duel ? { seed: W.duel.seed, turn: W.duel.turn, files: W.duel.plan.stage.files, ranks: W.duel.plan.stage.ranks, gap: W.duel.plan.deal.gap, kingFile: W.duel.plan.kingFile, fen: W.duel.plan.deal.fen } : null;
+    },
+    cell: (f, r) => (app.walk ? app.walk.world.cellView(f, r) : null),
+    debris: () => (app.walk && app.debris.ledger ? app.debris.ledger.stats() : null),
+
     get state() {
       const W = app.walk;
       if (!W) return null;

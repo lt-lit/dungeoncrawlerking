@@ -1016,7 +1016,123 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs4.length === 0, `no page errors on the walk${errs4.length ? ` — ${errs4.join(' | ')}` : ''}`);
   await page4.close();
 }
+// --- THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08): on the
+// fixture, three steps into the corridor, the button drops the barrier —
+// the duel runs ON THE WORLD (the crop's FEN equals the duel's board every
+// ply, the window shows the dungeon around the crop), a pending entry is
+// saved; a concession ends it and the ONE overlay button walks the army
+// out whole around the king's final cell with the enemy gone and the run
+// recording the duel as its result; a smash on the walk scars the floor
+// and the scars ride in the run; a reload mid-duel re-drops the same seeded
+// duel; the analyzer paints the barrier log from its world block; a second
+// duel on a scarred floor seeds the gods with the pit; a loss ends the run
+// and resume refuses it.
+{
+  const page5 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs5 = [];
+  page5.on('pageerror', (e) => errs5.push(String(e).split('\n')[0]));
+  const q5 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
+  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?world=w01-the-undercroft&${q5}`);
+  await page5.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
+  const bar = await page5.evaluate(async () => {
+    const K = window.__DCK;
+    await K.renderer.ready();
+    const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy}, phase ${K.app.phase}, duel ${K.app.duel?.state})`); };
+    const board = (fen) => fen.split(' ')[0];
+    const out = {};
+    for (let i = 0; i < 3; i++) await K.walk.input({ kind: 'step', dx: 0, dy: 1 });
+    out.walkTurn = K.walk.state.turn;
+    // A smash on the walk: the first piece with a capture among its own moves smashes it; the floor records it.
+    let smash = null;
+    for (const p of K.walk.state.pieces) {
+      if (p.ch === 'K') continue;
+      K.walk.select(p.f, p.r);
+      const t = K.walk.state.targets.find((x) => x.capture);
+      K.walk.select(-1, -1);
+      if (t) { smash = { id: p.id, to: { f: t.f, r: t.r } }; break; }
+    }
+    if (smash) await K.walk.input({ kind: 'move', id: smash.id, to: smash.to });
+    out.smash = { found: !!smash, debris: K.walk.debris(), saved: K.walk.saved()?.floors['w01-the-undercroft']?.debris?.events?.length ?? null };
+    // THE DROP, through the real button (the initiative select at its default: the player moves first).
+    localStorage.setItem('dck.setup.v1', JSON.stringify({ black: { width: 3, mode: 'pieces', pieces: 'NN', archetype: 'heavies-deep', anchor: 'center' } }));
+    document.getElementById('btnWalkBarrier').click();
+    await new Promise((r) => setTimeout(r, 50));
+    await settle();
+    for (let i = 0; i < 200 && K.app.phase !== 'playing'; i++) await new Promise((r) => setTimeout(r, 50));
+    out.drop = { phase: K.app.phase, screen: { walk: !document.getElementById('screen-walk').hidden, duel: !document.getElementById('screen-duel').hidden }, back: document.getElementById('btnBack').hidden, duel: K.walk.duel, session: K.app.session?.kind, crop: K.walk.crop, info: K.renderer.info };
+    out.drop.fenEqual0 = !!K.app.duel && board(K.walk.arenaFen()) === board(K.app.duel.fen());
+    out.pending = K.walk.saved()?.pending ?? null;
+    // Two plies: the player's random move, the engine's reply; the world's crop follows the board.
+    await settle();
+    if (K.app.duel?.state === 'playing' && K.app.duel.turnColor() === 'white') await K.playerMove(K.randomMove());
+    await settle();
+    out.ply = K.app.duel?.ply ?? null;
+    out.fenEqual1 = !!K.app.duel && board(K.walk.arenaFen()) === board(K.app.duel.fen());
+    const L = K.log.build();
+    out.log = { world: L?.world ? { id: L.world.id, stage: L.world.stage?.id, files: L.world.stage?.files, theme: L.world.theme, crop: !!L.world.crop } : null, stage: L?.stage, variantIni: !!L?.variantIni };
+    // A reload mid-duel: the run resumes and the barrier drops again on the same seed.
+    return out;
+  });
+  const dropSeed = bar.drop?.duel?.seed ?? null;
+  expect(bar.smash.found && bar.smash.debris?.events === 1 && bar.smash.saved === 1, `a smash on the walk scars the floor and the scar rides in the run (${bar.smash.debris?.events} event, ${bar.smash.saved} saved)`);
+  expect(bar.drop.phase === 'playing' && bar.drop.screen.duel && !bar.drop.screen.walk && bar.drop.back && bar.drop.session === 'world', `the button drops the barrier: the duel screen is up on a world session, Back hidden`);
+  expect(bar.drop.duel && bar.drop.duel.gap === 4 && bar.drop.duel.files >= 3 && bar.drop.duel.ranks >= 8 && bar.drop.duel.ranks <= 10, `the deal: ${bar.drop.duel?.files}×${bar.drop.duel?.ranks}, gap ${bar.drop.duel?.gap}, kings on file ${bar.drop.duel?.kingFile}`);
+  expect(bar.drop.info.viewport === 'screen' && bar.drop.info.facing === 1 && bar.drop.info.crop && bar.drop.info.crop.facing === 1 && bar.drop.info.window.cols > bar.drop.info.crop.cols, `the board is a window over the world at the army's facing, the dungeon around the ${bar.drop.info.crop?.cols}×${bar.drop.info.crop?.rows} crop (${bar.drop.info.window?.cols} cols shown)`);
+  expect(bar.drop.fenEqual0 && bar.fenEqual1 && bar.ply === 2, `the crop's FEN equals the duel's board at ply 0 and after ${bar.ply} plies`);
+  expect(bar.pending && bar.pending.seed === dropSeed && bar.pending.turn === 'w' && bar.pending.at === bar.walkTurn + (bar.smash.found ? 1 : 0), `the run holds the pending duel (seed ${bar.pending?.seed}, at walk turn ${bar.pending?.at})`);
+  expect(bar.log.world && bar.log.world.id === 'w01-the-undercroft' && bar.log.world.theme === 'crypt' && bar.log.world.files === bar.drop.duel.files && bar.log.world.crop && bar.log.variantIni, `the replay log carries the world block (${bar.log.world?.stage})`);
+  // The reload: the saved run resumes with the duel in flight and drops it again on the same seed.
+  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?run=resume&${q5}`);
+  await page5.waitForFunction(() => window.__DCK?.app?.phase === 'playing' && window.__DCK.app.session?.kind === 'world', null, { timeout: 120000 });
+  const re = await page5.evaluate(async () => {
+    const K = window.__DCK;
+    const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy}, phase ${K.app.phase}, duel ${K.app.duel?.state})`); };
+    const board = (fen) => fen.split(' ')[0];
+    await settle();
+    const out = { seed: K.walk.duel?.seed, fen: K.app.duel?.fen(), ply: K.app.duel?.ply, equal: board(K.walk.arenaFen()) === board(K.app.duel.fen()) };
+    // The player wins by the enemy's concession; the one button walks out.
+    out.ended = await K.walk.concede('black');
+    out.overlay = { hidden: document.getElementById('overlay').hidden, title: document.getElementById('overlay-title').textContent, walkOut: document.getElementById('btnWalkOut').hidden, label: document.getElementById('btnWalkOut').textContent, again: document.getElementById('btnAgain').hidden, redeal: document.getElementById('btnOverlayRedeal').hidden, menu: document.getElementById('btnMenu').hidden, undo: document.getElementById('btnOverlayUndo').hidden };
+    document.getElementById('btnWalkOut').click();
+    for (let i = 0; i < 100 && K.app.phase !== 'walk'; i++) await new Promise((r) => setTimeout(r, 30));
+    const st = K.walk.state;
+    const saved = K.walk.saved();
+    out.after = { phase: K.app.phase, screen: !document.getElementById('screen-walk').hidden, pieces: st.pieces.length, kingOnFloor: K.walk.cell(st.king.f, st.king.r)?.v === 'K', lower: st.rows.join('').replace(/[^a-z]/g, '').length, turn: st.turn, turns: saved.turns.length, last: saved.turns.at(-1), pending: saved.pending, debris: !!saved.floors['w01-the-undercroft'].debris, status: document.getElementById('walk-status').textContent, session: K.app.session, duel: !!K.app.duel };
+    // A second barrier on a scarred floor: a pit dug by hand in the corridor ahead seeds the gods.
+    const k = st.king;
+    const W = K.app.walk.world;
+    let pit = null;
+    for (let d = 3; d <= 5 && !pit; d++) if (W.at(k.f + d, k.r) === '.' && !W.pieceAt(k.f + d, k.r)) pit = { f: k.f + d, r: k.r };
+    if (pit) W.setTerrain(pit.f, pit.r, 'O');
+    const plan2 = await K.walk.barrier({ knobs: { width: 3, mode: 'pieces', pieces: 'NN' } });
+    await settle();
+    const holes = K.app.duel ? [...K.app.duel.director.holes] : [];
+    out.second = { ok: !!plan2?.ok, files: plan2?.stage?.files, ranks: plan2?.stage?.ranks, pit, holes, authored: K.app.duel?.director.authoredTerrain ?? null, fenHasPit: null };
+    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('*');
+    // The player loses by concession: the run is over, the save stays, resume refuses.
+    out.lost = { ended: await K.walk.concede('white'), label: document.getElementById('btnWalkOut').textContent };
+    document.getElementById('btnWalkOut').click();
+    for (let i = 0; i < 100 && K.app.phase !== 'setup'; i++) await new Promise((r) => setTimeout(r, 30));
+    const gone = K.walk.saved();
+    out.over = { phase: K.app.phase, ended: gone?.ended, resumeText: document.getElementById('btnRunResume').textContent, resumed: K.walk.resume(), note: document.getElementById('run-note').textContent, exportable: !!K.walk.export()?.ended };
+    return out;
+  });
+  expect(re.seed === dropSeed && re.ply === 0 && re.equal, `a reload mid-duel re-drops the same seeded duel from move one (seed ${re.seed})`);
+  expect(re.ended === 'ended' && !re.overlay.hidden && re.overlay.title === 'Victory' && !re.overlay.walkOut && /Walk on/.test(re.overlay.label) && re.overlay.again && re.overlay.redeal && re.overlay.menu && re.overlay.undo, `the overlay on a world duel: one button, "${re.overlay.label}" (Rematch / Re-deal / Back / Undo hidden)`);
+  expect(re.after.phase === 'walk' && re.after.screen && re.after.pieces === 6 && re.after.kingOnFloor && re.after.lower === 0 && !re.after.session && !re.after.duel, `the army walks out whole (${re.after.pieces} pieces around the king), the enemy gone from the floor`);
+  expect(re.after.last?.kind === 'duel' && re.after.last.result === '1-0' && re.after.last.termination === 'concede' && re.after.pending === null && re.after.debris && re.after.turn === bar.walkTurn + (bar.smash.found ? 1 : 0), `the run records the duel as its result (${re.after.last?.result} · ${re.after.last?.termination}), no pending entry, the ledger inside; the walk turn unchanged (${re.after.turn})`);
+  expect(re.second.ok && re.second.pit && re.second.holes.length >= 1 && re.second.fenHasPit && re.second.authored !== null, `a second barrier on the scarred floor: the pit is the gods' hole from ply 0 (${re.second.holes.join(',')}), the terrain anchor set`);
+  expect(re.lost.ended === 'ended' && /run is over/.test(re.lost.label) && re.over.phase === 'setup' && re.over.ended?.termination === 'concede' && /Run over/.test(re.over.resumeText) && re.over.resumed === false && /run is over/.test(re.over.note) && re.over.exportable, `a loss ends the run: back to setup, "${re.over.resumeText}", resume refused (${re.over.note}), the save still exports`);
+  expect(errs5.length === 0, `no page errors on the barrier${errs5.length ? ` — ${errs5.join(' | ')}` : ''}`);
+  // The analyzer paints the barrier log from its world block (the crop's terrain and skins, the world's theme).
+  await page5.goto(`http://127.0.0.1:${PORT}/replay/index.html?latest=1`);
+  await page5.waitForFunction(() => window.__DCK?.replay?.log, null, { timeout: 60000 });
+  const an = await page5.evaluate(async () => { const R = window.__DCK.replay; await R.waitIdle?.(); const v = R.view; return { world: R.log?.world?.id ?? null, stage: v.stage ?? null, theme: v.theme ?? null, skins: typeof v.skins === 'object' && v.skins ? Object.keys(v.skins).length : v.skins }; });
+  expect(an.world === 'w01-the-undercroft' && typeof an.stage === 'string' && an.stage.startsWith('w01-the-undercroft@') && an.theme === 'crypt', `the analyzer opens the barrier log on its own crop (${an.stage}, theme ${an.theme}, ${an.skins} skins)`);
+  await page5.close();
+}
 await browser.close();
+
 server.close();
 
 for (const n of notes) console.log(n);

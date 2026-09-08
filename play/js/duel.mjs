@@ -191,10 +191,20 @@ export class DuelController {
     this.evalGate = opts.evalGate === undefined ? { draws: 2, softenCp: 200, flipMinCp: 150, giftCp: 500 } : opts.evalGate;
     this.hooks = opts.hooks ?? {};
     this.director = new Director(opts.director ?? {});
+    // THE BARRIER (Phase 2 milestone 4c): a duel on a scarred floor starts
+    // with the world's holes and god crates already in the crop — '*' and
+    // '^' to the engine, indistinguishable from authored terrain. They are
+    // seeded into the Director's ledgers BEFORE the anchor below, so a pit
+    // is never counted as a standing wall (nor weakened into a crate,
+    // brief §4.5 "holes are forever") and an earlier duel's cracks stay the
+    // gods' own rubble. Arena square names; a replay seeds the same.
+    for (const sq of opts.holes ?? []) this.director.holes.add(sq);
+    for (const sq of opts.godCrates ?? []) this.director.godCrates.add(sq);
     // The conservation brake's reference point (§4.5, designer 2026-09-01):
     // freeze the authored terrain census from the start position. A replay
     // re-derives the identical anchor from the identical startFen.
     this.director.anchorTerrain(opts.startFen, opts.files, opts.ranks);
+
     this.board = null;
     this.baseFen = opts.startFen;
     this.movesSinceBase = [];
@@ -405,8 +415,19 @@ export class DuelController {
     return applied;
   }
 
+  /** Adjudicate a live duel from outside — a concession (the loser named,
+   *  termination 'concede'): the debug surface for driving the walk's
+   *  barrier end to end (4c). Records and ends exactly as a mate would. */
+  async adjudicate({ loser, termination = 'concede' } = {}) {
+    if (this.state !== 'playing' || (loser !== 'white' && loser !== 'black')) return false;
+    this.note(`${loser} concedes`, 'warn');
+    await this.#finish({ loser, termination });
+    return true;
+  }
+
   /** Favor of the Gods, recorded. Same semantics as director.setFavor(). */
   setFavor(mult) {
+
     this.director.setFavor(mult);
     this.record.tunes.push(this.#stamp({ ply: this.ply, favor: this.director.favor }));
   }

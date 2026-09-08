@@ -900,6 +900,13 @@ export class CanvasBoard {
     return c && c.idx >= 0 ? this.debrisBufs.get(c.idx) ?? null : null;
   }
 
+  /** The terrain rule's kind for a WORLD cell (the walk's smash reads what
+   *  a crate wore before it broke). */
+  kindAtCell(f, r) {
+    return this.world.inBounds(f, r) ? this.#kindAt(f, r) : null;
+  }
+
+
   hasDebris(sq) {
     const c = this.cells.get(sq);
     return !!c && c.idx >= 0 && this.debrisBufs.has(c.idx);
@@ -1521,15 +1528,27 @@ export class CanvasBoard {
       }
       byRow.push(list);
     }
-    // 1. floor + shade + debris + flat terrain + marks under the pieces
-    for (const list of byRow) for (const s of list) this.#paintFlat(s, theme, t);
-    // 2. the tall things, far row first: props and pieces interleaved by screen row
-    for (const list of byRow) for (const s of list) this.#paintTall(s, t);
-    // 2b. the world beyond the crop, dimmed (a duel's dungeon)
-    if (outside && this.dimOutside) {
-      g.fillStyle = DIM;
-      for (const list of byRow) for (const s of list) if (!s.sq) g.fillRect(s.x, s.y, T, T);
+    // 1. floor + shade + debris + flat terrain + marks under the pieces —
+    // and the world beyond the crop DIMMED here, under the tall pass, so
+    // the heads of the crop's top rank (the enemy's back rank on a barrier
+    // duel) rise into the dungeon undimmed.
+    const dim = outside && this.dimOutside;
+    for (const list of byRow) for (const s of list) {
+      this.#paintFlat(s, theme, t);
+      if (dim && !s.sq) {
+        g.fillStyle = DIM;
+        g.fillRect(s.x, s.y, T, T);
+      }
     }
+    // 2. the tall things, far row first: props and pieces interleaved by screen row (the dungeon's, faded)
+    for (const list of byRow) for (const s of list) {
+      if (dim && !s.sq) {
+        g.globalAlpha = 0.45;
+        this.#paintTall(s, t);
+        g.globalAlpha = 1;
+      } else this.#paintTall(s, t);
+    }
+
     // 3. marks over the pieces (the arena's by square, the walk's by cell)
     for (const list of byRow) for (const s of list) if (s.sq) this.#paintMarksOver(s);
     if (this.cellMarks.selected !== null || this.cellMarks.targets.size) for (const list of byRow) for (const s of list) this.#paintCellMarks(s);
@@ -1839,7 +1858,11 @@ export class CanvasBoard {
     if (!this.showCoords || !this.crop) return;
     const g = this.bctx;
     const b = this.cropBox;
-    const edges = coordEdges(this.facing);
+    // What varies along the crop's edges depends on how the CAMERA sits
+    // relative to the CROP's own north (a barrier duel is a crop at the
+    // army's facing, read north-up under a camera at the same facing).
+    const edges = coordEdges((this.facing - (this.crop.facing ?? 0) + 4) & 3);
+
     const label = (sq, what) => (what === 'file' ? sq[0] : sq.slice(1));
     const visible = (col, row) => col >= this.win.col0 && col < this.win.col0 + this.win.cols && row >= this.win.row0 && row < this.win.row0 + this.win.rows;
     const bottom = b.row0 + b.rows - 1;
