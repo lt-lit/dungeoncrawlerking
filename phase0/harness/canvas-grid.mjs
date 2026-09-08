@@ -5,7 +5,7 @@
 // Chromium and (when installed — `npx playwright install firefox`)
 // Firefox.
 //
-// How: the game page on the canvas renderer (?renderer=canvas), booted
+// How: the game page (the canvas board is the one renderer), booted
 // once per browser and ratio (the widths, scalings and snap strategies
 // are walked on the live page), the board switched to its TEST PATTERN (__DCK.renderer.testPattern: every native
 // pixel encodes its own (x, y) — red = x, green = y mod 256, blue = 255),
@@ -73,7 +73,7 @@ async function openRatio(browser, dpr) {
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
-  const q = new URLSearchParams({ stage: STAGE, autobegin: '1', fx: '0', seed: '3', go: 'depth 3', probe: 'depth 3', renderer: 'canvas', onset: '999' });
+  const q = new URLSearchParams({ stage: STAGE, autobegin: '1', fx: '0', seed: '3', go: 'depth 3', probe: 'depth 3', onset: '999' });
   await page.goto(`http://127.0.0.1:${PORT}/play/index.html?${q}`);
   await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
@@ -85,7 +85,7 @@ async function measure(pg, name, { dpr, width, scaling, snap }) {
   const { page, errs } = pg;
   await page.setViewportSize({ width, height: 900 });
   await page.waitForTimeout(120);
-  await page.evaluate(async (sc) => { window.__DCK.renderer.set('canvas', sc); await window.__DCK.renderer.ready(); }, scaling);
+  await page.evaluate(async (sc) => { window.__DCK.renderer.set(sc); await window.__DCK.renderer.ready(); }, scaling);
   await page.waitForTimeout(120);
   await page.evaluate((m) => { window.__DCK.renderer.snapMode(m); window.__DCK.renderer.testPattern(true); window.__DCK.renderer.paintNow(); }, snap);
   await page.waitForTimeout(150);

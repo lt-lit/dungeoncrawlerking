@@ -10,10 +10,9 @@
      SharedArrayBuffer, so this page must be cross-origin isolated too.
      Self-reloads once on first visit. -->
 <script src="coi-serviceworker.min.js"></script>
-<!-- The game's own stylesheets: the board, the tiles, the chrome. Relative
-     url()s inside them resolve against play/, so the tileset loads. -->
+<!-- The game's own stylesheet: the board's container, the chrome. The art
+     is the atlas in ../play/img/, which the canvas board loads itself. -->
 <link rel="stylesheet" href="../play/style.css">
-<link rel="stylesheet" href="../play/tiles.css">
 <link rel="stylesheet" href="replay.css">
 </head>
 <body>

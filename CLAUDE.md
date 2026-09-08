@@ -36,413 +36,136 @@ guarantee — see brief §4.5's amended "Holes are forever"). Sanity harness:
 Next per brief §10, a Gods track before calibration resumes:
 **Phase 1.1 — quake legibility ✅ done** (piece motion, sequenced quake
 beats, persistent quake marks, + the landing-safety stopgap in
-`play/js/threat.mjs`); **UI refresh ✅ built 2026-09-02** (designer-settled: terrain
-TILES by kind — wall slab / hole / crate / cracked wall, painted from
-`director.holes` + `godCrates` via `setPosition(fen, ledgers)`; edge
-coordinates; hint arrows gold/silver/bronze by RANK at half size; the gods'
-residue in their own light-blue hue, one mark per rung plus a dashed arrow
-per displacement (since rounds 13–14: a solid arrow alone per
-displacement, one blue frame per terrain rung), merged across quakes and
-mirrored in a gods line under the board; per-rung terrain fx held on their end frame; the hint probe
-STREAMS at the enemy's own `depth 22 movetime 10000` with a "Keep
-evaluating" option, `?probe=` override, and cancel hardening — an
-unanswered `stop` recycles the instance and `duel.#search` pins MultiPV 1;
-`?fx=0` is stamped as `data-fx` so CSS motion collapses too; the selftest
-gained a renderer check and `__DCK.cheat`/`__DCK.marks`; a live-board smoke
-lives in `phase0/harness/ui-smoke.mjs`; **round 2, same day**: floor is olive
-flagstone and walls are pixel-art purple-grey stone blocks, a cracked wall is
-the block with a branching black crack and NO crate sprite, hint arrows are
-outlined on shaft and head and carry their eval written into the arrow (paints
-are depth-consistent across ranks — UNTIL 2026-09-07, when the designer cut
-the numbers off the arrows for the hint LIST under the board, see milestone
-1 below), the floor is warm grey, and `^` has
-SKINS — an optional stage `skin` grid (door/barrel/table/chair/shelf/chest/
-crate/masonry; cosmetics only, never grid state) authored over the whole bed
-by `phase0/harness/gen-skins.mjs` (wall-line doors by geometry, furniture
-family by the stage notes, a reviewed override table) with sprites
-generated into `style.css` by `gen-sprites.mjs`; **round 3, 2026-09-03 —
-ART THEMES**: the designer shopped free tilesets and settled "use them all,
-16×16 is the standard, mix and match, repack and credit" — the board wears
-`hall` (pixel-poem Dungeon Asset Puck), `castle` (SnowHex Dungeon
-Gathering) or `crypt` (Szadi art Rogue Fantasy Catacombs), or `classic`
-(the in-house set); `phase0/harness/repack-tiles.mjs` crops ONLY the used
-tiles from the packs in gitignored `phase0/assets-src/` into
-`play/img/tileset.png` + `play/tiles.css` (PNG data-URI variables under
-`[data-theme]`) + `play/CREDITS.md`; the packs themselves are never
-committed; every stage carries a `theme` (gen-skins.mjs assigns it from the
-stage NAME's vocabulary, balanced 18/21/19), overridden by the Options
-panel's Art set or `?theme=`; the renderer classes every wall by its
-solid-neighbour mask (`wm-<mask>`, N=1 E=2 S=4 W=8 + diagonals, the 47-case
-blob via `canonicalMask`; holes are not solid, doors are) and the repack
-tool GENERATES each theme's 47 cases as a bevelled top band in the pack's
-colours with the pack's own brick face extruded under every south edge
-(the packs draw 2.5-D room borders and ship no thin-wall set; stitching
-their pieces was rounds 4–5's "walls look like ass / still janky"); a door
-in a north–south wall line is a WEAK SPOT (`weak`: the column's own case +
-`--sprite-weak`; the edge-on door was cut, designer round 6); floor tiles
-show through under every sprite, `f1…f6` are floor variants — EVERY theme
-wears the six Catacombs flagstones, palette-swapped into the pack's floor
-tone for hall and castle (designer round 7: the only floor tiles that look
-good); **round 8**: ONE crack (`--tile-crack`, thin black lines on
-transparency) for every weakened wall — god-cracked or authored weak spot
-(the generated "weak spot" sprite is gone); each theme has its OWN door
-(pixel-poem's leaf, a portcullis in Dungeon Gathering's arch, a barred gate
-in Catacombs stone) and cosmetic PROPS (`.decor` spans board-ui scatters
-by hash: torches/banners/chains on wall faces, cobwebs/bones/skulls/
-candles on floor — never on holes or furniture; a theme's `--decor-*`
-paints them); and **PIECE SPRITES** (rounds 6–8): NullTale's *Chess* (CC
-BY 4.0; `nulltale` classic — the DEFAULT — and `nulltale-dread`), Dani
-Maccari's *Pixel Chess* (`pixel-chess` stone / `-wood`) and Deja View's
-*Chess Assets* (`deja-view`, its white outline recoloured dark), every set
-FITTED so its tallest piece stands 0.96 cell — no piece rises into the
-square above (designer: overlap reads badly clustered) — via `data-piece`
-on every piece span + `data-pieces` on the board (`PIECE_SETS`, Options →
-Pieces, `?pieces=`; classic = the glyphs), the promotion picker included;
-the FLIP clone copies the piece's own box; **round 9**: pieces sit
-CENTRED in their square (not on the bottom edge); props paint at native
-16-px scale, placement baked into the sprite (anchored to the face / a
-corner); the crack is CLIPPED to the wall's pixels (`mask: var(--wall-
-tile)`); a Doors option (`DOOR_SETS` leaf / portcullis / gate, `data-doors`,
-`?doors=`); a per-duel RESIDUE ledger in main.mjs (`opened` / `rubble`,
-diffed from consecutive paints' terrain) leaves the theme's OPEN DOORWAY
-where a door was captured or burst and RUBBLE where a wall or crate broke,
-and a captured door swings instead of dissolving; and the live bug of the
-day: `.cell.dark.furniture`'s explicit `background-size` list outranked
-`.cell.dark.cracked`, so a god-cracked wall on a DARK square painted its
-wall tile at 16 px in the middle of the cell ("shrunk down") — every
-`.dark` cracked/weak rule now sets its own size and the smoke checks it;
-**round 10**: piece boxes are the set's tallest piece high (trimmed
-sprites, one baseline — a 32-px box centred in the square had hung the
-feet below it, "chopped in half") and dials place them; RUIN AUTOTILE — a
-broken wall, cracked wall, weak spot or authored masonry leaves a `.ruin` cell
-wearing one of 16 GENERATED cases (`--tile-ruin-<mask>`, the 4-bit
-neighbour mask — solid neighbours then, STANDING walls only since round
-12), a weak-spot door never leaves a doorway, other
-furniture leaves nothing, and ruins AND opened doorways count as SOLID to
-the wall autotile so the line runs on through a break (no more end caps
-at a gap); floor litter (web/bones/skull/candle) is packed away — wall
-props and `^` skins stay; **round 11**: the ruin tile IS FLOOR but for
-the broken END of each joining wall (one flush pixel, then a ragged
-hashed fringe of up to two — the gap is 10–14 of 16 after "visibly very
-narrow") and a few flat flecks between (round 10's lowered stub "read too
-much like a barrier"); the open doorway is GENERATED per theme — a
-two-pixel post in the door's material at each edge of the cell, floor
-between top to bottom (10 of 16 px), NOTHING arching over the space ("pieces sitting in
-open doorways wouldn't look as weird"; the arch/lintel doorways are gone
-and a door set no longer overrides the doorway); piece dials: size /
-lift / SHIFT / PIXEL-PERFECT (Options + `?piecescale=`/`?piecelift=`/
-`?pieceshift=`/`?piecesnap=1`; `setPieceFit`, `DEFAULT_PIECE_FIT` = the
-designer's settled 146% / +22% / +4% with pixel-perfect ON — a piece
-stands on its square's bottom edge and rises well into the one above,
-which paints behind it by DOM order; ranges widened
-to 50–200% / −50…+100% / ±50% because the first caps were hit;
-pixel-perfect = `layoutPieceSnap` on a ResizeObserver, the box a whole
-device-pixel multiple of the set's native `--piece-fit`/`--piece-box`
-from tiles.css, landed on whole pixels — **SUPERSEDED as the default by
-the TILE GRID, 2026-09-07 (see "PIECE PIXELS" below); it survives as the
-`display` mode**); selftest 35/35, ui-smoke green
-asserting the ruin / doorway / nothing per breached square, wall-face-only
-props and the pixel-perfect box; **round 12**: a ruin's stub case counts
-STANDING walls only (a wall, a cracked wall or a door — never another
-ruin or an opened doorway: two breaks side by side had drawn stubs at
-each other, "clumps of wall between squares", and a stub grew against a
-doorway post; the walls still see every residue as solid), and a broken
-NORTH end wears a two-row stump face instead of the wall's seven ("cover
-a ton of the square when pointed south"; a north–south case had drawn
-none at all) — `RUIN.face` in the repack tool, west/east ends untouched
-(their fringe columns keep the face under their own bottom — a first cut
-keyed the face on the run from the top and shrank them, caught in
-review); and an opened DOORWAY's posts stand only beside standing walls
-too (the cell wears the east/west mask, `doorway-8` / `doorway-2` are
-the one-post tiles, wm-0 paints nothing — "awkward looking vertical door
-frames between empty spaces"); the smoke checks every live ruin's and
-doorway's case against its neighbours; **round 13**: the crack is drawn
-ON the 16-px pixel grid (one black pixel per wall pixel); the enemy's
-last move is a RED ARROW (`kind: 'last'`, no square tint), a displacement
-is its blue arrow ALONE (the `quake-from`/`quake-to` marks and the dash
-are gone — every arrow shares one style, the colour says whose); the
-board is OPEN at the top (`overflow: visible` + a `clip-path` for the
-sides and bottom) with a headroom margin from the piece dials, so tall
-top-row pieces keep their heads; and HOLES AUTOTILE — 16 cases by the
-4-bit mask of HOLE neighbours (`--tile-hole-<mask>`, `holeBlob`: a ragged
-floor-showing margin and edge-colour lip on every floor-facing side, the
-pit's far wall under a north rim, edge to edge toward another pit so
-joined pits read as one; the in-house set keeps its gradient pit; the
-crumble fx ends on the lone-pit case); **round 14**: FOUR crack drawings
-(`--tile-crack-1…4`, `CRACK_VARIANTS`; every cell wears `ck1…ck4` by a
-stable hash, so neighbouring cracks differ and never swap) and the gods'
-residue is ONE 3-px light-blue frame for crack, breach and hole alike
-(the breach fill and the hole's rust rim are gone — "all god actions in
-light blue"; the three classes stay for the tests); **round 15,
-2026-09-04 — THE RUBBLE HEAP IS DEAD**: the `R` skin (41 squares across
-22 of wave 6's 36 arenas) painted a heap of loose stones sitting on the
-floor — "shitty… absurdly out of place. Why not just use a cracked
-wall?", the same look rounds 11–12 had already driven out of the ruin
-tile, and inverted: a heap that IS a standing obstacle reads as debris
-already broken. `R` is now the `masonry` skin and paints a WEAK SPOT
-(`weak`, board-ui.mjs) — its wall autotile case wearing THE crack,
-pixel-identical to a god-weakened wall and to the weak-spot door, and it
-counts as STANDING so a wall line runs through it. Nothing in the locked
-stage files moved (the letter is still `R`); the heap sprite survives only
-as the in-house set's ruin fallback, and the options legend lost its
-rubble tile (5 tiles: one "cracked wall" covers both origins). Same day, the
-FURNITURE THEME GAP: the skins' table / chair / shelf had never been in the
-repack tool's ROLES (no pack was asked for them) and hall had no barrel, so
-86 of the bed's 268 `^` painted the in-house SVGs — bright orange on every
-theme ("I don't like the sprites you authored, they look worse than the
-ones from the asset packs. Palette swap some of those"). The designer
-re-supplied the three tile packs: pixel-poem draws a pedestal table, a
-stool, a rack and a barrel, so the hall wears them natively and castle and
-crypt wear the same three palette-swapped into their stone / timber
-(`tint` per theme, `recolourFill` — fill recoloured like the floors,
-outline kept); the tool now runs without the chess packs (a missing piece
-pack's sprites are read back from the committed `img/pieces.png`) and
-reproduced every committed file byte-for-byte before the change. Also that
-day: a skin audit of all 268 `^` against each stage's notes fixed seven
-(three "broken furniture" squares authored as `R` for the old heap, two
-"bones", and s89's two UNSKINNED `^` — the bed's only ones), and the lesson
-that bit: **the game loads `play/stages/manifest.json`, not the stage
-files — run `gen-stage-manifest.mjs` after ANY stage edit** or the change
-is invisible (the first commit of that audit shipped stale). **Round 16,
-2026-09-05 — the designer went through the packs himself** ("multiple
-chest options that look better than the one you picked… ALL KINDS OF
-STUFF… an actual double door"): SKIN VARIANTS — a theme lists several
-crops per furniture role, every cell wears `sv1…sv5` by a stable hash
-(`SKIN_VARIANTS`) and tiles.css maps svN + skin to `--sprite-<role>-N`
-(base fallback, wrap-around aliases) — the hall's three chests and two
-tables, the castle's three stone blocks, the crypt's own crates, low boxes
-and FIVE urns; and DOUBLE DOORS — two door skins side by side in a rank
-pair (`door2-l` / `door2-r`, west to east, never a god-cracked leaf, never
-a vertical pair) and paint `--sprite-door2-l/-r`: pixel-poem's own double,
-the castle's portcullis in the pack's two-wide arch, a generated two-wide
-barred gate for the crypt, each door set carrying its double, two leaves
-as the fallback. **Round 17, same day**, seven designer points: crates
-and chests vary like the urns (pixel-poem's loose `box_1_1` /
-`mini_box_1_1` sprites join the sheet's, all four Catacombs crate columns
-are distinct); every furniture PROP is a 16×32 board box (`placeProp` —
-small props CENTRED in their square, the 20-px urns cropped `tall` and
-standing on the bottom edge, rising into the square north; the sprite
-element spans two cells on the board, the legend shows the lower half);
-the double-door pair is AUTHORED (skin grid, painted on a standing leaf),
-so a leaf keeps its half after its partner goes; the castle's portcullis
-and the crypt's barred gate are GONE — every theme wears pixel-poem's
-leaf + double, slate-stained / dark oak by `recolourHue` (wood takes the
-hue at its brightness, iron and outline stay), `DOOR_SETS` = hall /
-castle / crypt; and TABLE / CHAIR are DROPPED — `T` / `C` stay in the
-files, `SKIN_CHARS` maps them onto crate / chest until the category has
-art. **Round 18, same day — the designer's X's and O's**: castle crates
-are the Catacombs crates in slate (the stone blocks are out), crypt keeps
-two wide crates + its wide low box + pixel-poem's chests in oak, hall
-barrels are the DG vase + Catacombs urns as terracotta, crypt barrels all
-ten urns (`SKIN_VARIANTS` 10), SHELF is dropped (`S` → crate), a new
-WRECKAGE skin `W` (broken crates + spilled urns) sits on the seven
-"broken / collapsed / spilled" squares, castle doors are a cool walnut
-(#7d6455 — slate was "too blue/grey"), and `tint` accepts `{ to, whole }`
-for sprites the wood-only recolour cannot take whole. **Round 19, same
-day — the LID is the line**: a chest has a DOMED lid, a crate is a FLAT
-box; chests are pixel-poem's closed chest + mini chest (sheet (4,8) /
-(5,8)) and their squat frames, crates its two orange boxes + squats + the
-Catacombs' three, NO grey ("looks too much like chests" — castle crates
-are walnut like its door, not slate); every pixel-poem prop is a
-four-frame bounce whose frame 1 LIFTS the lid ("an open animation, or
-the lid is detached") — only the rest pose (frame 3 = the sheet tile) and
-the squat (frame 4) are used. Known nits from the
-round-13 review, accepted for now: an edge-file piece can overlap the
-2-px board border by a hair (the clip-path clips at the border box, where
-overflow:hidden clipped at the padding box); with pixel-perfect on, the
-headroom margin can over-reserve by up to one sprite step; the pit
-outline is per tile, so it does not wrap the inner corner of an L of
-joined pits — see `play/README.md` § "Art themes");
-**PIECE PIXELS — THE TILE GRID ✅ built 2026-09-07 (designer: "the scale
-of the chess pieces themselves bothers me… I need the pixels making up
-the pieces to exactly match the size and alignment of the pixels making
-up the 16x16 tiles, just like the debris layer" — the round-11
-"pixel-perfect" checkbox had been a MISREAD: it snapped the fitted box to
-whole SCREEN pixels, a different size from a tile pixel on an unrelated
-grid).** Options → Look → **Piece pixels** (`?piecepixels=tile|display|
-free`, `setPieceFit({ pixels })`, `PIECE_PIXELS`, `data-piece-pixels` on
-the board; `tile` is the DEFAULT and a saved `pieceSnap` is no longer
-read): on the tile grid every sprite pixel is one floor pixel. THE
-MEASURED RULE (`phase0/harness/piece-grid.mjs`, Playwright Chromium +
-Firefox, coordinate-encoded floor and king compared per device pixel over
-18 fractional layouts each): the ONLY construction that lands on the
-floor's device-pixel grid in BOTH browsers is a 16×16 image painted
-exactly as the floor is — a CELL-SIZED box with `center / 100% 100%`. A
-box of any other size (the 23-row sprite at 23/16 of the cell, a two-cell
-box, a 200% background on the cell) drifts a device pixel on some rows in
-one browser or the other; a background offset by whole tile pixels drifts
-too; the same-shaped box with `0 0` matches a `0 0` floor but not the
-`center` one; and a plain `<img>` behaves like `0 0` — so the debris
-layer's per-cell `<img>` is a sub-device-pixel phase off the `center`
-floor in both browsers (invisible at phone scale; making every tile rule
-`0 0` would fix it — not done, the repack tool emits those rules). So a
-tile-grid piece is THREE cell-sized boxes, one per square it can cover:
-`--piece-lo` in its square, `--piece-mid` in a `::before` (later in the
-DOM than the north square, so a nearer head paints over the piece
-behind), `--piece-hi` in a `::after` — the upper boxes at the north
-squares' MEASURED rectangles (`layoutPieceRows` → per-cell
-`--tier-mid-top/-h`, `--tier-hi-top/-h`, re-measured on resize;
-`tierRowVars`): `top:-100%` is NOT the row above once the grid hands its
-sub-pixel remainder to some rows (Chromium: 35.6875-px rows over
-35.70313-px ones at one width — 1/32 px flipped a device row in the
-gate); the percentages are only the fallback above the top rank. **THE
-TIERS ARE THE POSITION (same day: "the pieces are now sitting right at
-the bottom of the cell… The foot of the piece should be roughly centered
-on the tile. I need sliders to adjust their position in tile grid
-mode")**: `play/js/piecetiers.mjs` (pure, browser-safe) cuts a set's
-fitted sprite into the three 16×16 tiles with its placement baked in —
-Options → **Piece lift** / **Piece shift** in WHOLE TILE PIXELS on the
-tile grid (`tileLift` −4…+20, default 5; `tileShift` ±7, default 1 — the designer's settled numbers;
-`?tilelift=` / `?tileshift=`). tiles.css carries the lift-0 tiers
-(`--piece-<fen>-lo` / `-mid`; `phase0/lib/piecehalves.mjs` is the Node
-adapter over the same function — the repack tool emits them,
-`gen-piece-halves.mjs` writes the same lines from the committed
-`img/pieces.png` without the packs, `--check` for staleness; a wider box
-keeps the 16 centre columns — deja-view's knights lose one outline
-column); every other placement is BAKED AT RUNTIME by
-`board-ui.layoutPieceTiers` (the set's sprites read off the computed
-`--piece-<fen>`, decoded once off the DOM as the debris sampler does,
-re-cut per (set, lift, shift) and cached, `pngmini` PNGs set inline as
-`--piece-<fen>-lo/-mid/-hi`; `pieceBaked` resolves when worn;
-`--piece-tile-lift` feeds the headroom, (fit − 16 + lift)/16 of a cell).
-The size dial does not apply (the art's scale); the shadow is one tile
-pixel (`100cqh/16`; the FLIP clone gets `--tpx` inline, its layer being
-no size container, and carries the tiers as its pseudo-elements).
-`display` (the old snap) and `free` keep the % dials. Gates: piece-grid
-4/4 (72/72 exact in each browser — 18 layouts × lift-0 / default / a
-hi-tier reach / the clamps' edge — the free-mode control off the grid),
-selftest (the fit fields, the clamp, the pure cut), ui-smoke (display
-box a whole multiple; tile box = the cell painted like the floor, head
-one cell up, the default lift baked into 36 inline tiers, lift 0 wears
-the stylesheet's, the px dials shown and the % dials hidden),
-replay-smoke, `gen-piece-halves --check`. **The designer's baseline, same
-day: lift +5, shift +1.**
+`play/js/threat.mjs`); **THE ART — what survives the DOM board (2026-09-02 … 2026-09-07; the
+round-by-round record, including every DOM mechanic that got each look,
+is `play/README.md` § "Art themes" and stays there).** Everything drawn
+is 16×16 pixel art off ONE atlas (`play/img/tileset.png` + `pieces.png` +
+`tileset.json`, written by `phase0/harness/repack-tiles.mjs` from three
+free packs in gitignored `phase0/assets-src/` + the in-house drawings in
+`phase0/lib/inhouse.mjs`; the tool READS BACK a missing pack from the
+committed atlas, so the index, the classic row and new roles regenerate
+without the packs; `play/CREDITS.md` is generated). Three THEMES —
+`hall` (pixel-poem), `castle` (SnowHex Dungeon Gathering), `crypt`
+(Szadi art Catacombs) — plus `classic`, the in-house set (the atlas's
+classic row: one wall block for every case, its crate / door / barrel /
+chest, the rubble heap as its ruin, and THE CRACK ×4 that every theme
+masks onto a weakened wall). Every stage carries a `theme` (wave 6 hand-
+authored, 12/12/12), overridden by Options → Art set or `?theme=`. The
+renderer classes every wall by its solid-neighbour mask (the 47-case blob,
+`canonicalMask`; holes are not solid, doors and masonry are; ruins and
+opened doorways count as solid so a line runs through a break), a RUIN by
+its standing-wall neighbours (16 stub cases, chip-free — the debris layer
+owns every fleck), a HOLE by its hole neighbours (16 pit cases) and an
+opened DOORWAY by the walls still standing beside it (posts only where a
+wall stands). Floors are six Catacombs flagstones palette-swapped per
+theme (`f1…f6` by a stable hash); walls are generated bevelled tops in
+each pack's colours over the pack's own brick face. FURNITURE SKINS
+(`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
+door in a north–south line is a WEAK SPOT wearing the crack; an
+authored double is `door2-l`/`-r`), crate, chest (the LID is the line:
+domed = chest, flat = crate; no grey crates), barrel (urns), wreckage,
+masonry (= a weak spot); every role has VARIANTS (`sv1…sv10` by a stable
+hash, wrapping around what the theme has); props are 16×32 boxes (small
+ones centred in the square, tall urns rising north); table / chair /
+shelf are dropped; the rubble heap died 2026-09-04. Cosmetic PROPS
+(torch / banner / chain) scatter on east–west wall faces by hash; floor
+litter is packed away. PIECE SETS (`PIECE_SETS`: NullTale classic — the
+DEFAULT — and dread, Pixel Chess stone / wood, Deja View; every set
+fitted to a native box, one baseline), drawn at the art's own scale on
+THE TILE GRID — every sprite pixel is one floor pixel — placed by
+Options → Piece lift / shift in WHOLE TILE PIXELS (`tileLift` −4…+20,
+`tileShift` ±7; `?tilelift=` / `?tileshift=`; `DEFAULT_PIECE_FIT` = the
+designer's settled lift +5, shift +1; a piece stands on its square's
+bottom edge and rises into the square north, which paints behind it).
+The classic GLYPH piece set is gone (text, not pixel art). Decisions
+that still bind the art: no numbers on hint arrows (the hint LIST under
+the board carries rank swatch + SAN + eval + depth), one 3-px light-blue
+frame for every god action, arrows in the player's own width / opacity
+(Options → Arrow width / opacity), the enemy's last move a red arrow, a
+displacement its blue arrow alone.**
 
 **PHASE 2 OPENS WITH THE 16×16 RENDERER — DECIDED 2026-09-07 (designer:
 "I can't help but feel like our whole graphics pipeline might be a bit
 janky. Especially if we want to commit to the 16x16 tile grid for
-everything… I want to commit to 16x16. Next session we'll start Phase 2
-proper, and get a proper rendering pipeline").** Brief §2 item 5 is the
+everything… I want to commit to 16x16").** Brief §2 item 5 is the
 constraint: every drawn thing is 16×16 pixel art on ONE native-resolution
 grid, composed in ONE buffer and scaled to the screen ONCE, by a whole
-number where the screen allows it. THE DIAGNOSIS the tile-grid piece work
-produced: the DOM board is a CSS grid of FRACTIONAL cells and every layer
-is a separate image the browser resamples on its own, so a tile pixel is
-6.9 device pixels drawn 7,7,7,6,7 and every layer must re-earn alignment
-by construction (cell-sized boxes, measured row rectangles, positions
-baked into tiles, a two-browser gate); the debris `<img>` sits a
-sub-device-pixel off the floor; FLIP slides interpolate off-grid; a CSS
-trick cannot fix it (at dpr 3 a device pixel is not a multiple of
-Chromium's 1/64-px layout unit, so the row remainder comes straight
-back); and a DOM grid of 10,000 cells × 5 layers cannot carry the
-100×100 overworld, which needs a camera and sprite batching regardless.
-THE SHAPE: a full-board buffer at 16 px per tile plus headroom, every
-layer written by the existing pure painters, blitted at an integer
-device-pixel scale (k = ⌊available device px ÷ (16 × files)⌋: a 390-px
-phone at dpr 3 gets k 7, 1120 device px, a 17-CSS-px margin; the board
-steps in size and never fills exactly — the pixel-art norm), a camera for
-the overworld, hit-testing by division, labels as a DOM overlay. THE
-SPIKE FIRST: one board-sized canvas at integer scale running the existing
-painters, judged for flicker on the designer's Firefox/Windows and
-Android Firefox BEFORE anything is built on it — the "NO CANVAS on the
-board" rule (the debris layer's flicker rounds) was written against
-PER-CELL canvases mixed into DOM compositing, and one board-sized surface
-is a different animal, but the phone decides. CARRIES OVER: `piecetiers`,
-the debris ledger + painter, `classifyTerrain`, the autotile masks, the
-atlas + repack tool (one atlas PNG in place of 160 KB of data URIs), the
-rules, the Director, the replay log. REWRITTEN: board-ui's DOM painting,
-style.css's tile rules, the arrow/mark overlays, the FLIP slides and quake
-fx, the smoke suites' renderer checks; the replay analyzer shares the new
-renderer. Until it lands the DOM board carries the duel exactly as gated
-above; nothing else is built on the DOM renderer.
-**MILESTONE 1 ✅ BUILT 2026-09-07 — THE CANVAS BOARD, behind the Renderer
-option while the phone judges it** (`play/js/canvas-board.mjs` +
-`atlas.mjs` + `pixelfont.mjs`; `play/README.md` § "The canvas board").
-Not a throwaway spike (designer: "is it setting up plumbing… or built out
-of old parts just to see integer scaling?" — it is the real renderer's
-first milestone): the same method surface as `BoardUI` (main.mjs drives
-either through `createBoard`; `options.renderer` `dom`/`canvas`,
-`?renderer=`, `options.scaling` `integer`/`fill`, `?scaling=`; a change
-REMOUNTS live on the same position), the art straight off the atlas PNGs
-(the in-house SVGs — cracks, the classic set — decoded off style.css's
-properties until the repack tool moves them), one native buffer with
-HEADROOM (fit − 16 + lift), painter's order (floor, flat terrain, debris
-OVER a ruin's stub, decor and the doorway OVER the debris, marks under,
-the tall things row by row far-to-near — props and pieces interleaved —
-marks over, the 3×5-font coordinates, the flight's pixels, a piece in
-mid-slide), ONE blit at k = ⌊device width ÷ (16 × files)⌋ (the board
-centred in whole device pixels; `fill` = the exact quotient), on-grid
-slides in whole native pixels, terrain fx with held end frames, the
-rumble as blit jitter (`rumble(ms)`), the flight through
-`particles.mjs`'s new sink (`ui.drawFlight`; SVG paths on the DOM board),
-the ARROWS as PIXEL ART in the buffer (`pixelarrow.mjs`: shaft + head +
-one-pixel halo; THE STYLE IS THE PLAYER'S — Options → Look → Arrow width
-(the shaft in floor pixels 1–5, default 2, the head growing with it; odd
-widths through a pixel centre, even along a boundary, so a straight shaft
-is exactly that many rows) and Arrow opacity (0.2–1, default 0.85, scaled
-by strength), `?arrowwidth=` / `?arrowalpha=`, `setArrowStyle` on BOTH
-boards, `__DCK.arrowStyle`; and NO NUMBER ON A HINT — a plate beside the
-shaft was "way too big", a staircase of 3×5 digits inside it was cut the
-same day ("not worth keeping"), so the HINT LIST in the player's bar
-carries rank swatch + SAN + eval + depth; a label is still drawn as that
-staircase for a caller that asks — the replay page's numbered PV arrows;
-the first build kept
-the SVG overlay above the canvas and the designer's first session saw "a
-big white rectangle flash" it was suspected of — nothing overlays the
-canvas now; the DOM board keeps `renderArrows`), the container still
-stamped `data-theme/-pieces/-doors` (the legend and the debris sampler
-read the cascade), a diagnostics line under the board (`#render-diag`:
-dpr, device-pixel size, k, integer/fill), `__DCK.renderer` (kind / info /
-diag / square / buffer / decor / testPattern / snapMode / set). Not there
-on purpose: glyph pieces (the default set stands in), the % dials (tile
-grid only), the camera. THREE MEASURED FACTS (rule 18
-grows): (a) the screen canvas must be sized EXPLICITLY in whole device
-pixels from the container's `device-pixel-content-box` — a `100%` canvas
-is a fractional number of device pixels and gets resampled, a column
-drifting in part way across, in both browsers; (b) under an EMULATED
-ratio (Playwright's `deviceScaleFactor`) Chromium reports that box in
-CSS px, a whole factor off — the board falls back to css × ratio when
-they disagree (`renderInfo.emulated`), the real phone's observer is the
-truth; (c) the element's POSITION is fractional in device pixels whenever
-the page above it is, and a canvas composited at a fractional offset is
-resampled (ratio 1.25: the first 4-px block 3 rows tall) —
-`setSnapMode` `none` / `margin` / `transform`, `canvas-grid.mjs` measures
-them per browser — VERDICT: `none` (the browser's own placement) is the
-default: Firefox, whose emulated ratio is the real preference, landed
-1:1 in 18/18 cases (ratios 1–3 × nine widths, integer + fill, `none` and
-`margin` alike); Chromium at ratio 1 exact with either; `transform`
-fails everywhere (a float translate defeats the browser's snapping); and
-CHROMIUM AT ANY OTHER RATIO CANNOT BE MEASURED under Playwright — its
-emulation is a compositor scale over a layout that still believes ratio
-1, so a canvas is resampled twice and blocks drift a device pixel part
-way across even on a whole-pixel, exact-size box (the gate runs Chromium
-at ratio 1 only and says why); the real phone is the final word. GATES: `canvas-parity.mjs` (the
-DOM board forced to an exact integer cell vs the canvas buffer, every
-square's 16×16 on the start, after 14 seeded plies with the gods hot and
-on the other themes — EXACT, 24 320/24 320 per snapshot; the DOM's arrow
-SVG hidden, the coordinate corners masked), `canvas-grid.mjs` (the test
-pattern at nine ratio × width cases, integer + fill, Chromium +
-Firefox), `ui-smoke.mjs --renderer canvas` (the DOM-only probes skipped,
-the geometry / diag / live remount checked; everything else renderer-
-neutral through `__DCK.marks.cell` + `__DCK.renderer.decor`), selftest
-44/44 (both boards classify, decorate and mark alike on detached boards;
-the arrows' compact labels, the staircase's steps and its ink, a straight
-shaft exactly the dial's rows, the DOM board's dials re-rendering),
-`flicker-scan.mjs --renderer canvas` in Playwright's Firefox (a 48-s
-duel: 3.3 / 18.4 piece- / debris-scale blinks per 10 s vs the DOM board's
-8.5 / 48.2 on its own random duel, motion on; the s59 door and torch
-vanish 0 times; a 25-s idle turn with the probe streaming shows nothing
-beyond the arrows' repaints; no white frame mid-duel on the canvas
-recordings where the DOM recording has four). **THE DESIGNER'S VERDICT
-(2026-09-07, Zenfone 10 + Firefox/Windows 153): "works fine on both
-desktop and mobile" — k 3 on the desktop, k 6 on the phone — and the fill
-scaling "doesn't look bad either"; one "big white rectangle flash",
-suspected of the arrow overlay ("the arrows should probably be in the
-same rendering system, reworked to fit the 16x16 tile art") — done, the
-pixel arrows above; the replay log of that session (s60, 62 plies, 7
-quakes, 2 undos) had no anomalies.** Whether the DOM board goes is the
-next verdict.
-DECIDED the same session (brief §5.1, §10, §11): the DUEL IS A CAMERA
+number where the screen allows it. THE DIAGNOSIS that decided it: the DOM
+board was a CSS grid of FRACTIONAL cells and every layer a separate image
+the browser resampled on its own, so alignment was a property each layer
+had to re-earn by construction (a tile pixel drawn 7,7,7,6,7 device
+pixels; the debris `<img>` a sub-device-pixel off the floor; FLIP slides
+off-grid; no CSS trick fixes it at dpr 3, where a device pixel is not a
+multiple of Chromium's 1/64-px layout unit), and a DOM grid of 10 000
+cells × 5 layers cannot carry the 100×100 overworld.
+**MILESTONE 1 ✅ 2026-09-07 — THE CANVAS BOARD** (`play/js/canvas-board.mjs`
++ `atlas.mjs` + `pixelfont.mjs` + `pixelarrow.mjs`; `play/README.md` §
+"The canvas board"): one native buffer at 16 px per tile plus HEADROOM
+(fit − 16 + lift), repainted from scratch in painter's order (floor, flat
+terrain, debris over a ruin's stub, decor and the doorway over the
+debris, marks under, the tall things row by row far-to-near — props and
+pieces interleaved — marks over, the 3×5-font coordinates, the arrows as
+PIXEL ART, the flight's pixels, a piece in mid-slide), ONE blit at k =
+⌊device width ÷ (16 × files)⌋ (`integer`, the board centred in whole
+device pixels) or the exact quotient (`fill`), on-grid slides in whole
+native pixels, terrain fx with held end frames, the rumble as blit
+jitter. THREE MEASURED FACTS (rule 18): the screen canvas must be sized
+EXPLICITLY in whole device pixels from the container's
+`device-pixel-content-box`; under an EMULATED ratio Chromium reports that
+box in CSS px (the board falls back to css × ratio, `renderInfo.emulated`);
+and a canvas at a fractional device-pixel POSITION is resampled — `none`
+(the browser's own placement) measured exact in Firefox at every ratio
+and in Chromium at ratio 1, `transform` fails everywhere, and Chromium at
+any other ratio cannot be measured under Playwright (its emulation
+resamples twice) — the real phone is the final word. Gates that remain:
+`canvas-grid.mjs` (nine ratio × width cases, integer + fill, Chromium +
+Firefox), `ui-smoke.mjs`, selftest, `flicker-scan.mjs` (Playwright's
+Firefox: 3.3 / 18.4 piece- / debris-scale blinks per 10 s vs the DOM
+board's 8.5 / 48.2; no white frame). **THE DESIGNER'S VERDICTS (2026-09-07,
+Zenfone 10 + Firefox/Windows): "works fine on both desktop and mobile" —
+k 3 on the desktop, k 6 on the phone — the fill scaling "doesn't look bad
+either"; a "big white rectangle flash" laid at the SVG arrow overlay
+(gone: the arrows are pixels in the buffer, nothing overlays the canvas);
+and, the next session, "the current build looks fine with canvas
+rendering on both desktop and mobile, including integer scaling" — the
+DOM board goes.**
+**MILESTONE 2 ✅ 2026-09-07 — THE DOM BOARD IS RETIRED** (the same
+session; `play/README.md` § "The canvas board", Milestone 2). One PR of
+deletion plus one move, GATED PIXEL FOR PIXEL: a guard dumped the debris
+sampler's decoded sprites and every square of the buffer on six cases
+(three themes, classic, a door set, another piece set; the start and 14
+hot plies) before and after — every pack theme identical to the byte,
+zero page errors. The in-house drawings (the classic set + the four
+cracks) are the atlas's `classic` row (`phase0/lib/inhouse.mjs`, exact
+against the browser's 16×16 decode of the SVGs it replaces); the repack
+tool READS BACK a missing pack from the committed atlas; the debris
+SAMPLER reads the atlas through `atlas.tileOf` under the board's theme
+and door set (the ledger's sprite names keep the old custom-property
+spelling as keys); the options LEGEND is five 16×16 canvases painted off
+the atlas (main.mjs `paintLegend`); the promotion picker draws the set's
+sprites; the residue ledger runs on `residueStep` (the replay page's
+rule) over the last paint's own ledgers; the replay page mounts the
+canvas board. GONE: `BoardUI` + `renderArrows` (board-ui.mjs is the pure
+half: `classifyTerrain`, `residueStep`, `decorFor`, the hashes, the
+masks, the set lists, `DEFAULT_PIECE_FIT`, `pickPromotion`), tiles.css,
+style.css's tile / cell / piece / arrow / fx rules and `@sprites` block,
+`piecetiers.mjs` + `lib/piecehalves.mjs` + `gen-piece-halves.mjs`,
+`gen-sprites.mjs`, `canvas-parity.mjs`, `piece-grid.mjs`, the flight's
+SVG sink, the Renderer option (`?renderer=`), the Piece-pixels modes and
+the three % dials, the classic GLYPH piece set. ONE FIX fell out: the
+canvas board had drawn the classic set's SVGs at their 150-px decode
+size (a viewBox-only SVG's intrinsic size in Chromium), so a classic wall
+block spilled over nine squares — the atlas row is 16×16 and the classic
+theme paints right (and its debris now samples true 16×16 sprites).
+`renderer.set` takes the scaling alone (the old `set('canvas', s)` still
+reads); saved DOM-era options are not read. Gates after: selftest 43/43,
+ui-smoke 186 ok, replay-smoke, test-debris 53, test-logreport 47,
+strip-ruin-chips --check, canvas-grid `none` 4/4 in Chromium at ratio 1
+and 18/18 in Firefox (the `transform` strategy fails by design, as
+recorded; a build container's `npx playwright install firefox` can
+resolve a different Playwright than node_modules' — install through
+`./node_modules/.bin/playwright` so the build numbers agree).
+DECIDED the same day (brief §5.1, §10, §11): the DUEL IS A CAMERA
 VIEW OF THE SAME WORLD, zoomed (the largest integer step that fits the
 arena, the dungeon outside dimmed — small fights zoom in, no letterbox,
 no board mode); the CAMERA TURNS WITH THE ARMY (screen-up = facing; every
@@ -455,21 +178,78 @@ the king step OR its own chess move that most reduces its BFS distance to
 its slot, rotation turns the pattern, automatic moves never capture, a
 wait button); integer scaling the default, FILL the fallback (designer:
 "not a dealbreaker"). THE PHONE NUMBERS (1080-wide Zenfone 10, ratio
-likely 2.625): a 10-file arena at k 6 = 96 device px = 5.7 mm per tile
-(the DOM board draws ~100); exploration at k 4 = 17 × 34 tiles at 3.8 mm;
-across current phones a 10-file arena lands between 5.0 and 7.1 mm per
-tile, within a step of today; a 1080p desktop is height-bound at k 5–6
-with 35 tiles of dungeon beside the arena. **HANDOFF (end of 2026-09-07;
-the designer's screenshot verdict on the dials + hint list: "looks
-good"): NEXT is the phone verdict on the pixel arrows, the dials and the
-hint list (and whether the white flash is gone with the overlay); then
-RETIRE THE DOM BOARD — board-ui's DOM painting, style.css's tile rules,
-the FLIP slides, the arrow SVG, the per-cell debris `<img>` and the
-piece tiers' CSS go, the replay analyzer mounts the canvas board, ui-smoke
-loses its DOM branches, `canvas-parity.mjs` and `piece-grid.mjs` retire
-with the board they gate (the canvas board keeps `canvas-grid.mjs`);
-then the camera + rotation + edge-on doors, then the world + the army
-rule on one hand-built map, then enemies + LOS + the trigger pipeline.**
+likely 2.625): a 10-file arena at k 6 = 96 device px = 5.7 mm per tile;
+exploration at k 4 = 17 × 34 tiles at 3.8 mm; across current phones a
+10-file arena lands between 5.0 and 7.1 mm per tile; a 1080p desktop is
+height-bound at k 5–6 with 35 tiles of dungeon beside the arena. The
+five decisions of the retirement session (designer: "sounds fine by
+me"): retire now; the classic glyph set dies; tiles.css all the way; THE
+CAMERA OWNS THE DESKTOP SCREEN; a generated edge-on door placeholder
+until per-theme art exists.
+**HANDOFF (end of 2026-09-07, after milestone 2): NEXT IS THE CAMERA —
+the second PR, on a codebase with one renderer.** The buffer becomes the
+VIEWPORT (the screen's device size ÷ k in tiles, plus a one-tile margin
+for partial tiles and one headroom row), painted from a WORLD grid
+through a camera {origin, facing, k}; canvas-board's `#origin(sq)` is the
+ONE function to redirect (every painter takes an origin; hit-testing is
+its inverse); full repaint of the viewport per change (about 600 cells at
+phone k 4 — six arenas' worth of today's per-change paint; no dirty
+rectangles until something needs them; a 100×100 painted whole would be
+1600² and pointless). THE CAMERA OWNS THE SCREEN: k on BOTH axes, and
+the duel zoom is the largest integer k that fits the arena on both axes
+INCLUDING the headroom row (else the top rank's heads clip at the
+barrier), the world outside dimmed — today k is the container's WIDTH
+alone and the board box is capped at 560 CSS px, which is why the
+desktop got k 3 (560 ÷ 160 floors to 3); a 1080p desktop is height-bound
+at k 5–6, so the panels (the player's bar, the hint list; the desktop
+sits the board beside them at 45%) move to give the camera the screen —
+the desktop look is the designer's to judge on the first build. FILL
+becomes DUEL-ONLY (exploration has no arena to fit; it is always
+integer). FACING goes into the camera model NOW, the turn BUTTONS wait
+for the army (a full turn is unobservable until an army turns):
+`flipped` already IS the 180° turn — coordinate mirroring in `gridPos`,
+`#squareAt` and `#arenaToBuf` — so quarter turns generalise it to a
+facing with the buffer's width and height swapping; `classifyTerrain`
+needs NO rewrite — a wall mask is eight neighbour bits, so a quarter turn
+is a BIT PERMUTATION applied before the tile lookup, the same for the
+four-bit ruin / pit-rim / doorway-post masks; debris buffers rotate by
+index permutation; the gate is a debug ROTATE button walked over the
+36-arena bed. Variant hashes move to WORLD coordinates (today the
+arena's file + rank) so a crop or a turn never reshuffles the floor. The
+EDGE-ON DOOR is a GENERATED PLACEHOLDER (the wall's top band with a slab
+and a post above and below, brief §11) until per-theme art exists. A
+zoom step is a CUT like a turn — which makes the brief's snap-zoom for
+the tap-a-piece move free (phone k 4 tiles are under 4 mm, below a
+thumb: the d-pad carries the army, the individual move needs the zoom).
+THEN THE WORLD + THE ARMY RULE — most plumbing exists: stage schema 2 IS
+a world file (a hand-built 100×100 map is the same file, bigger); the
+debris ledger keys on the environment's uncropped grid through
+`envTransform`, so the WORLD IS THAT ENVIRONMENT and a duel IS A CROP.
+THE SAVE IS THE WORLD: holes (the Director's, written back after a
+duel), residue, debris, army positions, facing and enemy states in ONE
+serializable object per floor, keyed the way the debris ledger is today
+— decide it at the milestone's start so the replay log can grow an
+exploration section without a second format. NEW: a pure MOVE GENERATOR
+on the world grid for the army rule's "its own chess move" (sliders
+blocked by walls and pieces, knight hops, pawns forward along facing, no
+check — ffish caps at 12×10 and rule 7's catalog is per dimension; the
+exploration layer lives outside FSF by design, brief §2 item 1, and this
+generator is NEVER duel legality); a STAMPING path that puts the CARRIED
+formation, facing as it stands, into the barrier's crop (`dealMatchup`
+keeps dealing random armies for the setup screen and the labs; the
+molding invariants — royal rearmost, pawns in front per file — are the
+shape of the pattern the player carries); the TRIGGER check as one pure
+module read by the linter, the live check and the threat display; the
+ENGINE BOOTS AT PAGE LOAD once a world exists (the barrier drop must not
+wait on the WASM; the catalog + incremental per-deal variants already
+cover any crop). The Phase 1 page survives as "a world the size of the
+arena where the duel triggers at once", which keeps the god lab, the
+smokes and the analyzer alive without a port. THE TRIGGER RULE IS STALE
+AGAINST THE BED: brief §5.3 caps kings at 7 apart (gap 4) and §4.4 has
+the band under re-investigation, but the wave-6 arenas stand the kings 9
+apart (gap 8) and those were "the fun" — marked under review in the
+brief; settle the band before enemies + LOS + the trigger pipeline, and
+never build the trigger to the old numbers.**
 **Phase 1.2 — the Gods debug overlay ✅ done**
 (the tuning instrument, built BEFORE 1.3 changes what it measures: roll
 trace with reason codes recorded INSIDE `quake()` incl. the fall-through
@@ -938,7 +718,7 @@ mode on something like lt-lit.github.io/dungeoncrawlerking/replay/").** It
 is a SEPARATE PAGE — `replay/index.html` + `replay/js/replay.mjs` +
 `replay/replay.css`, a sibling of `play/` on Pages (its own copy of
 `coi-serviceworker.min.js` — rule 10, scope; `../play/vendor/stockfish.js`
-finds its wasm and worker next to itself; `../play/style.css` + `tiles.css`
+finds its wasm and worker next to itself; `../play/style.css`
 for the look) — so the game's phase machine and main.mjs are untouched
 beyond two entry buttons (`▶ Review` on the end overlay → `../replay/
 ?latest=1`; `Open` on the setup screen's saved-logs row → `?slot=N`; both
@@ -1029,7 +809,13 @@ browser logs (the lab's line shape and the export are two shapes of one
 thing); mid-duel review (the in-game `before` / `deep Δ` cover the last
 quake).
 
-**THE DEBRIS LAYER ✅ built 2026-09-07 (designer: "a universal debris
+**THE DEBRIS LAYER ✅ built 2026-09-07 (renderer detail in this paragraph —
+the per-cell `<img>`, the SVG flight, the three flicker rounds, "NO
+CANVAS on the board" — is the DOM board's and HISTORY since its
+retirement the same day; the canvas board draws the debris buffer and the
+flight's pixels straight into its own buffer, and the ledger, the
+painter, the transform, the caps, the settling and the flight model are
+what survive unchanged) (designer: "a universal debris
 system, so traces of destruction can be seen everywhere… blood splatters
 for captured pieces… skid marks under displacements and worn paths sound
 awesome… actual particle effects… stick to the 16×16 tiles… persist after
@@ -1274,11 +1060,17 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
+- `play/js/canvas-board.mjs` + `atlas.mjs` + `pixelarrow.mjs` +
+  `pixelfont.mjs` — THE BOARD (Phase 2, 2026-09-07): one 16×16 buffer
+  scaled once, its art off `play/img/` (the atlas; `phase0/lib/inhouse.mjs`
+  draws the classic row). `play/js/board-ui.mjs` is the pure terrain rule
+  (`classifyTerrain`, `residueStep`, the hashes, the masks) + the
+  promotion picker — the DOM board that file used to be is retired.
 - `play/js/debris.mjs` + `particles.mjs` + `pngmini.mjs` — THE DEBRIS
   LAYER (2026-09-07): the environment's scar ledger + painter (pure), the
-  flight (SVG paths) and the deterministic PNG; wired in main.mjs (§ THE
-  DEBRIS LAYER), shown by per-cell `<img>`s through board-ui setPosition's
-  `debris` callback / `setDebris`, the flight on `flightSvg`.
+  flight (pixels the board draws) and the deterministic PNG; wired in
+  main.mjs (§ THE DEBRIS LAYER), painted straight into the canvas board's
+  buffer through setPosition's `debris` callback / `setDebris`.
 - `play/` — the Phase 1 game (vanilla-JS ES modules, GitHub Pages). Phase 0
   modules are ported verbatim into `play/js/`; `play/vendor/` carries its own
   copy of the validated WASM builds; `coi-serviceworker.min.js` sits next to
@@ -1322,19 +1114,15 @@ node spikes/spike04-*.mjs      # any spike; PASS/FAIL lines, exit code
 node harness/godlab/run.mjs harness/godlab/sweeps/smoke.json  # rig sanity
 node harness/godlab/gods-metrics.mjs results/godlab/godlab-wave6-*.jsonl  # the v4 scorecard: pacing, next-ply share, double-touch, un-mating, heat, floor
 node harness/selftest-headless.mjs  # play/selftest.html in real Chromium (npm i --no-save playwright)
-node harness/ui-smoke.mjs --shots   # live-board UI smoke: tiles/marks/arrows/probe/themes on a forced-hot duel (+ screenshots) + the replay log's export/undo branch
+node harness/ui-smoke.mjs --shots   # live-board UI smoke on the canvas board: tiles/marks/arrows/probe/themes/legend/geometry on a forced-hot duel (+ screenshots) + the debris layer + the replay log's export/undo branch
 node harness/log-report.mjs <dck-log_*.json> [quakes|branches|engine|all] [--ply N]  # a phone's exported replay log as a readable post-mortem (no engine needed; the rendering is play/js/logreport.mjs, shared with replay/)
 node harness/test-logreport.mjs      # the shared report module's Node gate on the committed sample log (replay/samples/)
 node harness/test-debris.mjs         # THE DEBRIS LAYER's Node gate: transform, ledger, painter, the debris PNG, the ruin tiles' chip strip
-node harness/strip-ruin-chips.mjs --check  # the committed ruin tiles carry no baked chips (the debris layer owns the flecks)
+node harness/strip-ruin-chips.mjs --check  # the committed atlas's ruin tiles carry no baked chips (the debris layer owns the flecks)
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
-node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner (the debris layer's three flicker rounds); --idle 25000 for an idle turn; compare <dirs…>
-node harness/repack-tiles.mjs       # rebuild play/tiles.css + img/tileset.png + CREDITS.md from the packs in assets-src/ (gitignored)
-node harness/gen-piece-halves.mjs --check  # the tile-grid piece halves in tiles.css match the committed atlas (drop --check to rewrite them without the packs)
-node harness/piece-grid.mjs          # THE PIECE GRID gate: tile-grid pieces land on the floor's device-pixel grid in Chromium + Firefox (npx playwright install firefox once)
-node harness/canvas-parity.mjs --shots   # PHASE 2: the canvas board draws what the DOM board draws, tile pixel for tile pixel (start, 14 hot plies, every theme)
-node harness/canvas-grid.mjs --browser all  # PHASE 2: the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy
-node harness/ui-smoke.mjs --renderer canvas --shots  # the live smoke on the canvas board
+node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner; --idle 25000 for an idle turn; compare <dirs…>
+node harness/repack-tiles.mjs       # rebuild play/img/tileset.png + tileset.json + CREDITS.md (+ pieces.png) from the packs in assets-src/ (gitignored) — or, without them, read back from the committed atlas (the classic row is always regenerated)
+node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy (npx playwright install firefox once)
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)
@@ -1483,8 +1271,10 @@ run one sweep at a time.
     2026-08-25; the natural venue would be FSF issue #609 if that ever
     changes). The walled-passer eval fix stays unshipped, documented in
     `engine/README.md`.
-18. **Browsers do not resample two images alike (2026-09-07,
-    `phase0/harness/piece-grid.mjs`).** On the DOM board, the ONLY thing
+18. **Browsers do not resample two images alike (2026-09-07; measured by
+    the piece-grid gate, retired with the DOM board the same day — the
+    rule's conclusion IS the canvas board, and it is why nothing may be
+    added beside it).** On the DOM board, the ONLY thing
     that lands on the floor tile's device-pixel grid in both Chromium and
     Firefox is a 16×16 image painted exactly as the floor is — a
     cell-sized box, `center / 100% 100%`. A box of another size, a 200%
@@ -1496,4 +1286,15 @@ run one sweep at a time.
     ones) — measure the rows. Any position must be baked into the pixels.
     This is the case for the Phase 2 renderer: one buffer, one resample,
     nothing to align. Do not add another DOM layer that has to match the
-    floor; if one is unavoidable, run the gate.
+    floor — there is no gate for one any more; draw it in the buffer.
+19. **The atlas is the ONE art source (2026-09-07).** Every tile, sprite,
+    crack and piece the game shows comes from `play/img/tileset.png` +
+    `pieces.png` + `tileset.json` through `atlas.mjs tileOf` — the board,
+    the debris sampler, the options legend and the promotion picker all
+    read it, and `tileOf` is the one cascade (theme row, door set, variant
+    wrap-around, the classic row as the fallback). Never put art in CSS
+    again (a data URI decoded off computed style is a second source that
+    drifts: the classic SVGs decoded at 150 px, not 16, and the canvas
+    board drew them nine squares wide until the atlas replaced them), and
+    regenerate the atlas only through the repack tool, which reads back
+    what the packs are not on disk to rebuild.

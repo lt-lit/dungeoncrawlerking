@@ -3,19 +3,20 @@
 // the ruin tile keeps only the broken wall's stubs and their faces, and the
 // chips a breach scatters come from the stone spray, governed by the same
 // dials as every other debris). The repack tool generates chip-free ruins
-// from now on (RUIN.chips = 0); this rewrites the COMMITTED files the same
-// way without the packs, which are gitignored: every --tile-ruin-<mask> in
-// play/tiles.css loses its isolated pixel components (a chip is a 1- or
-// 2-pixel fleck a pixel clear of everything else; a stub always touches
-// the tile's edge, ring included), and the matching cells of
-// play/img/tileset.png are rewritten to agree.
+// from now on (RUIN.chips = 0); this rewrites the COMMITTED atlas the same
+// way without the packs, which are gitignored: every ruin-<mask> cell of
+// every theme in play/img/tileset.png (play/img/tileset.json says where)
+// loses its isolated pixel components (a chip is a 1- or 2-pixel fleck a
+// pixel clear of everything else; a stub always touches the tile's edge,
+// ring included). (Until 2026-09-07 the same tiles lived as data URIs in
+// play/tiles.css too; that file retired with the DOM board.)
 //
 // Usage: cd phase0 && node harness/strip-ruin-chips.mjs [--check]
 //   --check  exit 1 if any ruin tile still carries an isolated component
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { decodePng, encodePng, samePixels } from '../lib/png.mjs';
+import { decodePng, encodePng } from '../lib/png.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const T = 16;
@@ -61,43 +62,34 @@ export function stripIsolated(img) {
   return { img: out, removed: n };
 }
 
-const RE = /(--tile-ruin-(\d+): url\("data:image\/png;base64,)([A-Za-z0-9+/=]+)("\);)/g;
-
 export function run({ check = false } = {}) {
-  const cssPath = join(ROOT, 'play', 'tiles.css');
   const atlasPath = join(ROOT, 'play', 'img', 'tileset.png');
-  let css = readFileSync(cssPath, 'utf8');
-  const swaps = []; // [before, after] tiles for the atlas
+  const index = JSON.parse(readFileSync(join(ROOT, 'play', 'img', 'tileset.json'), 'utf8'));
+  const atlas = decodePng(readFileSync(atlasPath));
+  const rowH = index.row ?? 2 * T;
   let tiles = 0, removed = 0, dirty = 0;
-  css = css.replace(RE, (m, pre, mask, b64, post) => {
-    const img = decodePng(Buffer.from(b64, 'base64'));
-    const { img: clean, removed: n } = stripIsolated(img);
-    tiles++;
-    if (!n) return m;
-    dirty++;
-    removed += n;
-    swaps.push([img, clean]);
-    return pre + encodePng(clean).toString('base64') + post;
-  });
+  for (const [theme, t] of Object.entries(index.themes)) {
+    if (t.inhouse) continue;
+    for (const [role, cell] of Object.entries(t.tiles)) {
+      if (!/^ruin-\d+$/.test(role)) continue;
+      const x0 = cell.col * T, y0 = t.row * rowH;
+      const img = { width: T, height: T, data: Buffer.alloc(T * T * 4) };
+      for (let r = 0; r < T; r++) atlas.data.copy(img.data, r * T * 4, ((y0 + r) * atlas.width + x0) * 4, ((y0 + r) * atlas.width + x0 + T) * 4);
+      const { img: clean, removed: n } = stripIsolated(img);
+      tiles++;
+      if (!n) continue;
+      dirty++;
+      removed += n;
+      if (!check) for (let r = 0; r < T; r++) clean.data.copy(atlas.data, ((y0 + r) * atlas.width + x0) * 4, r * T * 4, (r + 1) * T * 4);
+      void theme;
+    }
+  }
   if (check) {
     console.log(`${tiles} ruin tiles, ${dirty} with isolated chips (${removed} px)`);
     return dirty === 0;
   }
-  let atlasCells = 0;
-  if (dirty) {
-    writeFileSync(cssPath, css);
-    const atlas = decodePng(readFileSync(atlasPath));
-    for (let y = 0; y + T <= atlas.height; y += T) for (let x = 0; x + T <= atlas.width; x += T) {
-      const cell = { width: T, height: T, data: Buffer.alloc(T * T * 4) };
-      for (let r = 0; r < T; r++) atlas.data.copy(cell.data, r * T * 4, ((y + r) * atlas.width + x) * 4, ((y + r) * atlas.width + x + T) * 4);
-      const swap = swaps.find(([before]) => samePixels(before, cell));
-      if (!swap) continue;
-      for (let r = 0; r < T; r++) swap[1].data.copy(atlas.data, ((y + r) * atlas.width + x) * 4, r * T * 4, (r + 1) * T * 4);
-      atlasCells++;
-    }
-    writeFileSync(atlasPath, encodePng(atlas));
-  }
-  console.log(`${tiles} ruin tiles, ${dirty} rewritten (${removed} chip px removed), ${atlasCells} atlas cells rewritten`);
+  if (dirty) writeFileSync(atlasPath, encodePng(atlas));
+  console.log(`${tiles} ruin tiles, ${dirty} rewritten (${removed} chip px removed)`);
   return true;
 }
 

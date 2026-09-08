@@ -7,19 +7,17 @@
 // the cell's bottom-left) and the index the repack tool writes next to
 // them (play/img/tileset.json). The canvas board draws straight off these
 // two images with drawImage — no data URIs, no CSS custom properties, no
-// per-tile decode — which is what play/tiles.css (160 KB of the SAME
-// pixels inlined) is for the DOM board. Both come from one run of
-// phase0/harness/repack-tiles.mjs, so a tile here and a tile there are
-// byte-identical; the parity gate (phase0/harness/canvas-parity.mjs)
-// checks exactly that on the real board.
+// per-tile decode. (play/tiles.css, the same pixels inlined for the DOM
+// board, retired with that board on 2026-09-07; the atlas is the one art
+// source now — the board, the debris sampler and the options legend all
+// read it.)
 //
-// The in-house drawings that never went into the PNG — THE CRACK (four
-// drawings, every theme wears them on a weakened wall) and the "classic"
-// set (the drawn wall block, crate, door, barrel, chest, rubble heap) — are
-// SVG data URIs in play/style.css; `cssSprite` decodes one off a CSS
-// custom property into a 16×16 bitmap, exactly as the debris sampler in
-// main.mjs does. Moving them into the PNG atlas is the repack tool's job,
-// a later step.
+// The in-house drawings — THE CRACK (four drawings, every theme wears them
+// on a weakened wall) and the `classic` set (the drawn wall block, crate,
+// door, barrel, chest, rubble heap: what a stage without a theme wears) —
+// are the atlas's `classic` row (phase0/lib/inhouse.mjs draws them, the
+// repack tool writes them); until 2026-09-07 they were SVG data URIs in
+// play/style.css decoded off the cascade at boot.
 //
 // Role resolution (`tileOf`) is the CSS cascade's, on data: a skin VARIANT
 // the theme lacks wraps around (barrel-7 on a theme with five barrels is
@@ -33,8 +31,11 @@ export const TILE = 16;
 export const PIECE_ORDER = 'pnrbqk';
 /** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles placeProp). */
 const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage']);
-/** The in-house (classic) set's sprites, by role → the style.css property. */
-const CLASSIC_VARS = { wall: '--tile-wall', crate: '--sprite-crate', door: '--sprite-door', barrel: '--sprite-barrel', chest: '--sprite-chest', wreckage: '--sprite-crate', rubble: '--sprite-rubble' };
+/** The atlas row of the in-house drawings (the classic set + the cracks). */
+const CLASSIC = 'classic';
+/** The classic set's one tile per family: any wall case is its block, a
+ *  ruin its heap, the wreckage and a double door's half its crate and door. */
+const CLASSIC_ROLE = { wall: 'wall', crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble', ruin: 'rubble' };
 
 const baseRole = (role) => role.replace(/-\d+$/, '');
 const variantOf = (role) => { const m = role.match(/-(\d+)$/); return m ? parseInt(m[1], 10) : 1; };
@@ -70,11 +71,9 @@ export class Atlas {
     this.index = index;
     this.tiles = tiles;
     this.pieces = pieces;
-    this.themes = Object.keys(index.themes);
+    this.themes = Object.keys(index.themes).filter((t) => !index.themes[t].inhouse); // the art sets (the classic row is the fallback, not a theme)
     this.roles = index.roles;
     this.rowH = index.row ?? 2 * TILE;
-    this.cssCache = new Map(); // css property → { canvas, w, h } | null
-    this.cssInflight = new Map();
     // Variant counts per (theme, base role): how many crops the theme lists.
     this.variants = {};
     for (const [theme, t] of Object.entries(index.themes)) {
@@ -112,7 +111,7 @@ export class Atlas {
    * { src, sx, sy, w, h } — or null when the theme (or the classic set)
    * has nothing for it. `doors` names the door set whose leaf / double
    * replaces the theme's own (board-ui DOOR_SETS = the theme names).
-   * Synchronous; classic-set sprites answer only once `warmCss` decoded them.
+   * Synchronous.
    */
   tileOf(theme, role, { doors = null } = {}) {
     if (!theme) return this.classicTile(role);
@@ -138,54 +137,28 @@ export class Atlas {
     return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h, role: name, theme: srcTheme };
   }
 
-  /** The classic (in-house) set's sprite for a role — an SVG off style.css,
-   *  decoded by warmCss — or null. The wall is one block for every case. */
+  /** A cell of the classic row as a 16×16 drawImage rectangle, or null. */
+  #classicCell(name) {
+    const row = this.index.themes[CLASSIC];
+    const cell = row?.tiles[name];
+    if (!cell) return null;
+    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: TILE, role: name, theme: null };
+  }
+
+  /** The classic (in-house) set's sprite for a role, or null: one block for
+   *  every wall case, the heap for every ruin, the crate for the wreckage,
+   *  the leaf for a double door's half; no floor, hole, decor or doorway
+   *  (the flat colours and the gradient pit are the canvas board's own). */
   classicTile(role) {
     const b = baseRole(role);
-    const key = b.startsWith('wall') ? 'wall' : b.startsWith('ruin') ? 'rubble' : b;
-    const prop = CLASSIC_VARS[key];
-    if (!prop) return null;
-    const s = this.cssCache.get(prop);
-    return s ? { src: s.canvas, sx: 0, sy: 0, w: s.w, h: s.h, role: key, theme: null } : null;
+    const key = b.startsWith('wall') ? 'wall' : b.startsWith('ruin') ? 'ruin' : b;
+    const name = CLASSIC_ROLE[key];
+    return name ? this.#classicCell(name) : null;
   }
 
-  /** The crack drawing n (1…4) — style.css --tile-crack-n, once warmed. */
+  /** The crack drawing n (1…CRACK_VARIANTS), or null. */
   crack(n) {
-    const s = this.cssCache.get(`--tile-crack-${n}`);
-    return s ? { src: s.canvas, sx: 0, sy: 0, w: s.w, h: s.h } : null;
-  }
-
-  /**
-   * Decode the in-house SVG sprites off `el`'s computed style (style.css
-   * :root carries them, so any element in the document will do): the four
-   * cracks and, for the classic set, its drawings. Idempotent; resolves
-   * when every named property is decoded (or found missing).
-   */
-  async warmCss(el, names = [...Array.from({ length: 4 }, (_, i) => `--tile-crack-${i + 1}`), ...Object.values(CLASSIC_VARS)]) {
-    if (typeof getComputedStyle === 'undefined' || !el) return;
-    const cs = getComputedStyle(el);
-    await Promise.all([...new Set(names)].map(async (name) => {
-      if (this.cssCache.has(name)) return;
-      if (this.cssInflight.has(name)) return this.cssInflight.get(name);
-      const job = (async () => {
-        let out = null;
-        try {
-          const m = cs.getPropertyValue(name).trim().match(/url\(\s*["']?(.*?)["']?\s*\)/);
-          if (m) {
-            const { img, w, h } = await loadImage(m[1]);
-            // An SVG's natural size is its viewBox (16×16 here); rasterise at that size, crisp.
-            const size = w > 0 && h > 0 ? { w, h } : { w: TILE, h: TILE };
-            out = { canvas: canvasOf(img, size.w, size.h), w: size.w, h: size.h };
-          }
-        } catch {
-          /* a sprite that will not decode paints nothing */
-        }
-        this.cssCache.set(name, out);
-        this.cssInflight.delete(name);
-      })();
-      this.cssInflight.set(name, job);
-      return job;
-    }));
+    return this.#classicCell(`crack-${n}`);
   }
 
   /** A piece set's box [w, h] (its native fitted size), or null. */

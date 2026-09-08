@@ -13,7 +13,7 @@
 // Usage (cd phase0; Firefox once: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 // npx playwright install firefox):
 //   node harness/flicker-scan.mjs record --out /tmp/cast [--browser firefox|chromium]
-//        [--stage s59-hall-corner] [--plies 24] [--idle 25000] [--debris off|all|list] [--renderer dom|canvas]
+//        [--stage s59-hall-corner] [--plies 24] [--idle 25000] [--debris off|all|list]
 //        [--desktop] [--root <repo>] [--port 8960]
 //   node harness/flicker-scan.mjs scan /tmp/cast
 //   node harness/flicker-scan.mjs compare /tmp/castA /tmp/castB …
@@ -59,8 +59,7 @@ async function record() {
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
-  const renderer = arg('renderer', null); // PHASE 2: --renderer canvas records the canvas board
-  const q = new URLSearchParams({ stage, autobegin: '1', seed: '3', go: 'depth 6 movetime 100', probe: 'depth 4 movetime 50', onset: '1', mramp: '2', debt: '2', ...(debris ? { debris } : {}), ...(renderer ? { renderer } : {}) });
+  const q = new URLSearchParams({ stage, autobegin: '1', seed: '3', go: 'depth 6 movetime 100', probe: 'depth 4 movetime 50', onset: '1', mramp: '2', debt: '2', ...(debris ? { debris } : {}) });
   await page.goto(`http://127.0.0.1:${PORT}/play/index.html?${q}`);
   await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   if (idleMs) await page.evaluate(() => { const o = window.__DCK.options; o.cheat = true; o.hints = true; o.hintN = 3; o.evalBar = true; window.__DCK.applyOptions(); });
@@ -88,13 +87,11 @@ async function record() {
     if (idleMs) {
       await new Promise((done) => {
         const tick = () => {
-          // The DOM sampler: every .piece present and visible? On the canvas
-          // board there are no piece elements — the buffer is the truth, and
-          // the frame scan below is the check — so the sample is a no-op.
-          const canvasBoard = K.renderer?.kind === 'canvas';
-          const pieces = canvasBoard ? [] : [...document.querySelectorAll('#board .piece')];
-          const vis = pieces.filter((p) => { const cs = getComputedStyle(p); return cs.visibility !== 'hidden' && cs.display !== 'none' && parseFloat(cs.opacity) > 0.5; }).length;
-          samples.push({ t: Math.round(performance.now() - idleStart), n: pieces.length, vis, canvasBoard });
+          // One sample per frame: on the canvas board there are no piece
+          // elements to inspect — the buffer is the truth and the frame scan
+          // below is the check — so a sample is a timestamp (the DOM board's
+          // sampler, which counted visible .piece elements, retired with it).
+          samples.push({ t: Math.round(performance.now() - idleStart) });
           if (performance.now() - idleStart < idleMs) requestAnimationFrame(tick); else done();
         };
         requestAnimationFrame(tick);
@@ -112,9 +109,7 @@ async function record() {
   execFileSync(ffmpeg, ['-loglevel', 'error', '-i', vpath, path.join(OUT, 'f%04d.png')]);
   const frames = fs.readdirSync(OUT).filter((f) => /^f\d+\.png$/.test(f)).length;
   fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ rect, size, browser: browserName, stage, plies, idleMs, debris, t0, marks: log.marks.map((m) => ({ ...m, t: m.t - t0 })), samples: log.samples, muts: log.muts, stats: log.stats, errs, fps: 25 }, null, 1));
-  const bad = log.samples.filter((x) => x.vis < x.n || x.n === 0).length;
-  const canvasIdle = log.samples[0]?.canvasBoard;
-  console.log(`${OUT}: ${frames} frames (${browserName}, ${desktop ? 'desktop' : 'phone'}), ${log.marks.length} marks${idleMs ? `, idle ${idleMs} ms: ${log.samples.length} ${canvasIdle ? 'samples (the canvas board — no piece elements to sample, the frame scan is the check)' : `DOM samples, ${bad} with a hidden/missing piece`}, ${log.muts.filter((m) => m.t >= 0).length} board mutations` : ''}, errs ${errs.length}`);
+  console.log(`${OUT}: ${frames} frames (${browserName}, ${desktop ? 'desktop' : 'phone'}), ${log.marks.length} marks${idleMs ? `, idle ${idleMs} ms: ${log.samples.length} frame samples (the frame scan is the check), ${log.muts.filter((m) => m.t >= 0).length} board mutations` : ''}, errs ${errs.length}`);
 }
 
 function signatures(OUT) {

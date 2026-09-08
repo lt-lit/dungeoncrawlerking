@@ -129,7 +129,11 @@
   "wreckage-4",
   "wreckage-5",
   "wreckage-6",
-  "wreckage-7"
+  "wreckage-7",
+  "crack-1",
+  "crack-2",
+  "crack-3",
+  "crack-4"
  ],
  "themes": {
   "hall": {
@@ -2315,6 +2319,53 @@
      "col": 103,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
+    }
+   }
+  },
+  "classic": {
+   "row": 3,
+   "title": "The classic set — drawn in-house (a stage without a theme; the crack every theme wears)",
+   "inhouse": true,
+   "tiles": {
+    "wall": {
+     "col": 0,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "crack-1": {
+     "col": 128,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "crack-2": {
+     "col": 129,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "crack-3": {
+     "col": 130,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "crack-4": {
+     "col": 131,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "crate": {
+     "col": 4,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "door": {
+     "col": 1,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "barrel": {
+     "col": 6,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "chest": {
+     "col": 5,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "rubble": {
+     "col": 8,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
     }
    }
   }

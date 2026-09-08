@@ -2,24 +2,20 @@
 // land on the environment… smashing thru walls with pieces could look so
 // cool"). Debris does not appear; it flies. On a pixel-art tick (~15 steps
 // a second — sub-pixel motion at sixty frames would be smoother and wrong
-// for this art) every live chunk is drawn as PIXELS OF THE 16-GRID into a
-// second SVG over the board (board-ui flightSvg: the arrow layer's twin,
-// same viewBox, above the pieces and below the FLIP clones) — one <path>
-// per colour, every pixel a unit square at tile coordinates, crisp edges.
+// for this art) every live chunk is drawn as PIXELS OF THE 16-GRID into the
+// canvas board's native buffer (canvas-board drawFlight: above the pieces,
+// below a piece in mid-slide) — every pixel one tile pixel, crisp edges.
 // The last frame of a flight is the persistent debris pixel for pixel: the
 // painter (debris.mjs chunksOf) decided where every chunk lands before it
 // took off, so the flight is a tween from the broken thing to a known
 // target, with a hop for the arc and a bounce for stone.
 //
-// Why an SVG and not a canvas: three cuts of this flight drew on a canvas —
-// board-wide on the fx layer, board-wide under z-indexed pieces (which
-// made Firefox drop every positioned child of the cells for a frame), and
-// per cell into the debris canvases (which coincided with pieces vanishing
-// for whole seconds on a desktop Firefox while idle). The game now has no
-// canvas on the board at all; the flight rides the SVG the hint arrows
-// already ride. A chunk in the air passes IN FRONT of a piece (the layer
-// is above the pieces — the only place a board-wide layer can be without
-// giving the pieces a z-index); the landed debris is under them.
+// (On the DOM board, retired 2026-09-07, the flight was SVG paths on a
+// layer above the pieces — three earlier cuts on per-cell and board-wide
+// canvases mixed into DOM compositing had flickered in Firefox; one
+// board-sized canvas that IS the board is a different animal, and the
+// phone judged it fine.) A chunk in the air passes IN FRONT of a piece; the
+// landed debris is under them.
 //
 // Two kinds of chunk fly: the PERSISTENT ones the painter will paint and the
 // EPHEMERAL shatter (debris.mjs shatterOf: the broken sprite cut into 2×2
@@ -29,22 +25,15 @@
 // ONE FRAME LOOP for every flight in the air. A flight goes flying →
 // LANDED (its chunks held at their final pixels, its `landed` promise
 // resolved, so the caller can paint the persistent debris under them) →
-// RELEASED (the caller has painted; the chunks leave). The group is
-// removed when no flight remains.
+// RELEASED (the caller has painted; the chunks leave). The board is handed
+// an empty frame when no flight remains.
 //
-// Phase 2 (2026-09-07): on the CANVAS BOARD (canvas-board.mjs) the same
-// frame goes to `ui.drawFlight(pixels)` — pixels in its native buffer,
-// above the pieces — instead of SVG paths; the flight model is unchanged.
-//
-// Cost: a few hundred unit squares in a handful of path strings per frame.
+// Cost: a few hundred pixels per frame.
 // Reduced motion / ?fx=0 give ms = 0 and a flight lands at once (the debris
 // then simply appears).
 import { toArenaPx, MATERIALS, T } from './debris.mjs';
 
 const TICK = 66; // ms between frames — the pixel-art step
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const CELL = 10; // SVG units per cell (board-ui's viewBox)
-const PX = CELL / T; // SVG units per tile pixel
 
 const easeOut = (p) => 1 - (1 - p) * (1 - p);
 const NONE = { id: 0, landed: Promise.resolve() };
@@ -80,35 +69,16 @@ export class Particles {
     }
   }
 
-  /** Present a frame's pixels: on a board that draws its own flight (the
-   *  canvas board's drawFlight — pixels in its buffer above the pieces),
-   *  hand them over as a flat list; otherwise one SVG path per colour. */
+  /** Present one frame: every chunk's pixels as a flat list to the board
+   *  (canvas-board drawFlight — pixels in its buffer above the pieces). */
   #present(paths) {
-    if (typeof this.ui.drawFlight === 'function') {
-      const out = [];
-      for (const [key, list] of paths) {
-        const [rgb, q] = key.split('|');
-        const a = parseFloat(q);
-        for (let i = 0; i < list.length; i += 2) out.push({ rgb, a, x: list[i], y: list[i + 1] });
-      }
-      this.ui.drawFlight(out);
-      return;
-    }
-    const g = this.#group();
-    const els = [...g.children];
-    let i = 0;
+    const out = [];
     for (const [key, list] of paths) {
       const [rgb, q] = key.split('|');
-      let d = '';
-      for (let j = 0; j < list.length; j += 2) d += `M${(list[j] * PX).toFixed(3)} ${(list[j + 1] * PX).toFixed(3)}h${PX}v${PX}h-${PX}z`;
-      const el = els[i] ?? g.appendChild(document.createElementNS(SVG_NS, 'path'));
-      el.setAttribute('d', d);
-      el.setAttribute('fill', `rgb(${rgb})`);
-      if (q !== '1') el.setAttribute('fill-opacity', q);
-      else el.removeAttribute('fill-opacity');
-      i++;
+      const a = parseFloat(q);
+      for (let i = 0; i < list.length; i += 2) out.push({ rgb, a, x: list[i], y: list[i + 1] });
     }
-    for (let k = els.length - 1; k >= i; k--) els[k].remove();
+    this.ui.drawFlight(out);
   }
 
   #stampFlight(paths, f, u) {
@@ -137,20 +107,9 @@ export class Particles {
     }
   }
 
-  #group() {
-    const svg = this.ui.flightSvg;
-    let g = svg.querySelector(':scope > g.flight');
-    if (!g) {
-      g = document.createElementNS(SVG_NS, 'g');
-      g.setAttribute('class', 'flight');
-      svg.appendChild(g);
-    }
-    return g;
-  }
-
-  /** The one loop: gather every flight's pixels at its own time into
-   *  per-colour paths, replace the group's paths, land the flights that
-   *  are done, drop the released, stop when none remain. */
+  /** The one loop: gather every flight's pixels at its own time, hand the
+   *  board the frame, land the flights that are done, drop the released,
+   *  stop when none remain. */
   #frame() {
     this.timer = null;
     const now = performance.now();
@@ -209,11 +168,10 @@ export class Particles {
     if (!this.timer && this.flights.length) this.#frame();
   }
 
-  /** The flight group gone — only when nothing is in the air or held. */
+  /** The flight's pixels gone from the board — only when nothing is in the air or held. */
   clear() {
     if (this.flights.some((f) => !f.released)) return;
-    if (typeof this.ui.drawFlight === 'function') this.ui.drawFlight(null);
-    else this.ui.container.querySelector(':scope > svg.flight-layer > g.flight')?.remove();
+    this.ui.drawFlight(null);
   }
 
   /** The material's hop height and bounce, for a flight. */

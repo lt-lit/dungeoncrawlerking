@@ -55,7 +55,7 @@ export const SKIN_CHARS = { D: 'door', B: 'barrel', T: 'crate', C: 'chest', S: '
 export const SKIN_NAMES = Object.values(SKIN_CHARS);
 /** Art themes (2026-09-03): which repacked tileset a stage's board wears —
  *  `hall` (pixel-poem), `castle` (Dungeon Gathering), `crypt` (Catacombs);
- *  play/tiles.css, phase0/harness/repack-tiles.mjs. Optional `theme` key on
+ *  play/img/tileset.png, phase0/harness/repack-tiles.mjs. Optional `theme` key on
  *  a stage; cosmetics only (a theme changes what the renderer paints, never
  *  the grid). Assigned over the bed by gen-skins.mjs; the Options panel and
  *  `?theme=` override it per device. */
@@ -133,7 +133,7 @@ export function loadStageV2(json) {
   };
 }
 
-/** {square: skinName} for every skinned furniture square — what BoardUI
+/** {square: skinName} for every skinned furniture square — what the board's
  *  setPosition takes. Squares without a skin fall back to the crate. */
 export function stageSkins(stage) {
   const out = {};
