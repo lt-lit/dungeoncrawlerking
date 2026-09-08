@@ -269,7 +269,8 @@ on the king and the world slides under him, the default zoom fits
 fifteen tiles across the short axis, the 3×2 kit is the walk's army
 (`?army=setup` for the knobs), no undo on the walk, a start marker in
 the map file (`@`, digits reserved for the enemy spawns), a 3×3 pad
-with wait in the middle. THE ENVIRONMENT IS THE WORLD: the Phase 1
+with wait in the middle (superseded the same day by the d-pad — see the
+HUD note under 4c). THE ENVIRONMENT IS THE WORLD: the Phase 1
 page's world IS the dealt arena (its crop the identity, no mirror
 exists — a flip is how a lab world is built); a world duel is a crop
 with the army's facing (4c). THE FIXTURE (`play/worlds/w01-the-
@@ -278,19 +279,136 @@ written plan) IS THE DESIGNER'S TO APPROVE from `world-shots.mjs`'s
 render; the phone verdict on the walk is the milestone's gate — **IN,
 2026-09-08 (designer): "Seems to work fine on mobile and desktop" — the
 walk-around build passed; the branch merges as it stands.**
-**NEXT: 4c, THE BARRIER BY HAND** — a debug button drops the barrier on
-the army as it stands: the crop of the world under the army's facing
-(`world.mjs cropTransform` + `arenaFen`), the carried formation stamped
-in place (the pattern as it stands, molded to the crop; `dealMatchup`
-keeps dealing random armies for the setup screen and the labs), a
-dealt enemy army across the gap, the engine booted at page load, the
-duel's board written into the world's crop every ply (the board's one
-model), the walk resuming on the scarred floor; the debris ledger moves
-into the run save (today the walk's smash leaves no debris and the
-duel page's ledger is still per-stage in localStorage); no trigger rule
-and no band — the trigger is the conversation after that.
+**MILESTONE 4c ✅ built 2026-09-08 — THE BARRIER BY HAND**
+(`play/js/barrier.mjs` the pure half; main.mjs § THE BARRIER BY HAND;
+`play/README.md` § "The canvas board", milestone 4c). A debug button on
+the walk (⚔ Barrier, `B`, an initiative select; `__DCK.walk.barrier`)
+drops the barrier on the army as it stands. DECIDED WITH THE DESIGNER the
+same day (2026-09-08 — "a duel can start at gap 4 for now, and the kings
+have to be aligned"; the rest "just do whatever you think the default
+is"): THE KING ANCHORS THE ARENA — his rank is row 0, his facing
+arena-north; WIDTH = the local room width at the king's rank (brief
+§4.1), capped at THE ARENA'S 10 FILES (designer, same day, on the first
+phone log — a 12×9 duel in the antechamber: "Max arena is 10x10 … a
+12 wide board is k 5 on mobile and that is officially too small for my
+thumbs"; the engine's 12 is the engine's, not the game's), the window
+centred on the king's file and slid whole to stay inside the room,
+under 3 wide refused; GAP EXACTLY 4 with
+THE ENEMY KING ON THE PLAYER'S KING'S FILE (strict colinearity — brief
+§5.3's band is amended for the barrier; the trigger conversation may
+loosen it), so the DEPTH IS COMPUTED, not dialled: the player's molded
+depth + 4 + the enemy's, by iteration on the crop's real terrain
+(`planBarrier`: grow while a side overflows, shrink by the surplus when
+the gap runs over, refuse past the engine's 10 ranks — a 2-deep kit vs a
+2-deep enemy is 8 ranks, the kings 7 apart; the 3–12 × 5–10 cap now
+lives in `buildMatchup` too, since a runtime crop never passes the stage
+loader); THE STAMP IS THE PATTERN, not the walk positions (the
+formation materializes whole — stragglers snap into their slots — molded
+by the deal's own rule with the royal PINNED to the king's cell and the
+back row in the order the player walked with: `layoutArmy` gained
+`royalAt` / `order: 'as-given'`, army.mjs `bagOfPattern`; the enemy is
+pinned to the same file; the camp-line variant falls out as for any
+deal; a crop the armies cannot fit refuses with one line); INITIATIVE IS
+THE TURN FIELD, never a seat swap (the player is always White, brief
+§4.4's "plays White" reads "moves first"); the enemy is dealt fresh from
+the setup screen's Black knobs (re-dealt on a lint failure); a square off
+the map is the barrier's wall (`arenaFen`; a planned crop never hangs
+off — the window is the floor run and the enemy king must stand on
+floor); THE DUEL RUNS ON THE WORLD — `startDuel(session)` is the one
+path after the deal for both pages, the board a WINDOW over the run's
+world (`mountDuelBoard`: the crop at the army's facing, viewport screen,
+the dungeon dimmed — under the tall pass now, so the top rank's heads
+rise undimmed — the coordinates keyed on camera − crop facing), every
+ply written into the crop's cells, the world's own layers seeded into
+the Director BEFORE the terrain anchor (`DuelController` opts `holes` /
+`godCrates` from `World.cropLayers` — a pit is never a standing wall nor
+weakened into a crate; every off-map square joins `holes`) and the
+residue seeded from the world's doorways and ruins; WALKING OUT is ONE
+overlay button (Rematch / Re-deal / Back / the cheat Undo hidden on a
+world duel): a WIN clears every letter in the crop (the enemy is gone
+from the floor) and re-spawns the pattern whole around the king's FINAL
+cell, facing kept (promotions revert, captured pieces return — brief
+§8; `spawnArmy` `lenient`: a king the closer sealed in a pocket walks
+his army out anyway, the rest on the nearest floor beyond); a LOSS ends
+the run (`run.ended`; the save stays exportable, the resume card says
+so, `beginRun` refuses it with one line); an ENGINE ERROR restores the
+floor, the army and the ledger from a pre-drop snapshot. THE RUN records
+a duel as its RESULT (`run.mjs recordDuel`: kind 'duel', crop, seed,
+initiative, result, termination, plies, quakes, the final FEN, the log
+id — never its plies, which the replay log holds; `run.turn` counts
+inputs alone) and a PENDING entry is written before the floor changes,
+so a reload mid-duel re-drops the SAME seeded duel from move one (Back
+is hidden during a world duel); THE DEBRIS LEDGER LIVES IN THE RUN (one
+per floor, `floors[id].debris`, carried by `updateRun`; the walk binds
+it at the identity, a barrier through the crop, `debrisSave` routes to
+the run save after a walk turn and never mid-duel; the walk's smash
+records its crate's own splinters by CELL — `debrisEventCell`, the
+square-name wrappers cap at file `l` — its steps wear the floor, and the
+walk board PAINTS the scars through `setCellDebris`); THE REPLAY LOG
+carries a `world` block (the world, the crop, the stage the crop made —
+terrain + skins — the floor's layers at the drop) and the analyzer paints
+a barrier log from it without a manifest (`resolveStage` reads it first;
+the report prints a `world` header line); `DuelController.adjudicate`
+(a concession, `__DCK.walk.concede`) is the test surface that ends a
+duel on demand. Gates: `test-barrier.mjs` 60 (the fixture at every
+facing: the pin, the gap, the crop reading north-up, the order kept, the
+window on a wide hall, a crawlspace refused, terrain deepening the crop,
+past 10 refused, off-map walls on a hand-built crop, the layers, the
+run's duel entry, the lenient spawn), ui-smoke 318 ok + THE BARRIER block (a
+smash on the walk in the run, the drop by button, the crop's FEN equal to
+the duel's every ply, the window, the pending entry, the log's world
+block, a reload re-dropping the same seed, the one-button walk-out with
+the army whole and the enemy gone, a second duel seeded with a hand-dug
+pit, a loss ending the run, the analyzer on the barrier log), selftest
+46/46, test-world 125, test-army 57, test-armygen, test-debris 60,
+test-camera 80, test-logreport 47, facing-walk 108/108, replay-smoke 63.
+THE WALK'S HUD was redone the same day on the designer's verdict
+("the ugliest most unusable virtual d-pad I've ever used"; the snap-zoom
+"absurdly oversized" on a desktop): the map fills the screen under the
+topbar and the controls FLOAT over it — bottom-left A REAL D-PAD (the
+designer's second verdict, the same day: "something that actually looks
+and FEELS like an actual d-pad… I don't need a wait button right in the
+middle": ONE cross, an inline SVG, driven by where the thumb is — the
+angle from the hub picks one of eight directions, an arm or between two
+arms for a diagonal, the hub dead, a press steps at once and KEEPS
+STEPPING while held, the thumb slides to steer, the pressed arm lights;
+wait lives in the side cluster), the turn / wait / zoom / barrier cluster
+bottom-right, the status strip along the top — a SWIPE on the map is a step in its direction (a short
+pointer is still a tap), and the tap-a-piece SNAP-ZOOM is no longer a
+constant k 6 but THE K A 10×10 DUEL GETS IN THIS BOX (`duelZoomFor`: the
+width fit on a phone, both axes under the wide layout — k 6 on the
+phone, k 3 in a narrow desktop window, k 5 on a 1080p wide layout).
+**NOT here, on purpose: enemies on the map, line of sight, the trigger
+(the conversation after this — do not build it to a number), per-theme
+edge-on door art, a phone height for the duel box (the dimmed dungeon
+shows beside the crop on a phone, not above or below), the analyzer
+mounting the whole world (it paints the crop as an arena, so an edge
+wall's autotile can differ from the game's).** THE PHONE VERDICT IS THE
+GATE.
 
-**HANDOFF (end of 2026-09-08, after milestone 3): NEXT WAS THE WORLD +
+
+**NEXT (end of 2026-09-08, after 4c and the HUD): THE PHONE VERDICT on
+4c and the d-pad is the gate for this branch. Then PHASE 2 MILESTONE 5 —
+ENEMIES ON THE MAP + LINE OF SIGHT + THE TRIGGER (brief §10 Phase 2:
+visible enemy armies, §5.2's hunt / pursuit state machine, §5.4's threat
+display, the trigger → barrier → FEN pipeline end to end; Phase 3 is the
+loop) — and that milestone OPENS WITH THE TRIGGER CONVERSATION, on the designer's word (2026-09-08: "there's going to be a
+shit fuck ton of rules dictating how and when a duel is allowed to
+trigger. It's not just about the trigger band. We will get to it"). Do
+not ask for the band and do not build the trigger to a number; what the
+conversation now has in hand: the barrier by hand as the instrument
+(gap 4, the kings aligned on one file, the 10-file cap, the depth a
+fixed point of the molding), brief §5.2's hunt state machine and §5.3's
+old clauses as amended, the world file's enemy spawns (`1`…`9`, read by
+`loadWorld`, unused), and the stamp path built for either side (an
+enemy that walks the map carries its own pattern into the crop the way
+the player does). Held over, on purpose: per-theme edge-on door art; a
+phone height for the duel box (the dimmed dungeon shows beside the crop
+on a phone only); the analyzer mounting the whole world; the debris
+flight on the walk's smash (the splinters appear, they do not fly).**
+
+**HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
+reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
 THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
 buffer becomes the screen's device size ÷ k in tiles plus a one-tile
 margin and the headroom row, painted from a WORLD grid through the
@@ -1160,7 +1278,15 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
+- `play/js/barrier.mjs` — THE BARRIER BY HAND (Phase 2 milestone 4c,
+  2026-09-08): where the barrier drops on an army as it stands (the
+  room's width across the king, gap 4, the kings aligned, the depth a
+  fixed point of the molding) and the deal it stamps (the carried
+  pattern pinned to the king's cell, the enemy dealt across the gap);
+  main.mjs § THE BARRIER BY HAND is the page (the drop, the world
+  session, the walk-out, the run's ledger). Node gate `test-barrier.mjs`.
 - `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
+
   (Phase 2 milestone 4b, 2026-09-08): brief §5.1's one movement rule as
   a pure module (the pattern, the move generator on the world grid, the
   BFS targets, the turn planner; Node gate `test-army.mjs`), the run save
@@ -1253,6 +1379,8 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
+node harness/test-barrier.mjs        # THE BARRIER BY HAND (play/js/barrier.mjs): the crop across the king at every facing, gap 4, the kings aligned, the pin, the order kept, refusals, off-map walls, the run's duel entry, the lenient walk-out; Node only
+
 node harness/gen-worlds.mjs          # the walk-around fixtures in play/worlds/ (w01 hand-built 60×40, w02 a seeded 100×100) + their manifest; every floor cell must be reachable
 node harness/world-shots.mjs         # each world painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (for the eye)
 node harness/facing-walk.mjs --shots # every arena × facings 1–3 on the bare lab page: the camera's paint must equal the world itself rotated, painted north-up

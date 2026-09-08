@@ -157,10 +157,18 @@ function centerOut(start, w) {
  * the army has exactly `width` non-pawns, so pieces always consume the
  * entire rearmost row before pawns begin).
  */
-export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', archetype = 'heavies-deep', rng = mulberry32(1), maxDepth }) {
+export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', archetype = 'heavies-deep', rng = mulberry32(1), maxDepth, royalAt = null, order = 'archetype' }) {
   const w = Math.min(army.width, files);
+  // THE PIN (Phase 2 milestone 4c, the barrier by hand): `royalAt` puts
+  // the royal on a given file of the side's rearmost row — the king stands
+  // there in the world and the barrier drops around him; the enemy royal
+  // is pinned to the same file ("the kings have to be aligned", designer
+  // 2026-09-08) — and the window is centred on that file, slid whole to
+  // stay on the board. Without a pin the anchor places the window.
+  const pin = royalAt ? { f: royalAt.f | 0, row: royalAt.row | 0 } : null;
   const start =
-    anchor === 'center' ? (files - w) >> 1
+    pin ? Math.max(0, Math.min(files - w, pin.f - ((w - 1) >> 1)))
+    : anchor === 'center' ? (files - w) >> 1
     : anchor === 'left' ? 0
     : anchor === 'right' ? files - w
     : Math.max(0, Math.min(files - w, anchor | 0));
@@ -170,16 +178,22 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
   const depthCap = Math.min(maxDepth ?? ranks, ranks);
 
   // Back units, royal first; the archetype orders the rest (first-placed
-  // sits deepest).
+  // sits deepest) — or, `order: 'as-given'`, the bag's own order (a carried
+  // marching pattern re-stamped keeps the order the player walked with).
   const rest =
-    archetype === 'scrambled' ? shuffled(rng, army.back)
+    order === 'as-given' ? [...army.back]
+    : archetype === 'scrambled' ? shuffled(rng, army.back)
     : [...army.back].sort((a, b) => {
         const d = PIECE_VALUES[b.toLowerCase()] - PIECE_VALUES[a.toLowerCase()];
         return archetype === 'minors-deep' ? -d : d;
       });
-  const backUnits = [army.royal, ...rest];
-
   const cells = [];
+  if (pin) {
+    if (pin.f < 0 || pin.f >= files || pin.row < 0 || pin.row >= depthCap || !open(pin.row, pin.f)) return null; // no floor for the royal on that file
+    cells.push({ f: pin.f, r: rowRank(pin.row), piece: army.royal });
+  }
+  const backUnits = pin ? rest : [army.royal, ...rest];
+
   let unit = 0;
   let pawns = 0;
   let row = 0;
@@ -191,7 +205,9 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     // row centers its spares).
     for (const f of centerOut(start, w)) {
       if (!open(row, f)) continue;
+      if (pin && row === pin.row && f === pin.f) continue; // the royal's cell
       if (unit < backUnits.length) {
+
         cells.push({ f, r: rowRank(row), piece: backUnits[unit++] });
       } else if (pawns < army.width) {
         cells.push({ f, r: rowRank(row), piece: 'P' });
@@ -239,6 +255,11 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
  */
 export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn = 'w' }) {
   const { grid, files, ranks } = stage;
+  // The engine's caps (CLAUDE.md rule 7's catalog: 3–12 files × 5–10
+  // ranks). The stage loader refuses a file outside them; a crop computed
+  // at runtime (the barrier, 4c) never passes through it, so the DEAL
+  // refuses too — brief §4.2: every guarantee lives in the deal.
+  if (!(files >= 3 && files <= 12 && ranks >= 5 && ranks <= 10)) return { error: `${files}x${ranks} outside 3-12 x 5-10` };
   const mk = (sideSpec, label) =>
     sideSpec.army ?? makeArmy(sideSpec.spec, mulberry32(childSeed(seed, `${label}-army`)));
   const wArmy = mk(white, 'white');
@@ -251,6 +272,7 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
     anchor: white.anchor ?? 'center', archetype: white.archetype ?? 'heavies-deep',
     rng: mulberry32(childSeed(seed, 'white-mold')),
     maxDepth: ranks - gapMin - 2,
+    royalAt: white.royalAt ?? null, order: white.order ?? 'archetype',
   });
   if (!wl) return { error: `white ${wArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
   const bl = layoutArmy({
@@ -258,7 +280,9 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
     anchor: black.anchor ?? 'center', archetype: black.archetype ?? 'heavies-deep',
     rng: mulberry32(childSeed(seed, 'black-mold')),
     maxDepth: ranks - gapMin - (wl.extent + 1),
+    royalAt: black.royalAt ?? null, order: black.order ?? 'archetype',
   });
+
   if (!bl) return { error: `black ${bArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
 
   // Gap = empty ranks between the armies' closest occupied rows.
@@ -481,7 +505,8 @@ export function campLineRank(layoutCells, enemyward) {
  *  Names encode their config (dealVariant), so a repeat is always the
  *  identical block — the guard only saves the redundant parse. */
 const registeredDealVariants = new Set();
-function registerDealVariant(ffish, variant) {
+export function registerDealVariant(ffish, variant) {
+
   if (registeredDealVariants.has(variant.name)) return;
   ffish.loadVariantConfig(variant.ini);
   registeredDealVariants.add(variant.name);

@@ -195,6 +195,8 @@ export class CanvasBoard {
     this.interactive = false;
     this.scaling = scaling === 'fill' ? 'fill' : 'integer';
     this.dimOutside = true; // the world beyond the crop is dimmed (a duel's dungeon)
+    this.overscroll = 0; // native px the window may look past the world's edge (the walk's HUD-aware focus; #fitWindow)
+
     this.focus = null; // { x, y } in the rotated world's native pixels, or null = the crop's centre
     this.focusCell = null; // lookAt's cell + offset, re-projected on a turn
     this.atlas = null;
@@ -565,12 +567,17 @@ export class CanvasBoard {
     const focus = this.#focusPx();
     const worldW = this.worldCols * T, worldH = this.worldRows * T;
     const centre = this.scaling === 'integer' || boxMode;
-    const axis = (worldPx, devPx, focusPx, tiles) => {
+    const axis = (worldPx, devPx, focusPx, tiles, over = 0) => {
       const visible = Math.ceil(devPx / k);
       if (worldPx <= visible) return { t0: 0, n: tiles, s: 0, sw: worldPx, d: centre ? Math.floor((devPx - worldPx * k) / 2) : 0, fits: true };
-      const v0 = Math.max(0, Math.min(worldPx - visible, Math.round(focusPx - visible / 2)));
+      // OVERSCROLL (the walk's HUD-aware focus, 2026-09-08): the window may
+      // look `over` native pixels past the world's FAR edge on this axis —
+      // the screen's bottom — so a focus set above the screen's centre is
+      // honoured at the map's edge too; the void it shows lies under the
+      // HUD's controls. Off-world tiles paint nothing (#cellAt is null).
+      const v0 = Math.max(0, Math.min(worldPx - visible + over, Math.round(focusPx - visible / 2)));
       const t0 = Math.max(0, Math.floor(v0 / T) - MARGIN);
-      const t1 = Math.min(tiles, Math.ceil((v0 + visible) / T) + MARGIN);
+      const t1 = Math.ceil((v0 + visible) / T) + MARGIN;
       return { t0, n: t1 - t0, s: v0 - t0 * T, sw: visible, d: 0, fits: false };
     };
     const ax = axis(worldW, this.devW, focus.x, this.worldCols);
@@ -579,7 +586,7 @@ export class CanvasBoard {
       // The width fit: the canvas is as tall as the crop; the window's rows are the crop's.
       ay = { t0: this.cropBox.row0, n: this.cropBox.rows, s: 0, sw: this.cropBox.rows * T + this.headroom, d: 0, fits: true };
     } else {
-      ay = axis(worldH, this.devH, focus.y, this.worldRows);
+      ay = axis(worldH, this.devH, focus.y, this.worldRows, Math.max(0, this.overscroll | 0));
       if (ay.fits) {
         ay.sw = worldH + this.headroom;
         ay.d = Math.floor((this.devH - ay.sw * k) / 2);
@@ -900,6 +907,13 @@ export class CanvasBoard {
     return c && c.idx >= 0 ? this.debrisBufs.get(c.idx) ?? null : null;
   }
 
+  /** The terrain rule's kind for a WORLD cell (the walk's smash reads what
+   *  a crate wore before it broke). */
+  kindAtCell(f, r) {
+    return this.world.inBounds(f, r) ? this.#kindAt(f, r) : null;
+  }
+
+
   hasDebris(sq) {
     const c = this.cells.get(sq);
     return !!c && c.idx >= 0 && this.debrisBufs.has(c.idx);
@@ -1108,18 +1122,19 @@ export class CanvasBoard {
 
   /** Glide the focus to a world cell over `ms` (the world sliding under the
    *  king on a walk); 0 ms is a cut. Resolves when it lands. */
-  async panTo(f, r, ms = 200) {
-    const to = this.#focusOf({ f, r });
+  async panTo(f, r, ms = 200, dx = 0, dy = 0) {
+    const to = this.#focusOf({ f, r, dx, dy });
     if (!ms || !this.focus) {
-      this.lookAt(f, r);
+      this.lookAt(f, r, dx, dy);
       return;
     }
-    this.pan = { from: { ...this.focus }, to, t0: now(), ms, cell: { f, r } };
+    this.pan = { from: { ...this.focus }, to, t0: now(), ms, cell: { f, r, dx, dy } };
     this.#run();
     await wait(ms);
     this.pan = null;
-    this.lookAt(f, r);
+    this.lookAt(f, r, dx, dy);
   }
+
 
   /** The quake's rumble: the blit jitters by whole native pixels for `ms`
    *  (main.mjs calls it on the quake's first beat). */
@@ -1521,15 +1536,27 @@ export class CanvasBoard {
       }
       byRow.push(list);
     }
-    // 1. floor + shade + debris + flat terrain + marks under the pieces
-    for (const list of byRow) for (const s of list) this.#paintFlat(s, theme, t);
-    // 2. the tall things, far row first: props and pieces interleaved by screen row
-    for (const list of byRow) for (const s of list) this.#paintTall(s, t);
-    // 2b. the world beyond the crop, dimmed (a duel's dungeon)
-    if (outside && this.dimOutside) {
-      g.fillStyle = DIM;
-      for (const list of byRow) for (const s of list) if (!s.sq) g.fillRect(s.x, s.y, T, T);
+    // 1. floor + shade + debris + flat terrain + marks under the pieces —
+    // and the world beyond the crop DIMMED here, under the tall pass, so
+    // the heads of the crop's top rank (the enemy's back rank on a barrier
+    // duel) rise into the dungeon undimmed.
+    const dim = outside && this.dimOutside;
+    for (const list of byRow) for (const s of list) {
+      this.#paintFlat(s, theme, t);
+      if (dim && !s.sq) {
+        g.fillStyle = DIM;
+        g.fillRect(s.x, s.y, T, T);
+      }
     }
+    // 2. the tall things, far row first: props and pieces interleaved by screen row (the dungeon's, faded)
+    for (const list of byRow) for (const s of list) {
+      if (dim && !s.sq) {
+        g.globalAlpha = 0.45;
+        this.#paintTall(s, t);
+        g.globalAlpha = 1;
+      } else this.#paintTall(s, t);
+    }
+
     // 3. marks over the pieces (the arena's by square, the walk's by cell)
     for (const list of byRow) for (const s of list) if (s.sq) this.#paintMarksOver(s);
     if (this.cellMarks.selected !== null || this.cellMarks.targets.size) for (const list of byRow) for (const s of list) this.#paintCellMarks(s);
@@ -1839,7 +1866,11 @@ export class CanvasBoard {
     if (!this.showCoords || !this.crop) return;
     const g = this.bctx;
     const b = this.cropBox;
-    const edges = coordEdges(this.facing);
+    // What varies along the crop's edges depends on how the CAMERA sits
+    // relative to the CROP's own north (a barrier duel is a crop at the
+    // army's facing, read north-up under a camera at the same facing).
+    const edges = coordEdges((this.facing - (this.crop.facing ?? 0) + 4) & 3);
+
     const label = (sq, what) => (what === 'file' ? sq[0] : sq.slice(1));
     const visible = (col, row) => col >= this.win.col0 && col < this.win.col0 + this.win.cols && row >= this.win.row0 && row < this.win.row0 + this.win.rows;
     const bottom = b.row0 + b.rows - 1;

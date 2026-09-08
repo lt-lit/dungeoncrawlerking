@@ -57,28 +57,51 @@
        pad (the eight ways, wait in the middle), the two turns, the zoom,
        the save. Keyboard: WASD / arrows, Q E, space, numpad 1–9, + −. -->
   <section id="screen-walk" class="screen" hidden>
-    <div id="walk-board"></div>
-    <div id="walk-diag" hidden aria-live="polite"></div>
-    <div id="walk-status" class="side-bar" aria-live="polite"></div>
-    <div id="walk-controls">
-      <div id="walk-pad" aria-label="move the army">
-        <button data-dx="-1" data-dy="1" aria-label="forward-left" title="forward-left (numpad 7)">&#8598;</button>
-        <button data-dx="0" data-dy="1" aria-label="forward" title="forward (W, up, numpad 8)">&#8593;</button>
-        <button data-dx="1" data-dy="1" aria-label="forward-right" title="forward-right (numpad 9)">&#8599;</button>
-        <button data-dx="-1" data-dy="0" aria-label="left" title="left (A, numpad 4)">&#8592;</button>
-        <button id="btnWalkWait" aria-label="wait" title="wait a turn (space, numpad 5)">&#183;</button>
-        <button data-dx="1" data-dy="0" aria-label="right" title="right (D, numpad 6)">&#8594;</button>
-        <button data-dx="-1" data-dy="-1" aria-label="back-left" title="back-left (numpad 1)">&#8601;</button>
-        <button data-dx="0" data-dy="-1" aria-label="back" title="back (S, down, numpad 2)">&#8595;</button>
-        <button data-dx="1" data-dy="-1" aria-label="back-right" title="back-right (numpad 3)">&#8600;</button>
-      </div>
-      <div id="walk-side">
-        <div class="walk-row"><button id="btnWalkTurnL" title="turn left (Q) — a move" aria-label="turn left">&#8634;</button><span id="walk-facing" class="opt-val">east</span><button id="btnWalkTurnR" title="turn right (E) — a move" aria-label="turn right">&#8635;</button></div>
-        <div class="walk-row"><button id="btnZoomOut" title="zoom out (&minus;)" aria-label="zoom out">&minus;</button><span id="walk-zoom" class="opt-val">k 4</span><button id="btnZoomIn" title="zoom in (+)" aria-label="zoom in">+</button></div>
-        <div class="walk-row"><button id="btnRunExport" title="share or download this run's save file">&#9873; Export save</button></div>
+    <!-- THE WALK (Phase 2 milestone 4b; the HUD redone 2026-09-08 after the
+         designer's verdict on the first pad): the map fills the screen and
+         the controls float over it — a thumb-sized 3×3 pad bottom-left
+         (wait in the middle), the turn / zoom / barrier cluster bottom-
+         right, the status strip along the top. A SWIPE on the map is a
+         step in the swipe's direction; a tap is still a tap. WASD / the
+         arrows / the numpad, Q E, space, + −, B, Escape on a keyboard. -->
+    <div id="walk-stage">
+      <div id="walk-board"></div>
+      <div id="walk-hud">
+        <div id="walk-status" aria-live="polite"></div>
+        <div id="walk-controls">
+          <!-- THE D-PAD (designer 2026-09-08: "something that actually looks
+               and FEELS like an actual d-pad"): ONE cross, no buttons. Press
+               an arm for a step, press between two arms for a diagonal, hold
+               to keep walking, slide the thumb to steer; the pressed arm
+               lights. The hub is dead. Wait lives in the side cluster. -->
+          <div id="walk-pad" role="group" aria-label="the d-pad: press an arm to step, between two arms for a diagonal, hold to keep walking">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <path class="pad-body" d="M32 5 Q32 0 37 0 H63 Q68 0 68 5 V32 H95 Q100 32 100 37 V63 Q100 68 95 68 H68 V95 Q68 100 63 100 H37 Q32 100 32 95 V68 H5 Q0 68 0 63 V37 Q0 32 5 32 H32 Z"/>
+              <path class="arm arm-n" d="M34 2 H66 V34 H34 Z"/>
+              <path class="arm arm-e" d="M66 34 H98 V66 H66 Z"/>
+              <path class="arm arm-s" d="M34 66 H66 V98 H34 Z"/>
+              <path class="arm arm-w" d="M2 34 H34 V66 H2 Z"/>
+              <path class="tri tri-n" d="M50 10 L61 25 H39 Z"/>
+              <path class="tri tri-e" d="M90 50 L75 61 V39 Z"/>
+              <path class="tri tri-s" d="M50 90 L39 75 H61 Z"/>
+              <path class="tri tri-w" d="M10 50 L25 39 V61 Z"/>
+              <circle class="hub" cx="50" cy="50" r="6"/>
+            </svg>
+          </div>
+          <div id="walk-side">
+            <div class="walk-row"><button id="btnWalkTurnL" title="turn left (Q) — a move" aria-label="turn left">&#8634;</button><span id="walk-facing" class="opt-val">east</span><button id="btnWalkTurnR" title="turn right (E) — a move" aria-label="turn right">&#8635;</button></div>
+            <div class="walk-row"><button id="btnWalkWait" title="wait a turn (space) — the stragglers reform" aria-label="wait a turn">wait</button></div>
+            <div class="walk-row"><button id="btnZoomOut" title="zoom out (&minus;)" aria-label="zoom out">&minus;</button><span id="walk-zoom" class="opt-val">k 4</span><button id="btnZoomIn" title="zoom in (+)" aria-label="zoom in">+</button></div>
+            <!-- THE BARRIER BY HAND (Phase 2 milestone 4c): a debug button drops
+                 the barrier on the army as it stands — the crop of the floor
+                 under the army's facing, gap 4, the kings aligned. -->
+            <div class="walk-row"><button id="btnWalkBarrier" title="drop the barrier here (B) — gap 4, the kings aligned; the enemy from Options → Setup's Black knobs" aria-label="drop the barrier">&#9876;</button><select id="walkInitiative" title="initiative: who moves first (the player is always White)" aria-label="initiative"><option value="w">you first</option><option value="b">enemy first</option></select></div>
+            <div class="walk-row"><button id="btnRunExport" title="share or download this run's save file" aria-label="export the save">&#9873;</button></div>
+          </div>
+        </div>
       </div>
     </div>
-    <p class="opt-hint" id="walk-hint">Step with WASD / the arrows or the pad; Q E turn (a move); space waits; + &minus; zoom. Tap a piece for its own move.</p>
+    <div id="walk-diag" hidden aria-live="polite"></div>
   </section>
 
   <section id="screen-duel" class="screen" hidden>
@@ -182,8 +205,11 @@
          reads the same autosave ring, so Review just navigates there. -->
     <button id="btnOverlayReview" title="open this duel in the replay analyzer">&#9654; Review</button>
     <button id="btnMenu">Back to setup</button>
+    <!-- THE BARRIER (4c): a duel on the walk's floor ends in the walk. -->
+    <button id="btnWalkOut" class="primary" hidden>&#8594; Walk on</button>
   </div>
 </div>
+
 
 <div id="options" hidden>
   <div id="options-card">

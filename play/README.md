@@ -859,7 +859,8 @@ default zoom the largest whole k with 15 tiles across the short axis —
 a phone lands on k 4, `?zoom=` pins it), the king centred, the world
 SLIDING under him (the board's `panTo`) while the arrivals slide in
 whole native pixels (`animateArrivals`; a facing change is a CUT
-first); a 3×3 pad (the eight ways, wait in the middle), the two turns,
+first); a 3×3 pad (the eight ways, wait in the middle — replaced by the
+d-pad the same day, see milestone 4c's HUD note), the two turns,
 the zoom ± (a cut), Export save; WASD / arrows / numpad 1–9, Q E, space,
 + −, Escape; TAP A PIECE (not the king) for its own move: the zoom snaps
 to at least k 6 centred on it and its moves are marked (a capture red),
@@ -890,6 +891,119 @@ purpose: enemies, line of sight, the
 trigger (a design conversation of its own), the barrier by hand (4c),
 debris on a walk's smash (the ledger is the floor's; the walk's captures
 will feed it with 4c), a replay of a run's turn list in the analyzer.
+
+**Milestone 4c — THE BARRIER BY HAND (2026-09-08).** A debug button on
+the walk (⚔ Barrier, the `B` key, an initiative select beside it;
+`__DCK.walk.barrier({ seed, turn, knobs })`) drops the barrier on the
+army as it stands. `js/barrier.mjs` is the pure half: the WINDOW across
+the king — the room's floor run at his rank, capped at THE ARENA'S 10
+FILES (designer 2026-09-08, on the first phone log's 12×9 duel: "Max
+arena is 10x10" — k 6 on a phone; 12 wide is k 5, too small for thumbs;
+the engine's 12 is not the game's), centred on his file and slid whole
+to stay in the room, refused under 3 wide (`barrierWindow`); the CROP — his rank is row 0, his facing
+arena-north, so the arena reads north-up under the camera that turns
+with the army (`cropAt`); and the DEAL — gap EXACTLY 4 with the enemy
+king pinned to the player's king's FILE on the last row (designer
+2026-09-08: "a duel can start at gap 4 for now, and the kings have to be
+aligned"), the depth a FIXED POINT of the molding on the crop's own
+terrain (`planBarrier` starts at 2 + 4 + 2 ranks, grows while a side
+overflows, shrinks by the surplus when the gap runs over, refuses past
+10), the carried PATTERN stamped whole (the formation materializes,
+stragglers snap into their slots) through the deal's own molding with
+the royal pinned (`armygen.mjs layoutArmy` `royalAt`, the back row in
+walking order `order: 'as-given'`, `army.mjs bagOfPattern`), the enemy
+dealt from the setup screen's Black knobs and re-dealt on a lint failure,
+the camp-line variant minted as for any deal; a square off the map is
+the barrier's wall (`World.arenaFen`; a planned crop never hangs off);
+`World.arenaStage` is the crop as a stage (terrain + the skins whatever
+stands there now, a hole a wall to the deal), `cropLayers` its pits,
+god crates, doorways and ruins by square. THE DUEL RUNS ON THE WORLD:
+`startDuel(session)` is the one path after the deal for both pages; a
+world session (`makeWorldSession`, makeSession's exact shape plus the
+world, the crop, the layers and the log's `world` block) mounts the
+duel screen's board as a WINDOW over the run's world (`mountDuelBoard`:
+the crop at the army's facing, viewport screen, the dungeon dimmed
+under the tall pass so the top rank's heads rise undimmed, the
+coordinates keyed on camera − crop facing; a scaling change remounts on
+the same world), the Director is seeded with the floor's pits and cracks
+BEFORE its terrain anchor (`DuelController` `holes` / `godCrates`: a pit
+is never a standing wall nor a weaken candidate — every off-map square
+joins the holes), the residue with the floor's doorways and ruins, and
+every ply writes the crop's cells (the board's one model since 4a) —
+`__DCK.walk.arenaFen()` must equal the duel's board, and the smoke
+asserts it. INITIATIVE is the turn field: the player is always White.
+WALKING OUT is ONE overlay button (Rematch, Re-deal, Back to setup and
+the cheat Undo hide on a world duel; Back is hidden during it): a WIN
+clears every letter in the crop — the enemy is gone from the floor —
+and re-spawns the pattern whole around the king's FINAL cell, facing
+kept (promotions revert, captured pieces return, brief §8; `spawnArmy`
+`lenient`: a king the closer sealed in a pocket walks out anyway, the
+rest on the nearest floor beyond); a LOSS ends the run (`run.ended` —
+the save stays exportable, the resume card says "Run over", `beginRun`
+refuses it with one line); an ENGINE ERROR restores the floor, the army
+and the ledger from the pre-drop snapshot. THE RUN records a duel as
+its RESULT (`run.mjs recordDuel`: kind 'duel', the crop, the seed, the
+initiative, result, termination, plies, quakes, the final FEN, the log
+id; never its plies — the replay log holds them; `run.turn` counts
+inputs alone, `inputsOf`) and a PENDING entry (`run.pending`: seed,
+initiative, the enemy's knobs, the walk turn) goes into the save before
+the floor changes, so a reload mid-duel resumes the walk and re-drops
+the SAME seeded duel from move one. THE DEBRIS LEDGER LIVES IN THE RUN
+(`floors[id].debris`, `updateRun` carries it, `openRun` returns it):
+the walk binds it at the identity transform (`debrisBindRun`), a
+barrier through the crop (`debrisBindCrop` — every kill and quake lands
+in the floor's own pixels), `debrisSave` routes to the run save after a
+walk turn and never mid-duel; the walk's SMASH records the crate's own
+splinters by CELL (`debrisEventCell`, `debrisSrcOfCell` — the
+square-name wrappers cap at file `l`), its steps WEAR the floor
+(`debrisWalkTurn`), and the walk board paints the scars
+(`debrisPaintWalk` → canvas-board `setCellDebris`; the sampler keys on
+the mounted board's theme). THE REPLAY LOG carries `world` (the world,
+the crop, the stage the crop made, the layers at the drop; the file is
+named by world and walk turn) and the analyzer paints a barrier log from
+it without a manifest (`resolveStage` reads it first; the report's
+header prints a `world` line). `DuelController.adjudicate({ loser })`
+(`__DCK.walk.concede`) ends a duel on demand — the smoke's way to a
+verdict. Gates: `phase0/harness/test-barrier.mjs` (60: the fixture at
+every facing — the pin, the gap, the crop reading north-up, the order
+kept; the window on a hall wider than 12; a crawlspace refused; terrain
+deepening the crop; two deep armies in a corridor refused past 10;
+off-map walls and the layers on a hand-built crop; the run's duel entry
+and the ended run; the lenient spawn out of a sealed pocket), ui-smoke
+318 ok + THE BARRIER block (a smash on the walk in the run, the drop by button,
+the crop's FEN equal to the duel's at ply 0 and 2, the window around the
+crop, the pending entry, the log's world block, a reload re-dropping the
+same seed, the one-button walk-out with six pieces around the king and
+no enemy letter left, the run's duel entry, a second duel seeded with a
+hand-dug pit, a loss ending the run and resume refused, the analyzer on
+the barrier log), selftest 46/46, test-world 125, test-army 57,
+test-debris 60, test-camera 80, test-logreport 47, facing-walk 108/108,
+replay-smoke 63. THE WALK'S HUD, redone the same day on the designer's
+verdict ("the ugliest most unusable virtual d-pad I've ever used"): the
+map fills the screen under the topbar (`#walk-stage`) and the controls
+float over it (`#walk-hud`) — bottom-left A REAL D-PAD (the designer's
+second verdict the same day: "something that actually looks and FEELS
+like an actual d-pad… I don't need a wait button right in the middle"):
+ONE cross, an inline SVG, pointer-driven — the angle from the hub picks
+one of eight directions (`WALK_OCTANTS`; an arm, or between two arms for
+a diagonal), the hub is dead (`WALK_PAD_HUB`), a press steps at once and
+KEEPS STEPPING while held (`WALK_REPEAT_DELAY_MS` 320, then every
+`WALK_REPEAT_MS` 150 — the slide is 140), the thumb slides to steer, the
+pressed arm lights (`data-dir` on the pad); wait is a button in the side
+cluster — the turn / wait / zoom / barrier / export cluster bottom-right,
+the status strip along the top; a SWIPE on the map is a step in
+its direction (eight ways, body-relative — the camera is at the army's
+facing; `WALK_SWIPE_PX` 24, a shorter pointer is a tap and reaches the
+piece pick); and the tap-a-piece SNAP-ZOOM goes to `duelZoomFor()` — the
+k a 10×10 duel gets in this very box (the width fit on a phone, both
+axes under the wide layout: k 6 on the phone, k 3 in a narrow desktop
+window, k 5 on a 1080p wide layout) — never the old constant k 6, which
+was "absurdly oversized" on a desktop. NOT here, on purpose: enemies on the map, line of
+sight, the trigger (its own conversation), per-theme edge-on door art,
+a phone height for the duel box (on a phone the dimmed dungeon shows
+beside the crop only), the analyzer mounting the whole world (it paints
+the crop as an arena). THE PHONE VERDICT IS THE GATE.
+
 
 ## Art themes (2026-09-03)
 

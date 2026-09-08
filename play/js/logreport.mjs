@@ -266,7 +266,9 @@ export function headerLines(L) {
   const ranks = L.ranks ?? 10;
   const s = [];
   s.push(`schema ${L.schema}  build ${L.meta?.app ?? '?'}  exported ${L.meta?.exportedAt ?? '?'}  started ${L.meta?.startedAt ?? '?'}`);
-  s.push(`stage ${L.stage}${L.stageTransformed && L.stageTransformed !== L.stage ? ` (${L.stageTransformed})` : ''}  "${L.title ?? ''}"  ${files}×${ranks}  flip ${L.flip}  crop ${L.crop?.top ?? 0}/${L.crop?.bottom ?? 0}  first move ${L.turn}`);
+  if (L.world) s.push(`world ${L.world.id}  "${L.world.title ?? ''}"  the barrier at walk turn ${L.world.walkTurn ?? '?'}  crop (${L.world.crop?.wf ?? '?'}, ${L.world.crop?.wr ?? '?'}) facing ${['north', 'east', 'south', 'west'][L.world.crop?.facing ?? 0]}  ${files}×${ranks}  kings on file ${String.fromCharCode(97 + (L.world.kingFile ?? 0))}  first move ${L.turn}`);
+  else s.push(`stage ${L.stage}${L.stageTransformed && L.stageTransformed !== L.stage ? ` (${L.stageTransformed})` : ''}  "${L.title ?? ''}"  ${files}×${ranks}  flip ${L.flip}  crop ${L.crop?.top ?? 0}/${L.crop?.bottom ?? 0}  first move ${L.turn}`);
+
   s.push(`setup seed ${L.setupSeed} (attempt ${L.dealAttempt})  director seed ${L.seed}  player ${L.player}`);
   if (L.armies) s.push(`armies  W ${JSON.stringify(L.armies.white)}\n        B ${JSON.stringify(L.armies.black)}`);
   s.push(`engine ${L.meta?.engine ?? '?'}  go "${L.go}"  mate probe "${L.mateGo}"  eval gate ${L.evalGate ? JSON.stringify(L.evalGate) : 'off'}  hint probe "${L.meta?.probeGo ?? '?'}"`);

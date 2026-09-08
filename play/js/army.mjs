@@ -91,6 +91,20 @@ export function patternOf(slots) {
   return { width: 0, royal: slots[0]?.ch ?? 'K', slots: slots.map((s) => ({ ...s })), value: 0 };
 }
 
+/**
+ * The carried pattern as the deal's BAG (armygen.mjs makeArmy's shape:
+ * width = the pawn count, `back` the non-royal pieces IN SLOT ORDER), so
+ * the barrier can re-mold it onto a crop with `order: 'as-given'` — the
+ * formation materializes in the order the player walked with (4c).
+ */
+export function bagOfPattern(pattern) {
+  const rest = pattern.slots.slice(1).map((s) => s.ch.toUpperCase());
+  const back = rest.filter((ch) => ch !== 'P');
+  const pawns = rest.length - back.length;
+  return { width: pawns || pattern.width || back.length + 1, royal: pattern.royal ?? pattern.slots[0]?.ch ?? 'K', back, value: pattern.value ?? 0 };
+}
+
+
 /** The world cell a slot wants, given the king's cell and the facing. */
 export function slotCell(pattern, i, king, facing) {
   const s = pattern.slots[i];
@@ -436,7 +450,7 @@ export function advance(world, army, input) {
  * reachable from the king (the same molding). Pieces get ids 1… in slot
  * order. Throws when the king's cell is not floor.
  */
-export function spawnArmy(world, pattern, at, facing = 0, side = 'w') {
+export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient = false } = {}) {
   if (world.at(at.f, at.r) !== FLOOR) throw new Error(`spawn: (${at.f}, ${at.r}) is not floor`);
   const army = new Army({ side, facing, pattern, pieces: [] });
   army.pieces.push({ id: 1, ch: pattern.slots[0].ch, slot: 0, f: at.f, r: at.r });
@@ -456,9 +470,23 @@ export function spawnArmy(world, pattern, at, facing = 0, side = 'w') {
         const cheb = Math.max(Math.abs(f - want.f), Math.abs(r - want.r));
         if (!best || cheb < best.cheb || (cheb === best.cheb && (fromKing[j] < best.d || (fromKing[j] === best.d && (f < best.f || (f === best.f && r < best.r)))))) best = { f, r, cheb, d: fromKing[j] };
       }
+      if (!best && lenient) {
+        // WALKING OUT of a closed board (4c): the closer's pits can seal the
+        // king in a pocket smaller than his army. The pieces that fit stand
+        // with him; the rest take the nearest vacant floor anywhere, sealed
+        // off or not — a won duel never loses a piece (brief §8).
+        for (let j = 0; j < fromKing.length; j++) {
+          if (taken.has(j)) continue;
+          const f = j % world.files, r = (j - f) / world.files;
+          if (!vacant(world, f, r)) continue;
+          const cheb = Math.max(Math.abs(f - want.f), Math.abs(r - want.r));
+          if (!best || cheb < best.cheb || (cheb === best.cheb && (f < best.f || (f === best.f && r < best.r)))) best = { f, r, cheb, d: -1 };
+        }
+      }
       if (!best) throw new Error(`spawn: no floor for slot ${i}`);
       cell = { f: best.f, r: best.r };
     }
+
     taken.add(world.idx(cell.f, cell.r));
     army.pieces.push({ id: i + 1, ch: pattern.slots[i].ch, slot: i, f: cell.f, r: cell.r });
   }

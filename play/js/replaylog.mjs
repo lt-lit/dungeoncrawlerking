@@ -67,8 +67,14 @@ export function buildLog({ duel, session = null, meta = {} }) {
         }
       : null,
     player: session?.playerColor ?? null,
+    // THE BARRIER (Phase 2 milestone 4c): a duel on the walk's world — the
+    // world, the crop, the stage the crop made (its terrain and skins, so
+    // the analyzer paints it without a manifest), the floor's layers at the
+    // drop (holes, god crates, doorways, ruins). Null on the setup page.
+    world: session?.worldLog ?? null,
     files: d.files,
     ranks: d.ranks,
+
     variant: d.variantName,
     variantIni: deal?.variantIni ?? null, // the deal's own rules, so the log replays without the catalog
     startFen: d.startFen,
@@ -117,7 +123,8 @@ export function buildLog({ duel, session = null, meta = {} }) {
 export function logFileName(data, date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
-  const stage = String(data?.stage ?? 'duel').replace(/[^a-z0-9-]+/gi, '-');
+  const stage = String(data?.world ? `${data.world.id}_t${data.world.walkTurn ?? 0}` : data?.stage ?? 'duel').replace(/[^a-z0-9-]+/gi, '-');
+
   const seed = data?.setupSeed != null ? `_s${data.setupSeed}` : '';
   return `dck-log_${stage}${seed}_${stamp}.json`;
 }

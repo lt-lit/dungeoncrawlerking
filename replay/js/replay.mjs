@@ -194,7 +194,17 @@ async function resolveStage(L) {
   app.stage = null;
   app.skins = {};
   app.stageNote = '';
+  // THE BARRIER (4c): a duel on the walk's world carries the crop's own
+  // terrain and skins in the log — no manifest holds a crop.
+  if (L.world?.stage?.grid) {
+    const w = L.world.stage;
+    app.stage = { id: w.id, title: w.title ?? w.id, files: w.files, ranks: w.ranks, grid: w.grid, skin: w.skin ?? [], theme: w.theme ?? L.world.theme ?? null, notes: '' };
+    app.skins = stageSkins(app.stage);
+    if (app.stage.files !== L.files || app.stage.ranks !== L.ranks) app.stageNote = `the log's world crop is ${app.stage.files}×${app.stage.ranks}, the duel ${L.files}×${L.ranks}`;
+    return;
+  }
   const stages = await loadManifest();
+
   const base = stages.find((s) => s.id === L.stage);
   if (!base) {
     app.stageNote = L.stage ? `stage ${L.stage} is not in this build's manifest — no skins` : 'no stage recorded — no skins';
