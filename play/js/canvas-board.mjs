@@ -51,19 +51,46 @@
 //               designer's white flash on the first build pointed at the
 //               SVG overlay it then had; the diagnostics line main.mjs
 //               shows comes from `renderInfo`).
-//   INPUT       hit-testing by division: pointer → device px → tile.
+//   INPUT       hit-testing by division: pointer → device px → tile
+//               (squareAtPoint — the inverse of the camera's origin).
+//   THE CAMERA  (Phase 2, the camera PR, 2026-09-08; play/js/camera.mjs is
+//               the geometry) — FACING: which world direction points up
+//               the screen (0 north, 1 east, 2 south — the old `flipped`
+//               — 3 west; setFacing, a CUT). A quarter turn swaps the
+//               buffer's axes; every square, pixel and mark goes through
+//               the one origin function; every direction-bearing tile is
+//               generated from a mask, so the terrain's world-space masks
+//               (classifyTerrain, the shared test surface) are PERMUTED to
+//               the screen before the tile lookup — wall faces, ruin
+//               stubs, pit rims and doorway posts follow the turn; a
+//               square's debris buffer turns by index permutation; pieces
+//               and props never turn; the variant hashes and the checker
+//               key on WORLD coordinates (`hashCoords`, the environment's
+//               cell — so a crop, a flip or a turn never reshuffles the
+//               floor); a DOOR whose wall line runs up the screen stands
+//               EDGE-ON (a generated placeholder: the wall's band with the
+//               leaf as a thin slab and a post above and below — brief
+//               §11 — until per-theme art exists) and a double door's
+//               halves are dealt on the screen. FIT: 'width' (the phone —
+//               k from the container's width, the canvas as tall as the
+//               board) or 'box' (the camera owns the screen: the container's
+//               device box is the canvas, k the largest step that fits the
+//               board AND its headroom row on both axes, the board centred
+//               in whole device pixels; fill is the exact quotient of the
+//               tighter axis). The world beyond one arena is the next
+//               milestone's: this board still paints exactly one arena.
 //
 // What it does NOT do (milestone 1, on purpose): the classic GLYPH pieces
 // (a piece set is always drawn — the glyphs are text, not pixel art; the
 // default set stands in), the % piece-fit dials (the tile grid is the only
-// mode here: the art's own scale, lift and shift in whole tile pixels),
-// the overworld camera (later — this board is a fixed-size viewport over
-// one arena). The atlas is play/js/atlas.mjs.
+// mode here: the art's own scale, lift and shift in whole tile pixels).
+// The atlas is play/js/atlas.mjs.
 import { splitFen, parseBoard, WALL } from './fen.mjs';
 import { classifyTerrain, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './board-ui.mjs';
 import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
+import { normFacing, facingName, screenDims, toScreen, toWorld, pxToScreen, rotMask8, rotMask4, rotTile, doorHalf, edgeOn, coordEdges } from './camera.mjs';
 
 const T = TILE;
 const EMPTY = new Set();
@@ -113,12 +140,20 @@ export function resetAtlas() {
 }
 
 export class CanvasBoard {
-  constructor(container, { files, ranks, flipped = false, onSquareTap = null, scaling = 'integer', atlas = null, onResize = null, arrowStyle = null } = {}) {
+  constructor(container, { files, ranks, flipped = false, facing = null, fit = 'width', hashCoords = null, showCoords = true, onSquareTap = null, scaling = 'integer', atlas = null, onResize = null, arrowStyle = null } = {}) {
     this.container = container;
     this.onResize = onResize;
     this.files = files;
     this.ranks = ranks;
-    this.flipped = flipped;
+    // THE CAMERA: the facing (`flipped: true` is the old spelling of the
+    // 180° turn), the fit, the world coordinates the hashes key on
+    // ((f, rank) → [a, b]; the identity when none is given) and whether
+    // the edge coordinates are drawn.
+    this.facing = normFacing(facing ?? (flipped ? 2 : 0));
+    this.fit = fit === 'box' ? 'box' : 'width';
+    this.boxMode = false; // the fit actually in force (a box needs a height)
+    this.hashCoords = typeof hashCoords === 'function' ? hashCoords : null;
+    this.showCoords = showCoords !== false;
     this.onSquareTap = onSquareTap;
     this.interactive = false;
     this.scaling = scaling === 'fill' ? 'fill' : 'integer';
@@ -207,12 +242,23 @@ export class CanvasBoard {
     }
   }
 
-  /** The board's native size: files×16 by ranks×16 + headroom. */
+  /** The old spelling of the 180° turn. */
+  get flipped() {
+    return this.facing === 2;
+  }
+  /** The screen grid in tiles: a quarter turn swaps the axes. */
+  get screenCols() {
+    return screenDims(this.files, this.ranks, this.facing).cols;
+  }
+  get screenRows() {
+    return screenDims(this.files, this.ranks, this.facing).rows;
+  }
+  /** The board's native size on the screen: cols×16 by rows×16 + headroom. */
   get boardW() {
-    return this.files * T;
+    return this.screenCols * T;
   }
   get boardH() {
-    return this.ranks * T;
+    return this.screenRows * T;
   }
   get bufW() {
     return this.boardW;
@@ -239,26 +285,39 @@ export class CanvasBoard {
 
   /**
    * Size the screen canvas from its DEVICE-pixel box: backing store = the
-   * box (one canvas pixel per device pixel), k from the width, the CSS
-   * height set so the board fits at k; the observer fires again on the
-   * height change and this settles in one more step.
+   * box (one canvas pixel per device pixel). FIT 'width': k from the
+   * width, the CSS height set so the board fits at k; the observer fires
+   * again on the height change and this settles in one more step. FIT
+   * 'box' (a container with a height to give — the camera owns the
+   * screen): the canvas IS the box, k the largest step that fits the
+   * board and its headroom row on both axes, the board centred in whole
+   * device pixels on both; a box without a height falls back to 'width'.
    */
   #resize(box = null) {
     if (!this.canvas.isConnected) return;
     this.dpr = window.devicePixelRatio || 1;
     this.#allocBuffer();
-    let w;
+    let w, h;
     this.emulated = !!box?.emulated;
-    if (box) w = Math.floor(box.w);
-    else w = Math.floor(this.container.getBoundingClientRect().width * this.dpr);
+    if (box) {
+      w = Math.floor(box.w);
+      h = Math.floor(box.h);
+    } else {
+      const r = this.container.getBoundingClientRect();
+      w = Math.floor(r.width * this.dpr);
+      h = Math.floor(r.height * this.dpr);
+    }
     if (!(w > 0)) return;
-    const k = this.scaling === 'integer' ? Math.max(1, Math.floor(w / this.boardW)) : w / this.boardW;
-    const needH = Math.ceil(this.bufH * k);
+    const boxMode = this.fit === 'box' && h >= this.bufH;
+    this.boxMode = boxMode;
+    let k;
+    if (this.scaling === 'integer') k = boxMode ? Math.max(1, Math.min(Math.floor(w / this.bufW), Math.floor(h / this.bufH))) : Math.max(1, Math.floor(w / this.boardW));
+    else k = boxMode ? Math.min(w / this.bufW, h / this.bufH) : w / this.boardW;
     this.k = k;
     this.devW = w;
-    this.devH = needH;
-    this.x0 = this.scaling === 'integer' ? Math.floor((w - this.boardW * k) / 2) : 0;
-    this.y0 = 0;
+    this.devH = boxMode ? h : Math.ceil(this.bufH * k);
+    this.x0 = this.scaling === 'integer' || boxMode ? Math.floor((w - this.bufW * k) / 2) : 0;
+    this.y0 = boxMode ? Math.floor((this.devH - this.bufH * k) / 2) : 0;
     // The canvas's CSS size is its backing store in whole device pixels,
     // stated explicitly (a 100% width is a fractional number of device
     // pixels whenever the container's is, and a canvas drawn into a box a
@@ -303,6 +362,12 @@ export class CanvasBoard {
       bufH: this.bufH,
       files: this.files,
       ranks: this.ranks,
+      facing: this.facing, // THE CAMERA: which world direction points up the screen
+      facingName: facingName(this.facing),
+      screenCols: this.screenCols,
+      screenRows: this.screenRows,
+      fit: this.boxMode ? 'box' : 'width', // the fit in force (the option may ask for a box the container cannot give)
+      fitAsked: this.fit,
       ready: !!this.atlas,
       emulated: !!this.emulated, // the device-pixel box disagreed with css × ratio (a driver's emulated ratio)
       snap: [this.snapX, this.snapY], // the sub-pixel correction that lands the canvas on the device grid
@@ -314,37 +379,79 @@ export class CanvasBoard {
   get diag() {
     const i = this.renderInfo;
     const kf = Number.isInteger(i.k) ? String(i.k) : i.k.toFixed(3);
-    return `canvas · dpr ${+i.dpr.toFixed(3)} · ${i.devW}×${i.devH} device px · k ${kf} (${i.integer ? 'integer' : 'fill'}) · ${+(i.tilePx).toFixed(2)} px/tile · ${(i.tilePx / i.dpr).toFixed(1)} css px`;
+    return `canvas · dpr ${+i.dpr.toFixed(3)} · ${i.devW}×${i.devH} device px · k ${kf} (${i.integer ? 'integer' : 'fill'}) · ${+(i.tilePx).toFixed(2)} px/tile · ${(i.tilePx / i.dpr).toFixed(1)} css px · ${i.facingName} up · fit ${i.fit}`;
   }
 
-  /** Column / row-from-top of a square on the rendered grid (flip-aware). */
+  /** Column / row-from-top of a square on the rendered grid (the camera's facing). */
   gridPos(sq) {
     const f = sq.charCodeAt(0) - 97;
     const rank = parseInt(sq.slice(1), 10);
-    return { col: this.flipped ? this.files - 1 - f : f, row: this.flipped ? rank - 1 : this.ranks - rank };
+    return toScreen(f, rank, this.files, this.ranks, this.facing);
   }
 
-  /** Buffer pixel of a square's top-left. */
+  /** Buffer pixel of a square's top-left — THE origin: every painter and
+   *  the hit-test go through here (CLAUDE.md § Phase 2, the camera). */
   #origin(sq) {
     const { col, row } = this.gridPos(sq);
     return { x: col * T, y: this.headroom + row * T };
   }
 
   #squareAt(col, row) {
-    if (col < 0 || col >= this.files || row < 0 || row >= this.ranks) return null;
-    const f = this.flipped ? this.files - 1 - col : col;
-    const rank = this.flipped ? row + 1 : this.ranks - row;
-    return squareName(f, rank);
+    const w = toWorld(col, row, this.files, this.ranks, this.facing);
+    return w ? squareName(w.f, w.rank) : null;
+  }
+
+  /** The world coordinates a square's cosmetic hashes key on. */
+  #hc(c) {
+    return this.hashCoords ? this.hashCoords(c.f, c.rank) : [c.f, c.rank];
+  }
+
+  /** The square under a client point (the inverse of #origin), or null. */
+  squareAtPoint(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    if (!(r.width > 0) || !this.devW) return null;
+    const x = ((clientX - r.left) * this.devW) / r.width - this.x0;
+    const y = ((clientY - r.top) * this.devH) / r.height - this.y0 - this.headroom * this.k;
+    if (x < 0 || y < 0) return null;
+    return this.#squareAt(Math.floor(x / (T * this.k)), Math.floor(y / (T * this.k)));
+  }
+
+  /** The client point at the centre of a square (the test hook for the round trip). */
+  pointOfSquare(sq) {
+    if (!this.cells.has(sq)) return null;
+    const r = this.canvas.getBoundingClientRect();
+    const { x, y } = this.#origin(sq);
+    return { x: r.left + ((this.x0 + (x + T / 2) * this.k) * r.width) / this.devW, y: r.top + ((this.y0 + (y + T / 2) * this.k) * r.height) / this.devH };
   }
 
   #onClick(e) {
     if (!this.interactive || !this.onSquareTap) return;
-    const r = this.canvas.getBoundingClientRect();
-    if (!(r.width > 0)) return;
-    const x = ((e.clientX - r.left) * this.devW) / r.width - this.x0;
-    const y = ((e.clientY - r.top) * this.devH) / r.height - this.y0 - this.headroom * this.k;
-    const sq = this.#squareAt(Math.floor(x / (T * this.k)), Math.floor(y / (T * this.k)));
+    const sq = this.squareAtPoint(e.clientX, e.clientY);
     if (sq) this.onSquareTap(sq);
+  }
+
+  /** THE CAMERA's turn: which world direction points up the screen (0…3).
+   *  A CUT: the buffer swaps its axes, the debris turns, k is refitted.
+   *  Returns the facing in force. */
+  setFacing(n) {
+    const f = normFacing(n);
+    if (f === this.facing) return f;
+    this.facing = f;
+    this.#allocBuffer();
+    for (const [sq, buf] of this.debrisBufs) this.#putDebris(sq, buf);
+    this.#resize();
+    this.invalidate();
+    return f;
+  }
+
+  /** The fit ('width' / 'box' — see #resize). */
+  setFit(fit) {
+    const f = fit === 'box' ? 'box' : 'width';
+    if (f === this.fit) return f;
+    this.fit = f;
+    this.#resize();
+    this.invalidate();
+    return f;
   }
 
   // ------------------------------------------------------------ state
@@ -405,18 +512,25 @@ export class CanvasBoard {
       this.debrisCanvas.delete(sq);
     } else {
       this.debrisBufs.set(sq, buf);
-      let c = this.debrisCanvas.get(sq);
-      if (!c) {
-        c = document.createElement('canvas');
-        c.width = T;
-        c.height = T;
-        this.debrisCanvas.set(sq, c);
-      }
-      const data = buf instanceof Uint8ClampedArray ? buf : new Uint8ClampedArray(buf);
-      c.getContext('2d').putImageData(new ImageData(data, T, T), 0, 0);
+      this.#putDebris(sq, buf);
     }
     this.invalidate();
     await new Promise((r) => this.paintWaiters.push(r));
+  }
+
+  /** The square's debris canvas from its arena-space buffer, TURNED to the
+   *  camera's facing by index permutation (the buffer itself stays in arena
+   *  space — the test surface). */
+  #putDebris(sq, buf) {
+    let c = this.debrisCanvas.get(sq);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = T;
+      c.height = T;
+      this.debrisCanvas.set(sq, c);
+    }
+    const data = rotTile(buf instanceof Uint8ClampedArray ? buf : new Uint8ClampedArray(buf), this.facing, T);
+    c.getContext('2d').putImageData(new ImageData(data, T, T), 0, 0);
   }
 
   debrisBuf(sq) {
@@ -496,8 +610,8 @@ export class CanvasBoard {
   cellClasses(sq) {
     const c = this.cells.get(sq);
     if (!c) return null;
-    const { f, rank } = c;
-    const out = ['cell', (f + rank - 1) % 2 === 0 ? 'dark' : 'light', `f${floorVariantIndex(f, rank)}`, `ck${crackVariantIndex(f, rank)}`, `sv${skinVariantIndex(f, rank)}`];
+    const [hf, hr] = this.#hc(c);
+    const out = ['cell', (hf + hr - 1) % 2 === 0 ? 'dark' : 'light', `f${floorVariantIndex(hf, hr)}`, `ck${crackVariantIndex(hf, hr)}`, `sv${skinVariantIndex(hf, hr)}`];
     const k = this.kinds?.get(sq);
     if (k) {
       if (k.wallTile) out.push('wall');
@@ -505,7 +619,11 @@ export class CanvasBoard {
       if (k.furniture) out.push('furniture');
       if (k.cracked) out.push('cracked');
       if (k.skin) out.push(`skin-${k.skin}`);
-      if (k.door2) out.push(`door2-${k.door2}`);
+      // The double door's halves and the edge-on stance are the SCREEN's
+      // (the camera): door2-l is the leaf on the screen's left.
+      const half = doorHalf(k.door2, this.facing);
+      if (half) out.push(`door2-${half}`);
+      if (k.skin === 'door' && edgeOn(k.doorLine, this.facing)) out.push('door-edge');
       if (k.weak) out.push('weak');
       if (k.ruin) out.push('ruin');
       if (k.mask >= 0) out.push(`wm-${k.mask}`);
@@ -524,12 +642,16 @@ export class CanvasBoard {
     return out;
   }
 
-  /** The decor a square wears (torch / banner / chain / doorway), or null — the DOM's .decor span, as data. */
+  /** The decor a square wears (torch / banner / chain / doorway), or null —
+   *  the DOM's .decor span, as data. A wall prop hangs on the face toward
+   *  the viewer, so the mask is the SCREEN's (the camera); the scatter
+   *  hash keys on the world square. */
   decorOf(sq) {
     const k = this.kinds?.get(sq);
     const c = this.cells.get(sq);
     if (!k || !c) return null;
-    return decorFor({ wallTile: k.wallTile, cracked: k.cracked, mask: k.mask, f: c.f, rank: c.rank, earned: k.doorway ? 'doorway' : null });
+    const [hf, hr] = this.#hc(c);
+    return decorFor({ wallTile: k.wallTile, cracked: k.cracked, mask: rotMask8(k.mask, this.facing), f: hf, rank: hr, earned: k.doorway ? 'doorway' : null });
   }
 
   setInteractive(enabled) {
@@ -782,16 +904,150 @@ export class CanvasBoard {
     return c;
   }
 
-  /** The furniture sprite a square shows: the door leaf / double half, a
-   *  prop (crate / chest / barrel / wreckage, by the square's variant), or
-   *  the crate for an unskinned '^'. { tile, prop } — a prop is 16×32. */
+  /** The furniture sprite a square shows: the door leaf / its half of a
+   *  double ON THE SCREEN (the camera deals the halves), a prop (crate /
+   *  chest / barrel / wreckage, by the square's variant), or the crate for
+   *  an unskinned '^'. { tile, prop } — a prop is 16×32. An edge-on door
+   *  has no sprite here: it is flat terrain (#edgeDoorTile). */
   #furnitureSprite(sq, k) {
     const c = this.cells.get(sq);
-    if (k.skin === 'door') return { tile: this.#tile(k.door2 ? `door2-${k.door2}` : 'door'), prop: false };
+    if (k.skin === 'door') {
+      const half = doorHalf(k.door2, this.facing);
+      return { tile: this.#tile(half ? `door2-${half}` : 'door'), prop: false };
+    }
     const role = k.skin && k.skin !== 'masonry' ? k.skin : 'crate';
-    const v = skinVariantIndex(c.f, c.rank);
+    const [hf, hr] = this.#hc(c);
+    const v = skinVariantIndex(hf, hr);
     const tile = this.#tile(v > 1 ? `${role}-${v}` : role) ?? this.#tile(role) ?? this.#tile('crate');
     return { tile, prop: !!tile && tile.h === 2 * T };
+  }
+
+  /** Is this door edge-on under the camera's facing? */
+  #edgeOn(k) {
+    return k.skin === 'door' && edgeOn(k.doorLine, this.facing);
+  }
+
+  /** The half of a double door a square's leaf paints ON THE SCREEN ('l' /
+   *  'r'), or null — a single leaf, an edge-on pair, no door. */
+  doorHalfOf(sq) {
+    const k = this.kinds?.get(sq);
+    return k && k.skin === 'door' ? doorHalf(k.door2, this.facing) : null;
+  }
+
+  /** Is the door on this square edge-on under the camera? */
+  edgeOnAt(sq) {
+    const k = this.kinds?.get(sq);
+    return !!k && this.#edgeOn(k);
+  }
+
+  /** The pixels of an atlas tile (for the composites), or null. */
+  #pixelsOf(tile) {
+    return tile ? Atlas.pixelsOf(tile) : null;
+  }
+
+  /** The two colours a leaf / a post is made of: the brightest and the
+   *  darkest opaque pixel of a tile's middle. */
+  static #tones(px, x0 = 4, y0 = 4, w = 8, h = 8) {
+    if (!px) return null;
+    let lit = null, dark = null, hi = -1, lo = 1e9;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
+      const o = (y * px.w + x) * 4;
+      if (px.data[o + 3] < 200) continue;
+      const l = px.data[o] * 3 + px.data[o + 1] * 6 + px.data[o + 2];
+      if (l > hi) { hi = l; lit = `rgb(${px.data[o]},${px.data[o + 1]},${px.data[o + 2]})`; }
+      if (l < lo) { lo = l; dark = `rgb(${px.data[o]},${px.data[o + 1]},${px.data[o + 2]})`; }
+    }
+    return lit && dark ? { lit, dark } : null;
+  }
+
+  /**
+   * THE EDGE-ON DOOR (brief §11, a GENERATED placeholder until per-theme
+   * art exists): the wall case the door stands in (its band, as the wall
+   * line runs up the screen), a gap cut through its middle holding the
+   * leaf as a thin vertical slab in the leaf's own two tones (the door
+   * set's leaf, so the option follows), and a POST above and below in the
+   * doorway's post tones (the theme's doorway tile; the leaf's tones when
+   * a set has no doorway — the classic row). `mask` is the SCREEN mask.
+   * Cached per theme / door set / mask.
+   */
+  #edgeDoorTile(mask) {
+    const key = `edge|${this.theme ?? ''}|${this.doors ?? ''}|${mask}`;
+    let c = this.composites.get(key);
+    if (c) return c;
+    const wall = this.#wallTile(mask);
+    if (!wall) return null;
+    const cv = document.createElement('canvas');
+    cv.width = T;
+    cv.height = T;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(wall.src, wall.sx, wall.sy, T, T, 0, 0, T, T);
+    const leaf = CanvasBoard.#tones(this.#pixelsOf(this.#tile('door'))) ?? { lit: '#bf704d', dark: '#895a45' };
+    const post = CanvasBoard.#tones(this.#pixelsOf(this.#tile('doorway')), 0, 0, 2, 16) ?? leaf;
+    // The slab: four columns through the band, dark edges, lit planks.
+    g.fillStyle = leaf.dark;
+    g.fillRect(6, 1, 1, 14);
+    g.fillRect(9, 1, 1, 14);
+    g.fillStyle = leaf.lit;
+    g.fillRect(7, 1, 2, 14);
+    // A plank seam every fourth row, so it reads as a leaf, not a bar.
+    g.fillStyle = leaf.dark;
+    for (let y = 4; y < 15; y += 4) g.fillRect(7, y, 2, 1);
+    // The posts: a cap above and below, two rows each, lit over dark.
+    g.fillStyle = post.lit;
+    g.fillRect(5, 0, 6, 1);
+    g.fillRect(5, 14, 6, 1);
+    g.fillStyle = post.dark;
+    g.fillRect(5, 1, 6, 1);
+    g.fillRect(5, 15, 6, 1);
+    c = { src: cv, sx: 0, sy: 0, w: T, h: T };
+    this.composites.set(key, c);
+    return c;
+  }
+
+  /**
+   * The OPEN DOORWAY's posts for a SCREEN mask of standing walls (N=1 E=2
+   * S=4 W=8): the theme's east / west post tiles as they are, and for a
+   * wall standing north or south the same tiles TURNED a quarter (the
+   * doorway tile is flat generated art — two full-height posts — so its
+   * quarter turn is the north–south post pair, brief §11). Mixed cases
+   * overlay both. Cached per theme / mask; null when the theme has no
+   * doorway (the classic row).
+   */
+  #doorwayTile(mask) {
+    if (!this.theme) return null;
+    const key = `doorway|${this.theme}|${mask}`;
+    let c = this.composites.get(key);
+    if (c !== undefined) return c;
+    const ew = mask & 10, ns = mask & 5;
+    const ewTile = ew === 10 ? this.#tile('doorway') : ew === 8 ? this.#tile('doorway-8') : ew === 2 ? this.#tile('doorway-2') : null;
+    // A quarter turn (camera facing 1) sends the west post to the south
+    // edge and the east post to the north edge.
+    const nsSrc = ns === 5 ? this.#tile('doorway') : ns === 4 ? this.#tile('doorway-8') : ns === 1 ? this.#tile('doorway-2') : null;
+    if (!ewTile && !nsSrc) {
+      this.composites.set(key, null);
+      return null;
+    }
+    const cv = document.createElement('canvas');
+    cv.width = T;
+    cv.height = T;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    if (ewTile) g.drawImage(ewTile.src, ewTile.sx, ewTile.sy, T, T, 0, 0, T, T);
+    if (nsSrc) {
+      const px = this.#pixelsOf(nsSrc);
+      if (px) {
+        const turned = rotTile(px.data, 1, T);
+        const tmp = document.createElement('canvas');
+        tmp.width = T;
+        tmp.height = T;
+        tmp.getContext('2d').putImageData(new ImageData(turned, T, T), 0, 0);
+        g.drawImage(tmp, 0, 0);
+      }
+    }
+    c = { src: cv, sx: 0, sy: 0, w: T, h: T };
+    this.composites.set(key, c);
+    return c;
   }
 
   #frame1(sq, x, y, fill, inset = 0) {
@@ -814,18 +1070,20 @@ export class CanvasBoard {
     const t = now();
     const kinds = this.kinds;
     const H = this.headroom;
-    // The square's own rectangle and its kind, in rendered order.
+    const rows = this.screenRows, cols = this.screenCols;
+    // The square's own rectangle, its kind and its hash coordinates, in
+    // rendered (screen) order.
     const squares = [];
-    for (let row = 0; row < this.ranks; row++) for (let col = 0; col < this.files; col++) {
+    for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
       const sq = this.#squareAt(col, row);
       const c = this.cells.get(sq);
       if (!c) continue;
-      squares.push({ sq, x: col * T, y: H + row * T, k: kinds?.get(sq) ?? null, c, row });
+      squares.push({ sq, x: col * T, y: H + row * T, k: kinds?.get(sq) ?? null, c, row, h: this.#hc(c) });
     }
     // 1. floor + shade + debris + flat terrain + marks under the pieces
     for (const s of squares) this.#paintFlat(s, theme, t);
-    // 2. the tall things, far rank first: props and pieces interleaved by row
-    for (let row = 0; row < this.ranks; row++) for (const s of squares) if (s.row === row) this.#paintTall(s, t);
+    // 2. the tall things, far row first: props and pieces interleaved by screen row
+    for (let row = 0; row < rows; row++) for (const s of squares) if (s.row === row) this.#paintTall(s, t);
     // 3. marks over the pieces
     for (const s of squares) this.#paintMarksOver(s);
     // 4. coordinates
@@ -847,20 +1105,23 @@ export class CanvasBoard {
     for (const s of this.slides) this.#paintSlide(s, t);
   }
 
-  /** Arena px (unflipped board space, y down from the top rank) → buffer px. */
+  /** Arena px (the unturned view, y down from the top rank) → buffer px,
+   *  through the camera's facing (camera.mjs pxToScreen). */
   #arenaToBuf(x, y) {
-    if (!this.flipped) return { x, y: this.headroom + y };
-    return { x: this.boardW - 1 - x, y: this.headroom + this.boardH - 1 - y };
+    const p = pxToScreen(x, y, this.files * T, this.ranks * T, this.facing);
+    return { x: p.x, y: this.headroom + p.y };
   }
 
-  #paintFlat({ sq, x, y, k, c }, theme, t) {
+  #paintFlat({ sq, x, y, k, c, h }, theme, t) {
     const g = this.bctx;
-    const dark = (c.f + c.rank - 1) % 2 === 0;
+    const [hf, hr] = h ?? this.#hc(c);
+    const dark = (hf + hr - 1) % 2 === 0;
     const fx = this.fx.get(sq);
     const u = fx ? (fx.done ? 1 : Math.min(1, (t - fx.t0) / fx.ms)) : 0;
+    const facing = this.facing;
     // Floor: the theme's flagstone variant over the flat colour, the dark
     // square's shade over it; the classic set is the flat colours alone.
-    const floor = theme ? this.#tile(`floor-${floorVariantIndex(c.f, c.rank)}`) : null;
+    const floor = theme ? this.#tile(`floor-${floorVariantIndex(hf, hr)}`) : null;
     g.fillStyle = dark ? CLASSIC.dark : CLASSIC.light;
     g.fillRect(x, y, T, T);
     if (floor) {
@@ -878,7 +1139,12 @@ export class CanvasBoard {
       if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
       return;
     }
-    const ck = crackVariantIndex(c.f, c.rank);
+    const ck = crackVariantIndex(hf, hr);
+    // The autotile cases as the SCREEN sees them (the camera): the wall's
+    // 8-neighbour mask and the 4-bit ruin / pit / doorway masks permuted
+    // to the facing before the tile lookup.
+    const sm = rotMask8(k.mask, facing);
+    const sm4 = rotMask4(k.mask, facing);
     if (fx?.kind === 'crumbling') {
       // The floor gives way: the lone-pit tile fades in over the floor, then stays.
       const hole = theme ? this.#tile('hole-0') : null;
@@ -902,7 +1168,7 @@ export class CanvasBoard {
       return;
     }
     if (k.hole) {
-      const hole = theme ? this.#tile(`hole-${k.mask}`) : null;
+      const hole = theme ? this.#tile(`hole-${sm4}`) : null;
       if (hole) this.#draw(hole, x, y);
       else {
         g.fillStyle = CLASSIC.pit;
@@ -912,19 +1178,23 @@ export class CanvasBoard {
       }
     } else if (k.wallTile) {
       const [jx, jy] = fx?.kind === 'cracking' ? JITTER[Math.min(JITTER.length - 1, Math.floor(u * JITTER.length))] : [0, 0];
-      this.#draw(this.#wallTile(k.mask), x + jx, y + jy);
+      this.#draw(this.#wallTile(sm), x + jx, y + jy);
       if (fx?.kind === 'cracking') {
         // The crack appears under a flash of light; the end frame is the cracked tile.
-        this.#draw(this.#crackedTile(k.mask, ck), x + jx, y + jy);
+        this.#draw(this.#crackedTile(sm, ck), x + jx, y + jy);
         if (u < 1) {
           g.fillStyle = `rgba(255,255,255,${(0.5 * (1 - u)).toFixed(3)})`;
           g.fillRect(x, y, T, T);
         }
       }
     } else if (k.ruin) {
-      this.#draw(this.#tile(theme ? `ruin-${k.mask}` : 'rubble'), x, y);
+      this.#draw(this.#tile(theme ? `ruin-${sm4}` : 'rubble'), x, y);
     } else if (k.furniture && (k.cracked || k.weak)) {
-      this.#draw(this.#crackedTile(k.mask, ck), x, y);
+      this.#draw(this.#crackedTile(sm, ck), x, y);
+    } else if (this.#edgeOn(k)) {
+      // A door whose wall line runs up the screen: the edge-on placeholder,
+      // flat terrain like the wall band it stands in.
+      this.#draw(this.#edgeDoorTile(sm), x, y);
     }
     if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
     // Decor: a prop on a standing wall's face (never on a cracked wall), or
@@ -932,17 +1202,17 @@ export class CanvasBoard {
     // decor span is above its debris image (the posts stand on the rubble).
     const decor = this.decorOf(sq);
     if (decor === 'doorway') {
-      const role = k.mask === 10 ? 'doorway' : k.mask === 8 ? 'doorway-8' : k.mask === 2 ? 'doorway-2' : null;
-      if (role && theme) this.#draw(this.#tile(role), x, y);
+      const tile = this.#doorwayTile(sm4);
+      if (tile) this.#draw(tile, x, y);
     } else if (decor && theme) this.#draw(this.#tile(decor), x, y);
     // Marks under the pieces: the gods' residue and the debug heat.
     const m = this.marks;
-    const h = m.heat[sq];
-    if (h && HEAT[h]) this.#frame1(sq, x, y, HEAT[h]);
+    const heat = m.heat[sq];
+    if (heat && HEAT[heat]) this.#frame1(sq, x, y, HEAT[heat]);
     if (m.pits.has(sq) || m.cracked.has(sq) || m.breached.has(sq)) this.#frame1(sq, x, y, GODS);
   }
 
-  #paintTall({ sq, x, y, k, c }, t) {
+  #paintTall({ sq, x, y, k, c, h }, t) {
     if (!k || this.hidden.has(sq)) return;
     const g = this.bctx;
     const fx = this.fx.get(sq);
@@ -952,11 +1222,21 @@ export class CanvasBoard {
       if (k.cracked || k.weak) {
         if (fx?.kind === 'breaching' && u < 1) {
           // The crack bursts away from the broken wall.
-          const ck = crackVariantIndex(c.f, c.rank);
+          const [hf, hr] = h ?? this.#hc(c);
+          const ck = crackVariantIndex(hf, hr);
           const crack = this.atlas.crack(ck);
           if (crack) this.#burst(crack, x, y, T, T, u);
         }
         return; // the crack itself is drawn with the wall in #paintFlat
+      }
+      if (this.#edgeOn(k)) {
+        // An edge-on door is flat terrain (#paintFlat); when it breaks, the
+        // slab bursts away like a crack does.
+        if (fx?.kind === 'breaching' && u < 1) {
+          const tile = this.#edgeDoorTile(rotMask8(k.mask, this.facing));
+          if (tile) this.#burst(tile, x, y, T, T, u);
+        }
+        return;
       }
       const { tile, prop } = this.#furnitureSprite(sq, k);
       if (!tile) return;
@@ -1030,6 +1310,11 @@ export class CanvasBoard {
     const x = Math.round(a.x + (b.x - a.x) * e), y = Math.round(a.y + (b.y - a.y) * e);
     const k = this.kinds?.get(s.from);
     if (k?.furniture) {
+      if (this.#edgeOn(k)) {
+        const tile = this.#edgeDoorTile(rotMask8(k.mask, this.facing));
+        if (tile) this.#draw(tile, x, y);
+        return;
+      }
       const { tile, prop } = this.#furnitureSprite(s.from, k);
       if (tile) this.#draw(tile, x, prop ? y - T : y);
       return;
@@ -1070,18 +1355,24 @@ export class CanvasBoard {
     }
   }
 
-  /** File letters along the bottom row, rank numbers down the left column (the DOM's .coord). */
+  /** The edge coordinates (the DOM's .coord): along the bottom row what
+   *  varies across the screen's columns — file letters north / south up,
+   *  rank numbers east / west up — and down the left column the other. */
   #paintCoords() {
+    if (!this.showCoords) return;
     const g = this.bctx;
     const H = this.headroom;
-    for (let col = 0; col < this.files; col++) {
-      const sq = this.#squareAt(col, this.ranks - 1);
-      const letter = sq[0];
-      drawText(g, letter, col * T + T - 1 - textWidth(letter), H + (this.ranks - 1) * T + T - 6, COORD, COORD_SHADOW);
+    const rows = this.screenRows, cols = this.screenCols;
+    const edges = coordEdges(this.facing);
+    const label = (sq, what) => (what === 'file' ? sq[0] : sq.slice(1));
+    for (let col = 0; col < cols; col++) {
+      const sq = this.#squareAt(col, rows - 1);
+      const text = label(sq, edges.bottom);
+      drawText(g, text, col * T + T - 1 - textWidth(text), H + (rows - 1) * T + T - 6, COORD, COORD_SHADOW);
     }
-    for (let row = 0; row < this.ranks; row++) {
+    for (let row = 0; row < rows; row++) {
       const sq = this.#squareAt(0, row);
-      drawText(g, sq.slice(1), 1, H + row * T + 1, COORD, COORD_SHADOW);
+      drawText(g, label(sq, edges.left), 1, H + row * T + 1, COORD, COORD_SHADOW);
     }
   }
 

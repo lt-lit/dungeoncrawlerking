@@ -40,28 +40,46 @@
 //              the wall line; crates and the rest do not). A theme paints
 //              the 47 blob cases (wall-<mask> in the atlas), the classic set
 //              one block for all.
-//   weak       an authored WEAK SPOT: the masonry skin anywhere, or a door
-//              skin in a north–south wall line (no edge-on door exists yet,
-//              designer round 6). The cell paints its wall case under THE
-//              crack, the same overlay a god-weakened wall wears — the same
-//              capturable '^'. Since 2026-09-04 masonry is a weak spot, not
-//              a rubble heap (the heap survives as the classic set's ruin).
+//   weak       an authored WEAK SPOT: the masonry skin. The cell paints its
+//              wall case under THE crack, the same overlay a god-weakened
+//              wall wears — the same capturable '^'. Since 2026-09-04
+//              masonry is a weak spot, not a rubble heap (the heap survives
+//              as the classic set's ruin). Until the camera (2026-09-08) a
+//              DOOR in a north–south wall line was a weak spot too, for
+//              want of edge-on art; now every door is a door — see doorLine.
+//   doorLine   the wall line a door skin stands in, WORLD space: 'ns' when
+//              it has a standing neighbour north or south and none east or
+//              west, else 'ew'. The camera (camera.mjs edgeOn) decides
+//              whether the line runs up the screen — then the door paints
+//              EDGE-ON (the generated placeholder: the wall's band with the
+//              leaf as a thin slab and a post above and below, brief §11)
+//              — or across it, the leaf.
 //   f1…fN      the floor's stable texture variant (FLOOR_VARIANTS).
 //   ck1…ckN    the crack drawing this square's wall would wear (CRACK_VARIANTS).
 //   sv1…svN    which of a skin's sprite VARIANTS this square shows
 //              (SKIN_VARIANTS; the atlas wraps a variant the theme lacks).
-//   door2-l / door2-r  a door skin paired with the door skin beside it in
-//              its rank (round 16): the two paint ONE two-wide door — the
-//              west leaf its left half, the east its right. Paired west to
-//              east on the AUTHORED skin grid, so a run of three is a double
-//              and a single, and a leaf keeps its half after its partner goes.
+//   door2      a door skin paired with the door skin beside it ALONG ITS
+//              WALL LINE (round 16; both axes since the camera, 2026-09-08):
+//              the two paint ONE two-wide door. The value is the leaf's
+//              WORLD end — 'l' the west / 'r' the east leaf of a pair along
+//              a rank, 'n' / 's' the ends of a pair along a file — and the
+//              camera turns it into the SCREEN half (camera.mjs doorHalf:
+//              the left leaf on the screen paints the left half; a pair
+//              standing edge-on paints two edge-on doors, the brief's
+//              "two-tall pair"). The board's cellClasses report the screen
+//              half as door2-l / door2-r. Paired west to east, then south
+//              to north, on the AUTHORED skin grid, so a run of three is a
+//              double and a single, and a leaf keeps its half after its
+//              partner goes.
 //   decor      a cosmetic prop under the piece (decorFor: torch / chain /
 //              banner on an east–west wall face, scattered by a stable hash
 //              of the square — floor litter is packed away since round 10 —
-//              and the OPEN DOORWAY an east–west door left behind, whose
-//              cell wears wm-<mask> = the east (2) / west (8) walls still
-//              STANDING beside it, so a post stands only where its wall
-//              does — round 12).
+//              and the OPEN DOORWAY a door left behind, whose cell wears
+//              wm-<mask> = the walls still STANDING beside it (N=1 E=2 S=4
+//              W=8 — the north / south bits since the camera, 2026-09-08:
+//              a north–south door's doorway has its posts above and
+//              below), so a post stands only where its wall does — round
+//              12).
 //   ruin       a floor square where a wall, a cracked wall or a weak spot
 //              BROKE (the residue ledger `rubble`): the theme's ruin stub
 //              case (ruin-<mask>, 16 cases by its STANDING wall neighbours —
@@ -186,11 +204,15 @@ export function floorVariantIndex(f, rank) {
  *   furniture    '^'
  *   cracked      '^' the gods weakened (the `godCrates` ledger ANDed with the FEN)
  *   skin         the authored skin on an un-cracked '^', else null
- *   door2        'l' / 'r' for the leaves of an authored double door, else null
- *   weak         a weak spot: authored masonry, or a door in a north–south line
+ *   door2        the leaf's world end in an authored double door — 'l' / 'r'
+ *                (west / east, a pair along a rank), 'n' / 's' (a pair along
+ *                a file) — else null
+ *   doorLine     for a door skin, the wall line it stands in: 'ns' / 'ew'
+ *   weak         a weak spot: authored masonry
  *   ruin         floor where a wall broke (the `rubble` residue)
  *   doorway      floor where a door opened (the `opened` residue)
- *   mask         the autotile case (wm-<mask>), −1 for plain floor
+ *   mask         the autotile case (wm-<mask>), −1 for plain floor — WORLD
+ *                space; the camera permutes it to the screen (camera.mjs)
  * }).
  *
  * STANDING = stone that is not a hole: a wall, a cracked wall, a door,
@@ -226,20 +248,32 @@ export function classifyTerrain(fen, { holes = EMPTY, godCrates = EMPTY, skins =
     if (t === undefined || t === FURNITURE || t === WALL) return false;
     return rubble.has(name(ff, rr)) || opened.has(name(ff, rr));
   };
-  // DOUBLE DOORS (round 16): two door skins side by side in a rank are one
-  // two-wide door. Paired on the AUTHORED skin grid (round 17: "if one
-  // opens or is destroyed, the closed door next to it suddenly becomes a
-  // normal door"), so a leaf keeps its half after its partner is captured,
-  // burst or god-cracked — the half is painted only on a leaf that still
-  // stands.
+  // DOUBLE DOORS (round 16): two door skins side by side along their wall
+  // line are one two-wide door. Paired on the AUTHORED skin grid (round
+  // 17: "if one opens or is destroyed, the closed door next to it suddenly
+  // becomes a normal door"), so a leaf keeps its half after its partner is
+  // captured, burst or god-cracked — the half is painted only on a leaf
+  // that still stands. Pairs along a rank first (west leaf 'l', east 'r'),
+  // then, among the leaves still single, along a file (south 's', north
+  // 'n' — the camera, 2026-09-08: a stack in a file is the same double
+  // door seen from its side, and turns into a rank pair under a quarter
+  // turn).
   const isDoor = (ff, rr) => skins[name(ff, rr)] === 'door';
-  const leftLeaf = new Set(), rightLeaf = new Set();
+  const pairEnd = new Map(); // square → 'l' | 'r' | 'n' | 's'
   for (let rr = 1; rr <= ranks; rr++) {
     for (let ff = 0; ff < files - 1; ff++) {
       if (!isDoor(ff, rr) || !isDoor(ff + 1, rr)) continue;
-      leftLeaf.add(name(ff, rr));
-      rightLeaf.add(name(ff + 1, rr));
+      pairEnd.set(name(ff, rr), 'l');
+      pairEnd.set(name(ff + 1, rr), 'r');
       ff++; // the pair is spoken for
+    }
+  }
+  for (let ff = 0; ff < files; ff++) {
+    for (let rr = 1; rr < ranks; rr++) {
+      if (!isDoor(ff, rr) || !isDoor(ff, rr + 1) || pairEnd.has(name(ff, rr)) || pairEnd.has(name(ff, rr + 1))) continue;
+      pairEnd.set(name(ff, rr), 's');
+      pairEnd.set(name(ff, rr + 1), 'n');
+      rr++;
     }
   }
   const out = new Map();
@@ -253,24 +287,29 @@ export function classifyTerrain(fen, { holes = EMPTY, godCrates = EMPTY, skins =
       const hole = isWall && holes.has(sq);
       const cracked = furniture && godCrates.has(sq);
       const skin = furniture && !cracked ? skins[sq] ?? null : null;
-      const door2 = skin === 'door' ? (leftLeaf.has(sq) ? 'l' : rightLeaf.has(sq) ? 'r' : null) : null;
-      // WEAK SPOTS wear the crack (2026-09-04): authored masonry anywhere,
-      // and a door in a north–south wall line (there is no edge-on door, so
-      // it reads as the weakened stone it stands in). Both paint the wall
-      // block with THE crack, exactly like a god-weakened wall — the same
-      // capturable '^'.
+      const door2 = skin === 'door' ? pairEnd.get(sq) ?? null : null;
+      // WEAK SPOTS wear the crack (2026-09-04): authored masonry, which
+      // paints the wall block with THE crack exactly like a god-weakened
+      // wall — the same capturable '^'. A DOOR is a door wherever it stands
+      // (the camera, 2026-09-08): its wall LINE is recorded here in world
+      // space, and the board decides on the screen whether the leaf shows
+      // or the door stands edge-on (camera.mjs edgeOn). (Until then a door
+      // in a north–south line was a weak spot, for want of edge-on art.)
       const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
-      const weak = skin === 'masonry' || (skin === 'door' && (N || S) && !(E || W));
+      const weak = skin === 'masonry';
+      const doorLine = skin === 'door' ? ((N || S) && !(E || W) ? 'ns' : 'ew') : null;
       const floor = !isWall && !furniture;
       const ruin = floor && rubble.has(sq);
       const doorway = floor && !ruin && opened.has(sq);
-      const mask = wallTile || cracked || weak
+      // A door always carries its wall case: edge-on it paints the wall's
+      // band, and which way it stands is the camera's call, not this one.
+      const mask = wallTile || cracked || weak || skin === 'door'
         ? canonicalMask((N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0) | (solid(f + 1, rank + 1) ? 16 : 0) | (solid(f + 1, rank - 1) ? 32 : 0) | (solid(f - 1, rank - 1) ? 64 : 0) | (solid(f - 1, rank + 1) ? 128 : 0))
         : ruin ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
-        : doorway ? (standing(f + 1, rank) ? 2 : 0) | (standing(f - 1, rank) ? 8 : 0)
+        : doorway ? (standing(f, rank + 1) ? 1 : 0) | (standing(f + 1, rank) ? 2 : 0) | (standing(f, rank - 1) ? 4 : 0) | (standing(f - 1, rank) ? 8 : 0)
         : hole ? (isHole(f, rank + 1) ? 1 : 0) | (isHole(f + 1, rank) ? 2 : 0) | (isHole(f, rank - 1) ? 4 : 0) | (isHole(f - 1, rank) ? 8 : 0)
         : -1;
-      out.set(sq, { v, wallTile, hole, furniture, cracked, skin, door2, weak, ruin, doorway, mask });
+      out.set(sq, { v, wallTile, hole, furniture, cracked, skin, door2, doorLine, weak, ruin, doorway, mask });
     }
   }
   return out;
@@ -279,13 +318,15 @@ export function classifyTerrain(fen, { holes = EMPTY, godCrates = EMPTY, skins =
 /**
  * The RESIDUE a board change leaves (main.mjs paintBoard's rule, on data):
  * terrain that stood on `prev` and is gone on `next` leaves the theme's
- * OPEN DOORWAY where a door in an east–west line was captured or burst,
- * and the RUIN stub where a wall, a cracked wall, authored masonry or a
- * weak-spot door broke (round 10: "cracked walls turning into open doors
- * doesn't make any sense"); any other furniture (a crate, a barrel…) leaves
- * nothing — it never continued a wall line. Terrain that is back (an undo)
- * clears its residue. `prev` = { fen, holes, godCrates, opened, rubble },
- * `next` = { fen, holes }; returns the next { opened, rubble } (new Sets).
+ * OPEN DOORWAY where a door was captured or burst (any door since the
+ * camera, 2026-09-08 — a north–south door's doorway wears its posts above
+ * and below; until then such a door was a weak spot and left a ruin), and
+ * the RUIN stub where a wall, a cracked wall or authored masonry broke
+ * (round 10: "cracked walls turning into open doors doesn't make any
+ * sense"); any other furniture (a crate, a barrel…) leaves nothing — it
+ * never continued a wall line. Terrain that is back (an undo) clears its
+ * residue. `prev` = { fen, holes, godCrates, opened, rubble }, `next` =
+ * { fen, holes }; returns the next { opened, rubble } (new Sets).
  */
 export function residueStep(prev, next, skins = {}, files, ranks) {
   const opened = new Set(prev.opened ?? []);
@@ -304,9 +345,8 @@ export function residueStep(prev, next, skins = {}, files, ranks) {
     const stood = k.wallTile || k.furniture;
     if (!stood) continue;
     if (terrainNext(sq) || nextHoles.has(sq)) continue;
-    const wasDoor = k.skin === 'door';
-    if (wasDoor && !k.weak) opened.add(sq);
-    else if (wasDoor || k.wallTile || k.cracked || k.skin === 'masonry') rubble.add(sq);
+    if (k.skin === 'door') opened.add(sq);
+    else if (k.wallTile || k.cracked || k.skin === 'masonry') rubble.add(sq);
   }
   for (const sq of [...opened, ...rubble]) if (terrainNext(sq)) { opened.delete(sq); rubble.delete(sq); }
   return { opened, rubble };

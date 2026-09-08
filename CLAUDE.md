@@ -61,8 +61,10 @@ wall stands). Floors are six Catacombs flagstones palette-swapped per
 theme (`f1…f6` by a stable hash); walls are generated bevelled tops in
 each pack's colours over the pack's own brick face. FURNITURE SKINS
 (`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
-door in a north–south line is a WEAK SPOT wearing the crack; an
-authored double is `door2-l`/`-r`), crate, chest (the LID is the line:
+door whose wall line runs UP the screen stands EDGE-ON on a generated
+placeholder — since the camera, 2026-09-08; until then a north–south
+door was a WEAK SPOT wearing the crack — and an authored double is
+`door2-l`/`-r`, dealt on the screen, pairs along a file included), crate, chest (the LID is the line:
 domed = chest, flat = crate; no grey crates), barrel (urns), wreckage,
 masonry (= a weak spot); every role has VARIANTS (`sv1…sv10` by a stable
 hash, wrapping around what the theme has); props are 16×32 boxes (small
@@ -186,42 +188,97 @@ five decisions of the retirement session (designer: "sounds fine by
 me"): retire now; the classic glyph set dies; tiles.css all the way; THE
 CAMERA OWNS THE DESKTOP SCREEN; a generated edge-on door placeholder
 until per-theme art exists.
-**HANDOFF (end of 2026-09-07, after milestone 2): NEXT IS THE CAMERA —
-the second PR, on a codebase with one renderer.** The buffer becomes the
-VIEWPORT (the screen's device size ÷ k in tiles, plus a one-tile margin
-for partial tiles and one headroom row), painted from a WORLD grid
-through a camera {origin, facing, k}; canvas-board's `#origin(sq)` is the
-ONE function to redirect (every painter takes an origin; hit-testing is
-its inverse); full repaint of the viewport per change (about 600 cells at
-phone k 4 — six arenas' worth of today's per-change paint; no dirty
-rectangles until something needs them; a 100×100 painted whole would be
-1600² and pointless). THE CAMERA OWNS THE SCREEN: k on BOTH axes, and
-the duel zoom is the largest integer k that fits the arena on both axes
-INCLUDING the headroom row (else the top rank's heads clip at the
-barrier), the world outside dimmed — today k is the container's WIDTH
-alone and the board box is capped at 560 CSS px, which is why the
-desktop got k 3 (560 ÷ 160 floors to 3); a 1080p desktop is height-bound
-at k 5–6, so the panels (the player's bar, the hint list; the desktop
-sits the board beside them at 45%) move to give the camera the screen —
-the desktop look is the designer's to judge on the first build. FILL
-becomes DUEL-ONLY (exploration has no arena to fit; it is always
-integer). FACING goes into the camera model NOW, the turn BUTTONS wait
-for the army (a full turn is unobservable until an army turns):
-`flipped` already IS the 180° turn — coordinate mirroring in `gridPos`,
-`#squareAt` and `#arenaToBuf` — so quarter turns generalise it to a
-facing with the buffer's width and height swapping; `classifyTerrain`
-needs NO rewrite — a wall mask is eight neighbour bits, so a quarter turn
-is a BIT PERMUTATION applied before the tile lookup, the same for the
-four-bit ruin / pit-rim / doorway-post masks; debris buffers rotate by
-index permutation; the gate is a debug ROTATE button walked over the
-36-arena bed. Variant hashes move to WORLD coordinates (today the
-arena's file + rank) so a crop or a turn never reshuffles the floor. The
-EDGE-ON DOOR is a GENERATED PLACEHOLDER (the wall's top band with a slab
-and a post above and below, brief §11) until per-theme art exists. A
-zoom step is a CUT like a turn — which makes the brief's snap-zoom for
-the tap-a-piece move free (phone k 4 tiles are under 4 mm, below a
-thumb: the d-pad carries the army, the individual move needs the zoom).
-THEN THE WORLD + THE ARMY RULE — most plumbing exists: stage schema 2 IS
+**MILESTONE 3 ✅ 2026-09-08 — THE CAMERA** (`play/js/camera.mjs` the pure
+geometry; `play/README.md` § "The canvas board", milestone 3; the
+designer: "just do what you think is best" on the decisions below).
+FACING is in the camera model: which world direction points up the
+screen, 0 north … 3 west, `flipped` the old spelling of 2 (it was false
+everywhere in the game — only the selftest exercised it); a quarter turn
+is a CUT — the buffer swaps its axes, every square, pixel, mark and
+arrow goes through canvas-board's one `#origin`, `squareAtPoint` is its
+inverse. `classifyTerrain` needed no rewrite: its masks stay in WORLD
+space (the `wm-<mask>` test surface never turns) and `rotMask8` /
+`rotMask4` permute them to the screen at the tile lookup, so wall faces,
+ruin stubs, pit rims, doorway posts and the props hanging on a wall's
+face follow the turn; a square's debris buffer turns by index
+permutation (`rotTile`); pieces and props never turn; the cosmetic
+hashes AND the checker key on WORLD coordinates (`hashCoords` — the
+environment's cell through the debris ledger's transform, read at paint
+time; the replay page builds the same from the log) so a crop, a flip or
+a turn never reshuffles the floor. TWO DECISIONS TAKEN: (1) EVERY DOOR IS
+A DOOR — the weak-spot rule for a north–south door is RETIRED (brief
+§11): `classifyTerrain` records the door's wall line (`doorLine`), `weak`
+is masonry alone, a door always carries its wall case, doubles pair
+along a rank AND along a file (a stack is the same double seen from its
+side) with the halves dealt on the SCREEN (`doorHalf`), every door
+leaves a doorway and the doorway mask has four bits; on the screen a
+door whose line runs up it paints the GENERATED EDGE-ON PLACEHOLDER (the
+wall's case with a slab in the leaf's own two tones and a post above and
+below in the doorway's post tones, composited per theme / door set /
+case) and an opened north–south doorway is the doorway tile turned a
+quarter — so d8 and c3 on s59 stopped reading as cracked stone; (2) THE
+CAMERA OWNS THE SCREEN on a wide screen only: main.mjs stamps
+`body.layout-wide` at ONE breakpoint (`WIDE_LAYOUT` 900 px, `?layout=`
+pins it), style.css makes the duel screen two columns — the board an
+explicit box the canvas fills (`fit: 'box'`: k the largest integer step
+that fits the board AND its headroom row on both axes, centred in whole
+device pixels; fill the exact quotient of the tighter axis; a box without
+a height falls back to the width fit) sticky under the topbar, the bars
+/ hint list / eval bar / setup panel / log / debug panel in the column —
+and a 1080p desktop goes from k 3 to k 5 (height-bound; 1280×720 gets k
+3); a phone keeps the stacked layout and the width fit the verdicts were
+given on. Fill stays a duel option (there is no exploration yet). The
+turn BUTTONS wait for the army: the debug pair in Options → Look ("Turn
+the view", not saved), `?facing=`, `__DCK.renderer.facing(n)`. GATES,
+all green: `camera-guard.mjs` (milestone 2's method on six cases ×
+fifteen hot plies, the inputs recorded on the build before and replayed
+on the build after: north-up byte-identical except the door squares,
+south-up identical except the art that legitimately turns — the old
+flipped path mirrored positions and nothing else — 166/166),
+`facing-walk.mjs` (all 36 arenas × facings 1–3, a dressed position: the
+camera's paint equals the world itself rotated painted north-up,
+108/108), `test-camera.mjs` 80/80, selftest 44/44, ui-smoke 213 ok,
+replay-smoke 63, test-logreport 47, test-debris 53, strip-ruin-chips,
+canvas-grid 4/4 Chromium + 18/18 Firefox (`./node_modules/.bin/playwright
+install firefox`). NOT DONE, on purpose: the buffer as a VIEWPORT over a
+world grid larger than one arena (the dimmed dungeon around a duel, the
+one-tile margin) — there is no world to paint yet, so it is the FIRST
+step of the next milestone; per-theme edge-on door ART. **THE DESKTOP
+LOOK IS THE DESIGNER'S TO JUDGE ON THIS BUILD** (a 1920×1080 shot: the
+board 800×860 device px at k 5 in the left column, the panels a narrow
+text column on the right — functional, not designed).
+**HANDOFF (end of 2026-09-08, after milestone 3): NEXT IS THE WORLD +
+THE ARMY RULE — the third PR.** Its first step is the viewport: the
+buffer becomes the screen's device size ÷ k in tiles plus a one-tile
+margin and the headroom row, painted from a WORLD grid through the
+camera's origin (canvas-board's `#origin(sq)` gains the origin offset;
+`squareAtPoint` follows; the arena's crop is painted through the same
+path and the world beyond it dimmed); full repaint of the viewport per
+change (about 600 cells at phone k 4 — six arenas' worth of today's
+per-change paint; no dirty rectangles until something needs them; a
+100×100 painted whole would be 1600² and pointless). The duel zoom stays
+what milestone 3 built (the largest integer k fitting the arena and its
+headroom on both axes); exploration is ALWAYS integer and FILL becomes
+duel-only then. A zoom step is a CUT like a turn — which makes the
+brief's snap-zoom for the tap-a-piece move free (phone k 4 tiles are
+under 4 mm, below a thumb: the d-pad carries the army, the individual
+move needs the zoom). Decide the SAVE SHAPE on the milestone's first
+day, before the first line (below). THE DUEL TRIGGER IS A DESIGN
+CONVERSATION OF ITS OWN, NOT A NUMBER (designer 2026-09-08: "there's
+going to be a shit fuck ton of rules dictating how and when a duel is
+allowed to trigger. It's not just about the trigger band. We will get
+to it") — do NOT ask for the band again, do not build the trigger to
+§5.3's old numbers, and do not make the walk-around milestone wait on
+it: the first hand-built map is a WALK-AROUND FIXTURE, and the
+enemies + LOS + trigger milestone opens with that conversation when
+the designer is ready. The stage loader refuses anything outside 3–12 × 5–10 (the
+engine's caps); a world file is the same schema bigger, so that cap
+moves from the loader to the DEAL, where §4.2 says every guarantee
+lives. The §11 corners of the one rule (rotation free or a turn, the
+king's individual move, the snap-zoom target pick) wait for the
+walk-around build; the exploration zoom is a fixed k with ± buttons
+stepping it as a cut, not pinch.
+THE WORLD + THE ARMY RULE — most plumbing exists: stage schema 2 IS
 a world file (a hand-built 100×100 map is the same file, bigger); the
 debris ledger keys on the environment's uncropped grid through
 `envTransform`, so the WORLD IS THAT ENVIRONMENT and a duel IS A CROP.
@@ -1060,12 +1117,15 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
-- `play/js/canvas-board.mjs` + `atlas.mjs` + `pixelarrow.mjs` +
-  `pixelfont.mjs` — THE BOARD (Phase 2, 2026-09-07): one 16×16 buffer
-  scaled once, its art off `play/img/` (the atlas; `phase0/lib/inhouse.mjs`
-  draws the classic row). `play/js/board-ui.mjs` is the pure terrain rule
-  (`classifyTerrain`, `residueStep`, the hashes, the masks) + the
-  promotion picker — the DOM board that file used to be is retired.
+- `play/js/canvas-board.mjs` + `camera.mjs` + `atlas.mjs` +
+  `pixelarrow.mjs` + `pixelfont.mjs` — THE BOARD (Phase 2, 2026-09-07):
+  one 16×16 buffer scaled once, its art off `play/img/` (the atlas;
+  `phase0/lib/inhouse.mjs` draws the classic row), painted through THE
+  CAMERA (`camera.mjs`, 2026-09-08: the facing's pure geometry — squares,
+  pixels, masks, debris and doors turned to the screen; Node-tested by
+  `phase0/harness/test-camera.mjs`). `play/js/board-ui.mjs` is the pure
+  terrain rule (`classifyTerrain`, `residueStep`, the hashes, the masks)
+  + the promotion picker — the DOM board that file used to be is retired.
 - `play/js/debris.mjs` + `particles.mjs` + `pngmini.mjs` — THE DEBRIS
   LAYER (2026-09-07): the environment's scar ledger + painter (pure), the
   flight (pixels the board draws) and the deterministic PNG; wired in
@@ -1122,7 +1182,11 @@ node harness/strip-ruin-chips.mjs --check  # the committed atlas's ruin tiles ca
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
 node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner; --idle 25000 for an idle turn; compare <dirs…>
 node harness/repack-tiles.mjs       # rebuild play/img/tileset.png + tileset.json + CREDITS.md (+ pieces.png) from the packs in assets-src/ (gitignored) — or, without them, read back from the committed atlas (the classic row is always regenerated)
-node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy (npx playwright install firefox once)
+node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy (./node_modules/.bin/playwright install firefox once)
+node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
+node harness/facing-walk.mjs --shots # every arena × facings 1–3 on the bare lab page: the camera's paint must equal the world itself rotated, painted north-up
+node harness/camera-guard.mjs dump <dir> && node harness/camera-guard.mjs compare <dir> --allow door,turned  # the renderer's paint before/after a change: record the inputs + hashes on the build before (a pristine worktree), replay them on the build after
+node harness/camera-shots.mjs        # the desktop layout at 1920×1080 / 1280×720, the phone at the four facings, a door crop — for the eye
 ```
 (godlab and ladder-smoke play the SHIPPED rules — overlay the play/vendor
 pair into node_modules first, per engine/README.md.)

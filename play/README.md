@@ -60,14 +60,23 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `window.__DCK.theme` and `window.__DCK.renderer` are the read-only
   surfaces it uses; the board's own device-pixel gate is `node
   harness/canvas-grid.mjs` (the blit on the device-pixel grid, Chromium +
-  Firefox; § "The canvas board" below).
+  Firefox; § "The canvas board" below). THE CAMERA's gates (2026-09-08,
+  milestone 3): `node harness/test-camera.mjs` (the geometry, Node only),
+  `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
+  the turned camera equals the world itself rotated), `node
+  harness/camera-guard.mjs dump|compare <dir> [--allow door,turned]`
+  (the paint before and after a renderer change, from recorded inputs)
+  and `node harness/camera-shots.mjs` (the desktop layout, the four
+  phone facings and a door crop, for the eye).
 
 ## Layout
 
 - **THE DOM BOARD IS RETIRED (2026-09-07).** The board is `js/canvas-board.mjs`
   (one 16×16 buffer, scaled once — § "The canvas board" below) drawing off
   `js/atlas.mjs` (`img/tileset.png` + `img/pieces.png` + `img/tileset.json`,
-  the ONE art source); `js/board-ui.mjs` is the pure half that survived —
+  the ONE art source) through `js/camera.mjs` (THE CAMERA, 2026-09-08: the
+  facing's pure geometry — squares, pixels, masks, debris and doors turned
+  to the screen; milestone 3 below); `js/board-ui.mjs` is the pure half that survived —
   `classifyTerrain`, `residueStep`, `decorFor`, the variant hashes, the
   masks, the set lists, `DEFAULT_PIECE_FIT` and the promotion picker.
   `tiles.css`, `piecetiers.mjs`, the FLIP slides, the arrow SVG, the
@@ -225,9 +234,11 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   is not a hole, a cracked wall, a DOOR or authored MASONRY (those continue
   a wall line; crates and the rest do not) — painting the theme's case
   (`--tile-wall-<mask>`, else the plain wall); `weak` on an authored WEAK
-  SPOT — the `masonry` skin anywhere, or a door skin
-  sitting in a north–south wall line (there is no edge-on door, the
-  designer cut the first attempt) — so the cell paints its own
+  SPOT — the `masonry` skin (until the camera, 2026-09-08, a door skin
+  sitting in a north–south wall line was one too, for want of an edge-on
+  door — the designer cut the first attempt; since the camera every door
+  is a door, edge-on when its line runs up the screen: § "The canvas
+  board", milestone 3) — so the cell paints its own
   autotile case like a cracked wall does and its sprite is THE crack: one
   overlay for every weakened wall, whoever weakened it (`--tile-crack`,
   gen-sprites.mjs — thin black branching lines on transparency, nothing
@@ -269,10 +280,12 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   "visibly very narrow" — so a piece standing in the doorway stands
   between the posts and nothing arcs over it; the doorway is the theme's,
   whatever door set is chosen); a
-  floor square where a WALL, a cracked wall, a weak-spot door
-  (the crack in a north–south line — it never leaves a doorway: "cracked
-  walls turning into open doors doesn't make any sense") or authored
-  masonry broke becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
+  floor square where a WALL, a cracked wall or authored
+  masonry broke (and, until the camera, a weak-spot door — the crack in a
+  north–south line — which never left a doorway: "cracked walls turning
+  into open doors doesn't make any sense"; since 2026-09-08 every door
+  leaves its doorway, a north–south one with its posts above and below)
+  becomes a `.ruin` cell: it paints the theme's RUIN AUTOTILE — 16
   cases (`--tile-ruin-<mask>`, the cell's `wm-<mask>` is the plain 4-bit
   mask of its STANDING wall neighbours — a wall, a cracked wall or a
   door, never another ruin or an opened doorway: round 12, "broken wall
@@ -620,6 +633,101 @@ two-argument spelling still reads). Options saved by the DOM board
 (`renderer`, `piecePixels`, the % dials, `pieces: 'classic'`) are simply
 not read.
 
+**Milestone 3 — THE CAMERA (2026-09-08).** Brief §5.1: the camera turns
+with the army — screen-up is the army's facing — and CLAUDE.md § Phase 2:
+the board is painted through a camera. `js/camera.mjs` is the geometry,
+all data and Node-testable (`phase0/harness/test-camera.mjs`, 80 checks
+against brute force): FACING is which world direction points up the
+screen — 0 north (the duel's view since Phase 1), 1 east, 2 south (the
+old `flipped`, which the constructor still reads), 3 west; turning the
+army right is facing + 1 and the map turns counter-clockwise on the
+screen. `toScreen` / `toWorld` map a square to its screen column and
+row and back (a quarter turn swaps the grid's axes), `pxToScreen` does
+the same for an arena PIXEL (the debris flight, the fx — a chunk lands
+in the turned square exactly where it lands in the unturned one),
+`rotMask8` / `rotMask4` permute the wall and the 4-bit ruin / pit /
+doorway masks to the screen (each nibble rotates one bit; `canonicalMask`
+commutes with it), `rotTile` turns a 16×16 debris buffer by index
+permutation, `doorHalf` deals a double door's halves on the screen and
+`edgeOn` says whether a door stands edge-on. The board (`CanvasBoard`
+options `facing`, `fit`, `hashCoords`, `showCoords`; `setFacing(n)` — a
+CUT: the buffer swaps its axes, the debris canvases are re-put, k
+refits; `setFit`; `squareAtPoint` / `pointOfSquare`, the hit-test and
+its inverse; `doorHalfOf` / `edgeOnAt`; `renderInfo.facing / fit /
+screenCols / screenRows`) routes every square, pixel, mark and arrow
+through the one origin function; `classifyTerrain`'s masks stay in
+WORLD space (the shared test surface — `wm-<mask>` never turns) and are
+permuted at the tile lookup, so wall faces, ruin stubs, pit rims,
+doorway posts and the props hanging on a wall's face all follow the
+turn; pieces and props never turn; the floor's variant, the crack
+drawing, the skin variant, the prop scatter and the checker key on
+`hashCoords` — the ENVIRONMENT's cell (main.mjs `hashCoordsLive` reads
+the debris ledger's transform at paint time; the replay page builds the
+same from the log's flip, crop and recovered auto-crop) — so a crop, a
+flip or a turn never reshuffles the floor; the edge coordinates label
+what varies along each edge (rank numbers along the bottom east / west
+up). EVERY DOOR IS A DOOR: `classifyTerrain` records a door's wall LINE
+(`doorLine` 'ns' / 'ew', world space) and always its wall case, `weak`
+is masonry alone, doubles pair along a rank (west 'l' / east 'r') and
+then along a file (south 's' / north 'n'), `residueStep` gives every
+door its doorway and the doorway's mask has four bits; on the screen a
+door whose line runs up it paints the EDGE-ON PLACEHOLDER (brief §11 —
+the wall's case with a gap holding the leaf as a thin four-column slab
+in the leaf's own two tones, plank seams, a two-row post above and
+below in the doorway's post tones; composited once per theme / door set
+/ case, the classic row from its own leaf; a breach bursts the slab; the
+class is `door-edge`), a double edge-on is two of them, and an opened
+north–south doorway is the doorway tile TURNED a quarter (posts above
+and below; mixed cases overlay both). THE CAMERA OWNS THE SCREEN on a
+wide screen: main.mjs stamps `body.layout-wide` at ONE breakpoint
+(`WIDE_LAYOUT`, 900 px; `?layout=wide|stack` pins it) and style.css
+turns the duel screen into two columns — the board an explicit box
+(`fit: 'box'`: the canvas IS the container's device box, k the largest
+integer step that fits the board AND its headroom row on both axes, the
+board centred in whole device pixels on both; fill = the exact quotient
+of the tighter axis; a box without a height falls back to the width fit)
+sticky under the topbar, the bars, the eval bar, the hint list, the
+setup panel, the log and the debug panel in the column beside it. A
+1080p desktop goes from k 3 (the 560-px page cap) to k 5, height-bound;
+a 1280×720 window gets k 3; a phone keeps the stacked layout and the
+width fit the verdicts were given on. The diagnostics line adds the
+facing and the fit. The turn buttons wait for the army: Options → Look →
+"Turn the view" (↺ ↻, not saved), `?facing=0..3|n|e|s|w`,
+`__DCK.renderer.facing(n)` / `.layout` / `.squareAtPoint` /
+`.pointOfSquare`. NOT in this milestone, on purpose: the world beyond one
+arena — the buffer as a viewport over a world grid, the dimmed dungeon
+around a duel — which is the first step of the world milestone, since
+there is no world to paint yet; per-theme edge-on door ART (the
+placeholder stands until the designer wants better).
+**Gates.** `phase0/harness/camera-guard.mjs` — the retirement's method:
+`dump` records, on a build, six cases (the three themes, the classic set,
+a door set, another piece set) at the start and fourteen hot plies —
+every INPUT the board paints from and a hash of every square on the live
+board and on a mirror board turned 180°; `compare` mounts detached
+boards from those inputs on the current build and diffs square by
+square (`--allow door,turned`: the door squares and, away from north,
+the art that legitimately turns). Result: north-up byte-identical on
+every ply except the door squares; south-up identical except walls,
+ruins, rims, doorways, props and debris — 166/166. `facing-walk.mjs`
+(the bare `harness/lab/board.html`): every arena × facings 1–3 with a
+dressed position (pieces, a hole, a god-cracked wall, an opened door, a
+ruin, marks, arrows) — the camera's paint must equal the WORLD ITSELF
+ROTATED painted north-up, with `hashCoords` mapping the rotated squares
+back: 108/108, 60 edge-on door paints, 7 double halves. `test-camera.mjs`
+80/80. Selftest 44/44 (+ the camera check: the buffer 7×5 → 5×7, a1 at
+all four corners, kinds and floor unchanged by a turn, a debris pixel
+landing where `pxToScreen` says, `hashCoords` = the world square; the
+door checks rewritten for the edge-on rule and the file pairs).
+ui-smoke 213 (d8 edge-on and opaque at ply 0; the turn through the real
+buttons — buffer swapped, k refitted, every square hit-testing back to
+itself, kinds and debris unchanged, the diag line naming the facing —
+and the wide layout at 1280×720: the body class, the canvas = the box,
+k = min of both axes, the board centred, the bar in the column, and
+back). replay-smoke 63, test-logreport 47, test-debris 53,
+strip-ruin-chips, canvas-grid `none` 4/4 Chromium + 18/18 Firefox.
+`camera-shots.mjs` takes the desktop, the four phone facings and a door
+crop for the eye.
+
 ## Art themes (2026-09-03)
 
 > **Read with the Layout note above (2026-09-07):** the LOOKS below — the
@@ -739,7 +847,11 @@ crypt) and its barrels five Catacombs urns, purple and green. And DOUBLE
 DOORS: two door skins side by side in a rank are ONE two-wide door — the
 west leaf wears `door2-l`, the east `door2-r`, paired west to east so a run
 of three is a double and a single, never when either is god-cracked, and a
-vertical pair stays two weak spots — painting `--sprite-door2-l` / `-r`:
+vertical pair stayed two weak spots (until the camera, 2026-09-08: a
+stack in a file pairs too — the same double seen from its side, two
+edge-on doors north-up and a leaf pair once the camera turns; the halves
+are dealt on the SCREEN, `door2-l` the leaf on the screen's left) —
+painting `--sprite-door2-l` / `-r`:
 pixel-poem draws the double (6,6)+(7,6); the castle's is its portcullis
 dropped into the pack's two-wide arch (12,8)+(13,8) with the bars
 continuing through the seam; the crypt's a generated two-wide barred gate;

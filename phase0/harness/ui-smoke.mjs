@@ -238,7 +238,13 @@ if (STAGE === 's59-hall-corner') {
     return { g5: window.__DCK.marks.cell('g5'), h5: window.__DCK.marks.cell('h5'), same: S.sig('g5') === S.sig('h5') };
   });
   expect(dbl.g5?.includes('door2-l') && dbl.h5?.includes('door2-r') && !dbl.same, `g5+h5 are one double door: left half + right half, two different paints (${dbl.g5} / ${dbl.h5})`);
-  expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('weak'), `d8, the door in the north–south line, is a weak spot (${door.d8})`);
+  // THE CAMERA (2026-09-08): a door in a north–south line stands EDGE-ON
+  // north-up (the generated placeholder: the wall's band, a slab, two posts)
+  // — no longer a weak spot wearing the crack — and its paint differs from
+  // the leaf's.
+  expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('door-edge') && !door.d8?.includes('weak') && door.d8?.some((c) => c.startsWith('wm-')), `d8, the door in the north–south line, stands edge-on with its wall case, not a weak spot (${door.d8})`);
+  const edge = await page.evaluate(() => { const S = window.__smoke; return { d8: S.sig('d8'), g5: S.sig('g5'), wallInk: (() => { const px = window.__DCK.renderer.square('d8'); let n = 0; for (let i = 3; i < px.length; i += 4) if (px[i]) n++; return n; })() }; });
+  expect(edge.d8 !== edge.g5 && edge.wallInk === 256, `the edge-on door paints its own tile, fully opaque (sig ${edge.d8} vs the leaf's ${edge.g5}, ${edge.wallInk}/256 px)`);
 }
 
 // --- masonry (2026-09-04): an authored 'R' is a WEAK SPOT — the wall block
@@ -403,9 +409,9 @@ for (let i = 0; i < PLIES; i++) {
       // leave only the latest marked.
       for (const sq of wantPits) expect(cells[sq]?.includes('hole') && cells[sq]?.includes('fresh-pit'), `${sq}: hole tile + fresh-pit ring (${cells[sq]})`);
       // A breached square keeps its RUIN stub (a .ruin cell wearing a stub
-      // case, solid to the walls beside it) — or, for a door in an east–
-      // west line, its open doorway (residue ledger) — unless it is now a
-      // hole; a burst crate (never part of the wall line) leaves nothing.
+      // case, solid to the walls beside it) — or, for a door, its open
+      // doorway (residue ledger; any door since the camera) — unless it is
+      // now a hole; a burst crate (never part of the wall line) leaves nothing.
       const residue = await page.evaluate(() => window.__DCK.residue);
       const skinsNow = await page.evaluate(() => window.__DCK.skins);
       for (const sq of m.breached) {
@@ -478,7 +484,9 @@ function tilesVsLedgers({ holes, godCrates, fen }) {
       if (!has(sq, `wm-${want}`)) bad.push(`${sq} ruin wears ${caseOf(sq)}, its standing neighbours say wm-${want}`);
     }
     if (S.decor(sq) === 'doorway') {
-      const want = (standing(f + 1, r) ? 2 : 0) | (standing(f - 1, r) ? 8 : 0);
+      // Four bits since the camera (2026-09-08): a north–south door's
+      // doorway has its posts above and below.
+      const want = (standing(f, r + 1) ? 1 : 0) | (standing(f + 1, r) ? 2 : 0) | (standing(f, r - 1) ? 4 : 0) | (standing(f - 1, r) ? 8 : 0);
       if (!has(sq, `wm-${want}`)) bad.push(`${sq} doorway wears ${caseOf(sq)}, its standing walls say wm-${want}`);
     }
     if (has(sq, 'hole')) {
@@ -540,6 +548,94 @@ expect(await page.evaluate(() => !!document.getElementById('optHintCont') && doc
     return { fill, back: K.renderer.info, same: K.app.duel.fen() === fen, painted: K.debris.stats().painted, canvases: document.querySelectorAll('#board canvas').length, diag: K.renderer.diagShown };
   });
   expect(sw.fill.info.scaling === 'fill' && !sw.fill.info.integer && sw.fill.canvases === 1 && sw.back.integer && sw.same && sw.canvases === 1 && sw.painted === sw.fill.painted && sw.painted > 0 && !!sw.diag, `the Scaling option remounts live: → fill (k ${sw.fill.info.k.toFixed(3)}, ${sw.fill.painted} debris squares) → integer (k ${sw.back.k}, ${sw.painted} debris squares, diag back)`);
+}
+// --- THE CAMERA (Phase 2, 2026-09-08): the phone is the stacked layout
+// north-up; the debug turn buttons turn the view a quarter at a time — the
+// buffer swaps its axes, k refits, every square's hit-test round-trips
+// through the turned geometry, the kinds and the debris stay put, the
+// coordinates label what varies along each edge — and the door in the
+// north–south line shows its LEAF once the line runs across the screen.
+{
+  const cam = await page.evaluate(async () => {
+    const K = window.__DCK;
+    const out = { layout: K.renderer.layout, start: K.renderer.info, turns: [] };
+    const kinds0 = JSON.stringify([...K.app.boardUI.kinds]);
+    const painted0 = K.debris.stats().painted;
+    const btn = (id) => document.getElementById(id);
+    for (const [click, want] of [['btnTurnR', 1], ['btnTurnR', 2], ['btnTurnL', 1], ['btnTurnL', 0], ['btnTurnL', 3]]) {
+      btn(click).click();
+      await K.renderer.ready();
+      K.renderer.paintNow();
+      const info = K.renderer.info;
+      let round = 0, total = 0;
+      for (const sq of K.app.boardUI.cells.keys()) {
+        total++;
+        const p = K.renderer.pointOfSquare(sq);
+        if (K.renderer.squareAtPoint(p.x, p.y) === sq) round++;
+      }
+      out.turns.push({ click, want, facing: K.renderer.facing(), info, round, total, kindsSame: JSON.stringify([...K.app.boardUI.kinds]) === kinds0, painted: K.debris.stats().painted, label: document.getElementById('facingName').textContent, d8: K.marks.cell('d8'), g5: K.marks.cell('g5'), h5: K.marks.cell('h5'), diag: K.renderer.diagShown });
+    }
+    K.renderer.facing(0);
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    out.end = K.renderer.info;
+    out.painted0 = painted0;
+    return out;
+  });
+  expect(cam.layout.layout === 'stack' && cam.start.fit === 'width' && cam.start.facing === 0 && !cam.layout.wide, `the phone viewport is the stacked layout, fit width, north up (${JSON.stringify(cam.layout)})`);
+  for (const t of cam.turns) {
+    const odd = t.facing & 1;
+    expect(t.facing === t.want && t.info.facing === t.want && t.info.screenCols === (odd ? t.info.ranks : t.info.files) && t.info.bufW === t.info.screenCols * 16 && Number.isInteger(t.info.k) && t.info.k >= 1, `${t.click} → facing ${t.facing} (${t.label}): the buffer is ${t.info.screenCols}×${t.info.screenRows} tiles at k ${t.info.k}`);
+    expect(t.round === t.total && t.total > 0, `facing ${t.facing}: ${t.round}/${t.total} squares hit-test back to themselves`);
+    expect(t.kindsSame && t.painted === cam.painted0, `facing ${t.facing}: the world-space kinds and the ${t.painted} debris squares are unchanged`);
+    expect(typeof t.diag === 'string' && t.diag.includes(`${t.label}`), `facing ${t.facing}: the diagnostics line says "${t.label}"`);
+    if (STAGE === 's59-hall-corner') {
+      // The doors that still STAND this late in a hot duel (the gods may
+      // have cracked, breached or swallowed any of them by now): d8 in the
+      // north–south line is edge-on north / south up and a leaf east / west
+      // up; g5 + h5, the double in the east–west south wall, are two edge-on
+      // doors east / west up and the halves dealt on the screen otherwise.
+      const stands = (c) => !!c && c.includes('furniture') && c.includes('skin-door');
+      if (stands(t.d8)) expect(t.d8.includes('door-edge') === !odd, `facing ${t.facing}: d8's line runs ${odd ? 'across the screen — a leaf' : 'up the screen — edge-on'} (${t.d8})`);
+      if (stands(t.g5) && stands(t.h5)) {
+        if (odd) expect(t.g5.includes('door-edge') && t.h5.includes('door-edge') && !t.g5.some((c) => c.startsWith('door2-')), `facing ${t.facing}: the south wall's double runs up the screen — two edge-on doors (${t.g5} / ${t.h5})`);
+        else expect(t.g5.includes(t.facing === 2 ? 'door2-r' : 'door2-l') && t.h5.includes(t.facing === 2 ? 'door2-l' : 'door2-r'), `facing ${t.facing}: the double's halves dealt on the screen (${t.g5} / ${t.h5})`);
+      }
+      if (!stands(t.d8) && !(stands(t.g5) && stands(t.h5))) notes.push(`    (facing ${t.facing}: the doors are gone by now — d8 ${t.d8?.filter((c) => /hole|ruin|furniture/.test(c)).join('/') || 'floor'}; the stance checks ran at ply 0 above)`);
+    }
+  }
+  expect(cam.end.facing === 0 && cam.end.screenCols === cam.start.screenCols && cam.end.k === cam.start.k, `back north-up: the geometry is the start's (k ${cam.end.k})`);
+  await shot('06b-facing');
+}
+// THE CAMERA OWNS THE SCREEN: a wide viewport flips the layout live — the
+// body class, the two columns, the board an explicit box the canvas fills,
+// k the largest step that fits BOTH axes (height-bound here), the board
+// centred in it — and narrowing flips it back.
+{
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(250);
+  const wide = await page.evaluate(async () => {
+    const K = window.__DCK;
+    await K.renderer.ready();
+    K.renderer.paintNow();
+    const board = document.getElementById('board');
+    const c = board.querySelector('canvas');
+    const br = board.getBoundingClientRect(), cr = c.getBoundingClientRect();
+    const panel = document.getElementById('player-bar').getBoundingClientRect();
+    return { layout: K.renderer.layout, info: K.renderer.info, board: { w: br.width, h: br.height, x: br.left }, canvas: { w: cr.width, h: cr.height, cw: c.width, ch: c.height }, panelLeft: panel.left, wide: document.body.classList.contains('layout-wide') };
+  });
+  const i = wide.info;
+  const fitsW = Math.floor(i.devW / i.bufW), fitsH = Math.floor(i.devH / i.bufH);
+  expect(wide.wide && wide.layout.layout === 'wide' && i.fit === 'box', `1280×720: the wide layout (fit ${i.fit})`);
+  expect(Math.abs(wide.canvas.w - wide.board.w) < 1 && Math.abs(wide.canvas.h - wide.board.h) < 1 && i.devW === wide.canvas.cw && i.devH === wide.canvas.ch, `the canvas IS the board's box: ${wide.canvas.cw}×${wide.canvas.ch} device px`);
+  expect(Number.isInteger(i.k) && i.k === Math.min(fitsW, fitsH) && i.k >= 1, `k ${i.k} = the largest step that fits both axes (width ${fitsW}, height ${fitsH})`);
+  expect(i.x0 === Math.floor((i.devW - i.bufW * i.k) / 2) && i.y0 === Math.floor((i.devH - i.bufH * i.k) / 2) && (i.x0 > 0 || i.y0 > 0), `the board is centred in the box (x0 ${i.x0}, y0 ${i.y0})`);
+  expect(wide.panelLeft > wide.board.x + wide.board.w - 1, `the player's bar sits in the column beside the board (bar at ${Math.round(wide.panelLeft)} px, board ends ${Math.round(wide.board.x + wide.board.w)})`);
+  await shot('06c-wide');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  const back = await page.evaluate(async () => { const K = window.__DCK; await K.renderer.ready(); K.renderer.paintNow(); return { layout: K.renderer.layout, info: K.renderer.info }; });
+  expect(!back.layout.wide && back.info.fit === 'width' && back.info.y0 === 0, `back at the phone width: the stacked layout, fit width (k ${back.info.k})`);
 }
 if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT, '06-options.png') });
 // --- The replay log (2026-09-06): the export builds from the live duel and

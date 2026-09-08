@@ -189,6 +189,15 @@
         <option value="crypt">Crypt oak</option>
       </select>
     </label>
+    <!-- THE CAMERA (Phase 2, 2026-09-08): the view turns by quarters — screen-
+         up is the army's facing (brief §5.1). The real turn buttons wait for
+         the army; these are the debug ones, walked over the arena bed. -->
+    <div class="opt" id="view-turn">Turn the view
+      <button id="btnTurnL" title="turn left: the world's west comes up the screen" aria-label="turn left">&#8634;</button>
+      <span id="facingName" class="opt-val">north up</span>
+      <button id="btnTurnR" title="turn right: the world's east comes up the screen" aria-label="turn right">&#8635;</button>
+    </div>
+    <p class="opt-hint">Debug: the camera turns with the army in Phase 2; until the army exists these turn it by hand. Not saved.</p>
     <!-- The piece placement: whole floor pixels on the tile grid (every
          sprite pixel is one floor pixel, at the art's scale). -->
     <p class="opt-hint">Every sprite pixel is one floor pixel, on the floor&#8217;s own grid; lift and shift move a piece by whole floor pixels.</p>

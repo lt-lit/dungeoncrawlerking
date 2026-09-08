@@ -260,6 +260,36 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 }
 .board.inactive > canvas { cursor: default; }
 .board:not(.inactive) > canvas { cursor: pointer; }
+
+/* THE CAMERA OWNS THE SCREEN (Phase 2, 2026-09-08). On a wide screen
+   (main.mjs WIDE_LAYOUT stamps body.layout-wide — the one breakpoint) the
+   duel screen is two columns: the board fills the left one top to bottom,
+   an explicit box the canvas board fits on BOTH axes (fit 'box': the
+   largest integer step that fits the board and its headroom row — a 1080p
+   desktop is height-bound at k 5, where the 560-px page cap gave it k 3),
+   sticky under the topbar; the bars, the eval bar, the hint list, the
+   preview controls, the setup panel, the log and the debug panel stack in
+   a column beside it. A phone never sees this: below the breakpoint the
+   stacked layout the phone verdicts were given on is untouched. */
+body.layout-wide main#app { max-width: none; padding: .6rem .9rem; }
+body.layout-wide #screen-duel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 23rem;
+  column-gap: 1rem;
+  align-items: start;
+}
+body.layout-wide #screen-duel > * { grid-column: 2; min-width: 0; }
+body.layout-wide #screen-duel > #board {
+  grid-column: 1;
+  grid-row: 1 / span 40;
+  width: 100%;
+  height: calc(100dvh - 4.2rem);
+  position: sticky;
+  top: 3.2rem;
+}
+body.layout-wide #screen-duel > #board[hidden] { display: none; }
+body.layout-wide #eval-bar { width: 100%; }
+body.layout-wide #preview-controls { justify-content: flex-start; }
 #render-diag {
   font-family: ui-monospace, monospace;
   font-size: .68rem;
@@ -355,6 +385,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #options-card h2 { margin: 0 0 .2rem; font-size: 1.1rem; }
 
 .opt { display: flex; align-items: center; gap: .5rem; font-size: .95rem; }
+#view-turn button { font-size: 1rem; padding: .15rem .55rem; }
+#view-turn #facingName { min-width: 5.5em; text-align: center; }
 .opt[hidden], .opt-hint[hidden] { display: none; } /* (the display rule above would beat the UA [hidden]) */
 .opt.sub { margin-left: 1.4rem; font-size: .88rem; color: var(--muted); }
 .opt input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--gold); }

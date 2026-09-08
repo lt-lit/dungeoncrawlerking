@@ -45,6 +45,7 @@ import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANG
 // the screen — the one board since the DOM board's retirement the same day
 // (CLAUDE.md § Phase 2). The atlas is its art and the debris sampler's.
 import { CanvasBoard, loadAtlas } from './canvas-board.mjs';
+import { normFacing, facingName } from './camera.mjs'; // THE CAMERA's facing (2026-09-08)
 import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
@@ -104,6 +105,11 @@ const app = {
   stages: [], // loadStageV2 outputs from the manifest bundle, picker order
   session: null, // the previewed/live duel: {id, title, files, ranks, variantName, playerColor, enemyColor, deal}
   boardUI: null,
+  // THE CAMERA (Phase 2, 2026-09-08): the facing in force — which world
+  // direction points up the screen (0 north … 3 west). Runtime state, never
+  // saved: the turn buttons wait for the army (brief §5.1), so today only
+  // the debug turn buttons and `?facing=` move it.
+  view: { facing: 0 },
   duel: null,
   selectedSquare: null, // during play: player's selected from-square
   phase: 'boot', // boot | setup | preview | playing | ended | error
@@ -257,6 +263,17 @@ const OPT_KEY = 'dck.options.v1';
  *  the board centred in the width it gets) or a fill of the width (the
  *  fallback: uneven pixel widths, every layer still aligned). */
 const SCALINGS = ['integer', 'fill'];
+/** THE CAMERA OWNS THE SCREEN (2026-09-08): on a screen at least this wide
+ *  the duel screen is two columns — the board fills the left one top to
+ *  bottom (canvas-board fit 'box': k is the largest integer step that fits
+ *  the board and its headroom row on BOTH axes, height-bound on a 1080p
+ *  desktop) and the bars, the hint list, the log and the debug panel stack
+ *  in a column beside it (style.css body.layout-wide). Narrower — every
+ *  phone — keeps the stacked layout the phone verdicts were given on. The
+ *  ONE breakpoint: main.mjs stamps the body class, style.css keys on it.
+ *  `?layout=wide|stack` pins it (test-only). */
+const WIDE_LAYOUT = '(min-width: 900px)';
+const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
 const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
@@ -406,10 +423,74 @@ function scalingFor() {
   return SCALINGS.includes(pick) ? pick : 'integer';
 }
 
+/** The layout in force: 'wide' (the camera owns the screen) or 'stack'.
+ *  `?layout=` pins it; else the media query decides. */
+function layoutFor() {
+  const p = params.get('layout');
+  if (p === 'wide' || p === 'stack') return p;
+  return wideMQ?.matches ? 'wide' : 'stack';
+}
+
+/** The board's fit for the layout (canvas-board fit). */
+function fitFor() {
+  return layoutFor() === 'wide' ? 'box' : 'width';
+}
+
+/** Stamp the layout on the body and refit the mounted board. Runs at boot
+ *  and whenever the media query flips (a desktop window resized across
+ *  the breakpoint). */
+function applyLayout() {
+  const wide = layoutFor() === 'wide';
+  document.body.classList.toggle('layout-wide', wide);
+  app.boardUI?.setFit(fitFor());
+}
+wideMQ?.addEventListener?.('change', applyLayout);
+
+/** THE CAMERA's facing: `?facing=` (0–3, or n / e / s / w) pins it for a
+ *  driver; else the runtime state the turn buttons move. */
+function facingFor() {
+  const p = params.get('facing');
+  if (p !== null) {
+    const named = { n: 0, north: 0, e: 1, east: 1, s: 2, south: 2, w: 3, west: 3 }[p.toLowerCase()];
+    return normFacing(named ?? p);
+  }
+  return app.view.facing;
+}
+
+/** Turn the camera (a CUT): the board repaints from its state, the marks
+ *  and arrows ride along, the flight's pixels land where the camera says. */
+function setFacing(n) {
+  params.delete('facing'); // a turn beats the URL's pin
+  app.view.facing = normFacing(n);
+  app.boardUI?.setFacing(app.view.facing);
+  syncFacingUI();
+  return app.view.facing;
+}
+
+function syncFacingUI() {
+  const el = $('facingName');
+  if (el) el.textContent = `${facingName(app.view.facing)} up`;
+}
+
+/** The world coordinates a square's cosmetic hashes key on (canvas-board
+ *  `hashCoords`): the ENVIRONMENT's cell — the base stage's own uncropped,
+ *  unflipped grid, the debris ledger's space (debris.mjs envTransform) —
+ *  so a crop, a flip or a turn never reshuffles the floor. Read at paint
+ *  time, since the deal's transform can change under a mounted board (a
+ *  re-deal of the same dims). The identity until a transform is bound. */
+function hashCoordsLive(f, rank) {
+  const tx = app.debris.tx;
+  if (!tx) return [f, rank];
+  const { ef, er } = toEnvCell(tx, String.fromCharCode(97 + f) + rank);
+  return [ef, er + 1];
+}
+
 /** Mount the board on `el` (canvas-board.mjs — the one renderer). It
  *  reports its geometry to the diagnostics line under the board. */
 function createBoard(el, opts) {
-  const ui = new CanvasBoard(el, { ...opts, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+  const ui = new CanvasBoard(el, { ...opts, facing: facingFor(), fit: fitFor(), hashCoords: hashCoordsLive, arrowStyle: arrowStyleFor(), scaling: scalingFor(), onResize: (info) => renderDiag(info) });
+  app.view.facing = ui.facing;
+  syncFacingUI();
   void ui.ready.then(() => renderDiag(ui.renderInfo));
   return ui;
 }
@@ -2223,17 +2304,23 @@ async function debrisWarm() {
 }
 
 /** What a square's terrain was wearing, as the debris layer records it: the
- *  wall case for stone (a wall, a god-cracked wall, a weak spot — masonry
- *  or an edge-on door), the door leaf or its double's half, else the skin
- *  and the variant this square shows (board-ui skinVariantIndex). */
+ *  wall case for stone (a wall, a god-cracked wall, authored masonry), the
+ *  door leaf or its double's half AS THE SCREEN DEALS IT (the camera; an
+ *  edge-on door is the leaf — its splinters are the leaf's wood), else the
+ *  skin and the variant this square shows (board-ui skinVariantIndex on the
+ *  environment's coordinates, the same the board hashes on). */
 function debrisSrcOf(sq, k) {
   if (!k) return null;
   const f = sq.charCodeAt(0) - 97, rank = parseInt(sq.slice(1), 10);
+  const [hf, hr] = hashCoordsLive(f, rank);
   if (k.wallTile || k.cracked || k.weak) return { role: 'wall', v: 0, mask: k.mask };
   if (k.hole) return null;
-  if (k.skin === 'door') return { role: k.door2 ? `door2-${k.door2}` : 'door', v: 1, mask: -1 };
-  if (k.furniture) return { role: k.skin ?? 'crate', v: skinVariantIndex(f, rank), mask: -1 };
-  return { role: 'floor', v: floorVariantIndex(f, rank), mask: -1 };
+  if (k.skin === 'door') {
+    const half = app.boardUI?.doorHalfOf?.(sq) ?? null;
+    return { role: half ? `door2-${half}` : 'door', v: 1, mask: -1 };
+  }
+  if (k.furniture) return { role: k.skin ?? 'crate', v: skinVariantIndex(hf, hr), mask: -1 };
+  return { role: 'floor', v: floorVariantIndex(hf, hr), mask: -1 };
 }
 
 function debrisPaintCtx(o = debrisOpts()) {
@@ -2503,13 +2590,13 @@ function paintBoard(fen) {
     // Terrain that stood on the LAST paint and is gone now leaves its residue
     // (board-ui residueStep — the one rule, on data, shared with the replay
     // analyzer; until 2026-09-07 this read the last paint's cell classes):
-    // an east–west door its OPEN DOORWAY; a weak-spot door (the crack in a
-    // north–south line — round 10: "cracked walls turning into open doors
-    // doesn't make any sense"), a wall, a cracked wall or authored masonry
-    // the RUIN stub; any other furniture (a crate, a barrel, a chest…)
-    // nothing — it never continued a wall line. Judged on the last paint's
-    // OWN ledgers (a wall can crack and then break; undo brings terrain
-    // back and clears its residue).
+    // a door its OPEN DOORWAY (posts where its walls stand — above and
+    // below for a north–south door since the camera, 2026-09-08); a wall,
+    // a cracked wall or authored masonry the RUIN stub (round 10: "cracked
+    // walls turning into open doors doesn't make any sense"); any other
+    // furniture (a crate, a barrel, a chest…) nothing — it never continued
+    // a wall line. Judged on the last paint's OWN ledgers (a wall can crack
+    // and then break; undo brings terrain back and clears its residue).
     const step = residueStep({ fen: res.lastFen, holes: res.lastHoles, godCrates: res.lastCrates, opened: res.opened, rubble: res.rubble }, { fen, holes }, skins, app.boardUI.files, app.boardUI.ranks);
     res.opened = step.opened;
     res.rubble = step.rubble;
@@ -2929,6 +3016,11 @@ $('optScaling').addEventListener('change', (e) => {
   options.scaling = SCALINGS.includes(e.target.value) ? e.target.value : 'integer';
   applyOptions();
 });
+// THE CAMERA's debug turn buttons (2026-09-08): turning the army LEFT puts
+// the world's west up the screen (facing − 1), RIGHT its east (facing + 1).
+// The real turn buttons wait for the army (brief §5.1).
+$('btnTurnL').addEventListener('click', () => setFacing(app.view.facing - 1));
+$('btnTurnR').addEventListener('click', () => setFacing(app.view.facing + 1));
 $('optTheme').addEventListener('change', (e) => {
   options.theme = e.target.value;
   applyOptions();
@@ -3261,6 +3353,15 @@ window.__DCK = {
     testPattern: (on) => app.boardUI?.setTestPattern?.(on),
     snapMode: (mode) => app.boardUI?.setSnapMode?.(mode),
     paintNow: () => app.boardUI?.paintNow?.(),
+    /** THE CAMERA (2026-09-08): read the facing, or turn to one (0–3). */
+    facing: (n = null) => (n === null ? app.view.facing : setFacing(n)),
+    /** The layout in force and the board's fit ('wide' → 'box'). */
+    get layout() {
+      return { layout: layoutFor(), fit: app.boardUI?.renderInfo.fit ?? null, wide: document.body.classList.contains('layout-wide') };
+    },
+    /** The hit-test and its inverse, for the round trip under a turn. */
+    squareAtPoint: (x, y) => app.boardUI?.squareAtPoint?.(x, y) ?? null,
+    pointOfSquare: (sq) => app.boardUI?.pointOfSquare?.(sq) ?? null,
     /** The atlas's pixels for a role under the board's theme / door set, and the crack drawings — { w, h, data } or null. */
     tile: (role) => { const a = app.boardUI?.atlas; const t = a?.tileOf(app.boardUI.theme, role, { doors: app.boardUI.doors }); return t ? Atlas.pixelsOf(t) : null; },
     crack: (n) => { const t = app.boardUI?.atlas?.crack(n); return t ? Atlas.pixelsOf(t) : null; },
@@ -3354,6 +3455,9 @@ window.__DCK = {
 loadOptions();
 loadSetup();
 if (params.get('godsdebug')) options.godsDebug = true; // E2E/dev override (not persisted until the user touches options)
+applyLayout(); // the camera's layout before anything is mounted
+app.view.facing = facingFor();
+syncFacingUI();
 syncOptionsUI();
 refreshSavedLogs(); // the autosave ring from earlier sessions, on the setup screen
 window.__DCK.ready = boot();
