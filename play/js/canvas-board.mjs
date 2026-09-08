@@ -195,6 +195,8 @@ export class CanvasBoard {
     this.interactive = false;
     this.scaling = scaling === 'fill' ? 'fill' : 'integer';
     this.dimOutside = true; // the world beyond the crop is dimmed (a duel's dungeon)
+    this.overscroll = 0; // native px the window may look past the world's edge (the walk's HUD-aware focus; #fitWindow)
+
     this.focus = null; // { x, y } in the rotated world's native pixels, or null = the crop's centre
     this.focusCell = null; // lookAt's cell + offset, re-projected on a turn
     this.atlas = null;
@@ -565,12 +567,17 @@ export class CanvasBoard {
     const focus = this.#focusPx();
     const worldW = this.worldCols * T, worldH = this.worldRows * T;
     const centre = this.scaling === 'integer' || boxMode;
-    const axis = (worldPx, devPx, focusPx, tiles) => {
+    const axis = (worldPx, devPx, focusPx, tiles, over = 0) => {
       const visible = Math.ceil(devPx / k);
       if (worldPx <= visible) return { t0: 0, n: tiles, s: 0, sw: worldPx, d: centre ? Math.floor((devPx - worldPx * k) / 2) : 0, fits: true };
-      const v0 = Math.max(0, Math.min(worldPx - visible, Math.round(focusPx - visible / 2)));
+      // OVERSCROLL (the walk's HUD-aware focus, 2026-09-08): the window may
+      // look `over` native pixels past the world's FAR edge on this axis —
+      // the screen's bottom — so a focus set above the screen's centre is
+      // honoured at the map's edge too; the void it shows lies under the
+      // HUD's controls. Off-world tiles paint nothing (#cellAt is null).
+      const v0 = Math.max(0, Math.min(worldPx - visible + over, Math.round(focusPx - visible / 2)));
       const t0 = Math.max(0, Math.floor(v0 / T) - MARGIN);
-      const t1 = Math.min(tiles, Math.ceil((v0 + visible) / T) + MARGIN);
+      const t1 = Math.ceil((v0 + visible) / T) + MARGIN;
       return { t0, n: t1 - t0, s: v0 - t0 * T, sw: visible, d: 0, fits: false };
     };
     const ax = axis(worldW, this.devW, focus.x, this.worldCols);
@@ -579,7 +586,7 @@ export class CanvasBoard {
       // The width fit: the canvas is as tall as the crop; the window's rows are the crop's.
       ay = { t0: this.cropBox.row0, n: this.cropBox.rows, s: 0, sw: this.cropBox.rows * T + this.headroom, d: 0, fits: true };
     } else {
-      ay = axis(worldH, this.devH, focus.y, this.worldRows);
+      ay = axis(worldH, this.devH, focus.y, this.worldRows, Math.max(0, this.overscroll | 0));
       if (ay.fits) {
         ay.sw = worldH + this.headroom;
         ay.d = Math.floor((this.devH - ay.sw * k) / 2);
@@ -1115,18 +1122,19 @@ export class CanvasBoard {
 
   /** Glide the focus to a world cell over `ms` (the world sliding under the
    *  king on a walk); 0 ms is a cut. Resolves when it lands. */
-  async panTo(f, r, ms = 200) {
-    const to = this.#focusOf({ f, r });
+  async panTo(f, r, ms = 200, dx = 0, dy = 0) {
+    const to = this.#focusOf({ f, r, dx, dy });
     if (!ms || !this.focus) {
-      this.lookAt(f, r);
+      this.lookAt(f, r, dx, dy);
       return;
     }
-    this.pan = { from: { ...this.focus }, to, t0: now(), ms, cell: { f, r } };
+    this.pan = { from: { ...this.focus }, to, t0: now(), ms, cell: { f, r, dx, dy } };
     this.#run();
     await wait(ms);
     this.pan = null;
-    this.lookAt(f, r);
+    this.lookAt(f, r, dx, dy);
   }
+
 
   /** The quake's rumble: the blit jitters by whole native pixels for `ms`
    *  (main.mjs calls it on the quake's first beat). */

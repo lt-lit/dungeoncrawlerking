@@ -535,19 +535,32 @@ body.layout-wide #preview-controls { justify-content: flex-start; }
 .world-actions button { font-size: .8rem; padding: .3rem .7rem; }
 #run-note { margin: 0; }
 
-#screen-walk { display: flex; flex-direction: column; gap: .35rem; }
-#walk-board.board { width: 100%; height: calc(100dvh - 17.5rem); min-height: 200px; margin: 0; }
-#walk-status { min-height: 1.4rem; font-family: ui-monospace, monospace; font-size: .78rem; }
-#walk-controls { display: flex; gap: .9rem; justify-content: center; align-items: center; }
-#walk-pad { display: grid; grid-template-columns: repeat(3, 3rem); grid-auto-rows: 3rem; gap: .25rem; }
-#walk-pad button { font-size: 1.35rem; padding: 0; line-height: 1; }
-#walk-side { display: flex; flex-direction: column; gap: .4rem; }
-.walk-row { display: flex; gap: .3rem; align-items: center; justify-content: center; }
-.walk-row .opt-val { min-width: 3.2rem; text-align: center; font-size: .8rem; }
-#walk-hint { text-align: center; margin: .2rem 0 0; }
+/* THE WALK's HUD (2026-09-08, after the designer's verdict on the first
+   pad — "the ugliest most unusable virtual d-pad"): the map fills the
+   screen under the topbar and every control floats over it, translucent,
+   at thumb reach — the 3×3 pad bottom-left (thumb-sized cells), the turn /
+   zoom / barrier cluster bottom-right, the status strip along the top.
+   The board underneath is the canvas board; nothing here paints on it. */
+#screen-walk { display: flex; flex-direction: column; gap: .25rem; }
+#walk-stage { position: relative; width: 100%; height: calc(100dvh - 4.9rem); min-height: 240px; overflow: hidden; border-radius: .35rem; background: #000; }
+#walk-board.board { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; touch-action: none; }
+#walk-hud { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+#walk-status { margin: .4rem; padding: .28rem .55rem; font-family: ui-monospace, monospace; font-size: .72rem; line-height: 1.25; color: var(--text); background: rgba(20, 21, 26, .74); border: 1px solid rgba(255, 255, 255, .08); border-radius: .35rem; min-height: 1.2rem; }
+#walk-status:empty { visibility: hidden; }
+#walk-controls { display: flex; justify-content: space-between; align-items: flex-end; gap: .6rem; padding: .5rem; }
+#walk-controls > * { pointer-events: auto; }
+#walk-pad { display: grid; grid-template-columns: repeat(3, 3.4rem); grid-auto-rows: 3.4rem; gap: .3rem; }
+#walk-pad button { font-size: 1.55rem; padding: 0; line-height: 1; color: var(--gold); background: rgba(29, 30, 36, .78); border: 1px solid rgba(215, 180, 106, .35); border-radius: .55rem; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); touch-action: manipulation; }
+#walk-pad button:not(:disabled):active { background: rgba(58, 74, 116, .92); border-color: var(--gold); }
+#btnWalkWait { color: var(--muted); font-size: 2rem; }
+#walk-side { display: flex; flex-direction: column; gap: .35rem; align-items: flex-end; }
+.walk-row { display: flex; gap: .3rem; align-items: center; justify-content: flex-end; }
+.walk-row button { min-width: 2.7rem; height: 2.7rem; padding: 0 .4rem; font-size: 1.15rem; line-height: 1; background: rgba(29, 30, 36, .78); border: 1px solid rgba(255, 255, 255, .14); border-radius: .55rem; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); touch-action: manipulation; }
+.walk-row button:not(:disabled):active { background: rgba(58, 74, 116, .92); }
+.walk-row .opt-val { min-width: 2.7rem; text-align: center; font-size: .74rem; color: var(--text); background: rgba(20, 21, 26, .62); padding: .2rem .3rem; border-radius: .35rem; }
+#btnWalkBarrier { color: var(--gods); border-color: rgba(124, 200, 255, .35); }
+#walkInitiative { height: 2.7rem; max-width: 6.6rem; font-size: .72rem; color: var(--text); background: rgba(29, 30, 36, .85); border: 1px solid rgba(255, 255, 255, .14); border-radius: .55rem; padding: 0 .3rem; }
 #walk-diag { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--muted); text-align: center; }
 #walk-diag[hidden] { display: none; }
-body.layout-wide #screen-walk { display: grid; grid-template-columns: minmax(0, 1fr) 23rem; column-gap: 1rem; align-items: start; }
-body.layout-wide #screen-walk > * { grid-column: 2; min-width: 0; }
-body.layout-wide #screen-walk > #walk-board.board { grid-column: 1; grid-row: 1 / span 40; height: calc(100dvh - 4.2rem); position: sticky; top: 3.2rem; }
-#screen-walk[hidden], body.layout-wide #screen-walk[hidden] { display: none; }
+body.layout-wide #walk-stage { height: calc(100dvh - 4.4rem); }
+#screen-walk[hidden] { display: none; }

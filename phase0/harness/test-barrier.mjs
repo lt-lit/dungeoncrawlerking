@@ -139,15 +139,15 @@ function worldOf(rows, { id = 'lab' } = {}) {
   check(plan.ok && plan.stage.ranks === 8 && gapOf(plan.deal.fen) === 4, `open ground, kit vs kit: 8 ranks, gap 4 (${plan.ok ? plan.stage.ranks : plan.error})`);
   const { K, k } = kingsOf(plan.deal.fen);
   check(plan.ok && k.r - K.r === 7, `open ground: the kings 7 apart (${k.r - K.r})`);
-  check(plan.ok && plan.stage.files === 12 && plan.kingFile === 5, `a 12-wide room: 12 files, the king centred (file ${plan.kingFile})`);
+  check(plan.ok && plan.stage.files === 10 && plan.kingFile === 4 && arenaToWorld(plan.crop, 4, 0).f === 6, `a 12-wide room: the ARENA cap of 10 files, the king centred (file ${plan.kingFile})`);
 
   const wide = worldOf(['#'.repeat(24), ...Array.from({ length: 14 }, () => '#' + '.'.repeat(22) + '#'), '#'.repeat(24)]);
   const armyEdge = spawnArmy(wide, pattern, { f: 2, r: 2 }, 0, 'w');
   const planEdge = planBarrier(wide, armyEdge, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(planEdge.ok && planEdge.stage.files === 12 && planEdge.kingFile === 1, `a hall wider than 12, the king one cell off the wall: the 12-file window slides whole to stay in the room (king file ${planEdge.ok ? planEdge.kingFile : planEdge.error})`);
+  check(planEdge.ok && planEdge.stage.files === 10 && planEdge.kingFile === 1, `a hall wider than 10, the king one cell off the wall: the 10-file window slides whole to stay in the room (king file ${planEdge.ok ? planEdge.kingFile : planEdge.error})`);
   const armyMid = spawnArmy(wide, makePattern(KIT, { seed: 1 }), { f: 11, r: 2 }, 0, 'w');
   const planMid = planBarrier(wide, armyMid, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(planMid.ok && planMid.kingFile === 5 && arenaToWorld(planMid.crop, 5, 0).f === 11, `mid-hall: the window centred on the king (king file ${planMid.ok ? planMid.kingFile : planMid.error})`);
+  check(planMid.ok && planMid.stage.files === 10 && planMid.kingFile === 4 && arenaToWorld(planMid.crop, 4, 0).f === 11, `mid-hall: the 10-file window centred on the king (king file ${planMid.ok ? planMid.kingFile : planMid.error})`);
 
   const narrow = worldOf(['#'.repeat(6), ...Array.from({ length: 14 }, () => '##..##'), '#'.repeat(6)]);
   const armyN = spawnArmy(narrow, makePattern(KIT, { seed: 1 }), { f: 2, r: 2 }, 0, 'w');

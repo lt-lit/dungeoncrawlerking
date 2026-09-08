@@ -10,9 +10,11 @@
 //     his facing is arena-north, so the arena reads north-up on the screen
 //     under the camera that turns with the army.
 //   • WIDTH is the local room width at the king's rank (brief §4.1),
-//     capped at the engine's 12 files: the window is centred on the king's
-//     file and slid whole to stay inside the room; a way under 3 wide is
-//     no place to raise an army (§5.3).
+//     capped at the ARENA's 10 files (designer: the max arena is 10×10 —
+//     a phone's thumbs; the engine's 12 is not the game's): the window is
+//     centred on the king's file and slid whole to stay inside the room; a
+//     way under 3 wide is no place to raise an army (§5.3).
+
 //   • GAP 4, KINGS ALIGNED (designer: "a duel can start at gap 4 for now,
 //     and the kings have to be aligned"): the enemy royal stands on the
 //     player's king's FILE on the arena's last row, and there are exactly
@@ -47,9 +49,15 @@ import { childSeed } from './prng.mjs';
 
 export const GAP = 4; // designer 2026-09-08: "a duel can start at gap 4 for now"
 export const MIN_FILES = 3; // §5.3: width 1–2 passages are crawlspaces
-export const MAX_FILES = 12; // the engine's caps (rule 7's catalog)
+// THE ARENA CAP IS 10×10 (designer 2026-09-08: "Max arena is 10x10 … It has
+// to run at k 5 on mobile for a 12 wide board and that is officially too
+// small for my thumbs"). The engine's 12 files are the engine's, not the
+// game's: a 10-file arena is k 6 on the phone, the size everything is
+// optimized around.
+export const MAX_FILES = 10;
 export const MIN_RANKS = 5;
 export const MAX_RANKS = 10;
+
 
 /** The room's floor to the left and right of a cell, perpendicular to a
  *  facing: how many floor cells run each way before anything else (a wall,

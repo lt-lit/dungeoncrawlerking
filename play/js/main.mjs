@@ -50,7 +50,7 @@ import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
-import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves, Army } from './army.mjs';
+import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves, Army, rotateBody } from './army.mjs';
 import { newRun, updateRun, recordTurn, recordDuel, runEnded, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
 import { planBarrier } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08)
 import { childSeed } from './prng.mjs';
@@ -3344,7 +3344,9 @@ $('btnMenu').addEventListener('click', () => {
 
 const WALK_STEP_MS = 140; // one turn's slide and pan
 const WALK_MIN_TILES = 15; // the default zoom fits at least this many tiles across the short axis
-const WALK_TAP_ZOOM_MIN = 6; // the snap-zoom on a tapped piece: at least this k
+const WALK_SWIPE_PX = 24; // a pointer that travels this far on the map is a step, not a tap
+const ARENA_FILES = 10; // the arena the game is optimized around (designer 2026-09-08: the max arena is 10×10)
+
 const PIECE_NAMES = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
 const WALK_KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] }; // the opening kit (brief §4.2), the walk's default army
 
@@ -3358,8 +3360,54 @@ function walkZoomDefault() {
   return Math.max(1, Math.min(12, Math.floor(short / (WALK_MIN_TILES * 16))));
 }
 
+/** THE SNAP-ZOOM's target (designer 2026-09-08: "why would you not just
+ *  use the same scale you'd use for a 10x10 duel?"): the k a 10×10 duel
+ *  gets in this very box — the width fit on a phone, both axes under the
+ *  wide layout — so a tapped piece is exactly as big as it is in a fight:
+ *  k 6 on the phone, k 3 in a narrow desktop window, k 5 on a 1080p wide
+ *  layout. Never a constant. */
+function duelZoomFor() {
+  const info = app.boardUI?.renderInfo;
+  if (!info || !(info.devW > 0)) return 4;
+  const headroom = info.headroom ?? 12;
+  const kw = Math.floor(info.devW / (ARENA_FILES * 16));
+  const wide = document.body.classList.contains('layout-wide');
+  const k = wide && info.devH > 0 ? Math.min(kw, Math.floor(info.devH / (ARENA_FILES * 16 + headroom))) : kw;
+  return Math.max(1, Math.min(12, k));
+}
+
+/** THE CAMERA'S FOCUS on the walk: a cell (the king, or a tapped piece)
+ *  set ABOVE the screen's centre by half the height of the HUD's controls,
+ *  so it stands in the uncovered map instead of under the pad. The
+ *  board's lookAt / panTo take a WORLD-pixel offset, and "down the
+ *  screen" is one body step backward turned by the facing (screen-up IS
+ *  the facing on the walk). */
+function walkFocus(cell = null) {
+  const W = app.walk;
+  const ui = app.boardUI;
+  const at = cell ?? W.army.king;
+  const k = ui?.zoom ?? W?.zoom ?? 4;
+  const dpr = window.devicePixelRatio || 1;
+  const controls = $('walk-controls');
+  const covered = controls && !$('screen-walk').hidden ? (controls.getBoundingClientRect().height * dpr) / k : 0;
+  const d = Math.round(covered / 2);
+  if (ui) ui.overscroll = d; // the window may look past the map's edge by as much, under the controls
+  const back = rotateBody(0, -1, W.army.facing);
+  return { f: at.f, r: at.r, dx: back.df * d, dy: -back.dr * d };
+}
+
+
+/** Centre the walk's camera on the king (a cut), HUD-aware. */
+function walkLookAtKing() {
+  const W = app.walk;
+  if (!W || !app.boardUI) return;
+  const fo = walkFocus();
+  app.boardUI.lookAt(fo.f, fo.r, fo.dx, fo.dy);
+}
+
 /** The first floor cell, for a world without a start marker. */
 function firstFloor(world) {
+
   for (let r = world.ranks - 1; r >= 0; r--) for (let f = 0; f < world.files; f++) if (world.isFloor(f, r)) return { f, r, facing: 0 };
   throw new Error('a world with no floor');
 }
@@ -3426,11 +3474,11 @@ function mountWalkBoard() {
     app.boardUI.setZoom(W.zoom);
   }
   app.boardUI.dimOutside = false;
-  app.boardUI.lookAt(W.army.king.f, W.army.king.r);
+  walkLookAtKing();
   app.boardUI.setInteractive(true);
   applyTheme();
   debrisPaintWalk();
-  void app.boardUI.ready.then(() => app.boardUI?.lookAt(W.army.king.f, W.army.king.r));
+  void app.boardUI.ready.then(() => walkLookAtKing());
 }
 
 
@@ -3498,8 +3546,8 @@ async function walkInput(input) {
     ui.refresh();
     const ms = FX(WALK_STEP_MS);
     const arrivals = plan.moves.map((m) => ({ from: m.from, to: m.to, ch: W.army.letter(before.get(m.id) ?? 'P') }));
-    const king = W.army.king;
-    await Promise.all([ui.animateArrivals(arrivals, { ms }), ui.panTo(king.f, king.r, ms)]);
+    const fo = walkFocus();
+    await Promise.all([ui.animateArrivals(arrivals, { ms }), ui.panTo(fo.f, fo.r, ms, fo.dx, fo.dy)]);
     const smashed = plan.moves.find((m) => m.capture === 'furniture');
     walkStatus(plan.individual ? `${walkPieceName(before.get(plan.moves[0].id) ?? 'p')} ${smashed ? 'smashes the crate' : 'moves'}` : input.kind === 'turn' ? `turned ${input.dir < 0 ? 'left' : 'right'}` : '');
     debrisPaintWalk();
@@ -3533,9 +3581,10 @@ function onWalkCellTap(f, r) {
     ui.setCellMarks({ selected: { f, r }, targets: W.targets });
     if (W.snapped === null) {
       W.snapped = W.zoom;
-      ui.setZoom(Math.max(W.zoom, WALK_TAP_ZOOM_MIN));
+      ui.setZoom(Math.max(W.zoom, duelZoomFor()));
     }
-    ui.lookAt(f, r);
+    const fo = walkFocus({ f, r });
+    ui.lookAt(fo.f, fo.r, fo.dx, fo.dy);
     walkStatus(`${walkPieceName(p.ch)}: ${W.targets.length} moves — tap one`);
     return;
   }
@@ -3554,7 +3603,7 @@ function walkClearSelection(recentre) {
     ui.setZoom(W.snapped);
     W.snapped = null;
   }
-  if (recentre) ui.lookAt(W.army.king.f, W.army.king.r);
+  if (recentre) walkLookAtKing();
 }
 
 /** The zoom in whole steps (a CUT), the king kept centred. */
@@ -3564,7 +3613,7 @@ function walkZoom(delta) {
   walkClearSelection(false);
   W.zoom = Math.max(1, Math.min(12, (W.zoom ?? 4) + delta));
   app.boardUI.setZoom(W.zoom);
-  app.boardUI.lookAt(W.army.king.f, W.army.king.r);
+  walkLookAtKing();
   walkStatus();
 }
 
@@ -4021,6 +4070,35 @@ $('btnZoomIn').addEventListener('click', () => walkZoom(1));
 $('btnZoomOut').addEventListener('click', () => walkZoom(-1));
 $('btnWalkBarrier').addEventListener('click', () => void walkBarrier());
 $('btnWalkOut').addEventListener('click', () => void walkOut());
+// A SWIPE on the map is a step in its direction (eight ways, body-relative:
+// the camera is at the army's facing, so screen-up IS forward). A pointer
+// that travels under WALK_SWIPE_PX is a tap and reaches the board's own
+// click (the piece pick); a swipe swallows that click.
+{
+  const stage = $('walk-board');
+  let down = null;
+  let swallow = false;
+  stage.addEventListener('pointerdown', (e) => {
+    if (app.phase !== 'walk' || e.button) return;
+    down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  });
+  const end = (e) => {
+    if (!down || e.pointerId !== down.id) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    down = null;
+    if (Math.hypot(dx, dy) < WALK_SWIPE_PX) return;
+    swallow = true;
+    setTimeout(() => { swallow = false; }, 0);
+    const a = Math.atan2(-dy, dx); // screen up = forward
+    const oct = Math.round(a / (Math.PI / 4)) & 7; // 0 right, 2 forward, 4 left, 6 back
+    const step = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]][oct];
+    void walkInput({ kind: 'step', dx: step[0], dy: step[1] });
+  };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', () => { down = null; });
+  stage.addEventListener('click', (e) => { if (swallow) { e.stopPropagation(); e.preventDefault(); } }, true);
+}
+
 
 document.addEventListener('keydown', (e) => {
   if (app.phase !== 'walk' || !app.walk) return;
@@ -4211,6 +4289,9 @@ window.__DCK = {
     },
     cell: (f, r) => (app.walk ? app.walk.world.cellView(f, r) : null),
     debris: () => (app.walk && app.debris.ledger ? app.debris.ledger.stats() : null),
+    /** The snap-zoom's target: the k a 10×10 duel gets in this box. */
+    duelZoom: () => duelZoomFor(),
+
 
     get state() {
       const W = app.walk;

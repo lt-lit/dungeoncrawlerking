@@ -54,7 +54,7 @@ Each duel is a **generated variant**: a config block (board dims, regions, win c
 
 - The barrier is a rectangle along the **alignment axis** between the two kings, spawned from their **standing positions** (kings are never teleported/rearranged).
 - Barrier walls sit at both kings' backs. Backs-to-the-wall is the default for every duel — it's what makes mating patterns work.
-- **Width = local room width**, up to FSF's max files. Side barriers are only added when needed to fit FSF limits. Board caps: 12 files × 10 ranks (largeboard build).
+- **Width = local room width**, up to FSF's max files. Side barriers are only added when needed to fit FSF limits. Board caps: 12 files × 10 ranks (largeboard build). `[2026-09-08, designer: THE ARENA CAP IS 10×10 — the engine's 12 files are the engine's, not the game's; a 12-wide board is k 5 on a phone, "officially too small for my thumbs". The barrier (§10 Phase 2 milestone 4c) caps the room's width at 10.]`
 - **Overworld terrain inside the barrier carries into the duel as static wall squares (`*` in FEN).** This is the entire point of the dynamic-arena design: pillars, wall stubs, and room edges shape every fight. Walls and Earthquake holes (§4.5, §5.1) project identically.
 
 ### 4.2 Formations `[REVISED 2026-08 — the proving-grounds refresh; was: fixed N×2 patches, width 3–5, walls-eat-slots]`
@@ -402,7 +402,7 @@ A duel starts when, after any move, all of the following hold between a hunting 
 
 2. Kings are **5–7 tiles apart** along that axis (guarantees gap ∈ [2, 4] — the ≥ 5 floor keeps duels legal, the ≤ 7 cap keeps them out of grind territory, §4.4). `[UNDER REVIEW 2026-09-07 — the cap is stale against the bed: the wave-6 arenas (s59–s94, 10×10) stand the kings 9 apart, gap 8, and the designer's verdict was that those were the fun; §4.4's band is under re-investigation for the same reason. Settle the band before the trigger pipeline is built (§10 Phase 2, step five); do not build the trigger to 5–7.]`
 3. Both endpoint patches are **placeable at ≥ 3 wide** after terrain clipping. `[2026-09-08: molding, not clipping — the formation molds onto the crop (§4.2); a crop the armies cannot fit is REFUSED, as the deal refuses any other "doesn't fit".]`
-4. The resulting arena fits FSF limits (side barriers added only if required). `[2026-09-08, 4c: the barrier's width is the local room width at the king's rank capped at 12 (§4.1), the window centred on the king's file and slid whole to stay inside the room; its DEPTH is computed — the player's molded depth + the gap + the enemy's — and a crop past 10 ranks is refused. The 3–12 × 5–10 cap is enforced by the deal, since a runtime crop never passes the stage loader.]`
+4. The resulting arena fits FSF limits (side barriers added only if required). `[2026-09-08, 4c: the barrier's width is the local room width at the king's rank capped at the ARENA's 10 files (§4.1 — designer, same day: "Max arena is 10x10"; 12 is the engine's cap, not the game's: a 12-wide board is k 5 on a phone, too small for thumbs), the window centred on the king's file and slid whole to stay inside the room; its DEPTH is computed — the player's molded depth + the gap + the enemy's — and a crop past 10 ranks is refused. The 3–12 × 5–10 cap is enforced by the deal, since a runtime crop never passes the stage loader.]`
 
 
 The same check runs in three places from one source of truth: the map-gen linter, the live duel-start check, and the threat-display UI.

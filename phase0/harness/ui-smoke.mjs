@@ -961,7 +961,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const pc = K.walk.state.pieces.find((p) => p.ch !== 'K');
     const z0 = K.walk.zoom();
     K.walk.select(pc.f, pc.r);
-    out.tap = { z0, z1: K.renderer.info.k, selected: K.walk.state.selected, targets: K.walk.state.targets.length };
+    out.tap = { z0, z1: K.renderer.info.k, duelK: K.walk.duelZoom(), selected: K.walk.state.selected, targets: K.walk.state.targets.length };
     K.walk.select(-1, -1);
     out.tap.z2 = K.renderer.info.k;
     out.tap.cleared = K.walk.state.selected === null;
@@ -979,6 +979,16 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await new Promise((r) => setTimeout(r, 50));
     while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
     out.pad = { turns: K.walk.state.turn - t0, facing: K.walk.state.facing };
+    // A swipe on the map is a step in its direction: a pointer that travels 60 px right steps right (body-relative); a short one is a tap.
+    const t1 = K.walk.state.turn, k1 = { ...K.walk.state.king };
+    const el = document.getElementById('walk-board');
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const pe = (type, x, y) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 7, button: 0, buttons: 1 }));
+    pe('pointerdown', cx, cy); pe('pointerup', cx + 60, cy);
+    await new Promise((r) => setTimeout(r, 50));
+    while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
+    out.swipe = { turns: K.walk.state.turn - t1, king: { ...K.walk.state.king }, from: k1, facing: K.walk.state.facing };
     // Leave: the setup shows the resume card; resume: the same turn and facing.
     const snap = K.walk.state;
     K.walk.leave();
@@ -1006,9 +1016,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
   expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status), `a step into a wall is refused and says so (${wk.refused.reason}, turn ${wk.refused.turn})`);
   expect(wk.save.schema === 'dck-run/1' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'w01-the-undercroft' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
-  expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 >= wk.tap.z0 && wk.tap.z1 >= 6 && wk.tap.z2 === wk.tap.z0 && wk.tap.cleared, `a tapped piece snaps the zoom ${wk.tap.z0} → ${wk.tap.z1} with ${wk.tap.targets} moves marked; a tap elsewhere lets go and zooms back`);
+  expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === Math.max(wk.tap.z0, wk.tap.duelK) && wk.tap.duelK >= 1 && wk.tap.z2 === wk.tap.z0 && wk.tap.cleared, `a tapped piece snaps the zoom ${wk.tap.z0} → ${wk.tap.z1} (a 10×10 duel's k here: ${wk.tap.duelK}) with ${wk.tap.targets} moves marked; a tap elsewhere lets go and zooms back`);
   expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom buttons step k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
   expect(wk.pad.turns === 2 && wk.pad.facing === 1, `the pad and the keys drive turns (${wk.pad.turns} turns; q turned left to facing ${wk.pad.facing})`);
+  // facing east, "right" is south: the king's r falls by one (or the step was refused by a wall, which still counts as handled: no turn).
+  expect(wk.swipe.turns <= 1 && (wk.swipe.turns === 0 || (wk.swipe.king.r === wk.swipe.from.r - 1 && wk.swipe.king.f === wk.swipe.from.f)), `a swipe right on the map is one step right (${wk.swipe.turns} turn; king ${wk.swipe.from.f},${wk.swipe.from.r} → ${wk.swipe.king.f},${wk.swipe.king.r} facing ${wk.swipe.facing})`);
   expect(wk.leave.phase === 'setup' && wk.leave.resume && /turn/.test(wk.leave.resumeText), `leaving keeps the run: the setup offers "${wk.leave.resumeText}"`);
   expect(wk.resume.phase === 'walk' && wk.resume.sameTurn && wk.resume.sameFacing && wk.resume.sameKing, 'resuming lands on the same turn, facing and king');
   expect(wk.importBad.ok === false && /dck-run\/0/.test(wk.importBad.note), `a save of another schema is refused with one line (${wk.importBad.note})`);

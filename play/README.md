@@ -895,9 +895,11 @@ will feed it with 4c), a replay of a run's turn list in the analyzer.
 the walk (⚔ Barrier, the `B` key, an initiative select beside it;
 `__DCK.walk.barrier({ seed, turn, knobs })`) drops the barrier on the
 army as it stands. `js/barrier.mjs` is the pure half: the WINDOW across
-the king — the room's floor run at his rank, capped at the engine's 12
-files, centred on his file and slid whole to stay in the room, refused
-under 3 wide (`barrierWindow`); the CROP — his rank is row 0, his facing
+the king — the room's floor run at his rank, capped at THE ARENA'S 10
+FILES (designer 2026-09-08, on the first phone log's 12×9 duel: "Max
+arena is 10x10" — k 6 on a phone; 12 wide is k 5, too small for thumbs;
+the engine's 12 is not the game's), centred on his file and slid whole
+to stay in the room, refused under 3 wide (`barrierWindow`); the CROP — his rank is row 0, his facing
 arena-north, so the arena reads north-up under the camera that turns
 with the army (`cropAt`); and the DEAL — gap EXACTLY 4 with the enemy
 king pinned to the player's king's FILE on the last row (designer
@@ -975,7 +977,19 @@ no enemy letter left, the run's duel entry, a second duel seeded with a
 hand-dug pit, a loss ending the run and resume refused, the analyzer on
 the barrier log), selftest 46/46, test-world 125, test-army 57,
 test-debris 60, test-camera 80, test-logreport 47, facing-walk 108/108,
-replay-smoke 63. NOT here, on purpose: enemies on the map, line of
+replay-smoke 63. THE WALK'S HUD, redone the same day on the designer's
+verdict ("the ugliest most unusable virtual d-pad I've ever used"): the
+map fills the screen under the topbar (`#walk-stage`) and the controls
+float over it (`#walk-hud`) — a thumb-sized 3×3 pad bottom-left, the
+turn / zoom / barrier / export cluster bottom-right, the status strip
+along the top, the same ids as before; a SWIPE on the map is a step in
+its direction (eight ways, body-relative — the camera is at the army's
+facing; `WALK_SWIPE_PX` 24, a shorter pointer is a tap and reaches the
+piece pick); and the tap-a-piece SNAP-ZOOM goes to `duelZoomFor()` — the
+k a 10×10 duel gets in this very box (the width fit on a phone, both
+axes under the wide layout: k 6 on the phone, k 3 in a narrow desktop
+window, k 5 on a 1080p wide layout) — never the old constant k 6, which
+was "absurdly oversized" on a desktop. NOT here, on purpose: enemies on the map, line of
 sight, the trigger (its own conversation), per-theme edge-on door art,
 a phone height for the duel box (on a phone the dimmed dungeon shows
 beside the crop only), the analyzer mounting the whole world (it paints

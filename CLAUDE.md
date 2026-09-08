@@ -287,8 +287,12 @@ same day (2026-09-08 — "a duel can start at gap 4 for now, and the kings
 have to be aligned"; the rest "just do whatever you think the default
 is"): THE KING ANCHORS THE ARENA — his rank is row 0, his facing
 arena-north; WIDTH = the local room width at the king's rank (brief
-§4.1), capped at 12, the window centred on the king's file and slid
-whole to stay inside the room, under 3 wide refused; GAP EXACTLY 4 with
+§4.1), capped at THE ARENA'S 10 FILES (designer, same day, on the first
+phone log — a 12×9 duel in the antechamber: "Max arena is 10x10 … a
+12 wide board is k 5 on mobile and that is officially too small for my
+thumbs"; the engine's 12 is the engine's, not the game's), the window
+centred on the king's file and slid whole to stay inside the room,
+under 3 wide refused; GAP EXACTLY 4 with
 THE ENEMY KING ON THE PLAYER'S KING'S FILE (strict colinearity — brief
 §5.3's band is amended for the barrier; the trigger conversation may
 loosen it), so the DEPTH IS COMPUTED, not dialled: the player's molded
@@ -357,6 +361,16 @@ the army whole and the enemy gone, a second duel seeded with a hand-dug
 pit, a loss ending the run, the analyzer on the barrier log), selftest
 46/46, test-world 125, test-army 57, test-armygen, test-debris 60,
 test-camera 80, test-logreport 47, facing-walk 108/108, replay-smoke 63.
+THE WALK'S HUD was redone the same day on the designer's verdict
+("the ugliest most unusable virtual d-pad I've ever used"; the snap-zoom
+"absurdly oversized" on a desktop): the map fills the screen under the
+topbar and the controls FLOAT over it — a thumb-sized 3×3 pad bottom-
+left, the turn / zoom / barrier cluster bottom-right, the status strip
+along the top — a SWIPE on the map is a step in its direction (a short
+pointer is still a tap), and the tap-a-piece SNAP-ZOOM is no longer a
+constant k 6 but THE K A 10×10 DUEL GETS IN THIS BOX (`duelZoomFor`: the
+width fit on a phone, both axes under the wide layout — k 6 on the
+phone, k 3 in a narrow desktop window, k 5 on a 1080p wide layout).
 **NOT here, on purpose: enemies on the map, line of sight, the trigger
 (the conversation after this — do not build it to a number), per-theme
 edge-on door art, a phone height for the duel box (the dimmed dungeon
