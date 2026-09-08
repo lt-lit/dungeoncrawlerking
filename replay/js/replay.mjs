@@ -51,6 +51,7 @@ import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
 import { parseBoard, WALL, FURNITURE } from '../../play/js/fen.mjs';
+import { envTransform, toEnvCell } from '../../play/js/debris.mjs'; // the deal's transform into the stage's grid (the floor's hash coordinates)
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -70,6 +71,7 @@ const app = {
   ply: 0,
   boardUI: null,
   stage: null, // the transformed stage (skins + theme), or null
+  tx: null, // the deal's transform into the base stage's grid (debris.mjs envTransform), or null
   stageNote: '',
   skins: {},
   residue: new Map(), // line id → [{opened, rubble}] per state index
@@ -201,19 +203,24 @@ async function resolveStage(L) {
     return;
   }
   let t = base;
+  let autoCrop = { top: 0, bottom: 0 };
   try {
     if (L.flip) t = flipStageVertical(t);
     t = cropStage(t, L.crop?.top ?? 0, L.crop?.bottom ?? 0);
     const need = t.ranks - (L.ranks ?? t.ranks);
     if (need > 0) {
       let found = null;
-      if (L.autoCrop && (L.autoCrop.top ?? 0) + (L.autoCrop.bottom ?? 0) === need) found = cropStage(t, L.autoCrop.top ?? 0, L.autoCrop.bottom ?? 0);
+      if (L.autoCrop && (L.autoCrop.top ?? 0) + (L.autoCrop.bottom ?? 0) === need) {
+        found = cropStage(t, L.autoCrop.top ?? 0, L.autoCrop.bottom ?? 0);
+        autoCrop = { top: L.autoCrop.top ?? 0, bottom: L.autoCrop.bottom ?? 0 };
+      }
       if (!found || !terrainMatches(found, L.startFen)) {
         found = null;
         for (let top = 0; top <= need; top++) {
           const c = cropStage(t, top, need - top);
           if (terrainMatches(c, L.startFen)) {
             found = c;
+            autoCrop = { top, bottom: need - top };
             break;
           }
         }
@@ -231,14 +238,31 @@ async function resolveStage(L) {
   }
   app.stage = t;
   app.skins = stageSkins(t);
+  // The deal's transform into the base stage's own grid (debris.mjs
+  // envTransform) — the coordinates the game hashes the floor's variants
+  // on (the camera, 2026-09-08), so the analyzer paints the floor the
+  // player saw on a flipped or cropped stage.
+  app.tx = envTransform({ flip: !!L.flip, cropTop: L.crop?.top ?? 0, cropBottom: L.crop?.bottom ?? 0, autoCrop, files: L.files, ranks: L.ranks }, base);
 }
 
 // ------------------------------------------------------------- the board
 
+/** The world coordinates a square's cosmetic hashes key on (canvas-board
+ *  `hashCoords`): the environment's cell when the stage resolved, else the
+ *  identity — the same rule as the game's. */
+function hashCoords(f, rank) {
+  const tx = app.tx;
+  if (!tx) return [f, rank];
+  const { ef, er } = toEnvCell(tx, String.fromCharCode(97 + f) + rank);
+  return [ef, er + 1];
+}
+
 function mountBoard(files, ranks) {
   if (app.boardUI) app.boardUI.destroy();
   $('board').className = '';
-  app.boardUI = new CanvasBoard($('board'), { files, ranks, flipped: false, scaling: params.get('scaling') === 'fill' ? 'fill' : 'integer' });
+  // North up, the phone's fit: the analyzer replays the view the log was
+  // played in (the camera's turn buttons wait for the army).
+  app.boardUI = new CanvasBoard($('board'), { files, ranks, facing: 0, fit: 'width', hashCoords, scaling: params.get('scaling') === 'fill' ? 'fill' : 'integer' });
   app.boardUI.setInteractive(false);
   applyLook();
 }

@@ -1287,10 +1287,71 @@ async function main() {
     if (!(DEFAULT_PIECE_FIT.tileLift > 0)) throw new Error('the default lifts the foot off the edge');
     if (cvs.gridPos('a1').col !== 0 || cvs.gridPos('a1').row !== 5 || cvs.gridPos('f6').col !== 5 || cvs.gridPos('f6').row !== 0) throw new Error('gridPos: a1 bottom-left, f6 top-right');
     const flipped = new CanvasBoard(document.createElement('div'), { files: 6, ranks: 6, flipped: true, atlas: STUB_ATLAS });
-    if (flipped.gridPos('a1').col !== 5 || flipped.gridPos('a1').row !== 0) throw new Error('a flipped board puts a1 top-right');
+    if (flipped.gridPos('a1').col !== 5 || flipped.gridPos('a1').row !== 0 || flipped.facing !== 2 || !flipped.flipped) throw new Error('a flipped board is the camera facing south: a1 top-right');
     flipped.destroy();
     cvs.destroy();
     return `${decor} decor props / doorways classified, placement dials clamp, gridPos both ways`;
+  });
+
+  // --- THE CAMERA (Phase 2, 2026-09-08): the facing on a detached board —
+  // the buffer swaps its axes, every square lands where camera.mjs says and
+  // reads back, the world-space masks and kinds survive a turn, the hash
+  // coordinates hold the floor still, a square's debris turns by index
+  // permutation, and the coordinates can be switched off.
+  await check('the camera: facing swaps the buffer, squares round-trip, debris turns, the floor holds still', async () => {
+    const host = document.createElement('div');
+    const cam = new CanvasBoard(host, { files: 7, ranks: 5, atlas: STUB_ATLAS, showCoords: false });
+    const fen = '*6/7/7/2^4/*6 w - - 0 1';
+    cam.setPosition(fen, { holes: new Set(['a1']), skins: { c2: 'barrel' } });
+    const kindsBefore = new Map([...cam.kinds].map(([sq, k]) => [sq, JSON.stringify(k)]));
+    const floorBefore = Object.fromEntries([...cam.cells.keys()].map((sq) => [sq, cam.cellClasses(sq).filter((c) => /^(f\d|ck\d|sv\d+|dark|light)$/.test(c)).join(' ')]));
+    if (cam.bufferPixels().width !== 7 * 16 || cam.screenCols !== 7 || cam.screenRows !== 5) throw new Error(`north up: the buffer is 7 tiles wide (${cam.bufferPixels().width})`);
+    for (const facing of [1, 2, 3, 0]) {
+      cam.setFacing(facing);
+      if (cam.facing !== facing) throw new Error(`setFacing(${facing}) → ${cam.facing}`);
+      const wide = facing & 1 ? 5 : 7, tall = facing & 1 ? 7 : 5;
+      const bp = cam.bufferPixels();
+      if (cam.screenCols !== wide || cam.screenRows !== tall || bp.width !== wide * 16 || bp.height !== tall * 16 + cam.headroom) throw new Error(`facing ${facing}: the buffer is ${wide}×${tall} tiles (got ${cam.screenCols}×${cam.screenRows}, ${bp.width}×${bp.height} px)`);
+      for (const [sq, k] of cam.kinds) if (kindsBefore.get(sq) !== JSON.stringify(k)) throw new Error(`facing ${facing}: the world-space kinds must not change on a turn (${sq})`);
+      for (const sq of cam.cells.keys()) {
+        const now = cam.cellClasses(sq).filter((c) => /^(f\d|ck\d|sv\d+|dark|light)$/.test(c)).join(' ');
+        if (now !== floorBefore[sq]) throw new Error(`facing ${facing}: ${sq}'s floor variant / checker moved (${floorBefore[sq]} → ${now})`);
+      }
+      // a1 by the named facings (camera.mjs): bottom-left, bottom-right, top-right, top-left.
+      const p = cam.gridPos('a1');
+      const want = [[0, 4], [4, 6], [6, 0], [0, 0]][facing];
+      if (p.col !== want[0] || p.row !== want[1]) throw new Error(`facing ${facing}: a1 at col ${p.col} row ${p.row}, want ${want}`);
+    }
+    // The debris: one red pixel at (2, 5) of c2's arena-space buffer lands
+    // at pxToScreen(2, 5) inside the square, at every facing.
+    const buf = new Uint8ClampedArray(16 * 16 * 4);
+    buf[(5 * 16 + 2) * 4] = 255;
+    buf[(5 * 16 + 2) * 4 + 3] = 255;
+    const { pxToScreen } = await import('./camera.mjs');
+    for (const facing of [0, 1, 2, 3]) {
+      cam.setFacing(facing);
+      cam.setPosition(fen, { debris: (sq) => (sq === 'c2' ? buf : null) });
+      const px = cam.squarePixels('c2');
+      const p = pxToScreen(2, 5, 16, 16, facing);
+      const o = (p.y * 16 + p.x) * 4;
+      let reds = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i] === 255 && px[i + 1] === 0 && px[i + 2] === 0) reds++;
+      if (px[o] !== 255 || px[o + 1] !== 0 || reds !== 1) throw new Error(`facing ${facing}: the debris pixel should sit at (${p.x}, ${p.y}) alone (${reds} red pixels)`);
+      if (cam.debrisBuf('c2') !== buf) throw new Error('the arena-space buffer is what debrisBuf returns');
+    }
+    cam.setFacing(0);
+    // Hash coordinates: a board told its squares are elsewhere in the world
+    // paints the variants of THOSE squares.
+    const shifted = new CanvasBoard(document.createElement('div'), { files: 7, ranks: 5, atlas: STUB_ATLAS, hashCoords: (f, rank) => [f + 3, rank + 2] });
+    shifted.setPosition(fen);
+    const plain = new CanvasBoard(document.createElement('div'), { files: 10, ranks: 7, atlas: STUB_ATLAS });
+    plain.setPosition('10/10/10/10/10/10/10 w - - 0 1');
+    const pick = (ui, sq) => ui.cellClasses(sq).filter((c) => /^(f\d|ck\d|sv\d+|dark|light)$/.test(c)).join(' ');
+    if (pick(shifted, 'a1') !== pick(plain, 'd3') || pick(shifted, 'g5') !== pick(plain, 'j7')) throw new Error(`hashCoords keys the variants on the world square (${pick(shifted, 'a1')} vs ${pick(plain, 'd3')})`);
+    shifted.destroy();
+    plain.destroy();
+    cam.destroy();
+    return 'buffer 7×5 → 5×7 → 7×5, a1 at all four corners, kinds and floor unchanged by a turn, the debris pixel lands where pxToScreen says, hashCoords = the world square';
   });
 
   await check('board renderer: art themes, wall autotile masks, floor variants', async () => {
@@ -1312,17 +1373,28 @@ async function main() {
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { godCrates: new Set(['a2']) });
     if (mask('a1') !== 'wm-1' || mask('a2') !== 'wm-5' || mask('a3') !== 'wm-4') throw new Error(`a cracked wall continues the column (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
-    if (mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== 'wm-5') throw new Error(`a door continues the column, and as a weak spot wears the column's own case (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
+    if (mask('a1') !== 'wm-1' || mask('a3') !== 'wm-4' || mask('a2') !== 'wm-5') throw new Error(`a door continues the column, and wears the column's own case (${mask('a1')}, ${mask('a2')}, ${mask('a3')})`);
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'crate' } });
     if (mask('a1') !== 'wm-0' || mask('a3') !== 'wm-0') throw new Error(`a crate does not continue the wall line (${mask('a1')}, ${mask('a3')})`);
     ui.setPosition(fen);
     if (mask('a1') !== 'wm-1' || mask('c3') !== 'wm-0') throw new Error('masks must be recomputed on every paint');
-    // A door in a north–south line is a WEAK SPOT wearing the wall's own
-    // autotile case; in an east–west line it is the door leaf.
+    // A door in a north–south line stands EDGE-ON north-up (the camera,
+    // 2026-09-08 — it was a weak spot wearing the crack before): it wears
+    // the wall's own autotile case under the edge-on placeholder and is
+    // never weak; in an east–west line it is the door leaf, carrying its
+    // case for the day the camera turns it edge-on.
     ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
-    if (!has('a2', 'weak') || mask('a2') !== 'wm-5') throw new Error(`a door between a1 and a3 is a weak spot in the column: ${ui.cellClasses('a2')}`);
+    if (has('a2', 'weak') || !has('a2', 'door-edge') || mask('a2') !== 'wm-5' || ui.kinds.get('a2').doorLine !== 'ns') throw new Error(`a door between a1 and a3 is edge-on in the column, not weak: ${ui.cellClasses('a2')}`);
     ui.setPosition('1*^*/4/4/4/4 w - - 0 1', { skins: { c5: 'door' } });
-    if (has('c5', 'weak') || mask('c5') !== null || !has('c5', 'skin-door')) throw new Error(`a door between b5 and d5 is the leaf, no wall case: ${ui.cellClasses('c5')}`);
+    if (has('c5', 'weak') || has('c5', 'door-edge') || mask('c5') !== 'wm-10' || !has('c5', 'skin-door') || ui.kinds.get('c5').doorLine !== 'ew') throw new Error(`a door between b5 and d5 is the leaf, wearing the row's case: ${ui.cellClasses('c5')}`);
+    // Turned a quarter, the same two doors swap stances: the column runs
+    // across the screen (a leaf), the row up it (edge-on).
+    ui.setFacing(1);
+    ui.setPosition('1***/4/*1*1/^3/*3 w - - 0 1', { skins: { a2: 'door' } });
+    if (has('a2', 'door-edge') || mask('a2') !== 'wm-5') throw new Error(`east up, the column's door shows its leaf (world mask unchanged): ${ui.cellClasses('a2')}`);
+    ui.setPosition('1*^*/4/4/4/4 w - - 0 1', { skins: { c5: 'door' } });
+    if (!has('c5', 'door-edge')) throw new Error(`east up, the row's door is edge-on: ${ui.cellClasses('c5')}`);
+    ui.setFacing(0);
     // MASONRY (2026-09-04) is a weak spot WHEREVER it stands — the wall
     // block with the crack, never the retired rubble heap — and it
     // continues a wall line like the stone it is.
@@ -1337,8 +1409,20 @@ async function main() {
     if (!has('b5', 'door2-l') || !has('c5', 'door2-r') || has('b5', 'door2-r') || has('c5', 'door2-l')) throw new Error(`b5+c5 doors are one double door: ${ui.cellClasses('b5')} / ${ui.cellClasses('c5')}`);
     ui.setPosition('^^^1/4/4/4/4 w - - 0 1', { skins: { a5: 'door', b5: 'door', c5: 'door' } });
     if (!has('a5', 'door2-l') || !has('b5', 'door2-r') || has('c5', 'door2-l') || has('c5', 'door2-r')) throw new Error(`three doors in a row: a double and a single (${ui.cellClasses('c5')})`);
+    // Doors stacked in a COLUMN pair too (the camera, 2026-09-08 — the same
+    // double door seen from its side): north-up they stand edge-on, two
+    // edge-on doors with no screen half; east-up the pair runs across the
+    // screen and the NORTH leaf is the left half.
     ui.setPosition('1***/4/*1*1/^3/^3 w - - 0 1', { skins: { a1: 'door', a2: 'door' } });
-    if (has('a1', 'door2-l') || has('a1', 'door2-r') || has('a2', 'door2-l') || has('a2', 'door2-r') || !has('a2', 'weak')) throw new Error(`doors stacked in a column never pair (${ui.cellClasses('a2')})`);
+    if (has('a1', 'door2-l') || has('a1', 'door2-r') || has('a2', 'door2-l') || has('a2', 'door2-r') || !has('a2', 'door-edge') || !has('a1', 'door-edge')) throw new Error(`doors stacked in a column are an edge-on pair north-up (${ui.cellClasses('a1')} / ${ui.cellClasses('a2')})`);
+    if (ui.kinds.get('a2').door2 !== 'n' || ui.kinds.get('a1').door2 !== 's') throw new Error(`the stack's ends are n / s in world terms (${ui.kinds.get('a2').door2} / ${ui.kinds.get('a1').door2})`);
+    ui.setFacing(1);
+    ui.setPosition('1***/4/*1*1/^3/^3 w - - 0 1', { skins: { a1: 'door', a2: 'door' } });
+    if (!has('a2', 'door2-l') || !has('a1', 'door2-r') || has('a2', 'door-edge')) throw new Error(`east up, the stack is a double door across the screen, the north leaf left (${ui.cellClasses('a2')} / ${ui.cellClasses('a1')})`);
+    ui.setFacing(2);
+    ui.setPosition('*^^*/4/4/4/4 w - - 0 1', { skins: { b5: 'door', c5: 'door' } });
+    if (!has('b5', 'door2-r') || !has('c5', 'door2-l')) throw new Error(`south up, a rank pair's halves swap on the screen (${ui.cellClasses('b5')} / ${ui.cellClasses('c5')})`);
+    ui.setFacing(0);
     // Round 17: the pair is AUTHORED — a leaf keeps its half after its
     // partner is god-cracked, captured or burst (the half paints only on a
     // leaf that still stands).
