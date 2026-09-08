@@ -275,7 +275,9 @@ exists — a flip is how a lab world is built); a world duel is a crop
 with the army's facing (4c). THE FIXTURE (`play/worlds/w01-the-
 undercroft`, 60×40, `phase0/harness/gen-worlds.mjs` carves it from a
 written plan) IS THE DESIGNER'S TO APPROVE from `world-shots.mjs`'s
-render; the phone verdict on the walk is the milestone's gate.
+render; the phone verdict on the walk is the milestone's gate — **IN,
+2026-09-08 (designer): "Seems to work fine on mobile and desktop" — the
+walk-around build passed; the branch merges as it stands.**
 **NEXT: 4c, THE BARRIER BY HAND** — a debug button drops the barrier on
 the army as it stands: the crop of the world under the army's facing
 (`world.mjs cropTransform` + `arenaFen`), the carried formation stamped
