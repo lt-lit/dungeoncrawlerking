@@ -423,11 +423,43 @@ behind doors, the ossuary of alcoves, the barrel aisles, the crate-
 blocked strongroom, the gatehouse two thick, the switchback of stubs, the
 throne room's dais, the cave-in, the grotto, the cloister, the ruin).
 
-**PHASE 2 MILESTONE 5 IS NOW THE GENERATOR** (enemies + LOS + the trigger
-move to MILESTONE 6, on generated floors). THE PLAN, discussed and not
-yet built — the designer's inputs listed at the end are pending and
-"your call" stands as the default on each. THE LINTS, measured off the
-bed, not guessed: NO BOX IS BORING (for every floor cell, each of the
+**PHASE 2 MILESTONE 5 IS THE GENERATOR ✅ FIRST PR BUILT 2026-09-08, the
+same day** (`play/js/dungeon.mjs`; `play/README.md` § "The dungeon
+generator"; enemies + LOS + the trigger move to MILESTONE 6, on generated
+floors). BUILT: THE BOX in barrier.mjs (`BOX` 10, `GAP_MIN` 2,
+`boxPlacement` the one placement rule, `boxAt`, `planBox` with the enemy
+on any far-row file, `planBarrier` the button walking outward from the
+king's file; the summoning on ground connected to its king through a
+`reach` mask in `layoutArmy` / `buildMatchup`; `test-barrier.mjs` 109),
+THE LINTS (`LINT`, the bed's envelope: `denseFloor` 60, `openMax` 40,
+`featsMin` 3, `narrowExtent` 10 — the bed is FULL of short 2-wide
+passages, so the narrow rule is about EXTENT, a pocket no longer than an
+arena; the touching share is reported, not enforced), THE PREFAB GRID
+(style `vaults`: the 36 arenas as pieces off the loaded stages, each
+once, turned by seed, seams scored, a wall ring), THE FIX-UPS (connect
+by a 0-1 BFS tunnel three wide, widen by one 3×3 alcove at a pocket's
+middle, dress by a pillar or a crate pair in the largest empty block;
+one round settles every seed tried), THE START (a wide cell with a
+legal box ahead), THE SPAWN DIGITS (`SPAWN_WIDTHS`, by distance), the
+setup screen's "New floor" + `?gen=` + `__DCK.walk.generate`, the
+fixtures `vaults-1…4` written by `gen-worlds.mjs` (w01 and w02 DELETED),
+`test-dungeon.mjs` 92 (the bed's minima and maxima ARE the constants),
+ui-smoke's walk and barrier blocks on `?gen=vaults&seed=1` with
+geometry-agnostic checks (the drop at the start — a STAGING AREA three
+wide and five long with a legal box ahead, so the kit's first steps move
+it as one; a crate set down by hand on a knight's landing when no crate
+is in reach of the start; a second duel with a hand-dug pit on a fresh
+run of the same floor, since the walk-out lands where no box is
+promised; the expects stream to stderr as they land, so a hang is
+locatable). GATES GREEN: test-dungeon 92, test-barrier 109, ui-smoke 248
+ok, selftest 46/46, test-world 125, test-army 57, test-camera 80,
+test-debris 60, test-logreport 47; `world-shots.mjs` rendered the four
+fixtures and the walk screen (`phase0/results/world-shots/`). THE DESIGNER'S DEFAULTS TAKEN ("get started
+unless you actually need anything from me"): 60×40-class floors first
+(62×42 with the ring; 100×100 the cap), the arenas as prefab pieces, the
+five style names, four enemies at two levels, and the far row read as
+the BAND. THE PLAN as discussed — the lints, measured off the bed, not
+guessed: NO BOX IS BORING (for every floor cell, each of the
 four 10×10 boxes the trigger would drop has a largest empty block under
 30 cells, at least 3 separate terrain features and about 40% of its
 floor touching something — the one rule that kills empty rectangles
@@ -473,11 +505,12 @@ approved by eye in batches as the arena waves were; the generator places
 the start, the enemy spawns with the level rising away from it, and the
 stairs down for Phase 3. FIRST PR: the lints + the prefab-grid skeleton +
 the gallery (floors at arena density in front of the designer fast), then
-the recipe skeletons style by style; w01 and w02 retire with it. PENDING
-THE DESIGNER, with the default taken if unanswered: the floor size (60×40
-first; 100×100 stays the cap and the stress size), the arenas as prefab
-pieces and signatures (yes), the five style names (as above), enemies per
-floor (three to five, two levels, per §10's slice).
+the recipe skeletons style by style; w01 and w02 retire with it (DONE,
+above). NEXT PR: the recipe skeletons, style by style, each a gallery
+batch — packed rooms first (the keep), with the room and passage recipes,
+the wear pass, a signature piece and a symmetry lint; then milestone 6.
+THE PHONE VERDICT on the vaults fixtures and the New floor button is the
+gate for this PR.
 
 **MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
 conversation SETTLED and what it only PROPOSED.** Settled (designer): the
@@ -1418,21 +1451,32 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
-- `play/js/barrier.mjs` — THE BARRIER BY HAND (Phase 2 milestone 4c,
-  2026-09-08): where the barrier drops on an army as it stands (the
-  room's width across the king, gap 4, the kings aligned, the depth a
-  fixed point of the molding) and the deal it stamps (the carried
-  pattern pinned to the king's cell, the enemy dealt across the gap);
-  main.mjs § THE BARRIER BY HAND is the page (the drop, the world
-  session, the walk-out, the run's ledger). Node gate `test-barrier.mjs`.
+- `play/js/dungeon.mjs` — THE DUNGEON GENERATOR (Phase 2 milestone 5,
+  2026-09-08): a floor from a seed — the lints (the bed's envelope: no
+  boring box, no long narrow way, reachable, duelable ground through the
+  trigger function), the prefab-grid skeleton (the 36 arenas as pieces),
+  the fix-ups, the start and the spawn digits; `STYLES` (one: the
+  vaults). Node gate `test-dungeon.mjs`; `gen-worlds.mjs` writes the
+  fixtures, `world-shots.mjs` the gallery. `play/README.md` § "The
+  dungeon generator".
+- `play/js/barrier.mjs` — THE BOX (Phase 2 milestone 5, 2026-09-08, on
+  4c's barrier by hand): the arena is ALWAYS 10×10 on the player's king
+  (his rank row 0, his facing arena-north), placed by one rule
+  (`boxPlacement`, shared with the generator's lint), the enemy king on
+  the far row on the king's file or the nearest that deals (the band),
+  the gap an output with a floor of 2, the summoning on ground connected
+  to its king; main.mjs § THE BARRIER BY HAND is the page (the drop, the
+  world session, the walk-out, the run's ledger). Node gate
+  `test-barrier.mjs`.
 - `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
 
   (Phase 2 milestone 4b, 2026-09-08): brief §5.1's one movement rule as
   a pure module (the pattern, the move generator on the world grid, the
   BFS targets, the turn planner; Node gate `test-army.mjs`), the run save
   (one object per run, `dck-run/1`, export / import as a file, no
-  backward compatibility), and the walk-around fixtures (`w01-the-
-  undercroft` hand-built 60×40, `w02-stress-100` seeded); main.mjs § THE
+  backward compatibility), and the fixtures in `play/worlds/` (GENERATED
+  floors since milestone 5 — the hand-built w01 and the seeded w02 were
+  retired 2026-09-08); main.mjs § THE
   WALK is the page (`#screen-walk`: the pad, the turns, the zoom, the
   save; `?world=` / `?run=resume` / `?save=`); `play/README.md` § "The
   canvas board", milestone 4b.
@@ -1519,10 +1563,11 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
-node harness/test-barrier.mjs        # THE BARRIER BY HAND (play/js/barrier.mjs): the crop across the king at every facing, gap 4, the kings aligned, the pin, the order kept, refusals, off-map walls, the run's duel entry, the lenient walk-out; Node only
+node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
+node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 
-node harness/gen-worlds.mjs          # the walk-around fixtures in play/worlds/ (w01 hand-built 60×40, w02 a seeded 100×100) + their manifest; every floor cell must be reachable
-node harness/world-shots.mjs         # each world painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (for the eye)
+node harness/gen-worlds.mjs [--duel] # THE GENERATOR's fixtures in play/worlds/ (vaults-1…4, generated at fixed seeds, linted as written; --duel adds the duelable-ground coverage) + their manifest
+node harness/world-shots.mjs         # each fixture painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (THE GALLERY, for the eye)
 node harness/facing-walk.mjs --shots # every arena × facings 1–3 on the bare lab page: the camera's paint must equal the world itself rotated, painted north-up
 node harness/camera-guard.mjs dump <dir> && node harness/camera-guard.mjs compare <dir> --allow door,turned  # the renderer's paint before/after a change: record the inputs + hashes on the build before (a pristine worktree), replay them on the build after
 node harness/camera-shots.mjs        # the desktop layout at 1920×1080 / 1280×720, the phone at the four facings, a door crop — for the eye
