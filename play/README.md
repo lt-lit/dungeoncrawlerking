@@ -884,7 +884,9 @@ no crop, the kit facing east, a forward step +f for all six, a turn that
 costs a move and turns the camera, a wait, a refused wall step, the save
 after every turn, the tap's snap-zoom and targets, the zoom buttons,
 the pad and the keys, leave / resume, a refused stamp, an import), the
-4a gates unchanged. NOT here, on purpose: enemies, line of sight, the
+4a gates unchanged. THE VERDICT (designer,
+2026-09-08): "Seems to work fine on mobile and desktop." NOT here, on
+purpose: enemies, line of sight, the
 trigger (a design conversation of its own), the barrier by hand (4c),
 debris on a walk's smash (the ledger is the floor's; the walk's captures
 will feed it with 4c), a replay of a run's turn list in the analyzer.
