@@ -364,9 +364,15 @@ test-camera 80, test-logreport 47, facing-walk 108/108, replay-smoke 63.
 THE WALK'S HUD was redone the same day on the designer's verdict
 ("the ugliest most unusable virtual d-pad I've ever used"; the snap-zoom
 "absurdly oversized" on a desktop): the map fills the screen under the
-topbar and the controls FLOAT over it — a thumb-sized 3×3 pad bottom-
-left, the turn / zoom / barrier cluster bottom-right, the status strip
-along the top — a SWIPE on the map is a step in its direction (a short
+topbar and the controls FLOAT over it — bottom-left A REAL D-PAD (the
+designer's second verdict, the same day: "something that actually looks
+and FEELS like an actual d-pad… I don't need a wait button right in the
+middle": ONE cross, an inline SVG, driven by where the thumb is — the
+angle from the hub picks one of eight directions, an arm or between two
+arms for a diagonal, the hub dead, a press steps at once and KEEPS
+STEPPING while held, the thumb slides to steer, the pressed arm lights;
+wait lives in the side cluster), the turn / wait / zoom / barrier cluster
+bottom-right, the status strip along the top — a SWIPE on the map is a step in its direction (a short
 pointer is still a tap), and the tap-a-piece SNAP-ZOOM is no longer a
 constant k 6 but THE K A 10×10 DUEL GETS IN THIS BOX (`duelZoomFor`: the
 width fit on a phone, both axes under the wide layout — k 6 on the

@@ -972,7 +972,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.zoomOut = K.renderer.info.k;
     // The pad and the keys drive inputs too.
     const t0 = K.walk.state.turn;
-    document.querySelector('#walk-pad button[data-dx="0"][data-dy="-1"]').click();
+    { const pad = document.getElementById('walk-pad'); const pr = pad.getBoundingClientRect(); const px = pr.left + pr.width / 2, py = pr.top + pr.height * 0.86; const pev = (type) => pad.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: px, clientY: py, pointerId: 9, button: 0, buttons: 1 })); pev('pointerdown'); out.padLit = pad.dataset.dir; pev('pointerup'); }
     await new Promise((r) => setTimeout(r, 50));
     while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', bubbles: true }));
@@ -1018,7 +1018,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.save.schema === 'dck-run/1' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'w01-the-undercroft' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
   expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === Math.max(wk.tap.z0, wk.tap.duelK) && wk.tap.duelK >= 1 && wk.tap.z2 === wk.tap.z0 && wk.tap.cleared, `a tapped piece snaps the zoom ${wk.tap.z0} → ${wk.tap.z1} (a 10×10 duel's k here: ${wk.tap.duelK}) with ${wk.tap.targets} moves marked; a tap elsewhere lets go and zooms back`);
   expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom buttons step k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
-  expect(wk.pad.turns === 2 && wk.pad.facing === 1, `the pad and the keys drive turns (${wk.pad.turns} turns; q turned left to facing ${wk.pad.facing})`);
+  expect(wk.pad.turns === 2 && wk.pad.facing === 1 && wk.padLit === '0,-1', `the d-pad (a press on its south arm lit ${JSON.stringify(wk.padLit)}) and the keys drive turns (${wk.pad.turns} turns; q turned left to facing ${wk.pad.facing})`);
   // facing east, "right" is south: the king's r falls by one (or the step was refused by a wall, which still counts as handled: no turn).
   expect(wk.swipe.turns <= 1 && (wk.swipe.turns === 0 || (wk.swipe.king.r === wk.swipe.from.r - 1 && wk.swipe.king.f === wk.swipe.from.f)), `a swipe right on the map is one step right (${wk.swipe.turns} turn; king ${wk.swipe.from.f},${wk.swipe.from.r} → ${wk.swipe.king.f},${wk.swipe.king.r} facing ${wk.swipe.facing})`);
   expect(wk.leave.phase === 'setup' && wk.leave.resume && /turn/.test(wk.leave.resumeText), `leaving keeps the run: the setup offers "${wk.leave.resumeText}"`);

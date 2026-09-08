@@ -549,10 +549,23 @@ body.layout-wide #preview-controls { justify-content: flex-start; }
 #walk-status:empty { visibility: hidden; }
 #walk-controls { display: flex; justify-content: space-between; align-items: flex-end; gap: .6rem; padding: .5rem; }
 #walk-controls > * { pointer-events: auto; }
-#walk-pad { display: grid; grid-template-columns: repeat(3, 3.4rem); grid-auto-rows: 3.4rem; gap: .3rem; }
-#walk-pad button { font-size: 1.55rem; padding: 0; line-height: 1; color: var(--gold); background: rgba(29, 30, 36, .78); border: 1px solid rgba(215, 180, 106, .35); border-radius: .55rem; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); touch-action: manipulation; }
-#walk-pad button:not(:disabled):active { background: rgba(58, 74, 116, .92); border-color: var(--gold); }
-#btnWalkWait { color: var(--muted); font-size: 2rem; }
+/* THE D-PAD: one cross (an inline SVG), pointer-driven — the pressed arm
+   lights (data-dir on the pad, set by main.mjs), a diagonal lights two. */
+#walk-pad { width: 10.5rem; height: 10.5rem; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+#walk-pad svg { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55)); }
+#walk-pad .pad-body { fill: rgba(29, 30, 36, .84); stroke: rgba(215, 180, 106, .55); stroke-width: 2.5; stroke-linejoin: round; }
+#walk-pad .arm { fill: var(--gold); opacity: 0; transition: opacity .06s; }
+#walk-pad .tri { fill: var(--gold); opacity: .75; }
+#walk-pad .hub { fill: rgba(255, 255, 255, .07); }
+#walk-pad[data-dir="0,1"] .arm-n, #walk-pad[data-dir="1,1"] .arm-n, #walk-pad[data-dir="-1,1"] .arm-n,
+#walk-pad[data-dir="1,0"] .arm-e, #walk-pad[data-dir="1,1"] .arm-e, #walk-pad[data-dir="1,-1"] .arm-e,
+#walk-pad[data-dir="0,-1"] .arm-s, #walk-pad[data-dir="1,-1"] .arm-s, #walk-pad[data-dir="-1,-1"] .arm-s,
+#walk-pad[data-dir="-1,0"] .arm-w, #walk-pad[data-dir="-1,1"] .arm-w, #walk-pad[data-dir="-1,-1"] .arm-w { opacity: .32; }
+#walk-pad[data-dir="0,1"] .tri-n, #walk-pad[data-dir="1,1"] .tri-n, #walk-pad[data-dir="-1,1"] .tri-n,
+#walk-pad[data-dir="1,0"] .tri-e, #walk-pad[data-dir="1,1"] .tri-e, #walk-pad[data-dir="1,-1"] .tri-e,
+#walk-pad[data-dir="0,-1"] .tri-s, #walk-pad[data-dir="1,-1"] .tri-s, #walk-pad[data-dir="-1,-1"] .tri-s,
+#walk-pad[data-dir="-1,0"] .tri-w, #walk-pad[data-dir="-1,1"] .tri-w, #walk-pad[data-dir="-1,-1"] .tri-w { opacity: 1; }
+#btnWalkWait { min-width: 5.7rem; font-size: .82rem; color: var(--muted); }
 #walk-side { display: flex; flex-direction: column; gap: .35rem; align-items: flex-end; }
 .walk-row { display: flex; gap: .3rem; align-items: center; justify-content: flex-end; }
 .walk-row button { min-width: 2.7rem; height: 2.7rem; padding: 0 .4rem; font-size: 1.15rem; line-height: 1; background: rgba(29, 30, 36, .78); border: 1px solid rgba(255, 255, 255, .14); border-radius: .55rem; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); touch-action: manipulation; }

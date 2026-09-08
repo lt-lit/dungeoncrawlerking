@@ -980,9 +980,17 @@ test-debris 60, test-camera 80, test-logreport 47, facing-walk 108/108,
 replay-smoke 63. THE WALK'S HUD, redone the same day on the designer's
 verdict ("the ugliest most unusable virtual d-pad I've ever used"): the
 map fills the screen under the topbar (`#walk-stage`) and the controls
-float over it (`#walk-hud`) — a thumb-sized 3×3 pad bottom-left, the
-turn / zoom / barrier / export cluster bottom-right, the status strip
-along the top, the same ids as before; a SWIPE on the map is a step in
+float over it (`#walk-hud`) — bottom-left A REAL D-PAD (the designer's
+second verdict the same day: "something that actually looks and FEELS
+like an actual d-pad… I don't need a wait button right in the middle"):
+ONE cross, an inline SVG, pointer-driven — the angle from the hub picks
+one of eight directions (`WALK_OCTANTS`; an arm, or between two arms for
+a diagonal), the hub is dead (`WALK_PAD_HUB`), a press steps at once and
+KEEPS STEPPING while held (`WALK_REPEAT_DELAY_MS` 320, then every
+`WALK_REPEAT_MS` 150 — the slide is 140), the thumb slides to steer, the
+pressed arm lights (`data-dir` on the pad); wait is a button in the side
+cluster — the turn / wait / zoom / barrier / export cluster bottom-right,
+the status strip along the top; a SWIPE on the map is a step in
 its direction (eight ways, body-relative — the camera is at the army's
 facing; `WALK_SWIPE_PX` 24, a shorter pointer is a tap and reaches the
 piece pick); and the tap-a-piece SNAP-ZOOM goes to `duelZoomFor()` — the

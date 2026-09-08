@@ -3345,6 +3345,10 @@ $('btnMenu').addEventListener('click', () => {
 const WALK_STEP_MS = 140; // one turn's slide and pan
 const WALK_MIN_TILES = 15; // the default zoom fits at least this many tiles across the short axis
 const WALK_SWIPE_PX = 24; // a pointer that travels this far on the map is a step, not a tap
+const WALK_OCTANTS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]; // body-relative steps by octant, 0 = right, counter-clockwise
+const WALK_PAD_HUB = 0.13; // the d-pad's dead hub, as a fraction of its width
+const WALK_REPEAT_DELAY_MS = 320; // a held d-pad starts walking after this
+const WALK_REPEAT_MS = 150; // and steps this often (the slide is 140 ms)
 const ARENA_FILES = 10; // the arena the game is optimized around (designer 2026-09-08: the max arena is 10×10)
 
 const PIECE_NAMES = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
@@ -4060,8 +4064,51 @@ $('runFile').addEventListener('change', async (e) => {
   }
 });
 $('btnRunExport').addEventListener('click', () => void exportRun());
-for (const b of $('walk-pad').querySelectorAll('button[data-dx]')) {
-  b.addEventListener('click', () => void walkInput({ kind: 'step', dx: parseInt(b.dataset.dx, 10), dy: parseInt(b.dataset.dy, 10) }));
+// THE D-PAD (designer 2026-09-08: "something that actually looks and FEELS
+// like an actual d-pad"): one cross, driven by WHERE the thumb is — the
+// angle from the hub picks one of eight directions (an arm, or between two
+// arms for a diagonal), the hub itself is dead, a press steps at once and
+// KEEPS STEPPING while held (a walk), the thumb slides to steer, the
+// pressed arm lights. Body-relative, as the keys are.
+{
+  const pad = $('walk-pad');
+  let held = null; // { id, dir, timer, repeat }
+  const dirAt = (e) => {
+    const r = pad.getBoundingClientRect();
+    if (!(r.width > 0)) return null;
+    const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+    if (Math.hypot(x, y) < WALK_PAD_HUB) return null;
+    const oct = Math.round(Math.atan2(-y, x) / (Math.PI / 4)) & 7; // 0 right, 2 forward, 4 left, 6 back
+    return WALK_OCTANTS[oct];
+  };
+  const show = (dir) => { pad.dataset.dir = dir ? `${dir[0]},${dir[1]}` : ''; };
+  const fire = () => { if (held && app.phase === 'walk' && !app.walk?.busy) void walkInput({ kind: 'step', dx: held.dir[0], dy: held.dir[1] }); };
+  const stop = (e) => {
+    if (!held || (e && e.pointerId !== undefined && e.pointerId !== held.id)) return;
+    clearTimeout(held.timer);
+    clearInterval(held.repeat);
+    held = null;
+    show(null);
+  };
+  pad.addEventListener('pointerdown', (e) => {
+    if (app.phase !== 'walk' || e.button) return;
+    const dir = dirAt(e);
+    if (!dir) return;
+    e.preventDefault();
+    try { pad.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
+    stop();
+    held = { id: e.pointerId, dir, timer: null, repeat: null };
+    show(dir);
+    fire();
+    held.timer = setTimeout(() => { if (held) held.repeat = setInterval(fire, WALK_REPEAT_MS); }, WALK_REPEAT_DELAY_MS);
+  });
+  pad.addEventListener('pointermove', (e) => {
+    if (!held || e.pointerId !== held.id) return;
+    const dir = dirAt(e);
+    if (dir && (dir[0] !== held.dir[0] || dir[1] !== held.dir[1])) { held.dir = dir; show(dir); }
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) pad.addEventListener(ev, stop);
+  pad.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 $('btnWalkWait').addEventListener('click', () => void walkInput({ kind: 'wait' }));
 $('btnWalkTurnL').addEventListener('click', () => void walkInput({ kind: 'turn', dir: -1 }));
@@ -4091,7 +4138,7 @@ $('btnWalkOut').addEventListener('click', () => void walkOut());
     setTimeout(() => { swallow = false; }, 0);
     const a = Math.atan2(-dy, dx); // screen up = forward
     const oct = Math.round(a / (Math.PI / 4)) & 7; // 0 right, 2 forward, 4 left, 6 back
-    const step = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]][oct];
+    const step = WALK_OCTANTS[oct];
     void walkInput({ kind: 'step', dx: step[0], dy: step[1] });
   };
   stage.addEventListener('pointerup', end);
