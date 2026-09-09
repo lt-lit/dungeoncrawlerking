@@ -637,7 +637,17 @@ taps-to-turn / holds-to-walk with chained steps and a buffered input,
 key chords, drag-to-look, pinch and wheel zoom, the wall bump, the box
 outline on selection. Gates: test-army 97, selftest 46/46, ui-smoke 241
 ok, test-barrier 108, test-world 125, test-dungeon 96,
-test-debris 60, test-camera 80, test-logreport 47. NEXT: the DUEL START PR
+test-debris 60, test-camera 80, test-logreport 47. THE FIRST WALK'S
+VERDICT, the same day (three screenshots: "the king is lagging behind
+sometimes… without manual moves"; "bumping into single blocks the army
+should just be able to flow around"), FIXED the same day: the anchor may
+stand one cell into stone beside reachable floor (`anchorMay` — a crate
+or a pillar is flowed around) and "blocked" is a step that moves nobody;
+a catching-up path prefers one that does not cut through a comrade's
+slot (the king was being starved of his own cell); the king hurries
+three, ties toward the anchor, and THE KING'S LEASH (`KING_LEASH` 3)
+turns a step he could not follow into a REGROUP (the anchor holds, the
+walk runs, nothing refused). test-army 106. NEXT: the DUEL START PR
 (rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
 stand, `buildMatchup` measuring the gap between the camp lines and
 molding the enemy around the player's pieces, the box slid to hold the

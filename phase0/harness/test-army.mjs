@@ -146,6 +146,11 @@ const WAIT = { kind: 'wait' };
     '#.....#',
     '#.....#',
     '#.....#',
+    '#.....#',
+    '#.....#',
+    '#.....#',
+    '#.....#',
+    '#.....#',
     '###.###',
     '##...##',
     '##...##',
@@ -157,21 +162,90 @@ const WAIT = { kind: 'wait' };
   expect(onSlots(army), 'the kit stands in the corridor facing north, the door ahead of the middle pawn');
   const entered = []; // the order pieces cross the doorway (3, 5)
   const seen = new Set();
-  let perTurn = 0;
-  for (let i = 0; i < 12; i++) {
-    A.advance(world, army, i < 5 ? N : WAIT);
+  let perTurn = 0, worstLag = 0;
+  const kingLag = () => { const s = army.slotOf(army.king); return Math.max(Math.abs(s.f - army.king.f), Math.abs(s.r - army.king.r)); };
+  for (let i = 0; i < 16; i++) {
+    A.advance(world, army, i < 9 ? N : WAIT); // the pad held: nine steps, then waits
+    worstLag = Math.max(worstLag, kingLag());
     let n = 0;
     for (const p of army.pieces) if (!seen.has(p.id) && p.r >= 5) { seen.add(p.id); entered.push(p.ch); if (p.ch !== 'N') n++; }
     perTurn = Math.max(perTurn, n);
-    if (seen.size === 6) break;
+    if (seen.size === 6 && army.pieces.every((p) => p.r >= 6)) break;
   }
   expect(army.pieces.every((p) => p.r >= 6), `the whole army is in the north room (king ${JSON.stringify(army.king)})\n${rows(world)}`);
   expect(perTurn === 1, `one piece at a time through the door, the knight's hop over the wall aside (at most ${perTurn} a turn)`);
+  expect(worstLag <= A.KING_LEASH, `through the door the king never lags more than the leash (worst ${worstLag})`);
+  // THE LEASH itself: a king six cells behind his slot cannot close in one turn — the step becomes a regroup, the anchor holds, he hurries three.
+  const open2 = open(12, 20);
+  const a2 = A.spawnArmy(open2, A.makePattern(KIT), { f: 5, r: 10 }, 0);
+  a2.king.r = 4;
+  a2.stamp(open2);
+  const at0 = { ...a2.at };
+  const plan = A.advance(open2, a2, N);
+  expect(plan.ok && plan.regroup && a2.at.f === at0.f && a2.at.r === at0.r && a2.king.r === 7, `a step the king cannot follow regroups: the anchor holds and he hurries three (regroup ${plan.regroup}, king at rank ${a2.king.r})`);
+  const plan2 = A.advance(open2, a2, N);
+  expect(plan2.ok && !plan2.regroup && a2.at.r === at0.r + 1, 'the next step advances again once he is within the leash');
   expect(entered.length === 6 && entered[entered.length - 1] === 'K', `the king was the LAST through the door (order ${entered.join('')})`);
   expect(entered[0] === 'P', `a pawn was the first through the door (order ${entered.join('')})`);
   let t = 0;
   while (!onSlots(army) && t < 3) { A.advance(world, army, WAIT); t++; }
   expect(onSlots(army), `beyond the door the formation reforms within ${t} waits`);
+}
+
+// --- FLOW (designer 2026-09-09, the first walk of the build): a single crate or pillar in front of the middle pawn never stops the army — it flows around; a solid wall still refuses
+{
+  const world = worldOf([
+    '..........',
+    '..........',
+    '..........',
+    '....^.....',
+    '..........',
+    '..........',
+    '....#.....',
+    '..........',
+    '..........',
+    '..........',
+  ]);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 4, r: 0 }, 0);
+  const refused = [];
+  for (let i = 0; i < 8; i++) { const p = A.advance(world, army, N); if (!p.ok) refused.push(p.reason); }
+  expect(refused.length === 0 && army.king.r >= 7, `a pillar and a crate ahead of the middle pawn are flowed around, no step refused (king at rank ${army.king.r})\n${rows(world)}`);
+  expect(world.at(4, 6) === FURNITURE, 'the crate stands — the flow is never a capture');
+  let t = 0;
+  while (!onSlots(army) && t < 3) { A.advance(world, army, WAIT); t++; }
+  expect(onSlots(army), `beyond them the formation is whole within ${t} waits`);
+  const dead = worldOf(['#####', '#...#', '#...#', '#...#', '#####']);
+  const a2 = A.spawnArmy(dead, A.makePattern(KIT), { f: 2, r: 1 }, 0);
+  A.advance(dead, a2, N);
+  const wall = A.planTurn(dead, a2, N);
+  expect(!wall.ok && wall.reason === 'blocked', 'a solid wall ahead still refuses: nobody could move');
+}
+
+// --- THE KING KEEPS UP (designer 2026-09-09: "the king is lagging behind sometimes"): through clutter the king is never more than the leash from his slot; a step he could not follow regroups instead of leaving him
+{
+  const world = worldOf([
+    '############',
+    '#..........#',
+    '#....^.....#',
+    '#.^........#',
+    '#.....^.^..#',
+    '#..#.......#',
+    '#....^..#..#',
+    '#.^........#',
+    '#......^...#',
+    '#..........#',
+    '#..^.....^.#',
+    '#..........#',
+    '#..........#',
+    '############',
+  ]);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 5, r: 1 }, 0);
+  let worstLag = 0, advanced = 0, regroups = 0, refused = 0;
+  const lag = () => { const s = army.slotOf(army.king); return Math.max(Math.abs(s.f - army.king.f), Math.abs(s.r - army.king.r)); };
+  const walkOn = (inputs) => { for (const inp of inputs) { const p = A.advance(world, army, inp); if (!p.ok) { refused++; continue; } if (p.regroup) regroups++; else if (inp.kind === 'step') advanced++; worstLag = Math.max(worstLag, lag()); } };
+  walkOn([N, N, N, N, N, N, N, N, N, N, E, E, E, N, W, W, W, W, S, S, S, S, S, S]);
+  expect(worstLag <= A.KING_LEASH, `through the clutter the king never lags more than the leash (worst ${worstLag}, ${advanced} steps advanced, ${regroups} regroups, ${refused} refused)\n${rows(world)}`);
+  expect(advanced >= 16, `the walk mostly advances (${advanced} of 24 inputs)`);
 }
 
 // --- CATCH-UP (ruling 13): a pawn that lost a step to a pillar makes it up next turn; nobody trails on a long walk

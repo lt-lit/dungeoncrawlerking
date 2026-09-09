@@ -3588,7 +3588,7 @@ async function walkInput(input) {
     await Promise.all([ui.animateArrivals(arrivals, { ms }), walkLookAt(ms)]);
     const smashed = plan.moves.find((m) => m.capture === 'furniture');
     const mover = plan.individual || (input.kind === 'move') ? walkPieceName(before.get(input.id) ?? 'p') : null;
-    walkStatus(mover ? `${mover} ${smashed ? 'smashes it' : 'moves'}${plan.teleports?.length ? ' · a straggler rejoins' : ''}` : plan.teleports?.length ? 'a straggler rejoins' : input.kind === 'face' ? `faces ${['north', 'east', 'south', 'west'][plan.facing]}` : '');
+    walkStatus(mover ? `${mover} ${smashed ? 'smashes it' : 'moves'}${plan.teleports?.length ? ' · a straggler rejoins' : ''}` : plan.teleports?.length ? 'a straggler rejoins' : plan.regroup ? 'regrouping' : input.kind === 'face' ? `faces ${['north', 'east', 'south', 'west'][plan.facing]}` : '');
     debrisPaintWalk();
     walkSave();
   } finally {

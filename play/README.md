@@ -1106,7 +1106,33 @@ PR, rulings 3, 9, 16): the drop still stamps the pattern; the gap is
 still front-most to front-most; the box at the drop is still centred on
 the king's file; the walk-out still re-spawns the pattern whole. THE
 PHONE VERDICT IS THE GATE — the pace (`WALK_STEP_MS`), the hold threshold
-and the pivot's beat are the first dials to turn on it.
+and the pivot's beat are the first dials to turn on it. THE FIRST WALK'S
+VERDICT (designer, the same day, three screenshots): "the king is lagging
+behind sometimes… I feel like this shouldn't be seeing this without
+manual moves. Also, bumping into single blocks the army should just be
+able to flow around" — a junction of crates where the army bumped in
+several directions. Three defects, fixed the same day: (1) the step was
+refused whenever the anchor's cell was not floor, so one crate or pillar
+ahead of the middle pawn stopped the whole army — now the anchor may
+stand ONE cell into stone beside floor reachable from the king
+(`anchorMay`: a single block is flowed around, a thin wall into the next
+room is not), and "blocked" is a step that moves NOBODY (the front met
+the wall); (2) the king, planned last, could not end on a cell another
+piece passed through, so a pawn catching up across his slot starved him
+of it turn after turn — now a catching-up path PREFERS an equal-length
+path that does not cut through a comrade's slot (the strict one-passer
+rule stays, so at a doorway the king still waits his turn); (3) once
+behind, the king closed in at two cells a turn against a front moving
+one, with his molding tie-break pulling toward himself — now THE KING
+HURRIES THREE whenever his path is longer than one and his tie-break
+runs toward the ANCHOR, and THE KING'S LEASH (`KING_LEASH` 3): a step
+that would leave him more than three cells from his slot becomes a
+REGROUP (`plan.regroup`, the status says "regrouping") — the anchor
+holds, the walk still runs, nobody is refused, the front waits for its
+king. test-army 106 (+ the flow past a pillar and a crate with no refusal
+and the crate standing, a solid wall still refused, twenty-four inputs
+through a cluttered hall with the king never past the leash, the door
+scene's lag bound, a synthetic regroup).
 
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
