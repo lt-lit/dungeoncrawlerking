@@ -621,6 +621,28 @@ tap-to-turn still does; a step's turn is the step's), the body-relative
 d-pad and swipe in 4c's HUD note, the snap-zoom and `duelZoomFor`, the
 walk's "king centred" camera, and — for the walk only — "the camera
 turns with the army".**
+**THE CONTROLS PR ✅ BUILT 2026-09-09, the same session** (`play/README.md`
+§ "The canvas board", milestone 4d — the record; `play/js/army.mjs`
+rewritten, main.mjs § THE WALK rewritten). Rulings 1, 2, 5–8, 10–15, 17
+and 18 are live: the anchor is the formation's front-centre (`pattern.
+anchor`, `army.at`), inputs are world-relative (`dck-run/2`), the facing
+follows the step (`facingOfStep`), turns pivot (`pivotPlacement`), walks
+walk with catch-up (front rows first, the king last, stayers and
+finals as obstacles, one piece per doorway cell per turn, `via`
+waypoints), the box invariant teleports the stuck and the strays
+(`boxOf`), manual moves are chess moves only (`manualMoves`), the king's
+move is a step the army follows; the board is north-up with the wipe
+around the duel's cuts, the camera on the formation's centre, the pad
+taps-to-turn / holds-to-walk with chained steps and a buffered input,
+key chords, drag-to-look, pinch and wheel zoom, the wall bump, the box
+outline on selection. Gates: test-army 97, selftest 46/46, ui-smoke 241
+ok, test-barrier 108, test-world 125, test-dungeon 96,
+test-debris 60, test-camera 80, test-logreport 47. NEXT: the DUEL START PR
+(rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
+stand, `buildMatchup` measuring the gap between the camp lines and
+molding the enemy around the player's pieces, the box slid to hold the
+army, the walk-out keeping survivors in place and moving a whole army out
+of a sealed pocket), then milestone 6. THE PHONE VERDICT IS THE GATE.**
 
 **MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
 conversation SETTLED and what it only PROPOSED.** Settled (designer): the
@@ -1582,17 +1604,20 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   world session, the walk-out, the run's ledger). Node gate
   `test-barrier.mjs`.
 - `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
-
-  (Phase 2 milestone 4b, 2026-09-08): brief §5.1's one movement rule as
-  a pure module (the pattern, the move generator on the world grid, the
-  BFS targets, the turn planner; Node gate `test-army.mjs`), the run save
-  (one object per run, `dck-run/1`, export / import as a file, no
-  backward compatibility), and the fixtures in `play/worlds/` (GENERATED
-  floors since milestone 5 — the hand-built w01 and the seeded w02 were
-  retired 2026-09-08); main.mjs § THE
-  WALK is the page (`#screen-walk`: the pad, the turns, the zoom, the
-  save; `?world=` / `?run=resume` / `?save=`); `play/README.md` § "The
-  canvas board", milestone 4b.
+  (Phase 2 milestone 4b, 2026-09-08; REWRITTEN 2026-09-09 for the controls
+  and camera session, brief §5.1's eighteen rulings): the movement model
+  as a pure module — the pattern with its front-centre ANCHOR, the army's
+  `at`, world-relative inputs, the facing following the step, the PIVOT on
+  a turn, the walk with CATCH-UP (front rows first, the king last), the
+  BOX invariant with its stuck / stray teleports, manual moves as chess
+  moves only, the king's move the army follows (Node gate `test-army.mjs`
+  97); the run save (one object per run, `dck-run/2`, export / import as
+  a file, no backward compatibility); the fixtures in `play/worlds/`
+  (GENERATED floors since milestone 5). main.mjs § THE WALK is the page
+  (`#screen-walk`: the north-up board, the tap-to-turn / hold-to-walk
+  pad, key chords, drag, pinch, the wipe, the bump; `?world=` /
+  `?run=resume` / `?save=`); `play/README.md` § "The canvas board",
+  milestones 4b and 4d.
 - `play/js/world.mjs` — THE WORLD (Phase 2 milestone 4a, 2026-09-08): the
   floor's data (any size, stage schema 2 with `@` the start and digits the
   enemy spawns; terrain / pieces / skins / the Director's layers; a save

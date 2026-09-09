@@ -23,7 +23,7 @@
 import { World } from './world.mjs';
 import { Army } from './army.mjs';
 
-export const RUN_SCHEMA = 'dck-run/1';
+export const RUN_SCHEMA = 'dck-run/2'; // 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor
 export const RUN_KEY = 'dck.run.v1';
 
 /** A fresh run object from its parts. */

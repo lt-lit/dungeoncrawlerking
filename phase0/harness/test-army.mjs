@@ -1,12 +1,17 @@
-// THE ARMY RULE's Node gate (Phase 2 milestone 4b, 2026-09-08):
-// play/js/army.mjs against brief §5.1's own cases — unison on open floor,
-// flow around a wall, a rook home in one, a knight hopping, a bishop on the
-// wrong colour walking, a pawn king-stepping back, the about-face over a
-// few turns, a chain stepping into cells comrades leave, a slot in a wall
-// molding to the nearest floor, never a capture on an automatic move, the
-// individual move capturing furniture, refusals that cost nothing, and the
-// save round trip. No browser, no engine.
-// Usage (from phase0/): node harness/test-army.mjs
+// THE ARMY RULE's Node gate (Phase 2 milestone 4b, 2026-09-08; REWRITTEN
+// 2026-09-09 for the controls and camera session — brief §5.1's eighteen
+// rulings): play/js/army.mjs against the rulings' own cases — the facing
+// follows a world step (the diagonal rule, no ties), unison on open floor,
+// a turn is a PIVOT (the about-face in a three-wide corridor swaps the
+// rows in one beat), the formation's front-centre is the anchor (the pawns
+// file through a door first and the king last; blocked means the front met
+// the wall), CATCH-UP (a pawn that lost a step to a pillar makes it up next
+// turn), a STUCK piece and a piece the box cannot hold TELEPORT, manual
+// moves are actual chess moves only (furniture a capture, never the d-pad,
+// never an enemy piece), the king's own move is a step the army follows,
+// the box filters manual moves, a knight beyond a thin wall keeps its hop
+// and hops home, refusals cost nothing, the save round trip. No browser,
+// no engine. Usage (from phase0/): node harness/test-army.mjs
 import * as A from '../../play/js/army.mjs';
 import { World, FLOOR, WALL, FURNITURE } from '../../play/js/world.mjs';
 
@@ -28,20 +33,21 @@ const open = (files, ranks) => worldOf(Array.from({ length: ranks }, () => '.'.r
 const onSlots = (army) => army.pieces.every((p) => { const s = army.slotOf(p); return s.f === p.f && s.r === p.r; });
 const rows = (world) => world.rows().join('\n');
 const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
+const N = { kind: 'step', df: 0, dr: 1 }, E = { kind: 'step', df: 1, dr: 0 }, S = { kind: 'step', df: 0, dr: -1 }, W = { kind: 'step', df: -1, dr: 0 };
+const WAIT = { kind: 'wait' };
 
-// --- the pattern: the 3×2 kit is the king rearmost with pawns in front per file
+// --- the pattern: the 3×2 kit is the king rearmost with pawns in front; the anchor is the front-centre
 {
   const pat = A.makePattern(KIT);
   expect(pat.slots.length === 6 && pat.slots[0].ch === 'K' && pat.slots[0].dx === 0 && pat.slots[0].dy === 0, `the kit's pattern has 6 slots, the king at the origin (${JSON.stringify(pat.slots)})`);
   const pawns = pat.slots.filter((s) => s.ch === 'P');
   expect(pawns.length === 3 && pawns.every((s) => s.dy === 1), `three pawns one row ahead (${JSON.stringify(pawns)})`);
-  const back = pat.slots.filter((s) => s.ch !== 'P');
-  expect(back.every((s) => s.dy === 0) && new Set(back.map((s) => s.dx)).size === 3, 'the back row is one row wide, three files');
+  expect(pat.anchor.dx === 0 && pat.anchor.dy === 1, `the anchor is the front-centre, one ahead of the king (${JSON.stringify(pat.anchor)})`);
+  const wide = A.makePattern({ width: 6, royal: 'K', budget: 30 }, { seed: 3 });
+  expect(wide.anchor.dy === Math.max(...wide.slots.map((s) => s.dy)) && Math.abs(wide.anchor.dx) <= 1, `a 6-wide pattern's anchor sits on its front row near the king's file (${JSON.stringify(wide.anchor)})`);
   // Body → world under the facings: forward is north / east / south / west; right is east / south / west / north.
   const fwd = [0, 1, 2, 3].map((fc) => A.rotateBody(0, 1, fc));
   expect(fwd[0].dr === 1 && fwd[1].df === 1 && fwd[2].dr === -1 && fwd[3].df === -1, `forward turns with the facing (${JSON.stringify(fwd)})`);
-  const right = [0, 1, 2, 3].map((fc) => A.rotateBody(1, 0, fc));
-  expect(right[0].df === 1 && right[1].dr === -1 && right[2].df === -1 && right[3].dr === 1, `right turns with the facing (${JSON.stringify(right)})`);
   for (let fc = 0; fc < 4; fc++) for (const [dx, dy] of [[1, 0], [0, 1], [-2, 3]]) {
     const w = A.rotateBody(dx, dy, fc);
     const b = A.toBody(w.df, w.dr, fc);
@@ -49,45 +55,132 @@ const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
   }
 }
 
-// --- unison: on open floor a step moves every piece one cell the same way, and they stay on their slots
+// --- THE FACING FOLLOWS THE STEP (ruling 2): cardinal steps face their way; a diagonal keeps a facing that is one of its components, else turns to the perpendicular one, never about-face
 {
-  const world = open(14, 14);
-  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 6, r: 4 }, 0);
-  expect(army.pieces.length === 6 && onSlots(army) && world.pieceAt(6, 4) === 'K', 'the kit spawns on its slots, the king on its cell');
-  for (const [dx, dy, name] of [[0, 1, 'forward'], [1, 0, 'right'], [1, 1, 'forward-right'], [0, -1, 'back'], [-1, 0, 'left']]) {
+  const F = A.facingOfStep;
+  expect(F(0, 0, 1) === 0 && F(0, 1, 0) === 1 && F(0, 0, -1) === 2 && F(0, -1, 0) === 3, 'a cardinal step faces that way');
+  expect(F(2, 0, 1) === 0 && F(3, 1, 0) === 1, 'a cardinal step about-faces when pressed straight back');
+  expect(F(0, 1, 1) === 0 && F(0, -1, 1) === 0, 'facing north, NE and NW keep north');
+  expect(F(0, 1, -1) === 1 && F(0, -1, -1) === 3, 'facing north, SE turns east and SW turns west (never south)');
+  expect(F(1, 1, 1) === 1 && F(1, 1, -1) === 1 && F(1, -1, 1) === 0 && F(1, -1, -1) === 2, 'facing east: NE and SE keep east; NW turns north; SW turns south');
+  expect(F(2, 1, -1) === 2 && F(2, -1, -1) === 2 && F(2, 1, 1) === 1 && F(2, -1, 1) === 3, 'facing south: SE and SW keep south; NE turns east; NW turns west');
+  expect(F(3, -1, 1) === 3 && F(3, -1, -1) === 3 && F(3, 1, 1) === 0 && F(3, 1, -1) === 2, 'facing west: NW and SW keep west; NE turns north; SE turns south');
+  expect(F(1, 0, 0) === 1, 'no step keeps the facing');
+}
+
+// --- unison: on open floor a step moves every piece one cell the same way, and they stay on their slots; a step in a new direction PIVOTS first
+{
+  const world = open(16, 16);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 8, r: 4 }, 0);
+  expect(army.pieces.length === 6 && onSlots(army) && world.pieceAt(8, 4) === 'K' && army.at.f === 8 && army.at.r === 5, `the kit spawns on its slots, the king on its cell, the anchor one ahead (${JSON.stringify(army.at)})`);
+  for (const [input, name] of [[N, 'north'], [{ kind: 'step', df: 1, dr: 1 }, 'north-east'], [{ kind: 'step', df: -1, dr: 1 }, 'north-west']]) {
     const before = army.pieces.map((p) => ({ ...p }));
-    const plan = A.advance(world, army, { kind: 'step', dx, dy });
-    const { df, dr } = A.rotateBody(dx, dy, army.facing);
-    const all = plan.ok && plan.moves.length === 6 && army.pieces.every((p, i) => p.f === before[i].f + df && p.r === before[i].r + dr);
-    expect(all && onSlots(army), `a ${name} step on open floor moves all six one cell, in unison (${plan.moves.length} moves, ok ${plan.ok})`);
+    const plan = A.advance(world, army, input);
+    const all = plan.ok && !plan.pivot && plan.moves.length === 6 && army.pieces.every((p, i) => p.f === before[i].f + input.df && p.r === before[i].r + input.dr);
+    expect(all && onSlots(army) && army.facing === 0, `a ${name} step facing north moves all six one cell in unison, no pivot (${plan.moves.length} moves, pivot ${plan.pivot})`);
   }
-  // The world's piece grid follows.
+  // East: the facing turns, the formation pivots about the king, then steps.
+  const k0 = { ...army.king };
+  const plan = A.advance(world, army, E);
+  expect(plan.ok && plan.pivot && army.facing === 1 && army.king.f === k0.f + 1 && army.king.r === k0.r && onSlots(army), `an east step pivots the formation east and steps: everyone on their turned slots, the king one east (${JSON.stringify(army.king)})`);
+  const pawnsEast = army.pieces.filter((p) => p.ch === 'P').every((p) => p.f === army.king.f + 1);
+  expect(pawnsEast, 'facing east the pawns stand one file east of the king');
+  expect(plan.moves.every((m) => !m.teleport), 'a pivot on open ground is no teleport');
+  // South: an about-face (a step straight back), the rows swap.
+  const p2 = A.advance(world, army, S);
+  expect(p2.ok && p2.pivot && army.facing === 2 && onSlots(army) && army.pieces.filter((p) => p.ch === 'P').every((p) => p.r === army.king.r - 1), 'a step straight back about-faces: the pawns are now south of the king, everyone on slots');
   let count = 0;
   for (const ch of world.pieces) if (ch) count++;
   expect(count === 6, 'the world carries exactly the six letters after five steps');
 }
 
-// --- the about-face: a turn costs a move; the pattern turns, the pieces walk to their new slots over a few turns
+// --- a `face` input is the pivot alone, a move; facing the way you already face is refused
 {
   const world = open(14, 14);
   const army = A.spawnArmy(world, A.makePattern(KIT), { f: 6, r: 6 }, 0);
-  const plan = A.advance(world, army, { kind: 'turn', dir: 1 });
-  expect(plan.ok && army.facing === 1 && army.king.f === 6 && army.king.r === 6, 'a right turn faces east and the king stays');
-  let turns = 1;
-  while (!onSlots(army) && turns < 8) { A.advance(world, army, { kind: 'wait' }); turns++; }
-  expect(onSlots(army) && turns <= 4, `the army about-faces onto its turned slots in ${turns} turns (≤ 4)`);
-  // Facing east, "forward" is +f.
-  const k0 = { ...army.king };
-  A.advance(world, army, { kind: 'step', dx: 0, dy: 1 });
-  expect(army.king.f === k0.f + 1 && army.king.r === k0.r && onSlots(army), 'facing east, a forward step is +f and the army keeps formation');
-  A.advance(world, army, { kind: 'turn', dir: -1 });
-  A.advance(world, army, { kind: 'turn', dir: -1 });
-  expect(army.facing === 3, 'two left turns from east face west');
+  const plan = A.advance(world, army, { kind: 'face', facing: 3 });
+  expect(plan.ok && plan.pivot && army.facing === 3 && army.king.f === 6 && army.king.r === 6 && onSlots(army) && plan.moves.length === 5, `a face-west input pivots in place: the king stays, the other five slide to their turned slots (${plan.moves.length} moves)`);
+  const same = A.planTurn(world, army, { kind: 'face', facing: 3 });
+  expect(!same.ok && same.moves.length === 0, 'facing the way you already face is refused and costs nothing');
 }
 
-// --- a wall ahead of one piece: the blob flows around it and reforms beyond
+// --- THE ABOUT-FACE IN A THREE-WIDE CORRIDOR (ruling 14): one beat, the rows swap
 {
   const world = worldOf([
+    '#####',
+    '#...#',
+    '#...#',
+    '#...#',
+    '#...#',
+    '#...#',
+    '#...#',
+    '#####',
+  ]);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 2, r: 3 }, 0);
+  expect(onSlots(army), 'the kit fits the corridor facing north');
+  const pawnRow = army.pieces.filter((p) => p.ch === 'P')[0].r;
+  const plan = A.advance(world, army, { kind: 'face', facing: 2 });
+  expect(plan.ok && plan.pivot && onSlots(army) && army.pieces.filter((p) => p.ch === 'P').every((p) => p.r === army.king.r - 1) && army.king.r === 3, `an about-face in the corridor swaps the rows in one turn (pawns ${pawnRow} → ${army.pieces.filter((p) => p.ch === 'P')[0].r})\n${rows(world)}`);
+  expect(army.pieces.every((p) => world.at(p.f, p.r) === FLOOR && p.f >= 1 && p.f <= 3), 'every piece stands on the corridor floor');
+}
+
+// --- THE ANCHOR IS THE FRONT (ruling 12): blocked means the front met the wall; through a one-wide door the pawns file in first and the king last
+{
+  // A dead end: the front meets the wall while the king still has room behind it.
+  const dead = worldOf([
+    '#####',
+    '#...#',
+    '#...#',
+    '#...#',
+    '#...#',
+    '#####',
+  ]);
+  const a0 = A.spawnArmy(dead, A.makePattern(KIT), { f: 2, r: 1 }, 0);
+  const refused = [];
+  for (let i = 0; i < 5; i++) { const p = A.advance(dead, a0, N); if (!p.ok) refused.push(p.reason); }
+  expect(refused.length >= 1 && refused.every((r) => r === 'blocked'), `the front meets the wall and the step is refused (${refused.join(',')})`);
+  expect(a0.pieces.filter((p) => p.ch === 'P').every((p) => p.r === 4) && a0.king.r === 3, `blocked with the pawns against the wall, the king a rank behind them (king ${JSON.stringify(a0.king)})\n${rows(dead)}`);
+  // A one-wide door on the corridor's centre file into a room.
+  const world = worldOf([
+    '#######',
+    '#.....#',
+    '#.....#',
+    '#.....#',
+    '###.###',
+    '##...##',
+    '##...##',
+    '##...##',
+    '##...##',
+    '#######',
+  ]);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 3, r: 2 }, 0);
+  expect(onSlots(army), 'the kit stands in the corridor facing north, the door ahead of the middle pawn');
+  const entered = []; // the order pieces cross the doorway (3, 5)
+  const seen = new Set();
+  let perTurn = 0;
+  for (let i = 0; i < 12; i++) {
+    A.advance(world, army, i < 5 ? N : WAIT);
+    let n = 0;
+    for (const p of army.pieces) if (!seen.has(p.id) && p.r >= 5) { seen.add(p.id); entered.push(p.ch); if (p.ch !== 'N') n++; }
+    perTurn = Math.max(perTurn, n);
+    if (seen.size === 6) break;
+  }
+  expect(army.pieces.every((p) => p.r >= 6), `the whole army is in the north room (king ${JSON.stringify(army.king)})\n${rows(world)}`);
+  expect(perTurn === 1, `one piece at a time through the door, the knight's hop over the wall aside (at most ${perTurn} a turn)`);
+  expect(entered.length === 6 && entered[entered.length - 1] === 'K', `the king was the LAST through the door (order ${entered.join('')})`);
+  expect(entered[0] === 'P', `a pawn was the first through the door (order ${entered.join('')})`);
+  let t = 0;
+  while (!onSlots(army) && t < 3) { A.advance(world, army, WAIT); t++; }
+  expect(onSlots(army), `beyond the door the formation reforms within ${t} waits`);
+}
+
+// --- CATCH-UP (ruling 13): a pawn that lost a step to a pillar makes it up next turn; nobody trails on a long walk
+{
+  const world = worldOf([
+    '..............',
+    '..............',
+    '..............',
+    '..............',
     '..............',
     '..............',
     '..............',
@@ -102,37 +195,43 @@ const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
     '..............',
   ]);
   const army = A.spawnArmy(world, A.makePattern(KIT), { f: 6, r: 2 }, 0);
-  const refused = [];
-  for (let i = 0; i < 9; i++) {
-    const plan = A.advance(world, army, { kind: 'step', dx: 0, dy: 1 });
-    if (!plan.ok) refused.push(plan.reason);
-    if (army.king.r >= 9) break;
+  let trailing = 0, worst = 0;
+  for (let i = 0; i < 8; i++) {
+    A.advance(world, army, N);
+    const lag = Math.max(...army.pieces.map((p) => { const s = army.slotOf(p); return Math.max(Math.abs(s.f - p.f), Math.abs(s.r - p.r)); }));
+    if (lag > 1) trailing++;
+    worst = Math.max(worst, lag);
   }
-  expect(army.king.r >= 9 && refused.length <= 2, `the army walked past the pillar (king at rank ${army.king.r}, ${refused.length} refused steps: ${refused.join(',')})`);
-  let t = 0;
-  while (!onSlots(army) && t < 4) { A.advance(world, army, { kind: 'wait' }); t++; }
-  expect(onSlots(army), `beyond the pillar the formation reforms within ${t} waits\n${rows(world)}`);
+  expect(army.king.r === 10, `the army walked past the pillar without a refusal (king at rank ${army.king.r})`);
+  expect(worst <= 2 && trailing <= 1, `no piece ever trailed its slot by more than a step for more than a turn (worst lag ${worst}, ${trailing} turns over one)\n${rows(world)}`);
+  expect(onSlots(army), 'beyond the pillar the formation is whole');
+  // A straggler two behind its slot in the open: one turn home (two steps).
+  const pawn = army.pieces.find((p) => p.ch === 'P');
+  pawn.r -= 2;
+  army.stamp(world);
+  const plan = A.advance(world, army, WAIT);
+  const m = plan.moves.find((x) => x.id === pawn.id);
+  expect(m && !m.teleport && m.via.length === 2, `a pawn two behind the king hurries three cells around the back row, no teleport (${JSON.stringify(m)})`);
+  A.advance(world, army, WAIT);
+  expect(onSlots(army), 'and is home the turn after');
 }
 
-// --- stragglers walk home: a rook in one slide, a knight in hops, a bishop on the wrong colour on foot, a pawn backward on foot
+// --- stragglers walk home: a rook in one slide, a knight in hops, a bishop on the wrong colour on foot
 {
   const world = open(16, 16);
   const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'R', dx: -1, dy: 0 }, { ch: 'N', dx: 1, dy: 0 }, { ch: 'B', dx: 2, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }]);
   const army = A.spawnArmy(world, pat, { f: 8, r: 8 }, 0);
-  // Scatter: the rook 6 cells back on its file, the knight 4 back, the bishop on a cell of the wrong colour 3 back, the pawn 2 ahead of its slot.
   const rook = army.pieces[1], knight = army.pieces[2], bishop = army.pieces[3], pawn = army.pieces[4];
   rook.r = 2; knight.r = 4; bishop.f = 10; bishop.r = 5; pawn.r = 11;
   army.stamp(world);
-  const plan1 = A.advance(world, army, { kind: 'wait' });
+  const plan1 = A.advance(world, army, WAIT);
   const moved = (p) => plan1.moves.find((m) => m.id === p.id);
-  expect(moved(rook) && rook.f === 7 && rook.r === 8, `the rook slides home in one (${JSON.stringify(moved(rook))})`);
-  const knightMove = moved(knight);
-  expect(knightMove && (Math.abs(knightMove.to.f - knightMove.from.f) * Math.abs(knightMove.to.r - knightMove.from.r) === 2), `the knight hops (${JSON.stringify(knightMove)})`);
-  expect(moved(pawn) && pawn.r === 10, `a pawn ahead of its slot king-steps back (${JSON.stringify(moved(pawn))})`);
+  expect(moved(rook) && rook.f === 7 && rook.r === 8 && !moved(rook).teleport, `the rook slides home in one (${JSON.stringify(moved(rook))})`);
+  expect(moved(knight) && !moved(knight).teleport, `the knight hops (${JSON.stringify(moved(knight))})`);
+  expect(moved(pawn) && pawn.r === 9 && !moved(pawn).teleport, `a pawn two ahead of its slot walks back in one turn (${JSON.stringify(moved(pawn))})`);
   let t = 1;
-  while (!onSlots(army) && t < 8) { A.advance(world, army, { kind: 'wait' }); t++; }
-  expect(onSlots(army), `everyone is home after ${t} waits\n${rows(world)}`);
-  expect(t <= 5, `the bishop on the wrong colour walked (${t} turns)`);
+  while (!onSlots(army) && t < 6) { A.advance(world, army, WAIT); t++; }
+  expect(onSlots(army) && t <= 3, `everyone is home after ${t} waits\n${rows(world)}`);
 }
 
 // --- a chain: a file of three steps forward together (each into the cell the one ahead leaves)
@@ -140,12 +239,12 @@ const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
   const world = open(8, 12);
   const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }, { ch: 'P', dx: 0, dy: 2 }, { ch: 'R', dx: 0, dy: -1 }]);
   const army = A.spawnArmy(world, pat, { f: 3, r: 3 }, 0);
-  expect(onSlots(army), 'a file of four spawns in a column');
-  const plan = A.advance(world, army, { kind: 'step', dx: 0, dy: 1 });
+  expect(onSlots(army) && army.at.r === 5, 'a file of four spawns in a column, the anchor at its head');
+  const plan = A.advance(world, army, N);
   expect(plan.ok && plan.moves.length === 4 && onSlots(army) && army.king.r === 4, `the column steps forward as one, each into the cell the one ahead left (${plan.moves.length} moves)`);
 }
 
-// --- molding: a slot in a wall sends its piece to the nearest floor, toward the king; a 3-wide corridor squeezes a 5-wide line
+// --- molding: a slot in a wall sends its piece to the nearest floor, ahead of the king first; a 3-wide corridor squeezes a 5-wide line
 {
   const world = worldOf([
     '#########',
@@ -160,16 +259,13 @@ const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
   const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'R', dx: -2, dy: 0 }, { ch: 'N', dx: -1, dy: 0 }, { ch: 'B', dx: 1, dy: 0 }, { ch: 'Q', dx: 2, dy: 0 }]);
   const army = A.spawnArmy(world, pat, { f: 2, r: 3 }, 0);
   expect(army.pieces.every((p) => world.at(p.f, p.r) === FLOOR && p.f >= 1 && p.f <= 3), 'a 5-wide line spawns molded into the 3-wide corridor');
-  const plan = A.planTurn(world, army, { kind: 'wait' });
-  expect(plan.ok, 'a wait plans');
-  const targets = Object.values(plan.targets);
-  expect(targets.every((t) => t && world.at(t.f, t.r) === FLOOR && t.f >= 1 && t.f <= 3), `every target is floor inside the corridor (${JSON.stringify(targets)})`);
-  A.advance(world, army, { kind: 'step', dx: 0, dy: 1 });
-  A.advance(world, army, { kind: 'step', dx: 0, dy: 1 });
-  expect(army.king.r === 5 && army.pieces.every((p) => p.f >= 1 && p.f <= 3), `the squeezed line walks the corridor (king at rank ${army.king.r})\n${rows(world)}`);
+  expect(army.pieces.every((p) => p.r >= army.king.r), 'the molding puts nobody behind the king');
+  A.advance(world, army, N);
+  A.advance(world, army, N);
+  expect(army.pieces.every((p) => p.f >= 1 && p.f <= 3) && army.pieces.every((p) => p.r >= army.king.r), `the squeezed line walks the corridor, nobody behind the king (king at rank ${army.king.r})\n${rows(world)}`);
 }
 
-// --- never a capture: a rook whose way home is a crate stops short; the crate stands
+// --- never a capture on an automatic move; a d-pad step into furniture is a bump
 {
   const world = worldOf([
     '........',
@@ -186,47 +282,149 @@ const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
   const rook = army.pieces[1];
   rook.f = 1; rook.r = 0; // below the crate at (1, 1), its slot at (1, 4) straight up the file
   army.stamp(world);
-  const plan = A.advance(world, army, { kind: 'wait' });
-  expect(plan.ok && world.at(1, 1) === FURNITURE && !(rook.f === 1 && rook.r === 4), `an automatic move never smashes the crate (${JSON.stringify(plan.moves)})`);
+  const plan = A.advance(world, army, WAIT);
+  const rm = plan.moves.find((m) => m.id === rook.id);
+  expect(plan.ok && world.at(1, 1) === FURNITURE && rm && !rm.via.some((c) => c.f === 1 && c.r === 1) && !(rm.to.f === 1 && rm.to.r === 1), `an automatic move never smashes the crate: the rook goes around it (${JSON.stringify(rm)})`);
   expect(rook.f !== 1 || rook.r !== 0, 'the rook still made progress around it');
+  const w2 = worldOf(['....', '.^..', '....', '....']);
+  const a2 = A.spawnArmy(w2, A.patternOf([{ ch: 'K', dx: 0, dy: 0 }]), { f: 1, r: 1 }, 0);
+  const bump = A.planTurn(w2, a2, N);
+  expect(!bump.ok && bump.reason === 'blocked' && w2.at(1, 2) === FURNITURE, 'a d-pad step into a crate is a bump, never a capture');
 }
 
-// --- the individual move: one piece, captures allowed, the king never
+// --- MANUAL MOVES ARE ACTUAL CHESS MOVES (ruling 11): no king-step option, furniture a capture, the pawn's push and diagonals, never an enemy piece
 {
   const world = worldOf([
     '........',
+    '.^......',
     '........',
-    '..^.....',
     '........',
-    '.....^..',
+    '........',
     '........',
     '........',
     '........',
   ]);
-  const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'R', dx: -1, dy: 0 }, { ch: 'P', dx: 0, dy: -1 }]);
+  const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'R', dx: -1, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }]);
   const army = A.spawnArmy(world, pat, { f: 2, r: 2 }, 0);
-  const rook = army.pieces[1], pawn = army.pieces[2]; // the rook at (1, 2), the pawn behind the king at (2, 1)
-  // The crates: (2, 5) on the king's file, (5, 3) on rank 3. The rook's lines from (1, 2) see neither.
-  const ms = A.pieceMoves(world, army, rook, { captures: true });
-  expect(ms.some((m) => m.capture === null) && !ms.some((m) => m.capture === 'furniture'), 'the rook sees no crate on its lines from (1, 2)');
+  const rook = army.pieces[1], pawn = army.pieces[2]; // the rook at (1, 2), the pawn at (2, 3), a crate at (1, 6) up the rook's file
+  const rm = A.manualMoves(world, army, rook);
+  expect(rm.length > 0 && rm.every((m) => m.f === rook.f || m.r === rook.r), 'a rook\'s manual moves are its lines alone — no diagonal king step');
+  expect(!rm.some((m) => m.f === 2 && m.r === 2) && rm.some((m) => m.f === 0 && m.r === 2), 'the rook cannot land on the king, and slides west past nothing');
+  const smash = rm.find((m) => m.capture === 'furniture');
+  expect(smash && smash.f === 1 && smash.r === 6 && !rm.some((m) => m.f === 1 && m.r === 7), `the crate at (1, 6) is a capture and the slide stops there (${JSON.stringify(smash)})`);
   const p1 = A.advance(world, army, { kind: 'move', id: rook.id, to: { f: 1, r: 3 } });
   expect(p1.ok && p1.individual && p1.moves.length === 1 && rook.r === 3 && army.king.r === 2, 'an individual move moves that piece alone');
-  const ms2 = A.pieceMoves(world, army, rook, { captures: true });
-  const smash = ms2.find((m) => m.capture === 'furniture');
-  expect(smash && smash.f === 5 && smash.r === 3, `from (1, 3) the rook can smash the crate at (5, 3) (${JSON.stringify(smash)})`);
-  const p2 = A.advance(world, army, { kind: 'move', id: rook.id, to: { f: 5, r: 3 } });
-  expect(p2.ok && world.at(5, 3) === FLOOR && rook.f === 5, 'smashing furniture is a capture: the crate is floor, the rook stands there');
-  const kingTry = A.planTurn(world, army, { kind: 'move', id: army.king.id, to: { f: 3, r: 2 } });
-  expect(!kingTry.ok && /king/.test(kingTry.reason), 'the king never makes an individual move');
-  // The pawn at (2, 1): a crate diagonal-forward at (3, 2) is a capture; the king ahead at (2, 2) blocks its push.
-  world.setTerrain(3, 2, FURNITURE);
-  const pm = A.pieceMoves(world, army, pawn, { captures: true });
-  expect(pm.some((m) => m.f === 3 && m.r === 2 && m.capture === 'furniture') && !pm.some((m) => m.f === 2 && m.r === 2), `a pawn captures diagonally forward, never by its push (${JSON.stringify(pm)})`);
+  const p2 = A.advance(world, army, { kind: 'move', id: rook.id, to: { f: 1, r: 6 } });
+  expect(p2.ok && world.at(1, 6) === FLOOR && rook.r === 6 && p2.moves[0].capture === 'furniture', 'smashing furniture is a capture: the crate is floor, the rook stands there');
+  // The pawn at (2, 3): its push to (2, 4); a crate diagonal-forward at (3, 4) is a capture; the crate at (2, 5) is not on its push.
+  world.setTerrain(3, 4, FURNITURE);
+  const pm = A.manualMoves(world, army, pawn);
+  expect(pm.some((m) => m.f === 3 && m.r === 4 && m.capture === 'furniture') && pm.some((m) => m.f === 2 && m.r === 4 && !m.capture) && pm.length === 2, `a pawn's manual moves are its push and its diagonal capture, nothing sideways (${JSON.stringify(pm)})`);
+  world.setTerrain(2, 4, FURNITURE);
+  const pm2 = A.manualMoves(world, army, pawn);
+  expect(!pm2.some((m) => m.f === 2 && m.r === 4), 'a pawn never takes the crate dead ahead of it');
+  // An enemy piece is never a capture on the map.
+  world.setPiece(1, 7, 'p');
+  const rm2 = A.manualMoves(world, army, rook);
+  expect(!rm2.some((m) => m.f === 1 && m.r === 7), 'an enemy pawn on the rook\'s file is not a target');
+  world.setPiece(1, 7, null);
   const auto = A.pieceMoves(world, army, pawn);
-  expect(!auto.some((m) => m.capture), 'an automatic move list carries no captures');
+  expect(!auto.some((m) => m.capture) && auto.some((m) => m.f === 1 && m.r === 3), 'an automatic move list carries no captures and has the sideways king step');
 }
 
-// --- refusals cost nothing: a wall ahead, a comrade wedged in a dead end
+// --- THE KING'S OWN MOVE (ruling 10): his chess move, a capture included, and the army takes its formation move with it
+{
+  const world = worldOf([
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+  ]);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 4, r: 2 }, 0);
+  const km = A.manualMoves(world, army, army.king);
+  expect(km.length === 3 && km.every((m) => Math.max(Math.abs(m.f - 4), Math.abs(m.r - 2)) === 1 && m.r === 1), `the king's manual moves are his three free neighbouring cells behind him — R, N and the pawns hold the rest (${km.length})`);
+  const k0 = { ...army.king };
+  const plan = A.advance(world, army, { kind: 'move', id: army.king.id, to: { f: 4, r: 1 } });
+  expect(plan.ok && !plan.individual && plan.pivot && army.facing === 2 && army.king.f === 4 && army.king.r === 1, `the king stepping straight back about-faces the army (facing ${army.facing}, king ${JSON.stringify(army.king)} from ${JSON.stringify(k0)})`);
+  expect(onSlots(army) && army.pieces.filter((p) => p.ch === 'P').every((p) => p.r === 0), 'the army followed: the pawns are south of him on rank 0, everyone on slots');
+  // A crate beside him: his capture is a step the army follows too.
+  world.setTerrain(5, 1, FURNITURE);
+  const cap = A.manualMoves(world, army, army.king).find((m) => m.capture === 'furniture');
+  expect(cap && cap.f === 5 && cap.r === 1, `the king may smash the crate beside him (${JSON.stringify(cap)})`);
+  const p2 = A.advance(world, army, { kind: 'move', id: army.king.id, to: { f: 5, r: 1 } });
+  expect(p2.ok && world.at(5, 1) === FLOOR && army.king.f === 5 && p2.moves.find((m) => m.id === army.king.id)?.capture === 'furniture', 'the king smashes it and stands there');
+  expect(army.facing === 1 && army.pieces.filter((p) => p.ch === 'P').every((p) => p.f === 6), `the army turned east with him and the pawns stand east of him (${army.pieces.filter((p) => p.ch === 'P').map((p) => `${p.f},${p.r}`).join(' ')})`);
+}
+
+// --- THE BOX (ruling 15): a manual move that would break it is not offered; a piece left behind the king teleports; a stuck piece teleports
+{
+  const world = open(24, 24);
+  const army = A.spawnArmy(world, A.makePattern(KIT), { f: 10, r: 4 }, 0);
+  const rook = army.pieces.find((p) => p.ch === 'R');
+  const rm = A.manualMoves(world, army, rook);
+  expect(rm.every((m) => m.r >= army.king.r && m.r <= army.king.r + 9 && Math.abs(m.f - army.king.f) <= 9), `the rook's manual moves stay inside the box (${rm.length} offered)`);
+  expect(!rm.some((m) => m.r < army.king.r), 'no manual move goes behind the king');
+  expect(rm.some((m) => m.r === army.king.r && m.f === army.king.f - 8) && !rm.some((m) => m.f === army.king.f - 9), 'a slide west to eight files off the king is offered (the knight beside him makes the span ten), nine is not');
+  const box = A.boxOf(army);
+  expect(box.ok && box.spread === 3 && box.left === -4 && box.kingFile === 4 && box.rect.f1 - box.rect.f0 === 9 && box.rect.r1 - box.rect.r0 === 9 && box.rect.r0 === army.king.r, `the kit's box is centred on it (left ${box.left}, king file ${box.kingFile}, rect ${JSON.stringify(box.rect)})`);
+  // A pawn six behind the king in the open: it walks three (behind) and is still outside → teleported home.
+  const pawn = army.pieces.find((p) => p.ch === 'P');
+  pawn.r = army.king.r - 6;
+  army.stamp(world);
+  const plan = A.advance(world, army, WAIT);
+  const m = plan.moves.find((x) => x.id === pawn.id);
+  expect(m && m.teleport && plan.teleports.includes(pawn.id) && onSlots(army), `a pawn the box cannot hold teleports to its slot (${JSON.stringify(m)})`);
+  // The box slides: a rook far to the right puts the king off-centre.
+  rook.f = army.king.f + 8;
+  army.stamp(world);
+  const b2 = A.boxOf(army);
+  expect(b2.ok && b2.left === -1 && b2.kingFile === 1, `the box slides to hold a rook eight files right: the king on file ${b2.kingFile}`);
+  // Stuck: a knight sealed in a pocket with no hop out teleports; a knight beyond a thin wall hops home instead.
+  const w3 = worldOf([
+    '##########',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#.....####',
+    '#.....#.##',
+    '#.....#..#',
+    '##########',
+  ]);
+  const a3 = A.spawnArmy(w3, A.makePattern(KIT), { f: 2, r: 3 }, 0);
+  const kn = a3.pieces.find((p) => p.ch === 'N');
+  kn.f = 8; kn.r = 1; // a sealed pocket of three cells; every hop out lands on a wall or off the map
+  a3.stamp(w3);
+  const p3 = A.advance(w3, a3, WAIT);
+  const mk = p3.moves.find((x) => x.id === kn.id);
+  expect(mk && mk.teleport && w3.at(kn.f, kn.r) === FLOOR && kn.f >= 1 && kn.f <= 3, `a knight sealed in a pocket with no hop out teleports to the army (${JSON.stringify(mk)})\n${rows(w3)}`);
+  // Beyond a thin wall with a hop back: no teleport, it hops.
+  const w4 = worldOf([
+    '#########',
+    '#...#...#',
+    '#...#...#',
+    '#...#...#',
+    '#...#...#',
+    '#...#...#',
+    '#########',
+  ]);
+  const a4 = A.spawnArmy(w4, A.makePattern(KIT), { f: 2, r: 2 }, 0);
+  const n4 = a4.pieces.find((p) => p.ch === 'N');
+  const hop = A.manualMoves(w4, a4, n4).find((m) => m.f >= 5);
+  expect(hop, `the knight may hop over the thin wall into the next room (${JSON.stringify(A.manualMoves(w4, a4, n4))})`);
+  A.advance(w4, a4, { kind: 'move', id: n4.id, to: hop });
+  expect(n4.f >= 5, 'it stands in the next room');
+  const back = A.advance(w4, a4, WAIT);
+  const mb = back.moves.find((x) => x.id === n4.id);
+  expect(mb && !mb.teleport && n4.f <= 3, `on the next turn it hops home on its own, no teleport (${JSON.stringify(mb)})`);
+}
+
+// --- refusals cost nothing; planTurn is pure
 {
   const world = worldOf([
     '#####',
@@ -238,48 +436,29 @@ const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
   const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }]);
   const army = A.spawnArmy(world, pat, { f: 1, r: 1 }, 0);
   const snap = JSON.stringify(army.serialize()) + rows(world);
-  const plan = A.planTurn(world, army, { kind: 'step', dx: 1, dy: 0 }); // into the pillar at (2, 2)? no: (2, 1) is floor. Step into the wall east of (3, 1): first go there.
-  void plan;
-  const wall = A.planTurn(world, army, { kind: 'step', dx: 0, dy: -1 });
+  const wall = A.planTurn(world, army, W);
   expect(!wall.ok && wall.reason === 'blocked' && wall.moves.length === 0, 'a step into a wall is refused with no moves');
+  const off = A.planTurn(world, army, { kind: 'move', id: 99, to: { f: 1, r: 2 } });
+  expect(!off.ok, 'a move of no piece is refused');
   expect(JSON.stringify(army.serialize()) + rows(world) === snap, 'planTurn is pure: nothing moved');
-  // A dead end: R K P in a one-cell-high pocket facing east. The king steps
-  // onto the pawn; the pawn's only exit is the king's old cell, which the
-  // rook (its slot: behind the king) takes first. Nowhere to go: refused.
-  const w2 = worldOf([
-    '#####',
-    '#####',
-    '#...#',
-    '#####',
-  ]);
-  const a2 = new A.Army({ side: 'w', facing: 1, pattern: A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }, { ch: 'R', dx: 0, dy: -1 }]), pieces: [{ id: 1, ch: 'K', slot: 0, f: 2, r: 1 }, { id: 2, ch: 'P', slot: 1, f: 3, r: 1 }, { id: 3, ch: 'R', slot: 2, f: 1, r: 1 }] });
-  a2.stamp(w2);
-  // (The evicted pawn goes first — its target is its own cell — so it swaps
-  // into the king's old cell before the rook can claim it; the rook, its
-  // slot taken, stands. "The way is held" needs a cell nobody can vacate,
-  // which the swap makes nearly impossible by construction: the king can
-  // almost always step. The refusal path stays as a safety net.)
-  const held = A.planTurn(w2, a2, { kind: 'step', dx: 0, dy: 1 });
-  expect(held.ok && held.moves.length === 2 && held.moves.some((m) => m.id === 2 && m.to.f === 2) && !held.moves.some((m) => m.id === 3), `the king evicts the pawn, which swaps into his old cell; the rook stands (${JSON.stringify(held.moves)})`);
-  // With the rook gone the same swap.
-  a2.pieces.pop();
-  a2.stamp(w2);
-  const swap = A.planTurn(w2, a2, { kind: 'step', dx: 0, dy: 1 });
-  expect(swap.ok && swap.moves.length === 2, `the king and a cornered pawn swap cells (${JSON.stringify(swap.moves)})`);
 }
 
 // --- the save round trip and the plan's determinism
 {
-  const world = open(10, 10);
-  const army = A.spawnArmy(world, A.makePattern({ width: 5, royal: 'K', budget: 22 }, { archetype: 'scrambled', seed: 7 }), { f: 4, r: 2 }, 2);
+  const world = open(12, 12);
+  const army = A.spawnArmy(world, A.makePattern({ width: 5, royal: 'K', budget: 22 }, { archetype: 'scrambled', seed: 7 }), { f: 5, r: 2 }, 2);
   const obj = JSON.parse(JSON.stringify(army.serialize()));
   const back = A.Army.load(obj);
-  expect(back.facing === 2 && back.pieces.length === army.pieces.length && back.king.ch === 'K' && JSON.stringify(back.pattern.slots) === JSON.stringify(army.pattern.slots), 'an army serializes and loads');
+  expect(back.facing === 2 && back.at.f === army.at.f && back.at.r === army.at.r && back.pieces.length === army.pieces.length && back.king.ch === 'K' && JSON.stringify(back.pattern.slots) === JSON.stringify(army.pattern.slots) && back.pattern.anchor.dy === army.pattern.anchor.dy, 'an army serializes and loads with its anchor');
   const w2 = World.load(JSON.parse(JSON.stringify(world.serialize())));
-  const p1 = A.planTurn(world, army, { kind: 'step', dx: 1, dy: 1 });
-  const p2 = A.planTurn(w2, back, { kind: 'step', dx: 1, dy: 1 });
+  const p1 = A.planTurn(world, army, { kind: 'step', df: 1, dr: 1 });
+  const p2 = A.planTurn(w2, back, { kind: 'step', df: 1, dr: 1 });
   expect(JSON.stringify(p1) === JSON.stringify(p2), 'the same input on the same state plans the same turn');
-  expect(A.makePattern(KIT).slots.length === A.makePattern(KIT).slots.length && JSON.stringify(A.makePattern({ width: 4, royal: 'K', budget: 18 }, { seed: 3 })) === JSON.stringify(A.makePattern({ width: 4, royal: 'K', budget: 18 }, { seed: 3 })), 'a pattern is deterministic from its spec and seed');
+  const legacy = A.Army.load({ side: 'w', facing: 0, pattern: { width: 3, royal: 'K', slots: A.makePattern(KIT).slots, value: 0 }, pieces: army.pieces.map((p) => ({ ...p })) });
+  expect(legacy.at.f === legacy.king.f && legacy.at.r === legacy.king.r + 1, 'an army saved without an anchor derives it from the king');
+  expect(JSON.stringify(A.makePattern({ width: 4, royal: 'K', budget: 18 }, { seed: 3 })) === JSON.stringify(A.makePattern({ width: 4, royal: 'K', budget: 18 }, { seed: 3 })), 'a pattern is deterministic from its spec and seed');
+  const focus = A.formationFocus(army);
+  expect(Number.isFinite(focus.f) && Number.isFinite(focus.r), `the formation's focus is a point (${focus.f}, ${focus.r})`);
 }
 
 for (const b of bad) console.log(`FAIL ${b}`);

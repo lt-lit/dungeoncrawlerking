@@ -65,14 +65,23 @@
        a fixed zoom, the king centred, the world sliding under him; a 3×3
        pad (the eight ways, wait in the middle), the two turns, the zoom,
        the save. Keyboard: WASD / arrows, Q E, space, numpad 1–9, + −. -->
+  <!-- THE WIPE (2026-09-09): a blackout over the walk ↔ duel cuts — the camera
+       turns to the army's facing for a duel and back after, and each cut hides
+       behind this sheet for a beat (Pokémon's battle transition). -->
+  <div id="wipe" hidden aria-hidden="true"></div>
   <section id="screen-walk" class="screen" hidden>
     <!-- THE WALK (Phase 2 milestone 4b; the HUD redone 2026-09-08 after the
-         designer's verdict on the first pad): the map fills the screen and
-         the controls float over it — a thumb-sized 3×3 pad bottom-left
-         (wait in the middle), the turn / zoom / barrier cluster bottom-
-         right, the status strip along the top. A SWIPE on the map is a
-         step in the swipe's direction; a tap is still a tap. WASD / the
-         arrows / the numpad, Q E, space, + −, B, Escape on a keyboard. -->
+         designer's verdict on the first pad, and again 2026-09-09 for THE
+         CONTROLS AND CAMERA SESSION): the map fills the screen, north-up,
+         and the controls float over it — the d-pad bottom-left (a tap turns
+         the army in place, a hold walks it; world-relative, up is north),
+         the wait / barrier / export cluster bottom-right, the status strip
+         along the top. On the map: DRAG to look around (the camera glides
+         back on the next move), PINCH to zoom (whole steps), TAP a piece
+         for its chess moves. No turn buttons, no zoom buttons, no swipe.
+         WASD / the arrows (chords for diagonals) / the numpad, Q E to face
+         left / right, space to wait, + − and the wheel to zoom, B for the
+         debug barrier, Escape on a keyboard. -->
     <div id="walk-stage">
       <div id="walk-board"></div>
       <div id="walk-hud">
@@ -98,9 +107,7 @@
             </svg>
           </div>
           <div id="walk-side">
-            <div class="walk-row"><button id="btnWalkTurnL" title="turn left (Q) — a move" aria-label="turn left">&#8634;</button><span id="walk-facing" class="opt-val">east</span><button id="btnWalkTurnR" title="turn right (E) — a move" aria-label="turn right">&#8635;</button></div>
             <div class="walk-row"><button id="btnWalkWait" title="wait a turn (space) — the stragglers reform" aria-label="wait a turn">wait</button></div>
-            <div class="walk-row"><button id="btnZoomOut" title="zoom out (&minus;)" aria-label="zoom out">&minus;</button><span id="walk-zoom" class="opt-val">k 4</span><button id="btnZoomIn" title="zoom in (+)" aria-label="zoom in">+</button></div>
             <!-- THE BARRIER BY HAND (Phase 2 milestone 4c): a debug button drops
                  the barrier on the army as it stands — the crop of the floor
                  under the army's facing, gap 4, the kings aligned. -->
@@ -267,15 +274,17 @@
         <option value="crypt">Crypt oak</option>
       </select>
     </label>
-    <!-- THE CAMERA (Phase 2, 2026-09-08): the view turns by quarters — screen-
-         up is the army's facing (brief §5.1). The real turn buttons wait for
-         the army; these are the debug ones, walked over the arena bed. -->
+    <!-- THE CAMERA (Phase 2, 2026-09-08): the view turns by quarters — in a
+         DUEL screen-up is the army's facing (brief §5.1); the walk is
+         north-up always since 2026-09-09 (the controls session, ruling 1)
+         and has no turn buttons. These are the debug ones for the renderer
+         gates, walked over the arena bed. -->
     <div class="opt" id="view-turn">Turn the view
       <button id="btnTurnL" title="turn left: the world's west comes up the screen" aria-label="turn left">&#8634;</button>
       <span id="facingName" class="opt-val">north up</span>
       <button id="btnTurnR" title="turn right: the world's east comes up the screen" aria-label="turn right">&#8635;</button>
     </div>
-    <p class="opt-hint">Debug: the camera turns with the army in Phase 2; until the army exists these turn it by hand. Not saved.</p>
+    <p class="opt-hint">Debug: the camera turns to the army's facing for a duel and is north-up on the walk; these turn the view by hand for the renderer gates. Not saved.</p>
     <!-- The piece placement: whole floor pixels on the tile grid (every
          sprite pixel is one floor pixel, at the art's scale). -->
     <p class="opt-hint">Every sprite pixel is one floor pixel, on the floor&#8217;s own grid; lift and shift move a piece by whole floor pixels.</p>

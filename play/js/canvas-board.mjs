@@ -133,6 +133,7 @@ const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
 const TARGET = 'rgba(215,180,106,0.53)'; // .cell.target::after #d7b46a88
+const BOXLINE = 'rgba(126,176,255,0.6)'; // THE BOX's outline on the walk (2026-09-09): the arena the army must always fit
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
 const COORD = 'rgba(255,255,255,0.4)';
 const COORD_SHADOW = 'rgba(0,0,0,0.6)';
@@ -140,6 +141,7 @@ const COORD_SHADOW = 'rgba(0,0,0,0.6)';
 const JITTER = [[0, 0], [-1, 1], [1, -1], [-1, 0], [1, 1], [0, 0]];
 /** The rumble's blit jitter in native pixels by phase (style.css board-quake). */
 const RUMBLE = [[0, 0], [-1, 0], [1, 0], [-1, 0], [1, 0], [0, 0]];
+const NUDGE = [1, 2, 2, 1, 0]; // the wall bump's lean, in tile pixels, over its beat
 /** The window's margin beyond the visible tiles (viewport 'screen'). */
 const MARGIN = 1;
 
@@ -826,9 +828,12 @@ export class CanvasBoard {
     this.invalidate();
   }
 
-  /** Cell-keyed marks for the walk: the selected cell, its targets [{ f, r, capture }]. */
-  setCellMarks({ selected = null, targets = [] } = {}) {
-    this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])) };
+  /** Cell-keyed marks for the walk: the selected cell, its targets [{ f, r,
+   *  capture }], and `frame` — a rectangle of world cells { f0, r0, f1, r1 }
+   *  outlined one pixel wide (THE BOX, 2026-09-09: the arena the army must
+   *  always fit, shown while a piece is selected). */
+  setCellMarks({ selected = null, targets = [], frame = null } = {}) {
+    this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])), frame: frame ? { ...frame } : null };
     this.invalidate();
   }
 
@@ -1110,7 +1115,7 @@ export class CanvasBoard {
   async animateArrivals(moves, { ms = 200 } = {}) {
     if (!ms || !moves.length) return;
     const t0 = now();
-    const list = moves.map((m) => ({ ...m, t0, ms }));
+    const list = moves.map((m) => ({ ...m, path: [m.from, ...(m.via ?? []), m.to], t0, ms }));
     this.cellSlides = [...(this.cellSlides ?? []), ...list];
     for (const m of list) this.hiddenCells.add(this.world.idx(m.to.f, m.to.r));
     this.#run();
@@ -1144,6 +1149,15 @@ export class CanvasBoard {
     this.#run();
   }
 
+  /** THE WALL BUMP (2026-09-09): the blit leans `dx`, `dy` (screen
+   *  direction, −1 / 0 / 1) by up to two native pixels and comes back over
+   *  `ms` — a refused step reads as the army bumping the wall. */
+  nudge(dx, dy, ms) {
+    if (!ms || (!dx && !dy)) return;
+    this.nudging = { t0: now(), ms, dx: Math.sign(dx), dy: Math.sign(dy) };
+    this.#run();
+  }
+
   /** The FEN cell of a square: a piece letter, '*', '^' or null. */
   #letterAt(sq) {
     const c = this.cells.get(sq);
@@ -1156,6 +1170,7 @@ export class CanvasBoard {
     const t = now();
     if (this.slides.length || this.flight || this.cellSlides.length || this.pan) return true;
     if (this.rumbling && t < this.rumbling.t0 + this.rumbling.ms) return true;
+    if (this.nudging && t < this.nudging.t0 + this.nudging.ms) return true;
     for (const f of this.fx.values()) if (!f.done && t < f.t0 + f.ms) return true;
     return false;
   }
@@ -1237,8 +1252,9 @@ export class CanvasBoard {
     this.#blit();
     for (const r of this.paintWaiters.splice(0)) r();
     if (this.animating) this.invalidate();
-    else if (this.rumbling) {
+    else if (this.rumbling || this.nudging) {
       this.rumbling = null;
+      this.nudging = null;
       this.invalidate(); // one clean frame after the shake
     } else this.loop = false;
   }
@@ -1260,6 +1276,11 @@ export class CanvasBoard {
       const [dx, dy] = RUMBLE[Math.min(RUMBLE.length - 1, Math.floor(u * RUMBLE.length))];
       jx = dx * Math.round(this.k);
       jy = dy * Math.round(this.k);
+    } else if (this.nudging) {
+      const u = Math.min(1, (now() - this.nudging.t0) / this.nudging.ms);
+      const lean = NUDGE[Math.min(NUDGE.length - 1, Math.floor(u * NUDGE.length))];
+      jx = this.nudging.dx * lean * Math.round(this.k);
+      jy = this.nudging.dy * lean * Math.round(this.k);
     }
     const k = this.k;
     const b = this.blitRect;
@@ -1583,10 +1604,27 @@ export class CanvasBoard {
   /** A walk's arrival: the letter drawn between its old and new cells. */
   #paintCellSlide(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
-    const a = this.#tileOf(s.from.f, s.from.r), b = this.#tileOf(s.to.f, s.to.r);
-    const oa = this.#originOfTile(a.col, a.row), ob = this.#originOfTile(b.col, b.row);
     const e = ease(u);
-    const x = Math.round(oa.x + (ob.x - oa.x) * e), y = Math.round(oa.y + (ob.y - oa.y) * e);
+    // Along the path (a catch-up walk carries waypoints, so a slide goes
+    // AROUND a crate, never through it): the eased progress spread over the
+    // segments by their length.
+    const pts = (s.path ?? [s.from, s.to]).map((c) => { const tl = this.#tileOf(c.f, c.r); return this.#originOfTile(tl.col, tl.row); });
+    const lens = [];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); lens.push(l); total += l; }
+    let x = pts[pts.length - 1].x, y = pts[pts.length - 1].y;
+    if (total > 0) {
+      let d = e * total;
+      for (let i = 0; i < lens.length; i++) {
+        if (d <= lens[i] || i === lens.length - 1) {
+          const tt = lens[i] > 0 ? Math.min(1, d / lens[i]) : 1;
+          x = Math.round(pts[i].x + (pts[i + 1].x - pts[i].x) * tt);
+          y = Math.round(pts[i].y + (pts[i + 1].y - pts[i].y) * tt);
+          break;
+        }
+        d -= lens[i];
+      }
+    }
     if (x < -2 * T || y < -2 * T || x > this.bufW + T || y > this.bufH + T) return;
     this.#paintPiece(s.ch, x, y);
   }
@@ -1815,6 +1853,7 @@ export class CanvasBoard {
   #paintCellMarks({ idx, x, y, k }) {
     const g = this.bctx;
     const cm = this.cellMarks;
+    if (cm.frame) this.#paintFrameEdges(idx, x, y, cm.frame);
     if (cm.selected === idx) this.#frame1(x, y, GOLD);
     if (cm.targets.has(idx)) {
       const capture = cm.targets.get(idx);
@@ -1823,6 +1862,28 @@ export class CanvasBoard {
         g.fillStyle = TARGET;
         g.fillRect(x + 6, y + 6, 4, 4);
       }
+    }
+  }
+
+  /** The one-pixel outline of a rectangle of world cells, drawn on the cells
+   *  along its boundary: an edge is painted where the neighbour across it
+   *  lies outside the rectangle (or off the world). Facing-agnostic — the
+   *  neighbour's screen tile says which side of this tile the edge is. */
+  #paintFrameEdges(idx, x, y, fr) {
+    const w = this.world;
+    const f = idx % w.files, r = (idx - f) / w.files;
+    if (f < fr.f0 || f > fr.f1 || r < fr.r0 || r > fr.r1) return;
+    const me = this.#tileOf(f, r);
+    const g = this.bctx;
+    g.fillStyle = BOXLINE;
+    for (const [df, dr] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+      const nf = f + df, nr = r + dr;
+      if (nf >= fr.f0 && nf <= fr.f1 && nr >= fr.r0 && nr <= fr.r1) continue;
+      const t = this.#tileOf(nf, nr);
+      if (t.row < me.row) g.fillRect(x, y, T, 1);
+      else if (t.row > me.row) g.fillRect(x, y + T - 1, T, 1);
+      else if (t.col < me.col) g.fillRect(x, y, 1, T);
+      else g.fillRect(x + T - 1, y, 1, T);
     }
   }
 

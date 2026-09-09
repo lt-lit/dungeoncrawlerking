@@ -1010,6 +1010,104 @@ a phone height for the duel box (on a phone the dimmed dungeon shows
 beside the crop only), the analyzer mounting the whole world (it paints
 the crop as an arena). THE PHONE VERDICT IS THE GATE.
 
+**Milestone 4d — THE CONTROLS AND THE CAMERA (2026-09-09).** The
+designer-led session whose eighteen rulings are brief §5.1 (read them
+there; CLAUDE.md carries the digest), built as the CONTROLS PR — the
+movement model and the walk's controls together, since the d-pad's
+meaning IS the movement model. THE RULE (`play/js/army.mjs`, rewritten;
+`phase0/harness/test-army.mjs` 97): THE ANCHOR IS THE FORMATION'S
+FRONT-CENTRE, not the king — `pattern.anchor` (the front row's centre
+file, the king's when within half a cell of it, at the front row's
+depth), `army.at` its world cell (the formation's position; a save
+without one derives it from the king), the king a follower with a slot
+like everyone else, so through a one-wide door the pawns file in first
+and the king last, and "blocked" means the anchor's next cell is not
+floor (the FRONT met the wall — a bump, never a capture). INPUTS ARE
+WORLD-RELATIVE (`step { df, dr }`, `face { facing }`, `wait`, `move { id,
+to }`; the run stamp is `dck-run/2`): THE FACING FOLLOWS THE STEP
+(`facingOfStep` — a cardinal step faces that way; a diagonal keeps the
+facing when the facing is one of its components, else turns to the
+perpendicular one, never about-face; no ties), and a facing change is a
+PIVOT (`pivotPlacement`: every piece to its slot in the turned formation
+about the king's cell, molded to the nearest reachable floor at or ahead
+of him, own pieces never blocking since all are in motion) BEFORE the
+step; a `face` input is the pivot alone (a move). THE WALK (`planTurn` →
+`walk`): every piece toward its slot, FRONT ROWS FIRST, THE KING LAST OF
+ALL, else nearest-to-slot, in passes; a piece's path is measured with
+the comrades who STAY and every cell another piece ENDS on as obstacles
+(so a pawn boxed in behind the back row walks around it); a cell one
+piece passes THROUGH this turn carries nobody else (one at a time through
+a doorway); CATCH-UP — a second step when the path is longer than one, a
+third while behind the king (`CATCH_UP` 2 / `CATCH_UP_BEHIND` 3); moves
+carry `via`, the waypoints, so a slide goes AROUND a crate. THE
+INVARIANT after every turn: a STUCK piece (no king-step path to its
+target through floor at all AND no move that gets nearer — sealed off,
+not queued; a knight beyond a thin wall keeps its hop and hops home on
+its own) and any piece THE BOX cannot hold (`boxOf`: a 10×10 with the
+king on its first row, none behind him, the files spanning at most ten;
+`left` the offset that CENTRES the formation when there is slack, `rect`
+the box in world cells) are TELEPORTED to their slots (`teleport: true`
+on the move; the box loop takes the farthest-from-slot first). MANUAL
+MOVES (`manualMoves`) are a piece's ACTUAL CHESS MOVES and nothing else —
+`pieceMoves({ manual: true })`: the king one square any way, a pawn its
+push and its diagonal captures, sliders and the knight their own;
+furniture a capture; enemy pieces never — minus any that would break the
+box (the king's own filtered on the files' span alone); THE KING'S manual
+move is a step the army follows (`fixed` in the walk: his destination
+pinned, the anchor shifted by his delta, the facing following, a pivot if
+it changes). THE PAGE (main.mjs § THE WALK, rewritten): the board mounts
+NORTH-UP always (`facing: 0`), turned for a duel by `mountDuelBoard` as
+before and back by `mountWalkBoard` after, each cut behind THE WIPE
+(`#wipe`, a black sheet fading `WALK_WIPE_MS` 160 each way; the duel's
+lifts once the board has painted or after 1.5 s); the camera's focus is
+THE FORMATION'S CENTRE (`formationFocus`, fractional, through `walkFocus`
+with the HUD-aware offset) plus the look-around offset; `walkInput`
+BUFFERS one input that lands mid-turn and CHAINS the next step of a held
+pad or key on the end of the last (`W.pending` / `W.held`), so a walk has
+no seam; a refused step NUDGES the view into the wall (canvas-board
+`nudge`, `NUDGE` 1-2-2-1-0 tile pixels over `WALK_BUMP_MS` 120); a
+teleport dashes (`WALK_TELEPORT_MS` 260), a pivot takes its own beat
+(`WALK_PIVOT_MS` 220), a step `WALK_STEP_MS` 150. THE HUD: the d-pad is
+WORLD-relative (up is north) — a press in a NEW direction turns the army
+in place at once (a `face`, a move) and WALKS if held past `WALK_HOLD_MS`
+180, a press the way it faces steps at once and keeps stepping while
+held, the thumb slides to steer; the turn buttons, the zoom buttons and
+the swipe are GONE (the cluster is wait / barrier + initiative / export);
+THE KEYS are world directions, the direction THE SUM OF WHAT IS HELD (W
+and D = north-east) after a `WALK_KEY_CHORD_MS` 45 window, a new
+direction turning first and walking if still held, Q / E face left /
+right, space waits, + − zoom, B the debug barrier, Escape lets go; ON THE
+MAP a DRAG (past `WALK_DRAG_PX` 10) pans the focus in whole native pixels
+(`W.look`, cleared by the next move — the camera glides back with the
+step), a PINCH steps the zoom on each crossing of the geometric midpoint
+between neighbouring k (re-anchored per step; the wheel likewise), and a
+TAP selects a piece — the king included — marking its chess moves at the
+current zoom with the camera unmoved and THE BOX OUTLINED (canvas-board
+`setCellMarks({ frame })`, one pixel in `BOXLINE`, facing-agnostic: an
+edge is painted where the neighbour lies outside the rectangle); a
+catch-up path animates along its waypoints (`animateArrivals` takes
+`via`; `#paintCellSlide` walks the polyline). The status strip reads
+turn · facing · pieces · k · a note. The debug turn in Options → Look and
+`?facing=` stay for the renderer gates. `__DCK.walk` gained `look()`,
+`box()`, `focus()`; `state` carries `at` and `look`; `duelZoom` is gone.
+Gates: test-army 97 (the facing rule's sixteen cases, unison and the
+pivot on open ground, the corridor about-face in one turn, the dead end,
+the doorway — one at a time, a pawn first, the king last — catch-up past
+a pillar, stragglers home, the chain, molding, the crate bump, manual =
+chess only, the king's move with the army following, the box's filter and
+teleport, the sealed pocket, the knight's hop home, refusals, the save
+with its anchor), selftest 46/46, ui-smoke (the walk block rewritten: the
+step, the face, the pivots to a wall, the tap without a snap and the box,
+the king tapped, the pad's tap-turn, q, a W+D chord, a drag and its
+return, a pinch; the barrier block's walk-out waits for the transition)
+241 ok, test-barrier 108, test-world 125, test-dungeon 96, test-debris 60,
+test-camera 80, test-logreport 47. NOT here, on purpose (the DUEL START
+PR, rulings 3, 9, 16): the drop still stamps the pattern; the gap is
+still front-most to front-most; the box at the drop is still centred on
+the king's file; the walk-out still re-spawns the pattern whole. THE
+PHONE VERDICT IS THE GATE — the pace (`WALK_STEP_MS`), the hold threshold
+and the pivot's beat are the first dials to turn on it.
+
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
 
