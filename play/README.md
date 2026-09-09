@@ -1201,6 +1201,59 @@ step per tick, and the north-east step it makes was refused on the old
 build), test-barrier 108, test-world 125, test-dungeon 96, test-debris
 60, test-camera 80, test-logreport 47.
 
+THE THIRD WALK'S VERDICT (designer, the same day, five screenshots, every
+one a "regrouping" turn with the army spread over three or four cells
+around a wall stub or an urn column): "Still getting odd positioning
+sometimes. Maybe we're overthinking it. The whole goal of this is to make
+it so when moving with just a d-pad the army should never be split. They
+should stay in a battle ready cluster as much as possible." So THE
+CLUSTER IS THE INVARIANT, not a side effect: after every d-pad turn the
+army is ONE BODY — every piece TOUCHING another by chains (a king step
+apart; a diagonal counts only when one of its two orthogonal cells is
+crossable, so a piece across a wall's corner is NOT part of the body —
+that corner was how pieces had been slipping onto the far side of thin
+walls and walking a parallel corridor). Built in army.mjs on the
+harness, every rule measured: (1) the walk plans as before, then
+`settleBody` judges its end: whole, or else; (2) a laggard that could
+not move AT ALL while the body went on is STUCK — it teleports beside
+the body (ruling 15's "just teleport pieces that get stuck somewhere,
+who gives a fuck"), unless a comrade was what stopped it (`queued`: a
+claimed cell, a cell passed through, a cell not yet left — it is waited
+for); (3) THE RETRACTION (`retractSplit`, on a copy of the walk): a
+split end gives back last steps until the army is one body — first the
+outside pieces' steps that did not bring them nearer the body (a pawn
+that rounded a pillar a step too far waits beside the rook; the rook
+follows next turn), then the body's own, THE KING FIRST (he waits for a
+straggler still on its way, and for the rook he stepped past at a door),
+a piece stepping back onto a cell a comrade took in its wake pushing
+that comrade back too; (4) if even that fails the army was split before
+the walk began (a piece moved away by hand): it walks on and converges;
+(5) the king's never-overtake PLANNING rule of the second verdict is
+RETIRED — with two pieces level with him in a dead-end nook it froze the
+whole army for 1800 turns of a run: the king plans freely and the
+retraction gives his steps back only when a comrade would end BEHIND HIM
+(`behindKing`: behind his row and not touching him — one rank behind but
+touching, the queued rook at a door, is tolerated by the walk and the box
+loop alike; the drop molds it into the box), so the walk order is the
+king LAST again and the rook takes the doorway ahead of him; (6) a plan
+made while a comrade still meant to leave its cell is VOID once that
+comrade stays (the passes are capped; two pieces had ended on one cell);
+(7) the target set and the pivot's placement use the same touching
+adjacency; a stuck piece's teleport lands beside the body. THE
+INSTRUMENT grew what the work needed: `--teleports N` and `--refused N`
+samples, a collision check, and the would-be targets printed on a
+refused traced turn. MEASURED, the shipped set, 3000 inputs a fixture:
+held cardinal walks (10 300 turns) — the army in more than one body on
+3–6 turns a fixture (0.2%), zero collisions, the king touching a comrade
+on EVERY turn and never more than two behind his slot (lag two on 14%),
+4–32 teleports a fixture (stuck pieces, one "behind"), 3–4% regroups,
+16% refusals (the front meeting a wall); random walks with diagonals
+(10 100 turns) — split on 4–8 turns a fixture, 18–36 teleports. test-army
+115 (+ THE CLUSTER block: one body after every turn through the door,
+round the pillar, through the clutter and on a seeded random walk; a
+rook dragged four cells away rallies back on foot while the body stands),
+selftest 46/46, ui-smoke 331 ok, the other Node gates unchanged.
+
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
 

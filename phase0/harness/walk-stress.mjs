@@ -8,6 +8,8 @@
 //   node harness/walk-stress.mjs [--steps 4000] [--seed 1] [--worst 6] [--world vaults-4]
 //     [--hold 1]        a thumb on one arm of the pad: cardinals held 6–20 steps, no diagonals, no waits
 //     [--splits N]      print N sampled turns where the army is split but the king is not the one detached
+//     [--refused N]     print N sampled refused steps with their maps
+//     [--teleports N]   print N sampled turns with a teleport
 //     [--trace <turn>]  with --world: print every turn from turn−12 to turn (the maps and the moves)
 import fs from 'fs';
 import path from 'path';
@@ -26,6 +28,10 @@ const ONLY = arg('world', null);
 const TRACE = arg('trace', null);
 const HOLD = arg('hold', null);
 const SPLITS = parseInt(arg('splits', '0'), 10);
+const REFUSED = parseInt(arg('refused', '0'), 10);
+const TELEPORTS = parseInt(arg('teleports', '0'), 10); // --teleports N: print N sampled turns with a teleport (before / after maps, the reason)
+const teleportSample = []; // --refused N: print N sampled refused steps (the front met the wall, or the army could not move as one body)
+const refusedSample = [];
 const splits = [];
 const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
 const DIRS = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
@@ -77,12 +83,27 @@ for (const w of worlds) {
     const plan = A.advance(world, army, input);
     if (TRACE !== null && t >= +TRACE - 12 && t <= +TRACE) {
       const k = army.king; const s = army.slotOf(k);
+      if (!plan.ok && input.kind === 'step') {
+        // The targets the walk would have assigned for this step (the refused plan carries none).
+        const f2 = A.facingOfStep(army.facing, input.df, input.dr);
+        const at2 = { f: army.at.f + input.df, r: army.at.r + input.dr };
+        const kc = { f: k.f, r: k.r };
+        const fromKing = A.distanceField(world, army, [kc]);
+        const fromAnchor = world.inBounds(at2.f, at2.r) && world.at(at2.f, at2.r) === FLOOR ? A.distanceField(world, army, [at2]) : fromKing;
+        const tg = A.assignTargets(world, army, at2, f2, kc, fromKing, fromAnchor, null);
+        console.log(`(refused) targets for anchor ${at2.f},${at2.r} facing ${f2}: ${army.pieces.map((p) => `${p.ch}${p.f},${p.r}→${tg.get(p.id)?.f},${tg.get(p.id)?.r}`).join('  ')}`);
+      }
       console.log(`\n=== ${w.id} turn ${t}: input ${JSON.stringify(input)} facing ${fb}→${army.facing} ok ${plan.ok}${plan.pivot ? ' PIVOT' : ''}${plan.regroup ? ' REGROUP' : ''} anchor ${atb.f},${atb.r}→${army.at.f},${army.at.r} king ${kb.f},${kb.r}→${k.f},${k.r} slot ${s.f},${s.r} lag ${cheb(k, s)}\nmoves: ${(plan.moves ?? []).map((m) => `${army.piece(m.id)?.ch}${m.from.f},${m.from.r}>${m.to.f},${m.to.r}${m.teleport ? ' TP' : ''}`).join('  ')}\n${localMap(world, army, plan)}`);
     }
-    if (!plan.ok) { grand.refused++; hold = 0; continue; }
+    {
+      const seen = new Map();
+      for (const p of army.pieces) { const k = `${p.f},${p.r}`; if (seen.has(k)) { console.log(`\n!!! COLLISION ${w.id} turn ${t}: ${seen.get(k)} and ${p.ch}${p.id} on ${k}; input ${JSON.stringify(input)} ok ${plan.ok}${plan.regroup ? ' REGROUP' : ''}\nmoves: ${(plan.moves ?? []).map((m) => `${army.piece(m.id)?.ch}${m.id}:${m.from.f},${m.from.r}>${m.to.f},${m.to.r}${m.via?.length ? ` via ${m.via.map((c) => `${c.f},${c.r}`).join(' ')}` : ''}${m.teleport ? ` TP(${plan.teleportWhy?.[m.id]})` : ''}`).join('  ')}\nBEFORE:\n${before}\nAFTER:\n${localMap(world, army, plan)}`); grand.collisions = (grand.collisions ?? 0) + 1; } seen.set(k, `${p.ch}${p.id}`); }
+    }
+    if (!plan.ok) { grand.refused++; hold = 0; if (REFUSED > 0 && refusedSample.length < REFUSED && t % 41 === 0) refusedSample.push({ world: w.id, turn: t, input, reason: plan.reason, facing: army.facing, map: before }); continue; }
     grand.turns++;
     if (plan.regroup) grand.regroups++;
     grand.teleports += plan.teleports?.length ?? 0;
+    if (TELEPORTS > 0 && plan.teleports?.length && teleportSample.length < TELEPORTS && (grand.teleports % 7 === 1)) teleportSample.push({ world: w.id, turn: t, input, facing: army.facing, regroup: !!plan.regroup, moves: plan.moves.map((m) => `${army.piece(m.id)?.ch}${m.from.f},${m.from.r}>${m.to.f},${m.to.r}${m.via?.length ? ` via ${m.via.map((c) => `${c.f},${c.r}`).join(' ')}` : ''}${m.teleport ? ` TP(${plan.teleportWhy?.[m.id]})` : ''}`).join('  '), before, after: localMap(world, army, plan) });
     if (plan.pivot) grand.pivots++;
     for (const id of plan.teleports ?? []) { const w = `${plan.teleportWhy?.[id] ?? '?'}${plan.pivot ? '/pivot' : ''}`; grand.why[w] = (grand.why[w] ?? 0) + 1; }
     const k = army.king;
@@ -130,6 +151,8 @@ console.log(`walk-stress: ${grand.turns} turns (${grand.refused} refused, ${gran
 console.log(`king lag to slot   0..9: ${grand.lag.join(' ')}`);
 console.log(`king to nearest    0..9: ${grand.far.join(' ')}`);
 console.log(`army split turns: ${grand.split}; detached pieces ${grand.detachedN}: ${Object.entries(grand.detached).map(([k, v]) => `${k} ${v}`).join(', ')}; on target ${grand.detachedOnTarget}, moved this turn ${grand.detachedMoved}; distance to target 0..9: ${grand.detachedDist.join(' ')}`);
+for (const c of teleportSample) console.log(`\n--- TELEPORT ${c.world} turn ${c.turn}: facing ${c.facing}, input ${JSON.stringify(c.input)}${c.regroup ? ' REGROUP' : ''}\nmoves: ${c.moves}\nBEFORE (K king, k his slot, @ anchor):\n${c.before}\nAFTER:\n${c.after}`);
+for (const c of refusedSample) console.log(`\n--- REFUSED ${c.world} turn ${c.turn}: ${c.reason}, facing ${c.facing}, input ${JSON.stringify(c.input)}\n${c.map}`);
 for (const c of splits) {
   console.log(`\n--- SPLIT ${c.world} turn ${c.turn}: ${c.comps} groups, facing ${c.facing}, input ${JSON.stringify(c.input)}${c.regroup ? ' REGROUP' : ''}\nmoves: ${c.moves}\ntargets: ${c.targets}\nBEFORE:\n${c.before}\nAFTER:\n${c.after}`);
 }

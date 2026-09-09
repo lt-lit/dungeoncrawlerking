@@ -535,6 +535,53 @@ const WAIT = { kind: 'wait' };
   expect(Number.isFinite(focus.f) && Number.isFinite(focus.r), `the formation's focus is a point (${focus.f}, ${focus.r})`);
 }
 
+// --- THE CLUSTER (designer 2026-09-09, the third walk: "when moving with just a d-pad the army should never be split. They should stay in a battle ready cluster as much as possible"): one 8-connected body after every d-pad turn — through a door, round a pillar, through clutter, at every turn of a random walk; a piece dragged away by hand rallies back while the body stands
+{
+  const walkAll = (world, army, inputs, label) => {
+    let splits = 0, turns = 0;
+    for (const inp of inputs) { const p = A.advance(world, army, inp); if (!p.ok) continue; turns++; if (!A.isClustered(world, army)) splits++; }
+    expect(splits === 0, `${label}: one body after every turn (${splits} split turns of ${turns})\n${rows(world)}`);
+  };
+  // The door: a 3-wide corridor, a one-wide door, a room beyond.
+  const door = worldOf(['#######', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '###.###', '##...##', '##...##', '##...##', '##...##', '#######']);
+  walkAll(door, A.spawnArmy(door, A.makePattern(KIT), { f: 3, r: 2 }, 0), Array(14).fill(N), 'through the door');
+  // The pillar in front of the left pawn, and a crate pair beside the way.
+  const pillar = worldOf(['..............', '..............', '..............', '....^.........', '..............', '..............', '..............', '..............', '..............', '.....#........', '.....#........', '..............', '..............', '..............', '..............', '..............']);
+  const a1 = A.spawnArmy(pillar, A.makePattern(KIT), { f: 6, r: 2 }, 0);
+  walkAll(pillar, a1, Array(11).fill(N), 'round the pillar');
+  expect(a1.king.r >= 10, `and the army passed it (king at rank ${a1.king.r})`);
+  // The cluttered hall, every direction.
+  const hall = worldOf(['############', '#..........#', '#....^.....#', '#.^........#', '#.....^.^..#', '#..#.......#', '#....^..#..#', '#.^........#', '#......^...#', '#..........#', '#..^.....^.#', '#..........#', '#..........#', '############']);
+  walkAll(hall, A.spawnArmy(hall, A.makePattern(KIT), { f: 5, r: 1 }, 0), [N, N, N, N, N, N, N, N, N, N, E, E, E, N, W, W, W, W, S, S, S, S, S, S, E, E, N, N, N, W, W, W], 'through the clutter');
+  // A seeded random walk with diagonals and turns over the hall: never split.
+  {
+    const a3 = A.spawnArmy(hall, A.makePattern(KIT), { f: 5, r: 1 }, 0);
+    let x = 7;
+    const rnd = () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return x / 0x7fffffff; };
+    const dirs = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
+    const inputs = [];
+    for (let i = 0; i < 120; i++) { const d = dirs[Math.floor(rnd() * 8)]; const n = 1 + Math.floor(rnd() * 4); for (let k = 0; k < n; k++) inputs.push({ kind: 'step', df: d[0], dr: d[1] }); }
+    walkAll(hall, a3, inputs, 'a random walk through the clutter');
+  }
+  // A rook dragged four cells away by hand: the body stands, the rook rallies, the army is whole again within two inputs.
+  {
+    const open2 = open(16, 16);
+    const a4 = A.spawnArmy(open2, A.makePattern(KIT), { f: 8, r: 8 }, 0);
+    const rook = a4.pieces.find((p) => p.ch === 'R');
+    rook.f -= 4; rook.r -= 2;
+    a4.stamp(open2);
+    expect(!A.isClustered(open2, a4), 'the dragged rook leaves the army in two bodies');
+    const before = a4.pieces.filter((p) => p !== rook).map((p) => `${p.f},${p.r}`).join(' ');
+    const p1 = A.advance(open2, a4, WAIT);
+    const after = a4.pieces.filter((p) => p !== rook).map((p) => `${p.f},${p.r}`).join(' ');
+    expect(p1.ok && before === after, `on a wait the body stands (${before} → ${after})`);
+    expect(A.isClustered(open2, a4) && p1.moves.some((m) => m.id === rook.id && !m.teleport), `the rook rallied back on foot (${JSON.stringify(p1.moves.find((m) => m.id === rook.id))})`);
+    let t = 0;
+    while (!onSlots(a4) && t < 3) { A.advance(open2, a4, WAIT); t++; }
+    expect(onSlots(a4), `and the formation is whole within ${t} more waits`);
+  }
+}
+
 for (const b of bad) console.log(`FAIL ${b}`);
 console.log(`test-army: ${ok}/${ok + bad.length} checks passed`);
 process.exit(bad.length ? 1 : 0);
