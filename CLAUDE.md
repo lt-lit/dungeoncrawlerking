@@ -554,7 +554,7 @@ become PIECE FACTORIES feeding the same assembler (a generated room is a
 tagged piece like a hand-authored one), so both roads meet and the
 library never runs dry; styles = which tags a floor draws from + which
 plan shapes. NEXT, IN THE DESIGNER'S ORDER: (1) a session on THE
-CONTROLS AND THE CAMERA (theirs to lead; the open items on record: the
+CONTROLS AND THE CAMERA — ✅ HELD 2026-09-09, the paragraph below (theirs to lead; the open items on record: the
 turn as a cut with no animation, the zoom as ± cuts and no pinch, the
 walk's default zoom fitting fifteen tiles, the d-pad's held repeat and
 the swipe, the tap-a-piece snap-zoom and its target pick, the duel box
@@ -563,6 +563,64 @@ on a phone with the dimmed dungeon beside it only, the desktop layout
 LAYER for the generator (the lattice, the tags, the plan graph, exact
 seams), the arenas retagged, pieces authored for assembly in batches;
 (3) milestone 6.
+
+**THE CONTROLS AND CAMERA CONVERSATION ✅ HELD 2026-09-09 (designer-led;
+brief §5.1 carries the EIGHTEEN RULINGS in full — read them there before
+touching the walk; this is the digest). THE RULINGS: (1) the camera is
+NORTH-UP on the walk, always — it turns for a duel and back after, each
+cut a blackout wipe; the turn buttons are gone. (2) THE D-PAD TURNS THE
+ARMY "like a typical third person video game": inputs are WORLD-relative,
+the FACING FOLLOWS THE STEP (cardinal → that way; a diagonal keeps the
+facing when it is one of its components, else the perpendicular one,
+never about-face), a TAP in a new direction turns in place (a move), a
+HOLD walks. (3) a duel starts WITH THE PIECES WHERE THEY STAND — nothing
+summoned, 4c's stamp-is-the-pattern retired. (4) nobody is ever behind
+the king — by the pivot and the box invariant, never by refusing a duel.
+(5) NO CAMERA JERK on a tap; the snap-zoom is gone. (6) PINCH TO ZOOM,
+quantized to whole k, the wheel on a desktop, no zoom buttons. (7) WASD /
+arrow DIAGONALS by held-key chords. (8) POKÉMON FEEL: tap turns, hold
+walks, seamless chained steps with one buffered input, a wall bump, the
+battle wipe. (9) THE GAP IS BETWEEN THE PAWN LINES (the camp lines),
+never the front-most pieces. (10) THE KING MOVES BY HIS OWN CHESS MOVE on
+the walk, captures included, and the army takes its auto-formation move
+with it. (11) EVERY INTERACTION WITH THE ENVIRONMENT IS AN ACTUAL CHESS
+MOVE: a manual move offers chess moves only (the king-step option lives
+inside the auto move alone), `^` is taken only by a chess move and never
+by the d-pad, a front pawn cannot open the door dead ahead ("that is the
+puzzle"), enemy pieces are never captured on the map. (12) THE ANCHOR IS
+THE FORMATION'S FRONT-CENTRE, NOT THE KING (designer: "I'd want the pawns
+to file in first and the king to go last"; the back line will be
+editable): the d-pad moves that cell, it must be floor, every piece incl.
+the king walks to its slot, the camera follows the formation's centre.
+(13) CATCH-UP: two steps a turn when the path is longer than one, three
+while behind the king — a pawn walks at the king's own speed and could
+never make up a lost step (the designer's "half the army, usually pawns,
+trailing way behind"). (14) TURNS PIVOT, WALKS WALK: a facing change
+wheels the formation in place about the king, every piece sliding
+straight to its turned cell (molded), one beat — a teleport dressed as a
+slide, because an about-face in a three-wide corridor is a sliding
+puzzle walking cannot solve. (15) THE ARMY ALWAYS FITS THE BOX — a 10×10
+with the king on its first row, "not necessarily centered", slid along
+his rank — after every input: a manual move that would break it is not
+offered (the box outlined while a piece is selected), a STUCK piece (no
+path by its OWN moves — a knight beyond a thin wall has its hop back and
+is not stuck) is teleported to its slot ("who gives a fuck"), nothing is
+ever sealed off (the walk-out moves the whole army to the nearest floor
+that holds it). (16) THE DROP: the box slides to hold every piece,
+centred on the formation when there is slack; the enemy molds across the
+pawn-line gap and around the player's pieces; the one refusal is a
+position decided at load; milestone 6's trigger is four AXES on the king.
+(17) DRAG TO LOOK AROUND, the camera gliding back on the next army
+input; the swipe-to-step is gone. (18) the knight keeps its hop over
+walls. BUILD ORDER: the CONTROLS AND CAMERA PR (1, 2, 5–8, 10–15, 17, 18
+— the movement model is inseparable from the controls; branch
+`claude/exploration-controls-camera-714e6f`), then the DUEL START PR
+(3, 9, 16: barrier.mjs + armygen.mjs buildMatchup + the walk-out).
+Supersedes in this file: milestone 4b's "a rotation costs a move" (a
+tap-to-turn still does; a step's turn is the step's), the body-relative
+d-pad and swipe in 4c's HUD note, the snap-zoom and `duelZoomFor`, the
+walk's "king centred" camera, and — for the walk only — "the camera
+turns with the army".**
 
 **MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
 conversation SETTLED and what it only PROPOSED.** Settled (designer): the
@@ -573,7 +631,10 @@ WORLD direction (his facing does not gate it: an enemy behind him can
 catch him; at the drop the army turns to the axis as a cut and the
 pattern stamps forward as 4c does — flanking stays §11), his rank the
 box's row 0, CENTRED on his file (four to the left, five to the right —
-nothing slides, designer 2026-09-09); a duel
+nothing slides, designer 2026-09-09 — SUPERSEDED the same day by the
+controls session's ruling 16: the box SLIDES along his rank to hold every
+piece and centres the formation when there is slack; four AXES, not four
+placements); a duel
 starts the moment a HUNTING enemy's king stands on the FAR ROW of one —
 anywhere on it: brief §5.3's band alignment is back and 4c's strict
 colinearity retired, read from "both kings in the right rows" and NOT
