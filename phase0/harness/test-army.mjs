@@ -308,14 +308,14 @@ const WAIT = { kind: 'wait' };
   expect(onSlots(army) && t <= 3, `everyone is home after ${t} waits\n${rows(world)}`);
 }
 
-// --- a chain: a file of three steps forward together (each into the cell the one ahead leaves)
+// --- a chain: a file of four steps forward together (each into the cell the one ahead leaves); the royal is rearmost, as every pattern's is
 {
   const world = open(8, 12);
-  const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }, { ch: 'P', dx: 0, dy: 2 }, { ch: 'R', dx: 0, dy: -1 }]);
+  const pat = A.patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'P', dx: 0, dy: 1 }, { ch: 'P', dx: 0, dy: 2 }, { ch: 'R', dx: 0, dy: 3 }]);
   const army = A.spawnArmy(world, pat, { f: 3, r: 3 }, 0);
-  expect(onSlots(army) && army.at.r === 5, 'a file of four spawns in a column, the anchor at its head');
+  expect(onSlots(army) && army.at.r === 6, 'a file of four spawns in a column, the anchor at its head');
   const plan = A.advance(world, army, N);
-  expect(plan.ok && plan.moves.length === 4 && onSlots(army) && army.king.r === 4, `the column steps forward as one, each into the cell the one ahead left (${plan.moves.length} moves)`);
+  expect(plan.ok && plan.moves.length === 4 && plan.moves.every((m) => !m.teleport) && onSlots(army) && army.king.r === 4, `the column steps forward as one, each into the cell the one ahead left (${plan.moves.length} moves)`);
 }
 
 // --- molding: a slot in a wall sends its piece to the nearest floor, ahead of the king first; a 3-wide corridor squeezes a 5-wide line

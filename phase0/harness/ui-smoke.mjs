@@ -1002,7 +1002,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     document.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', bubbles: true }));
     await settle();
     const lastInput = K.walk.saved().turns.at(-1);
-    out.chord = { turns: K.walk.state.turn - t2, last: lastInput, king: { ...K.walk.state.king }, from: kq, facing: K.walk.state.facing };
+    const chordInputs = K.walk.saved().turns.filter((i) => i.kind !== 'duel').slice(t2);
+    out.chord = { turns: K.walk.state.turn - t2, last: lastInput, allNE: chordInputs.every((i) => i.kind === 'step' && i.df === 1 && i.dr === 1), king: { ...K.walk.state.king }, from: kq, facing: K.walk.state.facing };
     // A DRAG on the map looks around: the focus moves, no turn is spent; the next move brings the camera back.
     const t1 = K.walk.state.turn;
     const el = document.getElementById('walk-board');
@@ -1057,7 +1058,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom steps k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
   expect(wk.padTap.turns === 1 && wk.padTap.facing === 2 && wk.padLit === '0,-1', `a tap on the pad's south arm (lit ${JSON.stringify(wk.padLit)}) turns the army south in place for one move (${wk.padTap.turns} turn, facing ${wk.padTap.facing})`);
   expect(wk.pad.turns === 2 && wk.pad.facing === 1, `q faces left, south → east, for a move (${wk.pad.turns} turns, facing ${wk.pad.facing})`);
-  expect(wk.chord.turns <= 1 && (wk.chord.turns === 0 || (wk.chord.last?.kind === 'step' && wk.chord.last.df === 1 && wk.chord.last.dr === 1 && wk.chord.facing === 1)), `W and D together are one north-east input, and facing east stays east (${wk.chord.turns} turn, last input ${JSON.stringify(wk.chord.last)})`);
+  // With motion off (fx=0) a held chord chains a step per tick, so the count is the hold's; every input it made must be the one north-east step.
+  expect(wk.chord.turns === 0 || (wk.chord.allNE && wk.chord.last?.kind === 'step' && wk.chord.last.df === 1 && wk.chord.last.dr === 1 && wk.chord.facing === 1), `W and D together are one north-east input, and facing east stays east (${wk.chord.turns} turn(s), all north-east ${wk.chord.allNE}, last input ${JSON.stringify(wk.chord.last)})`);
   expect(wk.drag.turns === 0 && wk.drag.look && (wk.drag.look.dx !== 0 || wk.drag.look.dy !== 0) && (wk.drag.focusAfter.dx !== wk.drag.focusBefore.dx || wk.drag.focusAfter.dy !== wk.drag.focusBefore.dy) && wk.drag.lookAfterMove === null, `a drag looks around without spending a turn (look ${JSON.stringify(wk.drag.look)}) and the next move brings the camera back`);
   expect(wk.pinchUp > wk.pinchBase && wk.pinchDown === wk.pinchBase, `a pinch steps the zoom up and back down in whole steps (${wk.pinchBase} → ${wk.pinchUp} → ${wk.pinchDown})`);
   expect(wk.leave.phase === 'setup' && wk.leave.resume && /turn/.test(wk.leave.resumeText), `leaving keeps the run: the setup offers "${wk.leave.resumeText}"`);

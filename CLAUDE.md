@@ -647,7 +647,46 @@ a catching-up path prefers one that does not cut through a comrade's
 slot (the king was being starved of his own cell); the king hurries
 three, ties toward the anchor, and THE KING'S LEASH (`KING_LEASH` 3)
 turns a step he could not follow into a REGROUP (the anchor holds, the
-walk runs, nothing refused). test-army 106. NEXT: the DUEL START PR
+walk runs, nothing refused). test-army 106. THE SECOND WALK'S VERDICT
+(designer, the same day, four screenshots on Vaults 4: "It mostly works…
+I'm still seeing the king in weird spots despite seeing him make
+multiple moves… I feel the pieces should at least be able to stay
+adjacent if I'm only using d-pad movement"), MEASURED then fixed the
+same day with a new instrument, `phase0/harness/walk-stress.mjs` (random
+d-pad walks over the generated fixtures, `--hold` a thumb on one arm;
+the king's lag to his slot, his distance to the nearest comrade, the
+army's connectivity, teleports by reason, the worst turns as maps,
+`--trace <turn>`): the teleports WERE the weird spots — 4842 in 11 000
+random turns, almost all the box rule firing after the KING STEPPED
+DIAGONALLY AHEAD of a comrade still queued at a door, which the rule
+then read as "behind him" and threw across the map. Now (army.mjs, all
+in the walk itself): THE KING NEVER OVERTAKES a comrade and no comrade
+ENDS behind him (a way round a crate pair may dip `DETOUR` 2 cells
+behind him within the turn), so the box row is kept by the walk and the
+teleport is only for the truly stuck; a piece's plan HOLDS across the
+planning passes unless a re-plan ends strictly nearer (the king and a
+rook waiting on each other had swapped plans every pass); a comrade who
+has not planned yet is not an obstacle (a pawn planned before the pawn
+in front of it was detouring round the back of the formation); a way
+round the comrades longer than the way through them by `DETOUR_MAX` 3
+is not walked — the piece QUEUES up to the crowd; THE TARGETS OF A WALK
+ARE ONE CONNECTED SET (`assignTargets`: the king's first, slots as they
+are, the rest molded BESIDE a target already given, never behind the
+king's cell, a cell behind his TARGET costing `BEHIND_COST` 2 per rank —
+a pawn placed across a wall's corner had walked a parallel corridor for
+twenty turns with the king forbidden to overtake it; the pivot places by
+the same rule); STUCK means no way to the target that does not end
+behind the king (a pawn in a pocket beside him rejoins by teleport); and
+`KING_LEASH` is 2. Measured (held cardinal walks, 11 100 turns): the
+king never more than two behind his slot, two on 17% of turns, two or
+more from every comrade on 5.7%, 0–8 teleports a world (stuck or a
+pivot's leftovers); random walks with diagonals: lag three gone,
+teleports 4842 → 9–15 a world, regroups 588 → 90–130. test-army 106 (the
+chain fixture's rook now stands where every pattern's royal-rearmost
+rule puts it), selftest 46/46, ui-smoke 287 ok (its key-chord check
+judges the chord's inputs, not their count — with motion off a held
+chord chains a step per tick, and the north-east step it makes was
+refused on the old build), the other Node gates unchanged. NEXT: the DUEL START PR
 (rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
 stand, `buildMatchup` measuring the gap between the camp lines and
 molding the enemy around the player's pieces, the box slid to hold the
@@ -1620,8 +1659,12 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   `at`, world-relative inputs, the facing following the step, the PIVOT on
   a turn, the walk with CATCH-UP (front rows first, the king last), the
   BOX invariant with its stuck / stray teleports, manual moves as chess
-  moves only, the king's move the army follows (Node gate `test-army.mjs`
-  97); the run save (one object per run, `dck-run/2`, export / import as
+  moves only, the king's move the army follows, and since the second
+  walk's verdict (2026-09-09) THE ROW KEPT BY THE WALK ITSELF — the king
+  never overtakes, the targets one connected set (`assignTargets`), a
+  plan that holds across the passes (Node gate `test-army.mjs` 106;
+  `phase0/harness/walk-stress.mjs` the cohesion instrument); the run
+  save (one object per run, `dck-run/2`, export / import as
   a file, no backward compatibility); the fixtures in `play/worlds/`
   (GENERATED floors since milestone 5). main.mjs § THE WALK is the page
   (`#screen-walk`: the north-up board, the tap-to-turn / hold-to-walk
@@ -1711,6 +1754,7 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
+node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity, teleports by reason, the worst turns as local maps; --trace prints the turns before one
 node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 

@@ -1134,6 +1134,73 @@ and the crate standing, a solid wall still refused, twenty-four inputs
 through a cluttered hall with the king never past the leash, the door
 scene's lag bound, a synthetic regroup).
 
+THE SECOND WALK'S VERDICT (designer, the same day, four screenshots on
+Vaults 4, all from the d-pad alone): "It mostly works, I'm not getting
+stuck on every little square, and the army is mostly better at staying
+together. I'm still seeing the king in weird spots despite seeing him
+make multiple moves… I feel the pieces should at least be able to stay
+adjacent if I'm only using d-pad movement. Maybe this has something to
+do with how the spots are assigned in hairy spots. I'm seeing the king
+making multiple moves per turn just to pick a square that's sometimes
+multiple spaces behind the rest of the army." AN INSTRUMENT FIRST:
+`phase0/harness/walk-stress.mjs` walks the kit at random over the four
+generated fixtures (a direction held one to eight steps, 4% waits;
+`--hold 1` a thumb on one arm of the pad, cardinals held six to twenty)
+and measures what the designer was seeing — the king's lag to his slot,
+his distance to the nearest comrade, whether the army is one 8-connected
+body, teleports by reason (`plan.teleportWhy`: stuck / behind / box) —
+and prints the worst turns as local maps (K the king, k his slot, @ the
+anchor) and, with `--trace <turn>`, the twelve turns before one. The
+first run said where the weird spots came from: 4842 TELEPORTS in 11 000
+turns, and almost every one was the box rule firing after the king had
+stepped DIAGONALLY AHEAD of a comrade still queued at a door — the rule
+read the rook as "behind him" and threw it into the doorway. Every fix
+below is in the walk itself (army.mjs), each measured on the harness:
+(1) THE KING NEVER OVERTAKES a comrade (no step of his may put another
+piece's cell behind his own) and no comrade ENDS behind him — a path
+round a crate pair may dip `DETOUR` 2 cells behind him and come back
+within the turn — so the box's "king on the first row" is kept by the
+walk and the teleport is only for the truly stuck and what the ten-by-ten
+cannot hold (teleports 4842 → 35 on the spot); (2) a piece's plan HOLDS
+across the planning passes (its claim and the cells it passes through
+stay booked) and a re-plan replaces it only when it ends strictly nearer
+— the king and a rook waiting on each other had swapped plans every pass
+and the cut-off left one of them standing; (3) a comrade who has not
+planned yet this turn is not an obstacle in a piece's field (a pawn
+planned before the pawn in front of it was detouring round the back of
+the formation and blocking the king), and pass 0 is always followed by a
+second pass; (4) a way round the comrades longer than the way through
+them by `DETOUR_MAX` 3 is not walked — the piece QUEUES up to the crowd
+on the straight way's field (the king at a doorway had been sent round
+the outside of the building, then held by "never walks away", so he
+stood still); (5) THE TARGETS OF A WALK ARE ONE CONNECTED SET
+(`assignTargets`, once per turn, unique: the king's first — his slot, or
+the nearest direct cell never ahead of its row — then every slot that is
+free direct floor, then the rest molded BESIDE a target already given,
+never behind the king's cell, a cell behind his TARGET costing
+`BEHIND_COST` 2 per rank, and while the set falls apart the detached
+target nearest the king's component is given again beside it; the pivot
+places by the same rule) — a pawn molded across a wall's corner had
+walked a parallel corridor for twenty turns with the king forbidden to
+overtake it; (6) STUCK means no way to the target that does not end
+behind the king (a pawn in a pocket beside him whose only way out is
+round his back rejoins by teleport); (7) a step's tie-break prefers the
+more forward cell (a knight's hop over a diagonal step back); (8)
+`KING_LEASH` 2. MEASURED, the shipped set, 3000 inputs a fixture: held
+cardinal walks (11 100 turns) — the king never more than two behind his
+slot, two on 17% of turns, at least two from every comrade on 5.7%, 0–8
+teleports a fixture; random walks with diagonals (10 900 turns) — lag
+three gone, 9–15 teleports a fixture (stuck, or a pivot's leftovers),
+regroups 588 → 90–130, the army in more than one 8-connected body on
+36% of turns, two thirds of those a pawn already ON its target a cell
+ahead of a king one behind his. test-army 106 (the chain fixture's rook
+now stands where every pattern's royal-rearmost rule puts it), selftest
+46/46, ui-smoke 287 ok (its key-chord check now judges the chord's
+inputs rather than their count: with motion off a held chord chains a
+step per tick, and the north-east step it makes was refused on the old
+build), test-barrier 108, test-world 125, test-dungeon 96, test-debris
+60, test-camera 80, test-logreport 47.
+
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
 
