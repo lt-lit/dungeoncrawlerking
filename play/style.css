@@ -531,6 +531,9 @@ body.layout-wide #preview-controls { justify-content: flex-start; }
 .world-card canvas { width: 100%; image-rendering: pixelated; border-radius: .25rem; background: #000; }
 .world-card .world-title { font-weight: 600; font-size: .85rem; }
 .world-card .world-dims { font-size: .7rem; color: var(--muted); }
+.world-gen { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .5rem; font-size: .8rem; }
+.world-gen input { width: 6.5rem; }
+.world-gen button, .world-gen select { font-size: .8rem; padding: .3rem .6rem; }
 .world-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .8rem; }
 .world-actions button { font-size: .8rem; padding: .3rem .7rem; }
 #run-note { margin: 0; }

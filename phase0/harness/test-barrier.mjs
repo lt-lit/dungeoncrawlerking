@@ -1,29 +1,22 @@
 #!/usr/bin/env node
-// THE BARRIER BY HAND (Phase 2 milestone 4c) — the Node gate for
-// play/js/barrier.mjs: where the barrier drops on an army as it stands and
-// the deal it stamps. On the walk-around fixture at every facing and on
-// synthetic floors: the king anchors row 0 on his own file, the enemy king
-// stands on that file on the last row, the gap is exactly 4, the crop reads
-// north-up under the army's facing, the depth is computed (a 2-deep kit vs
-// a 2-deep enemy is 8 ranks; terrain deepens it; past 10 refuses), the
-// width is the room's capped at 12 and centred on the king, a crawlspace
-// refuses, a crop hanging off the map is walled, the carried pattern keeps
-// its marching order, the run records a duel as its result, and a sealed
-// king walks out whole.
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-import { loadWorld, World, arenaToWorld, worldToArena, cropTransform, HOLE, FLOOR, WALL } from '../../play/js/world.mjs';
-import { makePattern, spawnArmy, rotateBody, bagOfPattern, patternOf, Army } from '../../play/js/army.mjs';
-import { planBarrier, barrierWindow, cropAt, GAP, MAX_FILES } from '../../play/js/barrier.mjs';
+// THE BOX (Phase 2 milestone 5, 2026-09-08 — the trigger conversation) —
+// the Node gate for play/js/barrier.mjs: the arena is always 10×10 on the
+// player's king (his rank row 0, his facing arena-north), CENTRED on him
+// whatever stands beside him (designer 2026-09-09), the enemy king stands on the far row — the king's own file
+// first, else the nearest that deals — the kings nine apart, the gap an
+// output with a floor of 2, the summoning on ground connected to its king
+// (never through a thin wall into the next room), a crop hanging off the map
+// walled, the carried pattern in marching order, the run's duel entry, and
+// the lenient walk-out of a sealed king.
+import { loadWorld, arenaToWorld, worldToArena, cropTransform, HOLE, FLOOR, WALL } from '../../play/js/world.mjs';
+import { makePattern, spawnArmy, rotateBody, bagOfPattern, patternOf } from '../../play/js/army.mjs';
+import { planBarrier, planBox, boxPlacement, boxAt, reachOf, BOX, GAP_MIN } from '../../play/js/barrier.mjs';
 import { layoutArmy } from '../../play/js/armygen.mjs';
 import { newRun, recordDuel, inputsOf, runEnded, updateRun, openRun } from '../../play/js/run.mjs';
 import { parseBoard, splitFen } from '../../play/js/fen.mjs';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const W01 = JSON.parse(readFileSync(path.join(here, '..', '..', 'play', 'worlds', 'w01-the-undercroft.json'), 'utf8'));
 const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
-const ENEMY = { spec: { width: 6, budget: 24 }, archetype: 'heavies-deep' };
+const KIT_ENEMY = { spec: { width: 3, pieces: ['R', 'N'] } };
 
 let ok = 0, bad = 0;
 const check = (cond, msg) => { if (cond) ok++; else { bad++; console.log('FAIL', msg); } };
@@ -60,58 +53,144 @@ function worldOf(rows, { id = 'lab' } = {}) {
   rows.forEach((row, i) => { for (let f = 0; f < row.length; f++) if (row[f] === 'O') w.setTerrain(f, rows.length - 1 - i, HOLE); });
   return w;
 }
+const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 2 }, () => '#' + '.'.repeat(w - 2) + '#'), '#'.repeat(w)]);
 
-// ---- 1. the fixture at every facing: geometry, the gap, the pin, the order
+// ---- 1. the placement rule: the box is centred on the king, whatever stands beside him
 {
-  const results = {};
+  const run = (left, right) => (f, r) => r === 0 && f >= -left && f <= right;
+  const king = { f: 0, r: 0 };
+  for (const [left, right, why] of [[20, 20, 'a wide hall'], [1, 20, 'one cell off the west wall of a wide hall'], [20, 1, 'one cell off the east wall'], [1, 2, 'a 4-wide run'], [0, 2, 'a 3-wide run with the king at its west cell'], [0, 0, 'a lone cell'], [9, 0, 'a run of ten with the king at its east end']]) {
+    const p = boxPlacement(run(left, right), king, 0);
+    check(p.kingFile === 4 && p.left === left && p.right === right && p.width === left + 1 + right, `${why}: the king at file 4, the run ${left} / ${right} reported`);
+  }
+}
+
+// ---- 2. open ground at every facing: the box, the pin, the gap, the crop's orientation, the terrain
+{
+  const world = openFloor(30, 30);
   for (const facing of [0, 1, 2, 3]) {
-    const world = loadWorld(W01);
-    const pattern = makePattern(KIT, { archetype: 'heavies-deep', seed: 1 });
-    const at = world.start;
-    const army = spawnArmy(world, pattern, { f: at.f, r: at.r }, facing, 'w');
+    const w = openFloor(30, 30);
+    const army = spawnArmy(w, makePattern(KIT, { seed: 1 }), { f: 14, r: 14 }, facing, 'w');
     const king = army.king;
-    const win = barrierWindow(world, king, facing);
-    check(win && win.files >= 3 && win.files <= MAX_FILES, `facing ${facing}: a window across the king (${JSON.stringify(win)})`);
-    if (win) {
-      const tx = cropAt(world, king, facing, win.files, win.kingFile, 8);
-      const ahead = rotateBody(0, 1, facing), right = rotateBody(1, 0, facing);
-      const c0 = arenaToWorld(tx, win.kingFile, 0), c1 = arenaToWorld(tx, win.kingFile, 1), c2 = arenaToWorld(tx, win.kingFile + 1, 0);
-      check(c0.f === king.f && c0.r === king.r, `facing ${facing}: arena (kingFile, 0) is the king's cell`);
-      check(c1.f === king.f + ahead.df && c1.r === king.r + ahead.dr, `facing ${facing}: arena-north is the facing`);
-      check(c2.f === king.f + right.df && c2.r === king.r + right.dr, `facing ${facing}: arena-east is the army's right`);
-      const back = worldToArena(tx, king.f, king.r);
-      check(back && back.f === win.kingFile && back.r === 0, `facing ${facing}: the king's cell reads back as (kingFile, 0)`);
-    }
-    const plan = planBarrier(world, army, { enemy: ENEMY, seed: 7, turn: 'w' });
-    results[facing] = plan;
+    const box = boxAt(w, king, facing);
+    check(box.crop.files === BOX && box.crop.ranks === BOX && box.kingFile === 4, `facing ${facing}: a 10×10 box, the king at file 4`);
+    const tx = box.crop;
+    const ahead = rotateBody(0, 1, facing), right = rotateBody(1, 0, facing);
+    const c0 = arenaToWorld(tx, box.kingFile, 0), c1 = arenaToWorld(tx, box.kingFile, 1), c2 = arenaToWorld(tx, box.kingFile + 1, 0);
+    check(c0.f === king.f && c0.r === king.r, `facing ${facing}: arena (kingFile, 0) is the king's cell`);
+    check(c1.f === king.f + ahead.df && c1.r === king.r + ahead.dr, `facing ${facing}: arena-north is the facing`);
+    check(c2.f === king.f + right.df && c2.r === king.r + right.dr, `facing ${facing}: arena-east is the army's right`);
+    const back = worldToArena(tx, king.f, king.r);
+    check(back && back.f === box.kingFile && back.r === 0, `facing ${facing}: the king's cell reads back as (kingFile, 0)`);
+    const plan = planBarrier(w, army, { enemy: KIT_ENEMY, seed: 7, turn: 'w' });
+    check(plan.ok, `facing ${facing}: the barrier drops (${plan.ok ? '' : plan.error})`);
     if (!plan.ok) continue;
     const { K, k } = kingsOf(plan.deal.fen);
     check(K && K.r === 0 && K.f === plan.kingFile, `facing ${facing}: the player's king on row 0 of his file (${JSON.stringify(K)})`);
-    check(k && k.r === plan.stage.ranks - 1 && k.f === plan.kingFile, `facing ${facing}: the enemy king on the last row of the same file (${JSON.stringify(k)})`);
-    check(gapOf(plan.deal.fen) === GAP && plan.deal.gap === GAP, `facing ${facing}: the gap is exactly ${GAP} (${gapOf(plan.deal.fen)})`);
-    check(plan.stage.ranks >= 8 && plan.stage.ranks <= 10 && plan.stage.files === plan.crop.files, `facing ${facing}: ${plan.stage.files}×${plan.stage.ranks}, the depth computed`);
-    check(plan.deal.variantName.startsWith(`duel_${plan.stage.files}x${plan.stage.ranks}__`) && plan.deal.variantIni.includes(plan.deal.variantName), `facing ${facing}: the deal's camp-line variant (${plan.deal.variantName})`);
+    check(k && k.r === BOX - 1 && k.f === plan.kingFile && plan.enemyFile === plan.kingFile, `facing ${facing}: the enemy king on the far row of the same file (${JSON.stringify(k)})`);
+    check(k.r - K.r === 9, `facing ${facing}: the kings nine apart`);
+    check(plan.stage.files === BOX && plan.stage.ranks === BOX && plan.deal.files === BOX && plan.deal.ranks === BOX, `facing ${facing}: the deal is 10×10`);
+    check(gapOf(plan.deal.fen) === 6 && plan.deal.gap === 6, `facing ${facing}: kit vs kit on open ground leaves gap 6 (${gapOf(plan.deal.fen)})`);
+    check(plan.deal.variantName.startsWith('duel_10x10__') && plan.deal.variantIni.includes(plan.deal.variantName), `facing ${facing}: the deal's camp-line variant (${plan.deal.variantName})`);
+    check(plan.deal.world.kingSquare === 'e1' && plan.deal.world.enemyKingSquare === 'e10' && plan.deal.world.enemyFile === 4, `facing ${facing}: the provenance names e1 and e10`);
     // The crop's terrain is the world's: every wall in the FEN is a wall / hole / off-map cell in the world.
     const b = boardOf(plan.deal.fen);
     let terrainOk = true;
-    for (let r = 0; r < plan.stage.ranks; r++) for (let f = 0; f < plan.stage.files; f++) {
-      const ch = b[plan.stage.ranks - 1 - r][f];
+    for (let r = 0; r < BOX; r++) for (let f = 0; f < BOX; f++) {
+      const ch = b[BOX - 1 - r][f];
       const c = arenaToWorld(plan.crop, f, r);
-      const t = c && world.inBounds(c.f, c.r) ? world.at(c.f, c.r) : undefined;
+      const t = c && w.inBounds(c.f, c.r) ? w.at(c.f, c.r) : undefined;
       const wantWall = t === undefined || t === WALL || t === HOLE;
       if ((ch === '*') !== wantWall) terrainOk = false;
       if ((ch === '^') !== (t === '^')) terrainOk = false;
     }
     check(terrainOk, `facing ${facing}: the stamped FEN's terrain is the world's through the crop`);
-    // The stamp keeps the marching order: the kit's back row R then N reads R, N left to right around the king? The pattern's slots order R before N; the molding puts them centre-out: N (first) nearest the centre... assert the letters present and the pawns in front per file.
     const wCells = plan.deal.white.layout.cells;
-    check(wCells.filter((c) => c.piece === 'P').length === 3 && wCells.some((c) => c.piece === 'R') && wCells.some((c) => c.piece === 'N') && wCells.length === 6, `facing ${facing}: the whole kit materializes (${wCells.length} pieces)`);
+    check(wCells.filter((c) => c.piece === 'P').length === 3 && wCells.some((c) => c.piece === 'R') && wCells.some((c) => c.piece === 'N') && wCells.length === 6, `facing ${facing}: the whole kit materializes`);
   }
-  check(results[1].ok, `facing east (the corridor): the barrier drops (${results[1].ok ? `${results[1].stage.files}×${results[1].stage.ranks}` : results[1].error})`);
-  check(!results[0].ok && /no room/.test(results[0].error), `facing north in the antechamber: refused with one line (${results[0].error})`);
+  void world;
 }
 
-// ---- 2. the order of the carried pattern survives the stamp (as-given)
+// ---- 3. the band: the far-row cell on the king's file is a pillar → the nearest file that deals
+{
+  const rows = Array.from({ length: 30 }, (_, i) => (i === 0 || i === 29 ? '#'.repeat(30) : '#' + '.'.repeat(28) + '#'));
+  // the king at (14, 10) facing north: the far row is r 19 → top-down row 29 - 19 = 10; a pillar at f 14
+  rows[10] = rows[10].slice(0, 14) + '#' + rows[10].slice(15);
+  const w = worldOf(rows);
+  const army = spawnArmy(w, makePattern(KIT, { seed: 1 }), { f: 14, r: 10 }, 0, 'w');
+  const onFile = planBox(w, army, { enemy: KIT_ENEMY, seed: 1 });
+  check(!onFile.ok && /far row/.test(onFile.error), `planBox on the king's file refuses when the far-row cell is stone (${onFile.error})`);
+  const plan = planBarrier(w, army, { enemy: KIT_ENEMY, seed: 1 });
+  check(plan.ok && plan.enemyFile !== plan.kingFile && Math.abs(plan.enemyFile - plan.kingFile) === 1, `the button walks to the nearest far-row file that deals (file ${plan.ok ? plan.enemyFile : plan.error})`);
+  const { K, k } = kingsOf(plan.deal.fen);
+  check(plan.ok && K.f === 4 && K.r === 0 && k.r === 9 && k.f === plan.enemyFile, 'the kings on their rows, the enemy on the band');
+  const wide = planBox(w, army, { enemy: KIT_ENEMY, seed: 1, enemyFile: 0 });
+  check(wide.ok && kingsOf(wide.deal.fen).k.f === 0, 'planBox deals the enemy king on file 0 of the far row when asked');
+  check(!planBox(w, army, { enemy: KIT_ENEMY, seed: 1, enemyFile: 10 }).ok, 'a file outside the box refuses');
+}
+
+// ---- 4. the summoning lands only on ground connected to its king
+{
+  // A 3-wide corridor (files 3–5) with a 1-thick wall at file 6 and a room beyond (files 7–12).
+  const rows = Array.from({ length: 24 }, (_, i) => (i === 0 || i === 23 ? '#'.repeat(20) : '###...#......#######'));
+  const w = worldOf(rows);
+  const wide = { width: 6, pieces: ['Q', 'R', 'R', 'N', 'B'] };
+  const army = spawnArmy(w, makePattern(wide, { seed: 1 }), { f: 4, r: 4 }, 0, 'w');
+  const plan = planBarrier(w, army, { enemy: KIT_ENEMY, seed: 1 });
+  check(plan.ok, `a 6-wide army in a 3-wide corridor beside a room: the box deals (${plan.ok ? `gap ${plan.deal.gap}` : plan.error})`);
+  if (plan.ok) {
+    const cells = plan.deal.white.layout.cells.map((c) => arenaToWorld(plan.crop, c.f, c.r));
+    check(cells.every((c) => c.f >= 3 && c.f <= 5), `every white piece stands in the corridor, none through the wall (files ${[...new Set(cells.map((c) => c.f))].sort().join(',')})`);
+    check(plan.deal.white.layout.depthRows === 4, `the 6-wide army molds four deep in three files (${plan.deal.white.layout.depthRows})`);
+    const b = boardOf(plan.deal.fen);
+    // The room beyond the wall is still in the arena as floor (a knight may hop in).
+    let roomFloor = 0;
+    for (let r = 0; r < BOX; r++) for (let f = 0; f < BOX; f++) { const c = arenaToWorld(plan.crop, f, r); if (c.f >= 7 && b[BOX - 1 - r][f] === null) roomFloor++; }
+    check(roomFloor > 0, `the room beyond the wall stays in the arena as floor (${roomFloor} cells)`);
+  }
+  // reachOf directly: the wall line with no gap seals; a door in it passes.
+  const stage = w.arenaStage(boxAt(w, army.king, 0).crop);
+  const reach = reachOf(stage, { f: plan.ok ? plan.kingFile : 4, r: 0 });
+  check(reach.count > 0 && !reach(9, 0) && reach(plan.ok ? plan.kingFile : 4, 5), `reachOf: the corridor is reached, the room beyond the wall is not (${reach.count} cells)`);
+  // A wall across the box between the armies refuses; a door in it deals (furniture is passable).
+  const sealedRows = Array.from({ length: 24 }, (_, i) => (i === 0 || i === 23 ? '#'.repeat(20) : i === 12 ? '#'.repeat(20) : '#' + '.'.repeat(18) + '#'));
+  const sealed = worldOf(sealedRows);
+  const armyS = spawnArmy(sealed, makePattern(KIT, { seed: 1 }), { f: 9, r: 5 }, 0, 'w');
+  const planS = planBarrier(sealed, armyS, { enemy: KIT_ENEMY, seed: 1 });
+  check(!planS.ok && /seal/.test(planS.error), `a wall line across the box with no door: refused (${planS.error})`);
+  const doorRows = sealedRows.slice();
+  doorRows[12] = '#'.repeat(9) + '^' + '#'.repeat(10);
+  const doored = worldOf(doorRows);
+  const armyD = spawnArmy(doored, makePattern(KIT, { seed: 1 }), { f: 9, r: 5 }, 0, 'w');
+  const planD = planBarrier(doored, armyD, { enemy: KIT_ENEMY, seed: 1 });
+  check(planD.ok, `the same line with a door in it: the deal passes through the door (${planD.ok ? `gap ${planD.deal.gap}` : planD.error})`);
+  // layoutArmy's reach on its own: a 10-wide grid where only files 0–3 are reachable.
+  const grid = Array.from({ length: 10 }, () => Array(10).fill(null));
+  const laid = layoutArmy({ grid, files: 10, ranks: 10, side: 'white', army: { width: 6, royal: 'K', back: ['Q', 'R', 'R', 'N', 'B'], value: 0 }, royalAt: { f: 2, row: 0 }, reach: (f) => f <= 3 });
+  check(laid && laid.cells.every((c) => c.f <= 3) && laid.cells.length === 12, `layoutArmy with a reach mask fills only the reachable files (${laid ? laid.depthRows : 'null'} rows)`);
+}
+
+// ---- 5. the gap is an output with a floor of 2; a depth past the box refuses
+{
+  const eight = { width: 8, pieces: ['Q', 'R', 'R', 'B', 'B', 'N', 'N'] };
+  const eightEnemy = { spec: { width: 8, pieces: ['Q', 'R', 'R', 'B', 'B', 'N', 'N'] } };
+  const corridor = (width) => worldOf(['#'.repeat(width + 2), ...Array.from({ length: 30 }, () => '#' + '.'.repeat(width) + '#'), '#'.repeat(width + 2)]);
+  const c5 = corridor(5);
+  const a5 = spawnArmy(c5, makePattern(eight, { seed: 1 }), { f: 3, r: 4 }, 0, 'w');
+  const p5 = planBarrier(c5, a5, { enemy: eightEnemy, seed: 1 });
+  check(p5.ok && p5.deal.gap === GAP_MIN, `two 8-wide armies in a 5-wide corridor: four deep each, gap exactly ${GAP_MIN} (${p5.ok ? p5.deal.gap : p5.error})`);
+  const c3 = corridor(3);
+  const a3 = spawnArmy(c3, makePattern(eight, { seed: 1 }), { f: 2, r: 4 }, 0, 'w');
+  const p3 = planBarrier(c3, a3, { enemy: eightEnemy, seed: 1 });
+  check(!p3.ok && /no room/.test(p3.error), `two 8-wide armies in a 3-wide corridor: past the box, refused (${p3.error})`);
+  const c4 = corridor(4);
+  const a4 = spawnArmy(c4, makePattern({ width: 6, pieces: ['Q', 'R', 'R', 'N', 'B'] }, { seed: 1 }), { f: 2, r: 4 }, 0, 'w');
+  const p4 = planBarrier(c4, a4, { enemy: { spec: { width: 6, pieces: ['Q', 'R', 'N', 'B', 'N'] } }, seed: 1 });
+  check(p4.ok && p4.deal.gap === 4 && kingsOf(p4.deal.fen).k.r === 9, `two 6-wide armies in a 4-wide corridor: three deep each, gap 4, the kings nine apart (${p4.ok ? p4.deal.gap : p4.error})`);
+  check(GAP_MIN === 2 && BOX === 10, 'the constants: a 10×10 box, a gap floor of 2');
+}
+
+// ---- 6. the order of the carried pattern survives the stamp (as-given)
 {
   const pat = patternOf([{ ch: 'K', dx: 0, dy: 0 }, { ch: 'N', dx: -1, dy: 0 }, { ch: 'R', dx: 1, dy: 0 }, { ch: 'P', dx: -1, dy: 1 }, { ch: 'P', dx: 0, dy: 1 }, { ch: 'P', dx: 1, dy: 1 }]);
   const bag = bagOfPattern(pat);
@@ -130,54 +209,12 @@ function worldOf(rows, { id = 'lab' } = {}) {
   check(black && at(black, 'K').f === 3 && at(black, 'K').r === 5, 'the enemy pin: its royal on file 3 of the LAST row');
 }
 
-// ---- 3. synthetic floors: open ground 8 ranks / kings 7 apart; a crawlspace; a hall wider than 12; terrain deepening the crop; past 10 refused
-{
-  const open = worldOf(['#'.repeat(14), ...Array.from({ length: 14 }, () => '#' + '.'.repeat(12) + '#'), '#'.repeat(14)]);
-  const pattern = makePattern(KIT, { seed: 1 });
-  const army = spawnArmy(open, pattern, { f: 6, r: 2 }, 0, 'w');
-  const plan = planBarrier(open, army, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(plan.ok && plan.stage.ranks === 8 && gapOf(plan.deal.fen) === 4, `open ground, kit vs kit: 8 ranks, gap 4 (${plan.ok ? plan.stage.ranks : plan.error})`);
-  const { K, k } = kingsOf(plan.deal.fen);
-  check(plan.ok && k.r - K.r === 7, `open ground: the kings 7 apart (${k.r - K.r})`);
-  check(plan.ok && plan.stage.files === 10 && plan.kingFile === 4 && arenaToWorld(plan.crop, 4, 0).f === 6, `a 12-wide room: the ARENA cap of 10 files, the king centred (file ${plan.kingFile})`);
-
-  const wide = worldOf(['#'.repeat(24), ...Array.from({ length: 14 }, () => '#' + '.'.repeat(22) + '#'), '#'.repeat(24)]);
-  const armyEdge = spawnArmy(wide, pattern, { f: 2, r: 2 }, 0, 'w');
-  const planEdge = planBarrier(wide, armyEdge, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(planEdge.ok && planEdge.stage.files === 10 && planEdge.kingFile === 1, `a hall wider than 10, the king one cell off the wall: the 10-file window slides whole to stay in the room (king file ${planEdge.ok ? planEdge.kingFile : planEdge.error})`);
-  const armyMid = spawnArmy(wide, makePattern(KIT, { seed: 1 }), { f: 11, r: 2 }, 0, 'w');
-  const planMid = planBarrier(wide, armyMid, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(planMid.ok && planMid.stage.files === 10 && planMid.kingFile === 4 && arenaToWorld(planMid.crop, 4, 0).f === 11, `mid-hall: the 10-file window centred on the king (king file ${planMid.ok ? planMid.kingFile : planMid.error})`);
-
-  const narrow = worldOf(['#'.repeat(6), ...Array.from({ length: 14 }, () => '##..##'), '#'.repeat(6)]);
-  const armyN = spawnArmy(narrow, makePattern(KIT, { seed: 1 }), { f: 2, r: 2 }, 0, 'w');
-  const planN = planBarrier(narrow, armyN, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(!planN.ok && /under 3 wide/.test(planN.error), `a 2-wide crawlspace refuses (${planN.error})`);
-
-  // Terrain in the enemy's rows deepens the molding: a pillar row 8 ahead makes the enemy 3 deep → 9 ranks.
-  const pillars = worldOf(['#'.repeat(14), ...Array.from({ length: 14 }, (_, i) => (i === 4 ? '#..#..#..#..##' : '#' + '.'.repeat(12) + '#')), '#'.repeat(14)]);
-  // rows are top-down: i=4 is rank 15-1-4 = 10 from the bottom; the king at r 2 → arena row 8 = the enemy's rank when ranks 9
-  const armyP = spawnArmy(pillars, makePattern(KIT, { seed: 1 }), { f: 6, r: 2 }, 0, 'w');
-  const planP = planBarrier(pillars, armyP, { enemy: { spec: { width: 6, pieces: ['Q', 'R', 'N', 'B', 'N'] } }, seed: 1 });
-  check(planP.ok && gapOf(planP.deal.fen) === 4 && planP.stage.ranks >= 8, `terrain ahead: still gap 4, the depth follows the molding (${planP.ok ? `${planP.stage.files}×${planP.stage.ranks}` : planP.error})`);
-
-  // Two deep armies in a 3-wide corridor overflow the engine's 10 ranks → refused.
-  const corridor = worldOf(['#'.repeat(7), ...Array.from({ length: 16 }, () => '##...##'), '#'.repeat(7)]);
-  const armyC = spawnArmy(corridor, makePattern({ width: 6, pieces: ['Q', 'R', 'R', 'N', 'B'] }, { seed: 1 }), { f: 3, r: 1 }, 0, 'w');
-  const planC = planBarrier(corridor, armyC, { enemy: { spec: { width: 6, pieces: ['Q', 'R', 'N', 'B', 'N'] } }, seed: 1 });
-  check(!planC.ok && /no room/.test(planC.error), `two 6-wide armies in a 3-wide corridor: past 10 ranks, refused (${planC.error})`);
-}
-
-// ---- 4. a crop that hangs off the map is walled; the stage and the layers of a scarred crop
+// ---- 7. a crop that hangs off the map is walled; the stage and the layers of a scarred crop
 {
   const edge = worldOf(['.'.repeat(8), '.'.repeat(8), '.'.repeat(8), '.'.repeat(8), '..O.....', '.'.repeat(8), '.'.repeat(8), '.'.repeat(8)]);
   edge.godCrates.add(edge.idx(5, 5));
   edge.setTerrain(5, 5, '^');
   edge.opened.add(edge.idx(1, 1));
-  // The window is the room's floor run and the enemy king must stand on
-  // floor, so a planned crop never hangs off the map — the wall fallback
-  // is a safety net, exercised here on a hand-built crop two files off
-  // the west edge and two ranks off the north.
   {
     const tx = cropTransform({ wf: -2, wr: 2, facing: 0, files: 6, ranks: 8, worldFiles: 8, worldRanks: 8 });
     const b = boardOf(edge.arenaFen(tx, 'w'));
@@ -195,32 +232,39 @@ function worldOf(rows, { id = 'lab' } = {}) {
     const stage = edge.arenaStage(tx);
     check(stage.grid[0][0] === '*' && stage.grid[0][2] === null, 'arenaStage: an off-map square is a wall, floor is floor');
   }
+  // A box on an 8×8 map hangs off it on three sides: the off-map squares are walls and the deal still stands.
   const army = spawnArmy(edge, makePattern(KIT, { seed: 1 }), { f: 3, r: 0 }, 0, 'w');
-  const plan = planBarrier(edge, army, { enemy: { spec: { width: 3, pieces: ['R', 'N'] } }, seed: 1 });
-  check(plan.ok, `a crop on the map's south edge drops (${plan.ok ? `${plan.stage.files}×${plan.stage.ranks}` : plan.error})`);
-  if (plan.ok) {
-    const tx = plan.crop;
-    const layers = edge.cropLayers(tx);
-
+  const plan = planBarrier(edge, army, { enemy: KIT_ENEMY, seed: 1 });
+  check(!plan.ok && /far row|no room|seal/.test(plan.error), `a box that hangs off an 8-rank map has no far row on the map: refused (${plan.ok ? 'dealt' : plan.error})`);
+  const tall = worldOf(Array.from({ length: 12 }, () => '.'.repeat(8)));
+  tall.setTerrain(2, 3, HOLE);
+  tall.godCrates.add(tall.idx(5, 5));
+  tall.setTerrain(5, 5, '^');
+  const armyT = spawnArmy(tall, makePattern(KIT, { seed: 1 }), { f: 3, r: 0 }, 0, 'w');
+  const planT = planBarrier(tall, armyT, { enemy: KIT_ENEMY, seed: 1 });
+  check(planT.ok, `a box on an 8-file map: the files off the map are walls, the deal stands (${planT.ok ? `gap ${planT.deal.gap}` : planT.error})`);
+  if (planT.ok) {
+    const tx = planT.crop;
+    const layers = tall.cropLayers(tx);
     const holeSq = worldToArena(tx, 2, 3);
-    check(holeSq && layers.holes.includes(`${String.fromCharCode(97 + holeSq.f)}${holeSq.r + 1}`), `the floor's pit is in the crop's holes (${layers.holes.join(',')})`);
+    check(holeSq && layers.holes.includes(`${String.fromCharCode(97 + holeSq.f)}${holeSq.r + 1}`), `the floor's pit is in the crop's holes`);
     const crateSq = worldToArena(tx, 5, 5);
     check(!crateSq || layers.godCrates.includes(`${String.fromCharCode(97 + crateSq.f)}${crateSq.r + 1}`), `the floor's god crate is in the crop's godCrates`);
-    const stage = edge.arenaStage(tx);
-    check(stage.files === tx.files && stage.ranks === tx.ranks && stage.grid[3 - 0]?.length === tx.files && stage.id.startsWith('lab@'), `arenaStage: a ${stage.files}×${stage.ranks} stage named ${stage.id}`);
-    check(stage.grid[holeSq.r][holeSq.f] === '*', 'arenaStage: the pit is a wall to the deal');
+    check(layers.holes.length > 1, `the off-map files are holes to the gods (${layers.holes.length})`);
+    const stage = tall.arenaStage(tx);
+    check(stage.files === BOX && stage.ranks === BOX && stage.id.startsWith('lab@') && stage.grid[holeSq.r][holeSq.f] === '*', `arenaStage: a 10×10 stage named ${stage.id}, the pit a wall to the deal`);
   }
 }
 
-// ---- 5. the run records a duel as its result; a lost run is over; the lenient spawn walks a sealed king out whole
+// ---- 8. the run records a duel as its result; a lost run is over; the lenient spawn walks a sealed king out whole
 {
-  const world = loadWorld(W01);
+  const world = openFloor(20, 20);
   const pattern = makePattern(KIT, { seed: 1 });
-  const army = spawnArmy(world, pattern, { f: world.start.f, r: world.start.r }, 1, 'w');
+  const army = spawnArmy(world, pattern, { f: 5, r: 5 }, 1, 'w');
   const run = newRun({ seed: 5, worldId: world.id, world, army });
   run.turns.push({ t: 1, kind: 'step', dx: 0, dy: 1 });
   run.turn = 1;
-  recordDuel(run, { crop: { wf: 1, wr: 2, facing: 1, files: 8, ranks: 9 }, seed: 9, turn: 'w', result: '1-0', winner: 'white', termination: 'checkmate', plies: 40, quakes: 2, fen: '8/8 w - - 0 1', logId: 'x' });
+  recordDuel(run, { crop: { wf: 1, wr: 2, facing: 1, files: 10, ranks: 10 }, seed: 9, turn: 'w', result: '1-0', winner: 'white', termination: 'checkmate', plies: 40, quakes: 2, fen: '8/8 w - - 0 1', logId: 'x' });
   check(run.turns.length === 2 && run.turns[1].kind === 'duel' && run.turns[1].t === 1 && inputsOf(run).length === 1 && run.turn === 1, 'recordDuel: a duel entry in the turn list, not a walk turn');
   check(!runEnded(run), 'a run without a loss is not over');
   run.ended = { at: 'now', turn: 1, termination: 'checkmate', result: '0-1' };
@@ -231,13 +275,12 @@ function worldOf(rows, { id = 'lab' } = {}) {
   updateRun(run, { world, army, turn: 2 });
   check(run.floors[run.floor].debris?.epoch === 1, 'a save without a ledger keeps the one it had');
 
-  // A sealed king: pits all round a 2-cell pocket; the lenient spawn puts the rest on the nearest floor beyond.
   const sealed = worldOf(['........', '........', '..OOOO..', '..O..O..', '..OOOO..', '........', '........', '........']);
   let threw = false;
   try { spawnArmy(sealed, pattern, { f: 3, r: 4 }, 0, 'w'); } catch { threw = true; }
   check(threw, 'a strict spawn in a sealed 2-cell pocket throws');
   const out = spawnArmy(sealed, pattern, { f: 3, r: 4 }, 0, 'w', { lenient: true });
-  check(out.pieces.length === 6 && out.king.f === 3 && out.king.r === 4 && out.pieces.every((p) => sealed.at(p.f, p.r) === FLOOR), `the lenient spawn walks all ${out.pieces.length} out, the king in his pocket, the rest on the nearest floor`);
+  check(out.pieces.length === 6 && out.king.f === 3 && out.king.r === 4 && out.pieces.every((p) => sealed.at(p.f, p.r) === FLOOR), `the lenient spawn walks all ${out.pieces.length} out, the king in his pocket`);
   check(new Set(out.pieces.map((p) => `${p.f},${p.r}`)).size === 6, 'no two pieces share a cell');
 }
 

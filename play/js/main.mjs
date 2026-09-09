@@ -52,7 +52,8 @@ import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pix
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
 import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves, Army, rotateBody } from './army.mjs';
 import { newRun, updateRun, recordTurn, recordDuel, runEnded, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
-import { planBarrier } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08)
+import { planBarrier } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08) on THE BOX (milestone 5)
+import { generateWorld, STYLES, STYLE_NAMES } from './dungeon.mjs'; // THE DUNGEON GENERATOR (Phase 2 milestone 5, 2026-09-08)
 import { childSeed } from './prng.mjs';
 
 import { DebrisLedger, identityTransform, toEnvCell, fromEnvCell, toEnvPx, envDir, chunksOf, shatterOf, paintCell, spriteVar, CATEGORY, CATEGORIES, kindIsFloor, wearLevel, DRY_PLIES, BASELINE as DEBRIS_BASELINE } from './debris.mjs';
@@ -1805,6 +1806,12 @@ async function boot() {
     const w = app.worlds.find((x) => x.id === wantedWorld);
     if (w) return void beginRun(w);
     log(bootLog, `?world=${wantedWorld}: no such world`, 'bad');
+  }
+  // THE GENERATOR (milestone 5): `?gen=<style>&seed=N&size=small|medium|large|CxR` begins a run on a fresh floor.
+  const gen = params.get('gen');
+  if (gen) {
+    if (generateFloor({ style: gen, seed: params.get('seed') !== null ? intParam('seed', 1, 1) : null, size: params.get('size') ?? 'medium' })) return;
+    log(bootLog, `?gen=${gen}: ${$('run-note').textContent}`, 'bad');
   }
 
   const wantedStage = params.get('stage');
@@ -4052,6 +4059,35 @@ $('btnRunResume').addEventListener('click', () => {
   const saved = loadSavedRun();
   if (saved) beginRun(null, { resume: saved });
 });
+
+// THE GENERATOR (Phase 2 milestone 5, 2026-09-08 — play/js/dungeon.mjs):
+// "Generate a floor" makes a floor from a style, a seed and a size out of
+// the loaded stages (the arenas are the pieces — every run its own floor)
+// and begins a run on it; `?gen=` does the same at boot. The fixtures on
+// the cards above are floors this made at fixed seeds.
+const GEN_SIZES = { small: [4, 3], medium: [6, 4], large: [8, 6] };
+function generateFloor({ style = null, seed = null, size = null } = {}) {
+  const st = style ?? $('genStyle')?.value ?? STYLE_NAMES[0];
+  const sd = seed ?? (parseInt($('genSeed')?.value, 10) >= 1 ? parseInt($('genSeed').value, 10) : randomSeed());
+  const sz = size ?? $('genSize')?.value ?? 'medium';
+  const dims = GEN_SIZES[sz] ?? (/^\d+x\d+$/.test(String(sz)) ? String(sz).split('x').map((n) => Math.max(1, Math.min(12, parseInt(n, 10)))) : GEN_SIZES.medium);
+  let json;
+  try {
+    json = generateWorld({ seed: sd, style: st, pieces: app.stages, cols: dims[0], rows: dims[1] });
+  } catch (e) {
+    $('run-note').textContent = `✗ ${e.message}`;
+    return null;
+  }
+  if ($('genSeed')) $('genSeed').value = String(sd);
+  return beginRun(json);
+}
+$('btnGenFloor')?.addEventListener('click', () => generateFloor());
+$('btnGenSeed')?.addEventListener('click', () => { $('genSeed').value = String(randomSeed()); });
+{
+  const sel = $('genStyle');
+  if (sel && !sel.options.length) for (const name of STYLE_NAMES) { const o = document.createElement('option'); o.value = name; o.textContent = STYLES[name].title; sel.appendChild(o); }
+  if ($('genSeed') && !$('genSeed').value) $('genSeed').value = String(randomSeed());
+}
 $('btnRunImport').addEventListener('click', () => $('runFile').click());
 $('runFile').addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
@@ -4320,7 +4356,9 @@ window.__DCK = {
     leave: () => walkLeave(),
     saved: () => loadSavedRun(),
     clear: () => clearSavedRun(),
-    /** THE BARRIER (4c): drop it on the army as it stands; walk out of the ended duel; the crop's FEN read off the world (must equal the duel's). */
+    /** THE GENERATOR (milestone 5): a fresh floor from a style, a seed and a size (`small` / `medium` / `large` / `CxR`), and a run on it. */
+    generate: (opts = {}) => !!generateFloor(opts),
+    /** THE BARRIER (4c, on THE BOX since milestone 5): drop it on the army as it stands; walk out of the ended duel; the crop's FEN read off the world (must equal the duel's). */
     barrier: (opts = {}) => walkBarrier(opts),
     walkOut: () => walkOut(),
     /** Test-only: end the live barrier duel by concession (`loser` 'white' | 'black'). */
@@ -4332,7 +4370,7 @@ window.__DCK = {
     arenaFen: (turn = 'w') => (app.session?.kind === 'world' && app.walk ? app.walk.world.arenaFen(app.session.crop, turn) : null),
     get duel() {
       const W = app.walk;
-      return W?.duel ? { seed: W.duel.seed, turn: W.duel.turn, files: W.duel.plan.stage.files, ranks: W.duel.plan.stage.ranks, gap: W.duel.plan.deal.gap, kingFile: W.duel.plan.kingFile, fen: W.duel.plan.deal.fen } : null;
+      return W?.duel ? { seed: W.duel.seed, turn: W.duel.turn, files: W.duel.plan.stage.files, ranks: W.duel.plan.stage.ranks, gap: W.duel.plan.deal.gap, kingFile: W.duel.plan.kingFile, enemyFile: W.duel.plan.enemyFile, fen: W.duel.plan.deal.fen } : null;
     },
     cell: (f, r) => (app.walk ? app.walk.world.cellView(f, r) : null),
     debris: () => (app.walk && app.debris.ledger ? app.debris.ledger.stats() : null),

@@ -40,6 +40,15 @@
     <div id="world-list-wrap">
       <h2 class="list-title">Worlds &#8212; take a walk</h2>
       <div id="world-list"></div>
+      <!-- THE GENERATOR (Phase 2 milestone 5, 2026-09-08): a fresh floor from a
+           style, a seed and a size — the arenas are its pieces. -->
+      <div class="world-gen">
+        <label>New floor <select id="genStyle" aria-label="floor style"></select></label>
+        <label>seed <input type="number" id="genSeed" min="1" step="1" inputmode="numeric" aria-label="floor seed"></label>
+        <button id="btnGenSeed" title="a random seed" aria-label="random seed">&#127922;</button>
+        <select id="genSize" aria-label="floor size"><option value="small">small 42&times;32</option><option value="medium" selected>medium 62&times;42</option><option value="large">large 82&times;62</option></select>
+        <button id="btnGenFloor" title="generate a floor from the arenas and begin a run on it">Generate a floor</button>
+      </div>
       <div class="world-actions">
         <button id="btnRunResume" hidden></button>
         <button id="btnRunImport" title="load a saved run from a file">Import a save</button>
@@ -95,7 +104,7 @@
             <!-- THE BARRIER BY HAND (Phase 2 milestone 4c): a debug button drops
                  the barrier on the army as it stands — the crop of the floor
                  under the army's facing, gap 4, the kings aligned. -->
-            <div class="walk-row"><button id="btnWalkBarrier" title="drop the barrier here (B) — gap 4, the kings aligned; the enemy from Options → Setup's Black knobs" aria-label="drop the barrier">&#9876;</button><select id="walkInitiative" title="initiative: who moves first (the player is always White)" aria-label="initiative"><option value="w">you first</option><option value="b">enemy first</option></select></div>
+            <div class="walk-row"><button id="btnWalkBarrier" title="drop the barrier here (B) — a 10×10 box in front of the king, the enemy on its far row; the enemy from Options → Setup's Black knobs" aria-label="drop the barrier">&#9876;</button><select id="walkInitiative" title="initiative: who moves first (the player is always White)" aria-label="initiative"><option value="w">you first</option><option value="b">enemy first</option></select></div>
             <div class="walk-row"><button id="btnRunExport" title="share or download this run's save file" aria-label="export the save">&#9873;</button></div>
           </div>
         </div>

@@ -387,25 +387,250 @@ wall's autotile can differ from the game's).** THE PHONE VERDICT IS THE
 GATE.
 
 
-**NEXT (end of 2026-09-08, after 4c and the HUD): THE PHONE VERDICT on
-4c and the d-pad is the gate for this branch. Then PHASE 2 MILESTONE 5 —
-ENEMIES ON THE MAP + LINE OF SIGHT + THE TRIGGER (brief §10 Phase 2:
-visible enemy armies, §5.2's hunt / pursuit state machine, §5.4's threat
-display, the trigger → barrier → FEN pipeline end to end; Phase 3 is the
-loop) — and that milestone OPENS WITH THE TRIGGER CONVERSATION, on the designer's word (2026-09-08: "there's going to be a
-shit fuck ton of rules dictating how and when a duel is allowed to
-trigger. It's not just about the trigger band. We will get to it"). Do
-not ask for the band and do not build the trigger to a number; what the
-conversation now has in hand: the barrier by hand as the instrument
-(gap 4, the kings aligned on one file, the 10-file cap, the depth a
-fixed point of the molding), brief §5.2's hunt state machine and §5.3's
-old clauses as amended, the world file's enemy spawns (`1`…`9`, read by
-`loadWorld`, unused), and the stamp path built for either side (an
-enemy that walks the map carries its own pattern into the crop the way
-the player does). Held over, on purpose: per-theme edge-on door art; a
-phone height for the duel box (the dimmed dungeon shows beside the crop
-on a phone only); the analyzer mounting the whole world; the debris
-flight on the walk's smash (the splinters appear, they do not fly).**
+**THE TRIGGER CONVERSATION ✅ HELD 2026-09-08 (branch
+`claude/phase-2-milestone-5-discussion-o4vlf6`, docs only — nothing built;
+the discussion is the deliverable; the phone verdict on 4c and the d-pad
+is still owed). FOUR DESIGNER RULINGS:** (1) **THE ARENA IS ALWAYS 10×10**
+(designer: "just make it always a 10x10 arena. As soon as the two armies
+fit in a 10x10 box and it's a legal board state with both kings in the
+right rows, then the duel can start") — the gap is an OUTPUT (ten ranks
+minus the two moldings; the kings ALWAYS 9 apart; gap 6 on open ground,
+the wave-6 spacing), never a rule: the gap band, a gap scaled to the
+player's width (proposed and superseded within the hour), the room-width
+window and the depth iteration in `planBarrier` all go. (2) **MINIMUM GAP
+2** (designer) — the deal's `gapMin`. (3) **NO 2-WIDE HALLWAYS** (designer:
+"WHY NOT JUST NOT USE 2 WIDE HALLWAYS") — the generator authors nothing
+under 3 wide, so brief §5.3's crawlspace clause has nothing to apply to
+(w01's crawlspace was the sideways-walk test and goes with w01). (4)
+**BOTH HAND-BUILT MAPS ARE RETIRED AND A GENERATOR IS THE MILESTONE**
+(designer: "both these big maps are garbage. Just completely big blocks
+of boring empty featureless rectangles"; "It's literally got 'dungeon
+crawler' in the title, randomized dungeons are a requirement. Not just
+one alg either, I need different floors to have unique styles and
+features and themes"). MEASURED before the ruling — a 10×10 window slid
+over every position of both maps and scored as the 36 arenas score: per
+10×10 the wave-6 bed has 3 / 7 / 13 separate wall-or-crate features (min
+/ median / max), 31 / 43 / 58 floor cells touching terrain and a largest
+empty block of 12 / 19 / 40 cells; w01's busiest crop (of 255 with enough
+floor to fight on) has 4 features, 22 touching and an empty block of 42,
+and only 6 of its crops reach the PLAINEST arena on every count; w02
+clears it on 367 of 3403 crops by accident of its packed rooms and has no
+design in it. A room is an empty block by definition: no
+rooms-and-corridors dungeon crops to the bed. **THE BED IS THE SPEC**,
+and its vocabulary is ROOM RECIPES (`play/README.md` § "Stages (schema
+2)": the nave with a colonnade, the cistern of pillars, the cell block
+behind doors, the ossuary of alcoves, the barrel aisles, the crate-
+blocked strongroom, the gatehouse two thick, the switchback of stubs, the
+throne room's dais, the cave-in, the grotto, the cloister, the ruin).
+
+**PHASE 2 MILESTONE 5 IS THE GENERATOR ✅ FIRST PR BUILT 2026-09-08, the
+same day** (`play/js/dungeon.mjs`; `play/README.md` § "The dungeon
+generator"; enemies + LOS + the trigger move to MILESTONE 6, on generated
+floors). BUILT: THE BOX in barrier.mjs (`BOX` 10, `GAP_MIN` 2,
+`boxPlacement` the one placement rule, `boxAt`, `planBox` with the enemy
+on any far-row file, `planBarrier` the button walking outward from the
+king's file; the summoning on ground connected to its king through a
+`reach` mask in `layoutArmy` / `buildMatchup`; `test-barrier.mjs` 109),
+THE LINTS (`LINT`, the bed's envelope: `denseFloor` 60, `openMax` 40,
+`featsMin` 3, `narrowExtent` 10 — the bed is FULL of short 2-wide
+passages, so the narrow rule is about EXTENT, a pocket no longer than an
+arena; the touching share is reported, not enforced), THE PREFAB GRID
+(style `vaults`: the 36 arenas as pieces off the loaded stages, each
+once, turned by seed, seams scored, a wall ring), THE FIX-UPS (connect
+by a 0-1 BFS tunnel three wide, widen by one 3×3 alcove at a pocket's
+middle, dress by a pillar or a crate pair in the largest empty block;
+one round settles every seed tried), THE START (a wide cell with a
+legal box ahead), THE SPAWN DIGITS (`SPAWN_WIDTHS`, by distance), the
+setup screen's "New floor" + `?gen=` + `__DCK.walk.generate`, the
+fixtures `vaults-1…4` written by `gen-worlds.mjs` (w01 and w02 DELETED),
+`test-dungeon.mjs` 92 (the bed's minima and maxima ARE the constants),
+ui-smoke's walk and barrier blocks on `?gen=vaults&seed=1` with
+geometry-agnostic checks (the drop at the start — a STAGING AREA three
+wide and five long with a legal box ahead, so the kit's first steps move
+it as one; a crate set down by hand on a knight's landing when no crate
+is in reach of the start; a second duel with a hand-dug pit on a fresh
+run of the same floor, since the walk-out lands where no box is
+promised; the expects stream to stderr as they land, so a hang is
+locatable). GATES GREEN: test-dungeon 92, test-barrier 109, ui-smoke 248
+ok, selftest 46/46, test-world 125, test-army 57, test-camera 80,
+test-debris 60, test-logreport 47; `world-shots.mjs` rendered the four
+fixtures and the walk screen (`phase0/results/world-shots/`). THE DESIGNER'S DEFAULTS TAKEN ("get started
+unless you actually need anything from me"): 60×40-class floors first
+(62×42 with the ring; 100×100 the cap), the arenas as prefab pieces, the
+five style names, four enemies at two levels, and the far row read as
+the BAND. THE PLAN as discussed — the lints, measured off the bed, not
+guessed: NO BOX IS BORING (for every floor cell, each of the
+four 10×10 boxes the trigger would drop has a largest empty block under
+30 cells, at least 3 separate terrain features and about 40% of its
+floor touching something — the one rule that kills empty rectangles
+everywhere at once); THREE WIDE EVERYWHERE (erode the floor by one cell:
+the cells left must be ONE connected body and every floor cell within a
+step of it — bans a 2-wide passage as the only way anywhere, allows a
+niche, a pillar gap, an aisle); reachable from the start; NOTHING
+SYMMETRIC (no room dressed as its own mirror — the designer's standing
+complaint); DUELABLE GROUND (from most floor cells at least one box deals
+legally for the kit and no region has none — checked by THE TRIGGER
+FUNCTION ITSELF, so the lint, the live check and the threat display stay
+one piece of code, brief §5.3). THE BUILD: SKELETONS decide the bones and
+there are several — packed rooms for keeps and abbeys, a wide maze for
+catacombs, cellular caves for grottos and fissures, and a PREFAB GRID
+laying the 36 arenas themselves as pieces with their edge exits joined,
+a style of its own and the fallback that always passes; ROOM RECIPES
+decide what fills them — colonnade, pillar lattice, dais, alcove row,
+cell row with doors, barrel / crate aisles, a crate-blocked door, a choir
+screen, a stair core, an L with an alley — a room is never left empty and
+the lint refuses one whose box comes out plain; PASSAGE RECIPES — a
+guard post, stubs in a switchback, twin passages, a four-way crossing
+with unequal quadrants, an enfilade; a WEAR PASS per style breaks the
+bones after — ruin runs into masonry and gaps, a cave-in, masonry giving
+way to cave, a breached curtain wall; ONE SIGNATURE SET PIECE per floor,
+placed once, from a hand-authored library that starts with the arenas;
+THEMES ride the style (the three art sets, skins per recipe: urns in the
+crypt, crates in the store, chests in the vault, doors in every doorway,
+masonry as weak spots). FIVE STYLES from the bed's own vocabulary as the
+starting table — the keep (packed rooms; barracks, armoury, guard posts,
+mess hall, stables, smithy; castle; signature the gatehouse), the abbey
+(packed rooms with wide passages; nave, arcade, scriptorium, refectory,
+cloister; hall; the throne room), the cellars (a maze of aisles; wine
+cellar, larder, warehouse, strongroom, cistern; castle; the crate-blocked
+strongroom), the catacombs (wide maze plus caves; ossuary, cell block,
+warren, cave-in; crypt; the round tower base), the ruin (packed rooms,
+heavy wear; any recipe, then broken; hall; masonry giving way to cave).
+WHERE IT RUNS: a pure module in `play/js/`, seeded from the run so every
+run gets its own floor, the SAME code in the harness; a retry loop on the
+lints with a budget and the acceptance rate per style measured so a
+phone never waits on a bad seed; every passing floor rendered by
+`world-shots.mjs` into a GALLERY with its lint numbers beside it, styles
+approved by eye in batches as the arena waves were; the generator places
+the start, the enemy spawns with the level rising away from it, and the
+stairs down for Phase 3. FIRST PR: the lints + the prefab-grid skeleton +
+the gallery (floors at arena density in front of the designer fast), then
+the recipe skeletons style by style; w01 and w02 retire with it (DONE,
+above). NEXT PR: the recipe skeletons, style by style, each a gallery
+batch — packed rooms first (the keep), with the room and passage recipes,
+the wear pass, a signature piece and a symmetry lint; then milestone 6.
+THE FIRST VERDICT CAME THE SAME NIGHT (2026-09-09, a Firefox log at walk
+turn 96 on vaults-1): "this might work. A little incoherent, plus I'm
+sure on replays people will start to notice the repeating patterns. Also,
+why is the arena bounds not centered around the armies? Every duel is
+off-center, even in relatively open areas." THE LOG SAID WHY: `kingFile
+0` — the placement slid the box to keep the room's floor run inside it
+and measured the run along the king's rank alone, so a king beside a
+wall, or beside ONE CRATE in an open hall, stood at the box's edge with
+his army hugging it. FIXED the same night: THE BOX IS CENTRED ON THE
+KING, always (`boxPlacement` returns file 4; the run is reported and
+decides nothing), test-barrier 108. AGAINST THE REPEATS, a stopgap: the
+prefab grid lays pieces in EIGHT orientations (mirrored or not — a
+mirrored arena is not symmetric) and WEATHERS each by seed (zero to
+three edits in the ruin vocabulary, never on a door or an edge;
+`weathered`), so no floor carries an arena verbatim; test-dungeon 96,
+ui-smoke 254 ok (the deal at the start: kings on file 4).
+COHERENCE is the recipe skeletons' to give (a mosaic of set pieces has
+no floor plan) — the next PR, unchanged. The phone verdict on the
+centred box is the gate. THE DESIGNER'S DIRECTION, the same session
+(2026-09-09, discussion, nothing built): "if we can categorize them well
+and use them intelligently, I could see dungeons that actually feel
+different every playthru. Should we stick to 10x10 or get weird with the
+building block size? … these stages will serve for now." THE ANSWER ON
+RECORD: the arena's 10 has nothing to do with the piece size (the box
+floats over the world and never aligns to a piece grid), so pieces go on
+a 5-CELL LATTICE in multiples of five — 5×5 connectors and closets,
+10×5 corridors and galleries, 10×10 rooms (the arenas as they are),
+15×10 and 20×10 halls, 20×20 set-piece complexes — because variety of
+SCALE is what a mosaic of equal squares cannot give; pieces are TAGGED
+(role: room / corridor / junction / dead end / vault / set piece; size;
+theme; EXITS — which sides open and where, computed off the piece, so
+the 36 arenas tag themselves; density; a rating); a PLAN is drawn
+before a piece is laid — a graph on the lattice: the critical path from
+the start to the stairs, side rooms, a loop or two, dead ends, one
+vault, the set piece — each node a size + role + required exits, then
+pieces chosen by tag, oriented to match, seams EXACT where the plan
+demands a connection (Spelunky's typed rooms on a critical path, with
+variable piece sizes); the incoherence of the vaults is that the arenas
+were authored as CROPS (rooms running off every edge), so new pieces
+are authored FOR ASSEMBLY (walls on the border where nothing should
+leak, openings where the plan can use them); the recipe generators
+become PIECE FACTORIES feeding the same assembler (a generated room is a
+tagged piece like a hand-authored one), so both roads meet and the
+library never runs dry; styles = which tags a floor draws from + which
+plan shapes. NEXT, IN THE DESIGNER'S ORDER: (1) a session on THE
+CONTROLS AND THE CAMERA (theirs to lead; the open items on record: the
+turn as a cut with no animation, the zoom as ± cuts and no pinch, the
+walk's default zoom fitting fifteen tiles, the d-pad's held repeat and
+the swipe, the tap-a-piece snap-zoom and its target pick, the duel box
+on a phone with the dimmed dungeon beside it only, the desktop layout
+"functional, not designed", per-theme edge-on door art); (2) THE PLAN
+LAYER for the generator (the lattice, the tags, the plan graph, exact
+seams), the arenas retagged, pieces authored for assembly in batches;
+(3) milestone 6.
+
+**MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
+conversation SETTLED and what it only PROPOSED.** Settled (designer): the
+fixed box, min gap 2, no crawlspaces. Proposed in the discussion and not
+objected to — build to these unless the designer says otherwise: THE
+TRIGGER IS "YOUR BOX" — four 10×10 boxes on the player's king, one per
+WORLD direction (his facing does not gate it: an enemy behind him can
+catch him; at the drop the army turns to the axis as a cut and the
+pattern stamps forward as 4c does — flanking stays §11), his rank the
+box's row 0, CENTRED on his file (four to the left, five to the right —
+nothing slides, designer 2026-09-09); a duel
+starts the moment a HUNTING enemy's king stands on the FAR ROW of one —
+anywhere on it: brief §5.3's band alignment is back and 4c's strict
+colinearity retired, read from "both kings in the right rows" and NOT
+YET CONFIRMED by the designer — and the deal is legal (both armies MOLD
+into the box — fit means the molding fits, not where the walking pieces
+stand — gap ≥ 2, connected, the lint); the hunter's targets are those
+far rows and the threat display is those rows lit where the deal is
+legal, forty checks per move. TWO THINGS THE FIXED BOX BREAKS IN THE
+CODE: `layoutArmy` fills a window as wide as the army centred on the
+pinned royal and skips walls without asking whether the floor beyond is
+reachable — in 4c the window was the room, so it never bit; in a fixed
+box an 8-wide army in a 3-wide corridor would materialize through a thin
+wall into the next room — so THE SUMMONING MUST LAND ON GROUND CONNECTED
+TO THE KING (a mask on the stamp; floor beyond a thin wall stays in the
+arena and a knight may hop into it) and `armiesConnected` must run from
+the king rather than from every piece; and a hunter that gets too close
+backs off to nine, several steps, which the player can stall by
+following at no gain (harmless, odd once). SIGHT: king to king, a ray on
+the cell grid; walls and doors block, holes do not, crates proposed to
+block (a one-line switch); no range cap; no fog — the whole floor and
+every army visible as now; the enemy's STATE visible as a mark over its
+king (hunting / searching); sight checked AFTER EVERY MOVE, not once per
+enemy turn, so a step into a clear aligned line at nine is the player's
+ambush with his initiative, and a crate or a pillar on the axis means no
+fight from that cell. ROAM = SENTRIES for the first build (a predictable
+encounter for the phone; routes later as a list of cells in the file).
+THE HUNT: BFS from the enemy king over floor it can cross (its own pieces
+pass; the player's, furniture and holes block) to the nearest far-row
+cell, the first step as its body-relative king step into `planTurn`; it
+never turns (a rotation would cost it a step; the pattern trails
+wherever the king walks); with no legal cell reachable it walks toward
+the player's king, which parks it at the mouth of wherever he hides;
+sight lost → the last-seen cell, then it stands. SPEED PARITY: one enemy
+turn per player input, waits / turns / individual moves included (every
+input that leaves the king in place hands the hunter a step); the
+player's turn, then each enemy in spawn order, the trigger checked after
+each army's turn, every arrival in the one slide so the d-pad's repeat is
+not slowed. INITIATIVE per brief §4.4; several at once → the chooser
+overlay. A WIN removes the whole enemy army (letters inside or outside
+the crop); the other enemy keeps its state through the frozen duel
+(§5.5). NO CAPTURES ON THE MAP: `pieceMoves` already codes a `piece`
+capture for the individual move, unreachable until an enemy exists —
+turn it off; a piece dies only in a duel. THE ENGINE BOOTS WITH THE RUN
+(a triggered drop cannot be refused for a cold engine the way
+`walkBarrier` refuses now; a drop that beats it waits on one line). THE
+SAVE: enemies in the floor's entry with state, last-seen cell and seed;
+stamp `dck-run/2`; the turn list stays inputs only, the enemy's moves
+pure functions of state + seed. IMPLEMENTATION HAZARD: two enemy armies
+share lowercase letters and `Army.stamp` clears EVERY lowercase letter
+before writing — the second army erases the first; the stamp must clear
+its own last cells. SPAWNS: the digit read as the army's WIDTH (3…8,
+§8's level telegraph) drawn from the run's seed, an optional per-spawn
+block for an authored composition — the generator's to place now. Held
+over, on purpose: flanking, patrol routes, a sight range, fog, aggro
+between hunters, an enemy that smashes crates on its path, per-theme
+edge-on door art, a phone height for the duel box, the analyzer mounting
+the whole world, the debris flight on the walk's smash.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
@@ -1278,21 +1503,32 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `replay/` — the REPLAY ANALYZER (2026-09-07): a replay log on the real
   board, its own page next to `play/` (imports `../play/js/*`, its own
   `coi-serviceworker.min.js`), `replay/samples/` the committed sample log.
-- `play/js/barrier.mjs` — THE BARRIER BY HAND (Phase 2 milestone 4c,
-  2026-09-08): where the barrier drops on an army as it stands (the
-  room's width across the king, gap 4, the kings aligned, the depth a
-  fixed point of the molding) and the deal it stamps (the carried
-  pattern pinned to the king's cell, the enemy dealt across the gap);
-  main.mjs § THE BARRIER BY HAND is the page (the drop, the world
-  session, the walk-out, the run's ledger). Node gate `test-barrier.mjs`.
+- `play/js/dungeon.mjs` — THE DUNGEON GENERATOR (Phase 2 milestone 5,
+  2026-09-08): a floor from a seed — the lints (the bed's envelope: no
+  boring box, no long narrow way, reachable, duelable ground through the
+  trigger function), the prefab-grid skeleton (the 36 arenas as pieces),
+  the fix-ups, the start and the spawn digits; `STYLES` (one: the
+  vaults). Node gate `test-dungeon.mjs`; `gen-worlds.mjs` writes the
+  fixtures, `world-shots.mjs` the gallery. `play/README.md` § "The
+  dungeon generator".
+- `play/js/barrier.mjs` — THE BOX (Phase 2 milestone 5, 2026-09-08, on
+  4c's barrier by hand): the arena is ALWAYS 10×10 on the player's king
+  (his rank row 0, his facing arena-north), placed by one rule
+  (`boxPlacement`, shared with the generator's lint), the enemy king on
+  the far row on the king's file or the nearest that deals (the band),
+  the gap an output with a floor of 2, the summoning on ground connected
+  to its king; main.mjs § THE BARRIER BY HAND is the page (the drop, the
+  world session, the walk-out, the run's ledger). Node gate
+  `test-barrier.mjs`.
 - `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
 
   (Phase 2 milestone 4b, 2026-09-08): brief §5.1's one movement rule as
   a pure module (the pattern, the move generator on the world grid, the
   BFS targets, the turn planner; Node gate `test-army.mjs`), the run save
   (one object per run, `dck-run/1`, export / import as a file, no
-  backward compatibility), and the walk-around fixtures (`w01-the-
-  undercroft` hand-built 60×40, `w02-stress-100` seeded); main.mjs § THE
+  backward compatibility), and the fixtures in `play/worlds/` (GENERATED
+  floors since milestone 5 — the hand-built w01 and the seeded w02 were
+  retired 2026-09-08); main.mjs § THE
   WALK is the page (`#screen-walk`: the pad, the turns, the zoom, the
   save; `?world=` / `?run=resume` / `?save=`); `play/README.md` § "The
   canvas board", milestone 4b.
@@ -1379,10 +1615,11 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
-node harness/test-barrier.mjs        # THE BARRIER BY HAND (play/js/barrier.mjs): the crop across the king at every facing, gap 4, the kings aligned, the pin, the order kept, refusals, off-map walls, the run's duel entry, the lenient walk-out; Node only
+node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
+node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 
-node harness/gen-worlds.mjs          # the walk-around fixtures in play/worlds/ (w01 hand-built 60×40, w02 a seeded 100×100) + their manifest; every floor cell must be reachable
-node harness/world-shots.mjs         # each world painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (for the eye)
+node harness/gen-worlds.mjs [--duel] # THE GENERATOR's fixtures in play/worlds/ (vaults-1…4, generated at fixed seeds, linted as written; --duel adds the duelable-ground coverage) + their manifest
+node harness/world-shots.mjs         # each fixture painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (THE GALLERY, for the eye)
 node harness/facing-walk.mjs --shots # every arena × facings 1–3 on the bare lab page: the camera's paint must equal the world itself rotated, painted north-up
 node harness/camera-guard.mjs dump <dir> && node harness/camera-guard.mjs compare <dir> --allow door,turned  # the renderer's paint before/after a change: record the inputs + hashes on the build before (a pristine worktree), replay them on the build after
 node harness/camera-shots.mjs        # the desktop layout at 1920×1080 / 1280×720, the phone at the four facings, a door crop — for the eye

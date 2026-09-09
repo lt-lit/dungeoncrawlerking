@@ -157,7 +157,7 @@ function centerOut(start, w) {
  * the army has exactly `width` non-pawns, so pieces always consume the
  * entire rearmost row before pawns begin).
  */
-export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', archetype = 'heavies-deep', rng = mulberry32(1), maxDepth, royalAt = null, order = 'archetype' }) {
+export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', archetype = 'heavies-deep', rng = mulberry32(1), maxDepth, royalAt = null, order = 'archetype', reach = null }) {
   const w = Math.min(army.width, files);
   // THE PIN (Phase 2 milestone 4c, the barrier by hand): `royalAt` puts
   // the royal on a given file of the side's rearmost row — the king stands
@@ -174,7 +174,10 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     : Math.max(0, Math.min(files - w, anchor | 0));
   const rowRank = (i) => (side === 'white' ? i : ranks - 1 - i);
   // Furniture eats molding slots exactly like stone (§4.6: a wall to molding).
-  const open = (i, f) => !isTerrain(grid[rowRank(i)][f]);
+  // THE BOX (milestone 5): `reach(f, r)` restricts the fill to ground
+  // connected to the royal — a fixed 10×10 box in a corridor holds the next
+  // room's floor beyond a thin wall, and the summoning must not land there.
+  const open = (i, f) => !isTerrain(grid[rowRank(i)][f]) && (!reach || reach(f, rowRank(i)));
   const depthCap = Math.min(maxDepth ?? ranks, ranks);
 
   // Back units, royal first; the archetype orders the rest (first-placed
@@ -272,7 +275,7 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
     anchor: white.anchor ?? 'center', archetype: white.archetype ?? 'heavies-deep',
     rng: mulberry32(childSeed(seed, 'white-mold')),
     maxDepth: ranks - gapMin - 2,
-    royalAt: white.royalAt ?? null, order: white.order ?? 'archetype',
+    royalAt: white.royalAt ?? null, order: white.order ?? 'archetype', reach: white.reach ?? null,
   });
   if (!wl) return { error: `white ${wArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
   const bl = layoutArmy({
@@ -280,7 +283,7 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
     anchor: black.anchor ?? 'center', archetype: black.archetype ?? 'heavies-deep',
     rng: mulberry32(childSeed(seed, 'black-mold')),
     maxDepth: ranks - gapMin - (wl.extent + 1),
-    royalAt: black.royalAt ?? null, order: black.order ?? 'archetype',
+    royalAt: black.royalAt ?? null, order: black.order ?? 'archetype', reach: black.reach ?? null,
   });
 
   if (!bl) return { error: `black ${bArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
