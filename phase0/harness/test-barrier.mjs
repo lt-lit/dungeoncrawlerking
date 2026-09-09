@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // THE BOX (Phase 2 milestone 5, 2026-09-08 — the trigger conversation) —
 // the Node gate for play/js/barrier.mjs: the arena is always 10×10 on the
-// player's king (his rank row 0, his facing arena-north), the placement
-// across him is one rule (a run that fits sits centred, a wider one centres
-// the king), the enemy king stands on the far row — the king's own file
+// player's king (his rank row 0, his facing arena-north), CENTRED on him
+// whatever stands beside him (designer 2026-09-09), the enemy king stands on the far row — the king's own file
 // first, else the nearest that deals — the kings nine apart, the gap an
 // output with a floor of 2, the summoning on ground connected to its king
 // (never through a thin wall into the next room), a crop hanging off the map
@@ -56,19 +55,14 @@ function worldOf(rows, { id = 'lab' } = {}) {
 }
 const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 2 }, () => '#' + '.'.repeat(w - 2) + '#'), '#'.repeat(w)]);
 
-// ---- 1. the placement rule
+// ---- 1. the placement rule: the box is centred on the king, whatever stands beside him
 {
   const run = (left, right) => (f, r) => r === 0 && f >= -left && f <= right;
   const king = { f: 0, r: 0 };
-  check(boxPlacement(run(20, 20), king, 0).kingFile === 4, 'a wide hall: the king in the middle of the box (file 4)');
-  check(boxPlacement(run(1, 20), king, 0).kingFile === 1, 'the king one cell off the west wall of a wide hall: the box slides to stay in the room (file 1)');
-  check(boxPlacement(run(20, 1), king, 0).kingFile === 8, 'one cell off the east wall: file 8');
-  check(boxPlacement(run(1, 2), king, 0).kingFile === 4, 'a 4-wide run: centred in the box, the king at file 4');
-  check(boxPlacement(run(0, 2), king, 0).kingFile === 3, 'a 3-wide run with the king at its west cell: the run at files 3–5');
-  check(boxPlacement(run(0, 0), king, 0).kingFile === 4, 'a lone cell sits in the middle');
-  check(boxPlacement(run(9, 0), king, 0).kingFile === 9, 'a run of exactly ten with the king at its east end: file 9');
-  const p = boxPlacement(run(3, 3), king, 0);
-  check(p.width === 7 && p.left === 3 && p.right === 3 && p.kingFile === 4, `the run is reported (${JSON.stringify(p)})`);
+  for (const [left, right, why] of [[20, 20, 'a wide hall'], [1, 20, 'one cell off the west wall of a wide hall'], [20, 1, 'one cell off the east wall'], [1, 2, 'a 4-wide run'], [0, 2, 'a 3-wide run with the king at its west cell'], [0, 0, 'a lone cell'], [9, 0, 'a run of ten with the king at its east end']]) {
+    const p = boxPlacement(run(left, right), king, 0);
+    check(p.kingFile === 4 && p.left === left && p.right === right && p.width === left + 1 + right, `${why}: the king at file 4, the run ${left} / ${right} reported`);
+  }
 }
 
 // ---- 2. open ground at every facing: the box, the pin, the gap, the crop's orientation, the terrain

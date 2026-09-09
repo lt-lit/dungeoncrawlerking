@@ -1042,7 +1042,12 @@ cave-in, the grotto, the cloister, the ruin).
 (`LINT`; `test-dungeon.mjs` re-measures the bed and asserts the constants
 are its minima and maxima, and that a plain room fails): NO BOX IS BORING
 — for every floor cell, each of the four 10×10 boxes the trigger would
-drop (`boxRect`, through barrier.mjs's one placement rule) that holds at
+drop (`boxRect`, through barrier.mjs's one placement rule: THE BOX IS
+CENTRED ON THE KING, four files to his left and five to his right, the
+room's walls falling where they fall — the first cut slid the box to
+keep the room's floor run inside it, and the designer's first log had
+the army hugging the arena's edge: "why is the arena bounds not
+centered around the armies? Every duel is off-center") that holds at
 least 60 floor cells has a largest empty block of at most 40 and at least
 3 separate features (the two measures that mean "empty featureless
 rectangle"; the touching share is reported, not enforced — a mosaic box
@@ -1066,13 +1071,22 @@ does not. Nothing symmetric is by construction with the prefab skeleton.
 then the start and the spawns are placed. The first skeleton is THE
 PREFAB GRID (style `vaults`, "The Vaults"): the 36 arenas themselves as
 pieces (`pieceOf` off the loaded stages the game already holds), each
-used once until the deck runs dry, turned by seed, laid in reading order
-with the piece and turn whose seams meet the west and north neighbours
-best (`seamScore`: floor meeting floor in runs of three to six is a
-passage, a whole-edge merge scores low, a sealed seam lower) — every
-arena was written as a plausible crop of a bigger dungeon with corridors
-leaving by its edges — and a one-cell wall ring around the whole (6×4
-tiles is 62×42). THE FIX-UPS, until the cheap lints hold: CONNECT (a
+used once until the deck runs dry, in one of EIGHT orientations by seed
+(four turns, mirrored or not), laid in reading order with the piece and
+orientation whose seams meet the west and north neighbours best
+(`seamScore`: floor meeting floor in runs of three to six is a passage,
+a whole-edge merge scores low, a sealed seam lower) — every arena was
+written as a plausible crop of a bigger dungeon with corridors leaving
+by its edges — each piece WEATHERED by seed (zero to three edits in the
+ruin vocabulary: a wall segment cracks into masonry or opens into a gap,
+a crate appears against a wall, a crate goes; never on a door, never on
+the piece's edge), and a one-cell wall ring around the whole (6×4 tiles
+is 62×42). THE DESIGNER'S FIRST VERDICT on it (2026-09-09, a Firefox
+log at walk turn 96): "this might work. A little incoherent, plus I'm
+sure on replays people will start to notice the repeating patterns" —
+the mirrors and the wear are the stopgap against the repeats; coherence
+is the recipe skeletons' (next), since a mosaic of set pieces has no
+floor plan. THE FIX-UPS, until the cheap lints hold: CONNECT (a
 0-1 BFS tunnels from the smallest region to the nearest other through
 the fewest walls, three wide — no seed tried has needed one), WIDEN (a
 narrow pocket that stretches too far is cut at its middle: the stone in

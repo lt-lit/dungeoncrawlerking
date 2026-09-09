@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { loadStageV2 } from '../../play/js/stage.mjs';
 import { loadWorld, arenaToWorld } from '../../play/js/world.mjs';
-import { generateWorld, lintWorld, rectStats, narrowPockets, pocketExtent, rotated, pieceOf, floorOf, boxRect, duelCoverage, LINT, STYLES, STYLE_NAMES, SPAWN_WIDTHS } from '../../play/js/dungeon.mjs';
+import { generateWorld, lintWorld, rectStats, narrowPockets, pocketExtent, rotated, mirrored, oriented, pieceOf, floorOf, boxRect, duelCoverage, LINT, STYLES, STYLE_NAMES, SPAWN_WIDTHS } from '../../play/js/dungeon.mjs';
 import { planBarrier, boxAt, BOX } from '../../play/js/barrier.mjs';
 import { makePattern } from '../../play/js/army.mjs';
 
@@ -69,6 +69,7 @@ const check = (cond, msg) => { if (cond) ok++; else { bad++; console.log('FAIL',
   const F0 = floorOf(p.cells.map((r) => r.join(''))), F1 = floorOf(r1.map((r) => r.join('')));
   const s0 = rectStats(F0, 0, 0, BOX, BOX), s1 = rectStats(F1, 0, 0, BOX, BOX);
   check(s0.floor === s1.floor && s0.feats === s1.feats && s0.open === s1.open && s0.iface === s1.iface, 'the box measures are turn-invariant');
+  check(same(mirrored(mirrored(p.cells)), p.cells) && mirrored(p.cells)[0][0] === p.cells[0][BOX - 1] && same(oriented(p.cells, 0), p.cells) && same(oriented(p.cells, 5), rotated(mirrored(p.cells), 1)), 'a mirror is its own inverse; the eight orientations are the four turns of the piece and of its mirror');
   const rows = manifest.stages[0].map.map((r) => r.replace(/\*/g, '#'));
   check(p.cells.map((r) => r.join('')).join('\n') === rows.join('\n'), 'pieceOf reads a stage back as its map rows');
   let skinsKept = true;
@@ -88,6 +89,7 @@ for (const seed of [1, 2, 3]) {
   const ring = a.map[0] === '#'.repeat(62) && a.map[41] === '#'.repeat(62) && a.map.every((r) => r[0] === '#' && r[61] === '#');
   check(ring, `seed ${seed}: the ring is wall`);
   check(a.gen.pieces.length === 24 && new Set(a.gen.pieces.map((t) => t.id)).size === 24, `seed ${seed}: 24 pieces, each once`);
+  check(a.gen.pieces.some((t) => t.mirror) && a.gen.pieces.some((t) => !t.mirror) && a.gen.pieces.reduce((n, t) => n + t.wear, 0) >= 8, `seed ${seed}: some pieces mirrored, ${a.gen.pieces.reduce((n, t) => n + t.wear, 0)} cells of wear`);
   const world = loadWorld(a);
   check(world.start && world.spawns.length === STYLES.vaults.enemies, `seed ${seed}: a start facing ${a.facing} and ${world.spawns.length} spawns`);
   const widths = a.gen.spawns.map((s) => s.width);

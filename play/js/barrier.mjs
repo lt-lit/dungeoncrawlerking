@@ -13,10 +13,14 @@
 //     walls, whatever stands in the box, are the arena's terrain; a square
 //     off the map is the barrier's wall (World.arenaFen).
 //   • THE PLACEMENT across the king (boxPlacement — ONE rule, shared with
-//     the generator's lint, dungeon.mjs): the floor run through his cell
-//     at his rank; a run that fits the box sits centred in it, a wider one
-//     puts the king in the middle of the box and slides the box to stay in
-//     the run (4c's formula with the width pinned at ten).
+//     the generator's lint, dungeon.mjs): THE BOX IS CENTRED ON THE KING,
+//     four files to his left and five to his right, and the room's walls
+//     fall where they fall. The first cut slid the box to keep the room's
+//     floor run inside it and measured that run along the king's rank
+//     alone, so a king beside a wall — or beside one crate in an open hall
+//     — stood at the box's edge with his army hugging it (designer
+//     2026-09-09, on the first vaults log: "why is the arena bounds not
+//     centered around the armies? Every duel is off-center").
 //   • THE ENEMY KING stands on the FAR ROW (arena row 9) — on ANY file of
 //     it (brief §5.3's band alignment; "both kings in the right rows"):
 //     `planBox` takes the enemy's file; the button (`planBarrier`) tries
@@ -69,17 +73,14 @@ export function floorRun(isFloor, at, facing) {
 
 /**
  * THE PLACEMENT: the king's arena FILE inside a `box`-wide arena whose row
- * 0 is his rank. A floor run that fits the box sits centred in it (the
- * walls on either side balanced); a wider run centres the king and slides
- * the box whole to stay inside the run. Pure — `isFloor(f, r)` reads the
+ * 0 is his rank — THE MIDDLE, always (file 4 of ten: four files to his
+ * left, five to his right). The floor run through his cell is reported
+ * for the record and decides nothing. Pure — `isFloor(f, r)` reads the
  * ground, so the generator's lint and the game share one rule.
  */
 export function boxPlacement(isFloor, king, facing, box = BOX) {
   const { left, right } = floorRun(isFloor, king, facing);
-  const width = left + 1 + right;
-  const half = (box - 1) >> 1;
-  const kingFile = width <= box ? ((box - width) >> 1) + left : Math.max(box - 1 - right, Math.min(left, half));
-  return { kingFile, left, right, width };
+  return { kingFile: (box - 1) >> 1, left, right, width: left + 1 + right };
 }
 
 /**

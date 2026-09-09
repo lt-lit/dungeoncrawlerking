@@ -48,8 +48,12 @@
 // skeleton is the PREFAB GRID — the 36 arenas themselves as pieces, each
 // used once, turned by seed, laid so their edge exits meet (every arena
 // was written as a plausible crop of a bigger dungeon with corridors
-// leaving by the edges), a one-cell wall ring around the whole. It is a
-// style of its own (THE VAULTS) and the fallback that always passes; the
+// leaving by the edges), in eight orientations and WEATHERED by seed so no
+// floor carries an arena verbatim, a one-cell wall ring around the whole.
+// It is a style of its own (THE VAULTS) and the fallback that always
+// passes — the designer's first verdict on it (2026-09-09): "this might
+// work. A little incoherent, plus I'm sure on replays people will start to
+// notice the repeating patterns" — coherence is the recipe skeletons'; the
 // recipe skeletons (packed rooms, a wide maze, cellular caves) come next,
 // style by style, each a batch for the designer's eye.
 import { WALL, FURNITURE } from './fen.mjs';
@@ -106,6 +110,16 @@ export function pieceOf(stage) {
     skins.push(sk);
   }
   return { id: stage.id, size: stage.files, cells: rows, skins, theme: stage.theme ?? null };
+}
+
+/** A grid mirrored left to right. */
+export function mirrored(grid) {
+  return grid.map((row) => row.slice().reverse());
+}
+
+/** One of a piece's eight orientations: `o` & 3 quarter turns, mirrored first when `o` ≥ 4. */
+export function oriented(grid, o) {
+  return rotated(o >= 4 ? mirrored(grid) : grid, o & 3);
 }
 
 /** A square grid turned a quarter clockwise `k` times. */
@@ -590,10 +604,61 @@ function seamScore(a, b) {
 }
 
 /**
+ * WEAR on a piece (the designer, 2026-09-09, on the first vaults log: "on
+ * replays people will start to notice the repeating patterns"): a few
+ * seeded edits in the ruin vocabulary so no floor carries an arena
+ * verbatim — a wall segment cracks into masonry or opens into a gap, a
+ * crate appears against a wall, a crate goes. Zero to three edits, never on
+ * a door, never on the piece's edge (the seams are scored on the edges).
+ * The lints and the fix-ups run after, so what wear breaks gets repaired.
+ */
+function weathered(cells, skins, rng) {
+  const g = cells.map((r) => r.slice());
+  const sk = skins.map((r) => r.slice());
+  const n = g.length;
+  const at = (x, y) => (x < 0 || y < 0 || x >= n || y >= n ? '#' : g[y][x]);
+  const isDoorNear = (x, y) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => sk[y + dy]?.[x + dx] === 'D');
+  let edits = 0;
+  // A: a wall segment (floor on two opposite sides) cracks or opens.
+  if (rng() < 0.6) {
+    const segs = [];
+    for (let y = 1; y < n - 1; y++) for (let x = 1; x < n - 1; x++) {
+      if (g[y][x] !== '#' || isDoorNear(x, y)) continue;
+      if ((at(x - 1, y) === '.' && at(x + 1, y) === '.') || (at(x, y - 1) === '.' && at(x, y + 1) === '.')) segs.push([x, y]);
+    }
+    if (segs.length) {
+      const [x, y] = segs[randInt(rng, segs.length)];
+      if (rng() < 0.7) { g[y][x] = '^'; sk[y][x] = 'R'; } else { g[y][x] = '.'; sk[y][x] = '.'; }
+      edits++;
+    }
+  }
+  // B: a crate against a wall, in the open.
+  if (rng() < 0.5) {
+    const spots = [];
+    for (let y = 1; y < n - 1; y++) for (let x = 1; x < n - 1; x++) {
+      if (g[y][x] !== '.' || isDoorNear(x, y)) continue;
+      let walls = 0, floor = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const c = at(x + dx, y + dy); if (c === '#') walls++; else if (c === '.') floor++; }
+      if (floor >= 5 && walls >= 1 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at(x + dx, y + dy) === '#')) spots.push([x, y]);
+    }
+    if (spots.length) { const [x, y] = spots[randInt(rng, spots.length)]; g[y][x] = '^'; sk[y][x] = 'K'; edits++; }
+  }
+  // C: a crate or a barrel goes.
+  if (rng() < 0.3) {
+    const crates = [];
+    for (let y = 1; y < n - 1; y++) for (let x = 1; x < n - 1; x++) if (g[y][x] === '^' && (sk[y][x] === 'K' || sk[y][x] === 'B' || sk[y][x] === '.')) crates.push([x, y]);
+    if (crates.length) { const [x, y] = crates[randInt(rng, crates.length)]; g[y][x] = '.'; sk[y][x] = '.'; edits++; }
+  }
+  return { cells: g, skins: sk, edits };
+}
+
+/**
  * THE PREFAB GRID: `cols` × `rows` pieces, each used once until the deck
- * runs dry (then reshuffled), turned by seed, laid in reading order with
- * the piece and turn that meet the west and north neighbours best; a
- * one-cell wall ring around the whole.
+ * runs dry (then reshuffled), in one of EIGHT orientations by seed (four
+ * turns, mirrored or not), laid in reading order with the piece and
+ * orientation that meet the west and north neighbours best, WEATHERED so
+ * no floor carries an arena verbatim; a one-cell wall ring around the
+ * whole.
  */
 function prefabSkeleton(pieces, { cols, rows, rng }) {
   if (!pieces.length) throw new Error('prefab: no pieces');
@@ -610,17 +675,18 @@ function prefabSkeleton(pieces, { cols, rows, rng }) {
       let best = null;
       for (let i = 0; i < K; i++) {
         const piece = deck[i];
-        for (let rot = 0; rot < 4; rot++) {
-          const cells = rotated(piece.cells, rot);
+        for (let o = 0; o < 8; o++) {
+          const cells = oriented(piece.cells, o);
           let score = 0;
           if (west) score += seamScore(west.cells.map((r) => r[BOX - 1]), cells.map((r) => r[0]));
           if (north) score += seamScore(north.cells[BOX - 1], cells[0]);
-          if (!best || score > best.score) best = { i, rot, cells, score };
+          if (!best || score > best.score) best = { i, o, cells, score };
         }
       }
       const piece = deck[best.i];
       deck.splice(best.i, 1);
-      const tile = { id: piece.id, rot: best.rot, tx, ty, cells: best.cells, skins: rotated(piece.skins, best.rot), score: best.score };
+      const worn = weathered(best.cells, oriented(piece.skins, best.o), rng);
+      const tile = { id: piece.id, rot: best.o & 3, mirror: best.o >= 4, wear: worn.edits, tx, ty, cells: worn.cells, skins: worn.skins, score: best.score };
       grid[ty][tx] = tile;
       laid.push(tile);
       for (let y = 0; y < BOX; y++) for (let x = 0; x < BOX; x++) F.set(1 + tx * BOX + x, 1 + ty * BOX + y, tile.cells[y][x], tile.skins[y][x]);
@@ -748,12 +814,12 @@ export function generateWorld({ seed = 1, style = 'vaults', pieces, cols = null,
     schema: 2,
     id: wid,
     title: title ?? `${S.title} ${seed >>> 0}`,
-    notes: `${S.notes} Seed ${seed >>> 0}: ${laid.length} pieces on ${C}×${R}, ${fixes.connect.carved} cells carved to join the regions, ${fixes.widen.widened} widened, ${fixes.dress.dropped} features dropped into empty blocks; ${spawns.length} enemy spawns (widths ${spawns.map((s) => s.width).join(', ')}).`,
+    notes: `${S.notes} Seed ${seed >>> 0}: ${laid.length} pieces on ${C}×${R} (${laid.filter((t) => t.mirror).length} mirrored, ${laid.reduce((a, t) => a + t.wear, 0)} cells of wear), ${fixes.connect.carved} cells carved to join the regions, ${fixes.widen.widened} widened, ${fixes.dress.dropped} features dropped into empty blocks; ${spawns.length} enemy spawns (widths ${spawns.map((s) => s.width).join(', ')}).`,
     theme: th,
     facing: ['n', 'e', 's', 'w'][start.d],
     map,
     skin: F.skinRows(),
-    gen: { style, seed: seed >>> 0, cols: C, rows: R, pieces: laid.map((t) => ({ id: t.id, rot: t.rot, tx: t.tx, ty: t.ty })), fixes: { carved: fixes.connect.carved, widened: fixes.widen.widened, dropped: fixes.dress.dropped, rounds: fixes.rounds }, spawns: spawns.map((s) => ({ x: s.x, y: s.y, width: s.width, dist: s.d })) },
+    gen: { style, seed: seed >>> 0, cols: C, rows: R, pieces: laid.map((t) => ({ id: t.id, rot: t.rot, mirror: t.mirror, wear: t.wear, tx: t.tx, ty: t.ty })), fixes: { carved: fixes.connect.carved, widened: fixes.widen.widened, dropped: fixes.dress.dropped, rounds: fixes.rounds }, spawns: spawns.map((s) => ({ x: s.x, y: s.y, width: s.width, dist: s.d })) },
   };
   json.gen.lint = lintWorld(json);
   loadWorld(json); // throws on anything the world loader refuses

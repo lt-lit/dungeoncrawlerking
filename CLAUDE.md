@@ -509,8 +509,25 @@ the recipe skeletons style by style; w01 and w02 retire with it (DONE,
 above). NEXT PR: the recipe skeletons, style by style, each a gallery
 batch — packed rooms first (the keep), with the room and passage recipes,
 the wear pass, a signature piece and a symmetry lint; then milestone 6.
-THE PHONE VERDICT on the vaults fixtures and the New floor button is the
-gate for this PR.
+THE FIRST VERDICT CAME THE SAME NIGHT (2026-09-09, a Firefox log at walk
+turn 96 on vaults-1): "this might work. A little incoherent, plus I'm
+sure on replays people will start to notice the repeating patterns. Also,
+why is the arena bounds not centered around the armies? Every duel is
+off-center, even in relatively open areas." THE LOG SAID WHY: `kingFile
+0` — the placement slid the box to keep the room's floor run inside it
+and measured the run along the king's rank alone, so a king beside a
+wall, or beside ONE CRATE in an open hall, stood at the box's edge with
+his army hugging it. FIXED the same night: THE BOX IS CENTRED ON THE
+KING, always (`boxPlacement` returns file 4; the run is reported and
+decides nothing), test-barrier 108. AGAINST THE REPEATS, a stopgap: the
+prefab grid lays pieces in EIGHT orientations (mirrored or not — a
+mirrored arena is not symmetric) and WEATHERS each by seed (zero to
+three edits in the ruin vocabulary, never on a door or an edge;
+`weathered`), so no floor carries an arena verbatim; test-dungeon 96,
+ui-smoke 254 ok (the deal at the start: kings on file 4).
+COHERENCE is the recipe skeletons' to give (a mosaic of set pieces has
+no floor plan) — the next PR, unchanged. The phone verdict on the
+centred box is the gate.
 
 **MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
 conversation SETTLED and what it only PROPOSED.** Settled (designer): the
