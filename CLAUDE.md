@@ -527,7 +527,42 @@ three edits in the ruin vocabulary, never on a door or an edge;
 ui-smoke 254 ok (the deal at the start: kings on file 4).
 COHERENCE is the recipe skeletons' to give (a mosaic of set pieces has
 no floor plan) — the next PR, unchanged. The phone verdict on the
-centred box is the gate.
+centred box is the gate. THE DESIGNER'S DIRECTION, the same session
+(2026-09-09, discussion, nothing built): "if we can categorize them well
+and use them intelligently, I could see dungeons that actually feel
+different every playthru. Should we stick to 10x10 or get weird with the
+building block size? … these stages will serve for now." THE ANSWER ON
+RECORD: the arena's 10 has nothing to do with the piece size (the box
+floats over the world and never aligns to a piece grid), so pieces go on
+a 5-CELL LATTICE in multiples of five — 5×5 connectors and closets,
+10×5 corridors and galleries, 10×10 rooms (the arenas as they are),
+15×10 and 20×10 halls, 20×20 set-piece complexes — because variety of
+SCALE is what a mosaic of equal squares cannot give; pieces are TAGGED
+(role: room / corridor / junction / dead end / vault / set piece; size;
+theme; EXITS — which sides open and where, computed off the piece, so
+the 36 arenas tag themselves; density; a rating); a PLAN is drawn
+before a piece is laid — a graph on the lattice: the critical path from
+the start to the stairs, side rooms, a loop or two, dead ends, one
+vault, the set piece — each node a size + role + required exits, then
+pieces chosen by tag, oriented to match, seams EXACT where the plan
+demands a connection (Spelunky's typed rooms on a critical path, with
+variable piece sizes); the incoherence of the vaults is that the arenas
+were authored as CROPS (rooms running off every edge), so new pieces
+are authored FOR ASSEMBLY (walls on the border where nothing should
+leak, openings where the plan can use them); the recipe generators
+become PIECE FACTORIES feeding the same assembler (a generated room is a
+tagged piece like a hand-authored one), so both roads meet and the
+library never runs dry; styles = which tags a floor draws from + which
+plan shapes. NEXT, IN THE DESIGNER'S ORDER: (1) a session on THE
+CONTROLS AND THE CAMERA (theirs to lead; the open items on record: the
+turn as a cut with no animation, the zoom as ± cuts and no pinch, the
+walk's default zoom fitting fifteen tiles, the d-pad's held repeat and
+the swipe, the tap-a-piece snap-zoom and its target pick, the duel box
+on a phone with the dimmed dungeon beside it only, the desktop layout
+"functional, not designed", per-theme edge-on door art); (2) THE PLAN
+LAYER for the generator (the lattice, the tags, the plan graph, exact
+seams), the arenas retagged, pieces authored for assembly in batches;
+(3) milestone 6.
 
 **MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
 conversation SETTLED and what it only PROPOSED.** Settled (designer): the
@@ -537,8 +572,8 @@ TRIGGER IS "YOUR BOX" — four 10×10 boxes on the player's king, one per
 WORLD direction (his facing does not gate it: an enemy behind him can
 catch him; at the drop the army turns to the axis as a cut and the
 pattern stamps forward as 4c does — flanking stays §11), his rank the
-box's row 0, centred on his file and slid only to keep his floor run
-inside (`barrierWindow`'s formula with `files` pinned at 10); a duel
+box's row 0, CENTRED on his file (four to the left, five to the right —
+nothing slides, designer 2026-09-09); a duel
 starts the moment a HUNTING enemy's king stands on the FAR ROW of one —
 anywhere on it: brief §5.3's band alignment is back and 4c's strict
 colinearity retired, read from "both kings in the right rows" and NOT
