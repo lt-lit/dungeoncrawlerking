@@ -62,6 +62,15 @@ const DIAG = [[1, 1], [1, -1], [-1, -1], [-1, 1]];
 export const INPUTS = ['step', 'face', 'wait', 'move'];
 /** THE BOX the army must always fit (ruling 15): 10×10, the king on its first row. barrier.mjs's BOX is the same number (it imports this module, so the number is restated here). */
 export const BOX = 10;
+/**
+ * THE OPENING KIT (brief §4.2; designer 2026-09-10, the enemies session):
+ * K + R + N + B and FOUR pawns, value 15 — the ONE constant every reader
+ * imports (the page's walk, the generator's start and its lints, the
+ * harnesses; it was copy-pasted in six places before). The molder lays it
+ * N K R B over P P P P: a width of four has no middle, so the king stands
+ * second from the left and the anchor on his file.
+ */
+export const OPENING_KIT = Object.freeze({ width: 4, royal: 'K', pieces: Object.freeze(['R', 'N', 'B']) });
 /** CATCH-UP (ruling 13): steps a turn when the path is longer than one, and while behind the king. */
 export const CATCH_UP = 2;
 export const CATCH_UP_BEHIND = 3;
@@ -1521,18 +1530,28 @@ export function formationFocus(army) {
  * reachable from the king, at or ahead of him first (the same molding).
  * Pieces get ids 1… in slot order. Throws when the king's cell is not
  * floor. `lenient` (the walk-out of a closed board): a piece the king's
- * pocket cannot hold takes the nearest vacant floor anywhere.
+ * pocket cannot hold takes the nearest vacant floor anywhere. `fixed` (a
+ * map slot → cell; the walk-out, 2026-09-10): those slots take the cells
+ * given — the survivors of a duel stand where they stood — and only the
+ * rest are placed. `stamp: false` leaves the world's piece grid alone (a
+ * hypothetical army, the generator's lint).
  */
-export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient = false } = {}) {
+export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient = false, fixed = null, stamp = true } = {}) {
   if (world.at(at.f, at.r) !== FLOOR) throw new Error(`spawn: (${at.f}, ${at.r}) is not floor`);
   const fc = normFacing(facing);
   const army = new Army({ side, facing: fc, pattern, pieces: [], at: anchorCell(pattern, at, fc) });
   army.pieces.push({ id: 1, ch: pattern.slots[0].ch, slot: 0, f: at.f, r: at.r });
   const taken = new Set([world.idx(at.f, at.r)]);
+  if (fixed) for (const c of fixed.values()) taken.add(world.idx(c.f, c.r));
   const fromKing = distanceField(world, army, [at]);
   const direct = directFrom(world, fromKing, at);
   const vacant = (f, r) => world.at(f, r) === FLOOR && !world.pieceAt(f, r);
   for (let i = 1; i < pattern.slots.length; i++) {
+    const fx = fixed?.get(i) ?? null;
+    if (fx) {
+      army.pieces.push({ id: i + 1, ch: pattern.slots[i].ch, slot: i, f: fx.f, r: fx.r });
+      continue;
+    }
     const want = slotCell(pattern, i, army.at, fc);
     let cell = null;
     if (world.inBounds(want.f, want.r) && vacant(want.f, want.r) && !taken.has(world.idx(want.f, want.r)) && direct(want.f, want.r)) cell = want;
@@ -1563,6 +1582,111 @@ export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient 
     taken.add(world.idx(cell.f, cell.r));
     army.pieces.push({ id: i + 1, ch: pattern.slots[i].ch, slot: i, f: cell.f, r: cell.r });
   }
-  army.stamp(world);
+  if (stamp) army.stamp(world);
   return army;
+}
+
+/**
+ * THE NEAREST FLOOR THAT CAN HOLD an army of `n` pieces (ruling 15:
+ * "nothing is ever sealed off" — after a duel, if the king's pocket
+ * cannot hold the army, the whole army moves to the nearest floor that
+ * can): the vacant-floor region of at least `n` cells whose nearest cell
+ * to `from` (Chebyshev) is the nearest of all; that cell, or null.
+ */
+export function nearestHold(world, from, n) {
+  const n0 = world.size;
+  const region = new Int32Array(n0).fill(-1);
+  const sizes = [];
+  const vacant = (i) => { const f = i % world.files, r = (i - f) / world.files; return world.at(f, r) === FLOOR && !world.pieceAt(f, r); };
+  for (let s = 0; s < n0; s++) {
+    if (region[s] >= 0 || !vacant(s)) continue;
+    const id = sizes.length;
+    const stack = [s];
+    region[s] = id;
+    let size = 0;
+    while (stack.length) {
+      const i = stack.pop();
+      size++;
+      const f = i % world.files, r = (i - f) / world.files;
+      for (const [df, dr] of KING_STEPS) {
+        const nf = f + df, nr = r + dr;
+        if (!world.inBounds(nf, nr)) continue;
+        const j = world.idx(nf, nr);
+        if (region[j] >= 0 || !vacant(j)) continue;
+        region[j] = id;
+        stack.push(j);
+      }
+    }
+    sizes.push(size);
+  }
+  let best = null;
+  for (let i = 0; i < n0; i++) {
+    if (region[i] < 0 || sizes[region[i]] < n) continue;
+    const f = i % world.files, r = (i - f) / world.files;
+    const d = Math.max(Math.abs(f - from.f), Math.abs(r - from.r));
+    const k = [d, Math.abs(f - from.f) + Math.abs(r - from.r), f, r];
+    if (!best || lexLess(k, best.k)) best = { f, r, k };
+  }
+  return best ? { f: best.f, r: best.r } : null;
+}
+
+/**
+ * THE WALK-OUT of a won duel (2026-09-10, the duel start — ruling 3's
+ * other half): the survivors stand WHERE THEY STOOD when the duel ended,
+ * the captured return beside the body (the spawn's molding around the
+ * survivors), promotions revert (a promoted piece is a pawn again at its
+ * cell — brief §8). `survivors` are the side's letters on the board after
+ * the duel, in world cells: [{ ch, f, r }], the king among them (or
+ * `kingCell` is his). Each survivor takes the slot of its letter nearest
+ * its cell; a letter beyond the pattern's count of it is a promoted pawn.
+ * The world's piece grid must already be clear of the side's old letters
+ * (the crop's letters after a duel). When the king's pocket cannot hold
+ * the army, THE WHOLE ARMY MOVES to the nearest floor that can (ruling
+ * 15); failing even that, the lenient spawn.
+ */
+export function walkOutArmy(world, pattern, kingCell, facing, survivors, side = 'w') {
+  const fc = normFacing(facing);
+  const slots = pattern.slots;
+  const at = anchorCell(pattern, kingCell, fc);
+  const fixed = new Map();
+  const free = survivors.filter((s) => !(s.f === kingCell.f && s.r === kingCell.r)).map((s) => ({ ch: s.ch.toUpperCase(), f: s.f, r: s.r }));
+  const cellOfSlot = (i) => slotCell(pattern, i, at, fc);
+  const assign = (idxs, pool) => {
+    const open = [...idxs];
+    const cand = [...pool];
+    while (open.length && cand.length) {
+      let best = null;
+      for (const i of open) {
+        const sc = cellOfSlot(i);
+        for (const s of cand) {
+          const d = Math.max(Math.abs(s.f - sc.f), Math.abs(s.r - sc.r));
+          if (!best || d < best.d) best = { i, s, d };
+        }
+      }
+      fixed.set(best.i, { f: best.s.f, r: best.s.r });
+      open.splice(open.indexOf(best.i), 1);
+      cand.splice(cand.indexOf(best.s), 1);
+    }
+    return cand;
+  };
+  const letters = [...new Set(slots.slice(1).map((s) => s.ch.toUpperCase()).filter((ch) => ch !== 'P'))];
+  const pawnPool = free.filter((s) => s.ch === 'P' || !letters.includes(s.ch));
+  for (const ch of letters) {
+    const idxs = slots.map((s, i) => (i > 0 && s.ch.toUpperCase() === ch ? i : -1)).filter((i) => i >= 0);
+    pawnPool.push(...assign(idxs, free.filter((s) => s.ch === ch)));
+  }
+  assign(slots.map((s, i) => (i > 0 && s.ch.toUpperCase() === 'P' ? i : -1)).filter((i) => i >= 0), pawnPool);
+  try {
+    return spawnArmy(world, pattern, kingCell, fc, side, { fixed });
+  } catch {
+    const cell = nearestHold(world, kingCell, slots.length);
+    if (cell && !(cell.f === kingCell.f && cell.r === kingCell.r)) {
+      try {
+        return spawnArmy(world, pattern, cell, fc, side, {});
+      } catch {
+        /* the region holds the count but not the molding — fall through */
+      }
+    }
+    return spawnArmy(world, pattern, kingCell, fc, side, { fixed, lenient: true });
+  }
 }

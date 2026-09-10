@@ -1045,9 +1045,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   });
   expect(wk.screen.walk && !wk.screen.duel && !wk.screen.setup, 'the walk screen is up, the duel and setup screens down');
   expect(wk.info.fit === 'window' && wk.info.viewport === 'screen' && Number.isInteger(wk.info.k) && wk.info.k >= 1 && wk.info.crop === null, `the board is a window over the world at k ${wk.info.k} with no crop`);
-  expect(wk.start.worldId === 'vaults-1' && wk.start.facing === wk.world.facing && wk.start.pieces.length === 6 && wk.start.turn === 0, `the run begins on the generated floor facing its start's way with the 3×2 kit (${wk.start.pieces.length} pieces, turn ${wk.start.turn})`);
+  expect(wk.start.worldId === 'vaults-1' && wk.start.facing === wk.world.facing && wk.start.pieces.length === 8 && wk.start.turn === 0, `the run begins on the generated floor facing its start's way with the 4×2 opening kit (${wk.start.pieces.length} pieces, turn ${wk.start.turn})`);
   expect(wk.saved0 && wk.saved0.turn === 0, 'the run is saved at turn 0');
-  expect(wk.step.ok && !wk.step.pivot && wk.step.moves === 6 && wk.step.state.king.f === wk.start.king.f + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][0] && wk.step.state.king.r === wk.start.king.r + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][1] && wk.step.state.turn === 1 && wk.step.boardFacing === 0, `a step the way the army faces moves all six one cell ahead, no pivot, the board north-up (${wk.step.moves} moves, king ${wk.step.state.king.f})`);
+  expect(wk.step.ok && !wk.step.pivot && wk.step.moves === 8 && wk.step.state.king.f === wk.start.king.f + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][0] && wk.step.state.king.r === wk.start.king.r + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][1] && wk.step.state.turn === 1 && wk.step.boardFacing === 0, `a step the way the army faces moves all eight one cell ahead, no pivot, the board north-up (${wk.step.moves} moves, king ${wk.step.state.king.f})`);
   expect(wk.turn.ok && wk.turn.pivot && wk.turn.state.facing === (wk.start.facing + 1) % 4 && wk.turn.facing === 0 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.king.r === wk.step.state.king.r && wk.turn.state.turn === 2, `a face input pivots the army a quarter right for a move; the king stays and the board stays north-up (army facing ${wk.turn.state.facing}, board ${wk.turn.facing})`);
   expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
   expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status) && wk.refused.pivots === 1 && wk.refused.facing === 1, `stepping east pivots the army east once and walks until a wall refuses and says so (${wk.refused.reason}, turn ${wk.refused.turn}, ${wk.refused.pivots} pivot)`);
@@ -1118,6 +1118,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     if (smash) await K.walk.input({ kind: 'move', id: smash.id, to: smash.to });
     out.smash = { found: !!smash, debris: K.walk.debris(), saved: K.walk.saved()?.floors[K.walk.saved().floor]?.debris?.events?.length ?? null };
     // THE DROP, through the real button (the initiative select at its default: the player moves first).
+    const standing = K.walk.state.pieces.map((p) => ({ ch: p.ch, f: p.f, r: p.r }));
     localStorage.setItem('dck.setup.v1', JSON.stringify({ black: { width: 3, mode: 'pieces', pieces: 'NN', archetype: 'heavies-deep', anchor: 'center' } }));
     document.getElementById('btnWalkBarrier').click();
     await new Promise((r) => setTimeout(r, 50));
@@ -1125,6 +1126,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     for (let i = 0; i < 200 && K.app.phase !== 'playing'; i++) await new Promise((r) => setTimeout(r, 50));
     out.drop = { phase: K.app.phase, screen: { walk: !document.getElementById('screen-walk').hidden, duel: !document.getElementById('screen-duel').hidden }, back: document.getElementById('btnBack').hidden, duel: K.walk.duel, session: K.app.session?.kind, crop: K.walk.crop, info: K.renderer.info };
     out.drop.fenEqual0 = !!K.app.duel && board(K.walk.arenaFen()) === board(K.app.duel.fen());
+    // THE PIECES WHERE THEY STAND (2026-09-10): every piece of the walk is the same letter on the same world cell in the duel's crop.
+    out.drop.standing = standing.every((p) => K.walk.cell(p.f, p.r)?.v === p.ch);
+    out.drop.standingN = standing.length;
     out.pending = K.walk.saved()?.pending ?? null;
     // Two plies: the player's random move, the engine's reply; the world's crop follows the board.
     await settle();
@@ -1143,6 +1147,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(bar.drop.duel && bar.drop.duel.gap >= 2 && bar.drop.duel.files === 10 && bar.drop.duel.ranks === 10, `the deal: ${bar.drop.duel?.files}×${bar.drop.duel?.ranks}, gap ${bar.drop.duel?.gap}, kings on file ${bar.drop.duel?.kingFile}`);
   expect(bar.drop.info.viewport === 'screen' && bar.drop.info.facing === bar.world.facing && bar.drop.info.crop && bar.drop.info.crop.facing === bar.world.facing && bar.drop.info.window.cols > bar.drop.info.crop.cols, `the board is a window over the world at the army's facing, the dungeon around the ${bar.drop.info.crop?.cols}×${bar.drop.info.crop?.rows} crop (${bar.drop.info.window?.cols} cols shown)`);
   expect(bar.drop.fenEqual0 && bar.fenEqual1 && bar.ply === 2, `the crop's FEN equals the duel's board at ply 0 and after ${bar.ply} plies`);
+  expect(bar.drop.standing && bar.drop.standingN === 8, `the deal reads the ${bar.drop.standingN} pieces where they stand — nothing summoned`);
   expect(bar.pending && bar.pending.seed === dropSeed && bar.pending.turn === 'w' && bar.pending.at === bar.walkTurn + (bar.smash.found ? 1 : 0), `the run holds the pending duel (seed ${bar.pending?.seed}, at walk turn ${bar.pending?.at})`);
   expect(bar.log.world && bar.log.world.id === bar.world.id && bar.log.world.theme === bar.world.theme && bar.log.world.files === bar.drop.duel.files && bar.log.world.crop && bar.log.variantIni, `the replay log carries the world block (${bar.log.world?.stage})`);
   // The reload: the saved run resumes with the duel in flight and drops it again on the same seed.
@@ -1166,7 +1171,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   });
   expect(re.seed === dropSeed && re.ply === 0 && re.equal, `a reload mid-duel re-drops the same seeded duel from move one (seed ${re.seed})`);
   expect(re.ended === 'ended' && !re.overlay.hidden && re.overlay.title === 'Victory' && !re.overlay.walkOut && /Walk on/.test(re.overlay.label) && re.overlay.again && re.overlay.redeal && re.overlay.menu && re.overlay.undo, `the overlay on a world duel: one button, "${re.overlay.label}" (Rematch / Re-deal / Back / Undo hidden)`);
-  expect(re.after.phase === 'walk' && re.after.screen && re.after.pieces === 6 && re.after.kingOnFloor && re.after.lower === 0 && !re.after.session && !re.after.duel, `the army walks out whole (${re.after.pieces} pieces around the king), the enemy gone from the floor`);
+  expect(re.after.phase === 'walk' && re.after.screen && re.after.pieces === 8 && re.after.kingOnFloor && re.after.lower === 0 && !re.after.session && !re.after.duel, `the army walks out whole (${re.after.pieces} pieces, the survivors where they stood), the enemy gone from the floor`);
   expect(re.after.last?.kind === 'duel' && re.after.last.result === '1-0' && re.after.last.termination === 'concede' && re.after.pending === null && re.after.debris && re.after.turn === bar.walkTurn + (bar.smash.found ? 1 : 0), `the run records the duel as its result (${re.after.last?.result} · ${re.after.last?.termination}), no pending entry, the ledger inside; the walk turn unchanged (${re.after.turn})`);
   // A SECOND DUEL ON A SCARRED FLOOR, on a fresh run of the same floor (the
   // walk-out lands wherever the king ended, where no box is promised): a pit

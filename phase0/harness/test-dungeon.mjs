@@ -15,13 +15,13 @@ import { loadStageV2 } from '../../play/js/stage.mjs';
 import { loadWorld, arenaToWorld } from '../../play/js/world.mjs';
 import { generateWorld, lintWorld, rectStats, narrowPockets, pocketExtent, rotated, mirrored, oriented, pieceOf, floorOf, boxRect, duelCoverage, LINT, STYLES, STYLE_NAMES, SPAWN_WIDTHS } from '../../play/js/dungeon.mjs';
 import { planBarrier, boxAt, BOX } from '../../play/js/barrier.mjs';
-import { makePattern } from '../../play/js/army.mjs';
+import { makePattern, spawnArmy, OPENING_KIT } from '../../play/js/army.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(here, '..', '..', 'play', 'stages', 'manifest.json'), 'utf8'));
 const stages = manifest.stages.map((j) => loadStageV2(j));
 const pieces = stages.map(pieceOf);
-const KIT = makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }, { seed: 1 });
+const KIT = makePattern(OPENING_KIT, { seed: 1 }); // THE OPENING KIT: the start must deal for the real kit
 const KIT_ENEMY = { spec: { width: 3, pieces: ['R', 'N'] } };
 
 let ok = 0, bad = 0;
@@ -100,7 +100,7 @@ for (const seed of [1, 2, 3]) {
   for (let i = 0; i < a.gen.spawns.length; i++) for (let j = i + 1; j < a.gen.spawns.length; j++) { const p = a.gen.spawns[i], q = a.gen.spawns[j]; if (Math.max(Math.abs(p.x - q.x), Math.abs(p.y - q.y)) < LINT.spawnSpacing) spaced = false; }
   check(spaced, `seed ${seed}: spawns ${LINT.spawnSpacing} apart`);
   check(world.spawns.every((s) => world.at(s.f, s.r) === '.') && String(world.spawns.map((s) => s.n)) === String(widths), 'the digits on the map are the widths, on floor');
-  const army = { king: { f: world.start.f, r: world.start.r }, facing: world.start.facing, pattern: KIT };
+  const army = spawnArmy(world, KIT, { f: world.start.f, r: world.start.r }, world.start.facing, 'w', { stamp: false });
   const plan = planBarrier(world, army, { enemy: KIT_ENEMY, seed: 1 });
   check(plan.ok && plan.deal.gap >= 2, `seed ${seed}: a legal box ahead of the start (gap ${plan.ok ? plan.deal.gap : plan.error})`);
   const AH = [[0, 1], [1, 0], [0, -1], [-1, 0]][world.start.facing];
@@ -134,7 +134,7 @@ for (const seed of [1, 2, 3]) {
     for (let d = 0; d < 4; d++) {
       tried++;
       const rect = boxRect(F, x, y, d);
-      const box = boxAt(world, { f: x, r: world.ranks - 1 - y }, d);
+      const box = boxAt(world, { king: { id: 1, f: x, r: world.ranks - 1 - y }, pieces: [{ id: 1, f: x, r: world.ranks - 1 - y }], facing: d }, d); // a lone king: the centred box
       let inside = 0;
       for (let r = 0; r < BOX; r++) for (let f = 0; f < BOX; f++) {
         const c = arenaToWorld(box.crop, f, r);

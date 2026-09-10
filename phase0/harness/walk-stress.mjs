@@ -39,7 +39,7 @@ const TELEPORTS = parseInt(arg('teleports', '0'), 10); // --teleports N: print N
 const teleportSample = []; // --refused N: print N sampled refused steps (the front met the wall, or the army could not move as one body)
 const refusedSample = [];
 const splits = [];
-const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
+const KIT = A.OPENING_KIT; // THE OPENING KIT (army.mjs): four wide since 2026-09-10
 const DIRS = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'play/worlds/manifest.json'), 'utf8'));

@@ -220,9 +220,14 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     row++;
   }
 
-  // Cover report (informational): a piece is screened by an own pawn OR a
-  // wall forward of it in its file. Per the per-file invariant any own
-  // pawn in the file is forward of every piece in it.
+  return { cells, depthRows: row, extent: row - 1, violations: coverReport(grid, ranks, side, cells) };
+}
+
+/** Cover report (informational): a piece is screened by an own pawn OR a
+ *  wall forward of it in its file. Per the per-file invariant any own
+ *  pawn in the file is forward of every piece in it. Shared by the molding
+ *  and the standing cells of a walking army (buildMatchup `white.cells`). */
+export function coverReport(grid, ranks, side, cells) {
   const dir = side === 'white' ? 1 : -1;
   const pawnFiles = new Set(cells.filter((c) => c.piece === 'P').map((c) => c.f));
   const openFiles = new Set();
@@ -238,8 +243,7 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
     }
     if (!walled) openFiles.add(c.f);
   }
-  const violations = [...openFiles].sort((a, b) => a - b).map((f) => `open-file:${String.fromCharCode(97 + f)}`);
-  return { cells, depthRows: row, extent: row - 1, violations };
+  return [...openFiles].sort((a, b) => a - b).map((f) => `open-file:${String.fromCharCode(97 + f)}`);
 }
 
 /**
@@ -248,15 +252,24 @@ export function layoutArmy({ grid, files, ranks, side, army, anchor = 'center', 
  * opts = {
  *   stage,                      — stage.mjs loadStageV2() output
  *   white, black: { army | spec, anchor, archetype },
+ *   white.cells,                — THE PLAYER'S PIECES WHERE THEY STAND (brief
+ *                                 §5.1 ruling 3, the duel start, 2026-09-10):
+ *                                 [{ f, r, piece }] on the stage, no layout —
+ *                                 the walk's own cells through the crop
  *   seed,                       — one seed, per-side child streams
  *   gapMin = 1,                 — lint floor (designer: practical 2-5)
  *   turn = 'w',
+ *   gapAt = 'front' | 'camp',   — the gap between the closest rows, or (ruling
+ *                                 9) between the CAMP LINES — each side's
+ *                                 pawn line — so a piece pre-moved ahead of
+ *                                 the pawns sits inside the gap
  * }
- * Returns { fen, variantName, white, black, gap, violations } or
+ * Returns { fen, variantName, white, black, gap, gapFront, violations } or
  * { error } ("doesn't fit" / "no-gap"). Deterministic given (stage, specs,
- * seed).
+ * seed). Black's molding never lands on a white cell: the caller's `reach`
+ * excludes them (barrier.mjs), and an overlap is refused here besides.
  */
-export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn = 'w' }) {
+export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn = 'w', gapAt = 'front' }) {
   const { grid, files, ranks } = stage;
   // The engine's caps (CLAUDE.md rule 7's catalog: 3–12 files × 5–10
   // ranks). The stage loader refuses a file outside them; a crop computed
@@ -269,29 +282,49 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
   const bArmy = mk(black, 'black');
 
   // White lays out first with room left for a 2-row opponent + the gap;
-  // black gets exactly what remains.
-  const wl = layoutArmy({
-    grid, files, ranks, side: 'white', army: wArmy,
-    anchor: white.anchor ?? 'center', archetype: white.archetype ?? 'heavies-deep',
-    rng: mulberry32(childSeed(seed, 'white-mold')),
-    maxDepth: ranks - gapMin - 2,
-    royalAt: white.royalAt ?? null, order: white.order ?? 'archetype', reach: white.reach ?? null,
-  });
-  if (!wl) return { error: `white ${wArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
+  // black gets exactly what remains — or, `white.cells`, white STANDS where
+  // the walk left it (ruling 3): its cells are read, never laid.
+  let wl;
+  if (white.cells) {
+    const cells = white.cells.map((c) => ({ f: c.f | 0, r: c.r | 0, piece: c.piece }));
+    if (!cells.length) return { error: 'white has no pieces', white: wArmy, black: bArmy };
+    const bad = cells.find((c) => c.f < 0 || c.f >= files || c.r < 0 || c.r >= ranks || isTerrain(grid[c.r][c.f]));
+    if (bad) return { error: `white stands off the board or on stone at (${bad.f}, ${bad.r})`, white: wArmy, black: bArmy };
+    const rows = cells.map((c) => c.r);
+    const top = Math.max(...rows);
+    wl = { cells, depthRows: top + 1, extent: top, violations: coverReport(grid, ranks, 'white', cells), standing: true };
+  } else {
+    wl = layoutArmy({
+      grid, files, ranks, side: 'white', army: wArmy,
+      anchor: white.anchor ?? 'center', archetype: white.archetype ?? 'heavies-deep',
+      rng: mulberry32(childSeed(seed, 'white-mold')),
+      maxDepth: ranks - gapMin - 2,
+      royalAt: white.royalAt ?? null, order: white.order ?? 'archetype', reach: white.reach ?? null,
+    });
+    if (!wl) return { error: `white ${wArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
+  }
+  // THE LINE the gap is measured from: white's front-most row, or (ruling
+  // 9) its CAMP LINE — the rank holding the most of its pawns, ties toward
+  // the enemy (campLineRank counts ranks from 1).
+  const wLine = gapAt === 'camp' ? campLineRank(wl.cells, 1) - 1 : wl.extent;
   const bl = layoutArmy({
     grid, files, ranks, side: 'black', army: bArmy,
     anchor: black.anchor ?? 'center', archetype: black.archetype ?? 'heavies-deep',
     rng: mulberry32(childSeed(seed, 'black-mold')),
-    maxDepth: ranks - gapMin - (wl.extent + 1),
+    maxDepth: ranks - gapMin - (wLine + 1),
     royalAt: black.royalAt ?? null, order: black.order ?? 'archetype', reach: black.reach ?? null,
   });
 
   if (!bl) return { error: `black ${bArmy.width}x2 doesn't fit`, white: wArmy, black: bArmy };
+  const wKey = new Set(wl.cells.map((c) => c.r * files + c.f));
+  if (bl.cells.some((c) => wKey.has(c.r * files + c.f))) return { error: 'black molds onto a white piece', white: wArmy, black: bArmy };
 
-  // Gap = empty ranks between the armies' closest occupied rows.
+  // Gap = empty ranks between the armies' closest occupied rows, or (gapAt
+  // 'camp') between the two camp lines.
   const wTop = Math.max(...wl.cells.map((c) => c.r));
   const bBottom = Math.min(...bl.cells.map((c) => c.r));
-  const gap = bBottom - wTop - 1;
+  const gapFront = bBottom - wTop - 1;
+  const gap = gapAt === 'camp' ? campLineRank(bl.cells, -1) - 1 - wLine - 1 : gapFront;
   if (gap < gapMin) return { error: `gap ${gap} < ${gapMin}`, white: wArmy, black: bArmy };
 
   const fen = composeFen(grid, files, ranks, wl.cells, bl.cells, turn);
@@ -301,6 +334,7 @@ export function buildMatchup({ stage, white, black, seed = 1, gapMin = 1, turn =
     white: { army: wArmy, layout: wl },
     black: { army: bArmy, layout: bl },
     gap,
+    gapFront,
     violations: [...wl.violations.map((v) => `white:${v}`), ...bl.violations.map((v) => `black:${v}`)],
   };
 }

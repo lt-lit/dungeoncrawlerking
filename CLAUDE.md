@@ -874,6 +874,42 @@ between hunters, an enemy that smashes crates on its path, per-theme
 edge-on door art, a phone height for the duel box, the analyzer mounting
 the whole world, the debris flight on the walk's smash.**
 
+**THE ENEMIES SESSION ✅ HELD 2026-09-10 (designer: "Alright, it's time to
+get some enemies to fight… I'm thinking we make the player's starter army
+4 wide. 1 rook, 1 knight, 1 bishop, 4 pawns. Enemies will be 3 wide for
+now"; on the six picks below, "Sounds good, go ahead"). SIX RULINGS, built
+to: (1) THE KIT IS 4×2 — K + R + N + B and four pawns, value 15, laid by
+the molder as N K R B over P P P P (a width of four has no middle, so the
+king stands second from the left; the anchor stays on his file);
+`army.mjs OPENING_KIT` is the ONE constant (it was copy-pasted in six
+places). ENEMIES ARE 3 WIDE FOR NOW: the spawn digit is still the width,
+`SPAWN_WIDTHS` reads all threes until §8's ladder returns, and the two
+pieces are drawn from the run's seed in a NINE-TO-THIRTEEN band (no
+queens at width 3). (2) THE FAR ROW IS A BAND, any file of it (§5.3's
+unconfirmed reading, confirmed). (3) CRATES AND DOORS BLOCK SIGHT, holes
+do not; king to king, no cap, no fog, after every move. (4) A REAR OR
+SIDE CATCH PIVOTS THE ARMY to the axis at the drop (ruling 14's wheel),
+then the pieces are read where they stand — never a refusal of rear
+axes. (5) the enemy band above. (6) SENTRIES FIRST; a closed door is a
+wall to a hunter (automatic moves never take furniture). WHAT THE
+SESSION FOUND STALE in the milestone-6 paragraph above: "the pattern
+stamps forward at the drop" died with ruling 3; "the hunter never turns"
+is moot — the facing follows the step and the pivot is inside it, for
+enemies as for the player; `pieceMoves`' piece capture is ALREADY off
+(an enemy piece is a blocked square to every walk move since the
+controls rewrite); the engine ALREADY boots at page load, before any
+run, so only a recycle in flight can delay a drop and `startDuel` waits
+on it. TWO PLACEMENTS EXISTED: the walk's `boxOf` slides the box to hold
+every piece, the barrier's `boxPlacement` returned file 4 — the duel
+start makes the walk's the one rule. THE ORDER: the kit (one constant,
+the fixtures regenerated, walk-stress re-run on 4 wide — a four-piece
+front files into the vaults' 3-wide passages three deep, so the walk's
+numbers on record are 3-wide numbers), THE DUEL START (rulings 3, 9, 16:
+the player's pieces where they stand, the box slid by `boxOf`, the gap
+between the camp lines, the enemy molded around the player's pieces, a
+walk-out that keeps survivors in place), then ENEMIES (`play/js/enemy.mjs`
+— the record below says what was built). The phone verdict is the gate.**
+
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
 THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
