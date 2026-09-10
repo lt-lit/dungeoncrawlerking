@@ -958,7 +958,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.wait = { ok: p3.ok, turn: K.walk.state.turn };
     // Step east until a wall refuses (the ring at the latest); the first east step pivots the army east.
     let refused = null, pivots = 0;
-    for (let i = 0; i < 40 && !refused; i++) { const p = await K.walk.input({ kind: 'step', df: 1, dr: 0 }); if (!p.ok) refused = p.reason; else if (p.pivot) pivots++; }
+    for (let i = 0; i < 80 && !refused; i++) { const p = await K.walk.input({ kind: 'step', df: 1, dr: 0 }); if (!p.ok) refused = p.reason; else if (p.pivot) pivots++; }
     out.refused = { reason: refused, turn: K.walk.state.turn, status: document.getElementById('walk-status').textContent, pivots, facing: K.walk.state.facing };
     // The save after every turn: the stored run's turn equals the state's; the export is one object of the schema with the turn list.
     const saved = K.walk.saved();
@@ -1053,7 +1053,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status) && wk.refused.pivots === 1 && wk.refused.facing === 1, `stepping east pivots the army east once and walks until a wall refuses and says so (${wk.refused.reason}, turn ${wk.refused.turn}, ${wk.refused.pivots} pivot)`);
   expect(wk.save.schema === 'dck-run/2' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
   expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === wk.tap.z0 && wk.tap.z2 === wk.tap.z0 && wk.tap.focusSame && wk.tap.cleared && wk.tap.chessOnly, `a tapped piece marks ${wk.tap.targets} chess moves with the zoom (${wk.tap.z0}) and the focus unmoved; a tap elsewhere lets go`);
-  expect(wk.tap.box && wk.tap.box.ok && wk.tap.box.rect.f1 - wk.tap.box.rect.f0 === 9 && wk.tap.box.rect.r1 - wk.tap.box.rect.r0 === 9, `the box the army must fit is a 10×10 on the king's rank (${JSON.stringify(wk.tap.box?.rect)})`);
+  // The walk tolerates a comrade up to two ranks behind the king (army.mjs behindKing; the drop molds it in), so the box is judged on that tolerance, not `ok` alone.
+  expect(wk.tap.box && wk.tap.box.minDy >= -2 && wk.tap.box.maxDy < 10 && wk.tap.box.spread <= 10 && wk.tap.box.rect.f1 - wk.tap.box.rect.f0 === 9 && wk.tap.box.rect.r1 - wk.tap.box.rect.r0 === 9, `the box the army must fit is a 10×10 on the king's rank (${JSON.stringify(wk.tap.box?.rect)}, depth ${wk.tap.box?.minDy}…${wk.tap.box?.maxDy}, span ${wk.tap.box?.spread})`);
   expect(wk.tapKing.selected !== null && wk.tapKing.targets > 0 && wk.tapKing.allAdjacent, `the king can be tapped and offers his own chess moves (${wk.tapKing.targets}, all adjacent)`);
   expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom steps k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
   expect(wk.padTap.turns === 1 && wk.padTap.facing === 2 && wk.padLit === '0,-1', `a tap on the pad's south arm (lit ${JSON.stringify(wk.padLit)}) turns the army south in place for one move (${wk.padTap.turns} turn, facing ${wk.padTap.facing})`);

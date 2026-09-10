@@ -716,7 +716,36 @@ touching a comrade on every turn, 4–32 teleports a fixture; random walks
 with diagonals: split on 4–8 turns a fixture. test-army 115 (+ THE
 CLUSTER block), `walk-stress.mjs` grew `--teleports` / `--refused`
 samples, a collision check and the would-be targets on a refused traced
-turn; selftest 46/46, ui-smoke 331 ok. NEXT: the DUEL START PR
+turn; selftest 46/46, ui-smoke 331 ok. THE FOURTH WALK'S VERDICT (designer,
+2026-09-10, five screenshots, every one "blocked" with open floor ahead:
+"Alright they're much better at staying together. but now I'm getting
+blocked in a lot of places I feel shouldn't be a problem"), MEASURED then
+fixed the same day (7–11% of held cardinal inputs refused by the walk;
+`--refused N` now prints the refused step's stage traces and a `pieces:`
+line that rebuilds the position, `--lag N` the king's worst lags, and the
+maps show `%` / `x` for an anchor / slot one cell into stone): the greedy
+retraction is REPLACED BY THE ROPE (`ropeSettle`: the army settled from
+the king outward, each piece taking the farthest cell on its walk path
+adjacent to a piece already laid, a FOLLOW step for one with nothing to
+touch, the chain giving back a step only then, a deferral and an
+EXTENSION pass so the lay is order-blind); THE BODY IS EIGHT-ADJACENT
+(`adjacent`, corners included — the corner-free `touching` now only says
+where a target may be MOLDED, and the target set's connectivity and its
+bridging re-mold use the body's adjacency, so a set leads through a
+crate-and-wall gap by its corner cell instead of collapsing into a swap);
+a molded target ties toward the ANCHOR; TWO RANKS behind the king is the
+walk's tolerance (`behindKing`, read alike by the box loop, the drop and
+`manualMoves`, which offers a move that leaves the box no worse); a
+REGROUP THAT MOVES NOBODY yields the step's own whole walk with the
+anchor still held (it never runs ahead of the army). Measured (held
+cardinal walks, 11 000 turns): walk refusals 37–51 a fixture (104–168),
+one body on EVERY turn, zero collisions, the king never more than three
+behind his slot, 3–7 teleports; random walks with diagonals: walk
+refusals 28–47 (147–163), split on 0–4 turns a fixture, 6–24 teleports;
+every refused position replayed flows, the crate pair, the crate-and-wall
+corner, the corner-only pocket and the one-wide gap included. test-army
+115, selftest 46/46, ui-smoke 280 ok (its east walk runs 80 inputs to
+the ring; its box check reads the tolerance). NEXT: the DUEL START PR
 (rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
 stand, `buildMatchup` measuring the gap between the camp lines and
 molding the enemy around the player's pieces, the box slid to hold the
@@ -1694,7 +1723,12 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   targets one connected set (`assignTargets`), a plan that holds across
   the passes, and since the third verdict THE CLUSTER INVARIANT — one
   body after every d-pad turn (`settleBody`, `retractSplit`, `isClustered`,
-  the stuck teleport beside the body) (Node gate `test-army.mjs` 115;
+  the stuck teleport beside the body), and since the fourth verdict
+  (2026-09-10) THE ROPE (`ropeSettle`: the army settled from the king
+  outward with a follow step, a deferral and an extension pass; the body
+  eight-adjacent, a target never molded across a corner, two ranks behind
+  the king tolerated, a regroup that moves nobody yielding the step's walk
+  with the anchor held) (Node gate `test-army.mjs` 115;
   `phase0/harness/walk-stress.mjs` the cohesion instrument); the run
   save (one object per run, `dck-run/2`, export / import as
   a file, no backward compatibility); the fixtures in `play/worlds/`
@@ -1786,7 +1820,7 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
-node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, the worst turns as local maps; --trace prints the turns before one (a refused step prints the targets it would have assigned)
+node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
 node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 

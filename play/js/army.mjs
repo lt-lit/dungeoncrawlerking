@@ -363,14 +363,14 @@ function lexLess(a, b) {
  * cells BESIDE one of them — the connected formation (see
  * `assignTargets`). Null when the constraints leave nothing.
  */
-export function targetOf(world, army, slot, fromKing, king, facing, { tie = fromKing, royal = false, origin = king, floorAt = null, taken = null, near = null } = {}) {
+export function targetOf(world, army, slot, fromKing, king, facing, { tie = fromKing, royal = false, origin = king, floorAt = null, taken = null, near = null, corners = false } = {}) {
   const direct = king ? directFrom(world, fromKing, king) : (f, r) => world.inBounds(f, r) && fromKing[world.idx(f, r)] >= 0;
-  let adj = null; // the cells TOUCHING `near` (never across a wall's corner)
+  let adj = null; // the cells TOUCHING `near` (never across a wall's corner — unless `corners`: the body's adjacency)
   if (near) {
     adj = new Set();
     for (const i of near) {
       const f = i % world.files, r = (i - f) / world.files;
-      for (const [df, dr] of KING_STEPS) if (world.inBounds(f + df, r + dr) && touching(world, army, { f, r }, { f: f + df, r: r + dr })) adj.add(world.idx(f + df, r + dr));
+      for (const [df, dr] of KING_STEPS) if (world.inBounds(f + df, r + dr) && (corners || touching(world, army, { f, r }, { f: f + df, r: r + dr }))) adj.add(world.idx(f + df, r + dr));
     }
   }
   const open = (f, r) => world.inBounds(f, r) && (!taken || !taken.has(world.idx(f, r))) && (!adj || adj.has(world.idx(f, r))) && !(floorAt && bodyOf({ f, r }, floorAt, facing).dy < 0);
@@ -520,11 +520,23 @@ export function boxOf(army, cells = null, facing = army.facing) {
   return { ok, minDx, maxDx, minDy, maxDy, spread, left, kingFile: -left, rect };
 }
 
-/** Does the army still fit the box with piece `p` on `to`? */
+/**
+ * Does the army still fit the box with piece `p` on `to`? The walk
+ * tolerates a comrade up to two ranks behind the king (`behindKing`; the
+ * drop molds it into the box), so while one stands there the box is not
+ * `ok` and no move could be offered to anyone (2026-09-10, the fourth
+ * walk): a move is offered when the box is whole after it, or when it
+ * leaves the box no worse — the mover no farther behind the king than it
+ * stood, nobody past the tolerance, the depth and the span kept.
+ */
 function fitsWith(army, p, to) {
   const cells = new Map(army.pieces.map((q) => [q.id, cellOf(q)]));
   cells.set(p.id, to);
-  return boxOf(army, cells).ok;
+  const after = boxOf(army, cells);
+  if (after.ok) return true;
+  const kc = cellOf(army.king);
+  const was = bodyOf(cellOf(p), kc, army.facing).dy, now = bodyOf(to, kc, army.facing).dy;
+  return after.maxDy < BOX && after.spread <= BOX && after.minDy >= -2 && now >= Math.min(0, was);
 }
 
 /**
@@ -564,11 +576,11 @@ export function pivotPlacement(world, army, facing, kc) {
 }
 
 /**
- * TOUCHING, the cluster's adjacency: a king step apart, and a diagonal
- * only when one of its two orthogonal cells is crossable — a piece across
- * a wall's corner is NOT part of the body (it is on the far side of the
- * wall; the army walked away from such pieces along the wall, the
- * designer's third walk).
+ * TOUCHING, the adjacency a TARGET is molded by: a king step apart, and a
+ * diagonal only when one of its two orthogonal cells is crossable — no
+ * slot is ever given across a wall's corner (that corner was how pieces
+ * slipped onto the far side of thin walls and walked a parallel corridor,
+ * the designer's second and third walks).
  */
 function touching(world, army, a, b) {
   const df = b.f - a.f, dr = b.r - a.r;
@@ -577,13 +589,32 @@ function touching(world, army, a, b) {
   return crossable(world, army, a.f + df, a.r) || crossable(world, army, a.f, a.r + dr);
 }
 
-/** BEHIND THE KING: a cell behind his row, unless one rank behind and touching him (a queued rook at a door; the drop molds it into the box). */
-function behindKing(world, army, c, kd, facing) {
-  const dy = bodyOf(c, kd, facing).dy;
-  return dy < 0 && !(dy === -1 && touching(world, army, c, kd));
+/**
+ * ADJACENT, the BODY's adjacency: a king step apart, corners included
+ * (2026-09-10, the fourth walk: judged by `touching`, an army whose only
+ * way out of a pocket was the diagonal between a crate and a wall could
+ * never pass it as one body — the first piece through was "split off" —
+ * so it stood blocked, or a piece already past walked on alone; two pieces
+ * on the screen's diagonal ARE together, and the targets, never molded
+ * across a corner, pull the body through the gap and compact again).
+ */
+function adjacent(a, b) {
+  return Math.max(Math.abs(b.f - a.f), Math.abs(b.r - a.r)) === 1;
 }
 
-/** The ids of the king's BODY: the pieces touching him through `cells` (id → cell), by chains of touching. */
+/**
+ * BEHIND THE KING: a cell MORE THAN ONE RANK behind his row. One rank behind
+ * is the walk's tolerance (2026-09-10, the fourth walk: a column-shaped
+ * formation whose king steps diagonally leaves half the column a rank
+ * behind him, and holding them level froze the step) — the cluster keeps
+ * such a piece touching the body, and the drop molds it into the box
+ * (ruling 4's teleport).
+ */
+function behindKing(world, army, c, kd, facing) {
+  return bodyOf(c, kd, facing).dy < -2;
+}
+
+/** The ids of the king's BODY: the pieces adjacent to him through `cells` (id → cell), by chains of adjacency. */
 function kingComponent(world, army, cells, skip = null) {
   const seen = new Set([army.king.id]);
   const stack = [army.king.id];
@@ -591,7 +622,7 @@ function kingComponent(world, army, cells, skip = null) {
     const c = cells.get(stack.pop());
     for (const q of army.pieces) {
       if (seen.has(q.id) || (skip && skip.has(q.id))) continue;
-      if (touching(world, army, c, cells.get(q.id))) { seen.add(q.id); stack.push(q.id); }
+      if (adjacent(c, cells.get(q.id))) { seen.add(q.id); stack.push(q.id); }
     }
   }
   return seen;
@@ -603,69 +634,196 @@ export function isClustered(world, army, cells = null) {
 }
 
 /**
- * THE RETRACTION: a walk whose end leaves the army in more than one body —
- * or a piece BEHIND THE KING'S CELL (the box's row) — gives back last
- * steps until it is one body with the king rearmost: first the steps of
- * the pieces outside the body that did not bring them nearer it (a pawn
- * that rounded a pillar a step too far waits a step beside the rook), then
- * the BODY'S own steps, the king first (he waits for a straggler still on
- * its way, and for the queued rook he stepped past at the door), then the
- * rest nearest the stragglers first. A piece stepping back onto a cell a
- * comrade took in its wake pushes that comrade back a step too, and nobody
- * steps back onto a cell behind the king. `skip` holds the stuck (they
- * teleport beside the body and do not count). Mutates `walked` (dest,
- * vias); returns whether the army is one body at the end (false only when
- * it was split before the walk began).
+ * THE ROPE (2026-09-09, the fourth walk: "they're much better at staying
+ * together, but now I'm getting blocked in a lot of places I feel
+ * shouldn't be a problem" — the greedy retraction of the third walk gave
+ * back the whole walk whenever one pocketed pawn could not be reconnected,
+ * and the step read as blocked): the army is settled as a ROPE from the
+ * king outward. The pieces are ordered by their chain distance from the
+ * king as they STAND (each with the parent that links it toward him); the
+ * king takes his walk cell, and every piece after him takes the FARTHEST
+ * cell on its walk path that is adjacent to a piece already settled — never a
+ * cell taken, never one behind the king (unless it started there). A piece
+ * with nothing to touch pulls its chain back: the piece in its start cell
+ * if one took it, else its nearest ancestor with a step left, gives back a
+ * step and the rope is laid again; a laggard with no step at all that
+ * stone stopped (not a comrade — `queued`) is STUCK instead and teleports
+ * beside the body. A piece the start already left split (moved away by
+ * hand) takes its farthest free cell and converges. Mutates `walked`
+ * (dest, vias, stuck); returns whether the army is one body at the end.
  */
-function retractSplit(world, army, cells, walked, facing, skip = null) {
-  const { dest, vias } = walked;
+function ropeSettle(world, army, cells, walked, facing) {
   const king = army.king;
   const kingStart = cells.get(king.id);
-  const counts = (p) => !skip || !skip.has(p.id);
-  const at = (c) => army.pieces.find((q) => { const d = dest.get(q.id); return d.f === c.f && d.r === c.r; });
-  const steps = (p) => (vias.get(p.id)?.length ?? 0) + (dest.get(p.id).f !== cells.get(p.id).f || dest.get(p.id).r !== cells.get(p.id).r ? 1 : 0);
-  // Behind the king (behindKing) and worse off than at the start of the turn.
-  const behind = (p) => p !== king && behindKing(world, army, dest.get(p.id), dest.get(king.id), facing) && !behindKing(world, army, cells.get(p.id), kingStart, facing);
-  // `kd`: the king's cell to judge against — his retreat cell while his own undo cascades into a comrade in his way.
-  const undo = (p, depth = 0, kd = dest.get(king.id)) => {
-    if (steps(p) === 0) return false; // nothing to give back (a piece already at its start would "step back" onto itself)
-    const start = cells.get(p.id);
-    const path = [start, ...(vias.get(p.id) ?? []), dest.get(p.id)];
-    const startBad = p !== king && behindKing(world, army, start, kingStart, facing);
-    while (path.length > 1) {
-      path.pop();
-      const c = path[path.length - 1];
-      if (p !== king && !startBad && behindKing(world, army, c, kd, facing)) continue;
-      const occ = at(c);
-      if (occ && occ !== p && !(depth < army.pieces.length && undo(occ, depth + 1, p === king ? c : kd))) continue;
-      dest.set(p.id, { f: c.f, r: c.r });
-      vias.set(p.id, path.slice(1, -1));
-      return true;
+  const idx = (c) => world.idx(c.f, c.r);
+  const paths = new Map();
+  for (const p of army.pieces) {
+    const d = walked.dest.get(p.id), st = cells.get(p.id);
+    const moved = d.f !== st.f || d.r !== st.r;
+    paths.set(p.id, moved ? [st, ...(walked.vias.get(p.id) ?? []), d] : [st]);
+  }
+  const cap = new Map(army.pieces.map((p) => [p.id, paths.get(p.id).length - 1]));
+  // The chain as the army stands: BFS from the king over adjacent cells.
+  const parent = new Map([[king.id, null]]);
+  const order = [king.id];
+  for (let i = 0; i < order.length; i++) {
+    const c = cells.get(order[i]);
+    for (const q of army.pieces) {
+      if (parent.has(q.id)) continue;
+      if (adjacent(c, cells.get(q.id))) { parent.set(q.id, order[i]); order.push(q.id); }
     }
-    return false;
+  }
+  const loose = army.pieces.filter((p) => !parent.has(p.id)).map((p) => p.id); // split before the walk began
+  for (const id of loose) { parent.set(id, null); order.push(id); }
+  const stuck = new Set(walked.stuck);
+  const queued = walked.queued ?? new Set();
+  const noFollow = new Set();
+  // THE FOLLOW STEP: a piece with no cell on its path that touches the body
+  // takes ONE move of its own — the king step or its own chess move — to a
+  // free floor cell adjacent to a settled comrade, the one nearest its target
+  // (a rook that slid north while the king rounded a wall's east end steps
+  // east after him instead of holding the whole army back).
+  const fields = new Map();
+  const toTarget = (id, c) => {
+    const t = walked.targets?.get(id);
+    if (!t) return 1e9;
+    const k = world.idx(t.f, t.r);
+    if (!fields.has(k)) fields.set(k, distanceField(world, army, [t]));
+    const d = fields.get(k)[idx(c)];
+    return d < 0 ? 1e9 : d;
   };
-  const cheb = (a, b) => Math.max(Math.abs(a.f - b.f), Math.abs(a.r - b.r));
-  for (let guard = 0; guard < 8 * army.pieces.length; guard++) {
-    const body = kingComponent(world, army, dest, skip);
-    const outside = army.pieces.filter((p) => counts(p) && (!body.has(p.id) || behind(p)));
-    if (outside.length === 0) return true;
-    const bodyCells = [...body].filter((id) => !outside.some((p) => p.id === id)).map((id) => dest.get(id));
-    const field = distanceField(world, army, bodyCells);
-    const toBody = (c) => { const d = field[world.idx(c.f, c.r)]; return d < 0 ? 1e9 : d; };
-    const nearestOf = (c, list) => Math.min(...list.map((b) => cheb(b, c)));
-    const outsideCells = outside.map((p) => dest.get(p.id));
-    // A step that brought a straggler nearer the body is kept.
-    const givers = outside.filter((p) => steps(p) > 0 && !body.has(p.id)).filter((p) => {
-      const path = [cells.get(p.id), ...(vias.get(p.id) ?? []), dest.get(p.id)];
-      return toBody(path[path.length - 2]) <= toBody(dest.get(p.id));
-    }).sort((a, b) => nearestOf(dest.get(a.id), bodyCells) - nearestOf(dest.get(b.id), bodyCells) || a.id - b.id);
-    let undone = false;
-    for (const p of givers) if (undo(p)) { undone = true; break; }
-    if (undone) continue;
-    const inside = army.pieces.filter((p) => body.has(p.id) && !outside.includes(p) && steps(p) > 0)
-      .sort((a, b) => (a === king ? -1 : b === king ? 1 : 0) || nearestOf(dest.get(a.id), outsideCells) - nearestOf(dest.get(b.id), outsideCells) || a.id - b.id);
-    for (const p of inside) if (undo(p)) { undone = true; break; }
-    if (!undone) return false;
+  for (let lay = 0; lay < 8 * army.pieces.length + 8; lay++) {
+    const chosen = new Map();
+    const followed = new Map(); // id → the via cells of its follow
+    const taken = new Map(); // cell index → id
+    for (const id of stuck) taken.set(idx(cells.get(id)), id); // a stuck piece stands where it is until its teleport
+    const kPath = paths.get(king.id);
+    const kc = kPath[cap.get(king.id)];
+    chosen.set(king.id, kc);
+    taken.set(idx(kc), king.id);
+    let failed = null;
+    // A piece that cannot take its WHOLE path is DEFERRED once — laid again
+    // after the rest, when the comrade it would touch, or the one that fills
+    // the cell it leaves, may have been laid (the chain is laid in the order
+    // the pieces stand: a pawn whose way to the body ran through the cell of
+    // a pawn laid after it fell back and its chain pulled the king to the
+    // start; a pawn ahead of a corner could not step into it until the pawn
+    // behind it was laid in its cell: 2026-09-10, the fourth walk).
+    const queue = [...order];
+    const deferred = new Set();
+    for (let qi = 0; qi < queue.length; qi++) {
+      const id = queue[qi];
+      if (id === king.id || stuck.has(id)) continue;
+      const p = army.piece(id);
+      const path = paths.get(id);
+      const start = path[0];
+      const startBad = behindKing(world, army, start, kingStart, facing);
+      const free = (c) => !taken.has(idx(c)) && (startBad || !behindKing(world, army, c, kc, facing));
+      const touchesBody = (c) => { for (const q of chosen.values()) if (adjacent(c, q)) return true; return false; };
+      let pick = -1;
+      for (let i = cap.get(id); i >= 0; i--) {
+        const c = path[i];
+        if (free(c) && touchesBody(c)) { pick = i; break; }
+      }
+      if (pick < cap.get(id) && !deferred.has(id)) { deferred.add(id); queue.push(id); continue; }
+      if (pick >= 0) { chosen.set(id, path[pick]); taken.set(idx(path[pick]), id); continue; }
+      if (!noFollow.has(id)) {
+        // The follow: up to CATCH_UP_BEHIND of its own moves through free floor
+        // (never a comrade still standing, never a cell taken or behind the
+        // king) to the NEAREST cell adjacent to the body, ties toward its target.
+        const standing = new Set();
+        for (const q of army.pieces) if (q.id !== id && !chosen.has(q.id)) standing.add(idx(cells.get(q.id)));
+        const passable = (c) => world.at(c.f, c.r) === FLOOR && !enemyAt(world, army, c.f, c.r) && !standing.has(idx(c)) && free(c);
+        const seen = new Map([[idx(start), null]]);
+        let frontier = [start];
+        let best = null;
+        for (let depth = 1; depth <= CATCH_UP_BEHIND && !best && frontier.length; depth++) {
+          const next = [];
+          for (const from of frontier) {
+            for (const m of pieceMoves(world, army, { ...p, f: from.f, r: from.r }, { viaComrades: true, facing })) {
+              const c = { f: m.f, r: m.r };
+              if (m.capture || seen.has(idx(c)) || !passable(c)) continue;
+              seen.set(idx(c), from);
+              next.push(c);
+              if (touchesBody(c)) { const d = toTarget(id, c); if (!best || d < best.d) best = { c, d }; }
+            }
+          }
+          frontier = next;
+        }
+        if (best) {
+          const via = [];
+          for (let c = seen.get(idx(best.c)); c && (c.f !== start.f || c.r !== start.r); c = seen.get(idx(c))) via.unshift(c);
+          chosen.set(id, best.c);
+          taken.set(idx(best.c), id);
+          followed.set(id, via);
+          continue;
+        }
+      }
+      if (parent.get(id) === null) { for (let i = cap.get(id); i >= 0; i--) if (free(path[i])) { pick = i; break; } }
+      if (pick >= 0) { chosen.set(id, path[pick]); taken.set(idx(path[pick]), id); continue; }
+      // Nothing to touch and nowhere to follow. A laggard stone stopped is stuck; else the chain gives back a step.
+      if (cap.get(id) === 0 && !queued.has(id) && !taken.has(idx(start))) { stuck.add(id); taken.set(idx(start), id); continue; }
+      failed = id;
+      break;
+    }
+    if (failed === null) {
+      // THE EXTENSION (2026-09-10, the fourth walk): the chain touches only
+      // pieces laid BEFORE it, so a pawn laid before the comrade beside its
+      // path stopped at its start — with the body laid, every piece now
+      // takes the farthest cell on its path that keeps the army ONE BODY,
+      // round after round until nothing moves on.
+      const skip = new Set(army.pieces.filter((p) => !chosen.has(p.id)).map((p) => p.id));
+      const oneBody = () => kingComponent(world, army, chosen, skip).size === chosen.size;
+      for (let round = 0, more = true; more && round < 8; round++) {
+        more = false;
+        for (const id of order) {
+          if (id === king.id || !chosen.has(id) || followed.has(id)) continue;
+          const path = paths.get(id);
+          const cur = chosen.get(id);
+          const at = path.findIndex((q) => q.f === cur.f && q.r === cur.r);
+          if (at < 0) continue;
+          const startBad = behindKing(world, army, path[0], kingStart, facing);
+          for (let i = cap.get(id); i > at; i--) {
+            const c = path[i];
+            if (taken.has(idx(c)) || (!startBad && behindKing(world, army, c, kc, facing))) continue;
+            chosen.set(id, c);
+            if (oneBody()) { taken.delete(idx(cur)); taken.set(idx(c), id); more = true; break; }
+            chosen.set(id, cur);
+          }
+        }
+      }
+      for (const p of army.pieces) {
+        if (stuck.has(p.id) && !chosen.has(p.id)) { walked.dest.set(p.id, { ...cells.get(p.id) }); walked.vias.set(p.id, []); continue; }
+        const c = chosen.get(p.id);
+        const path = paths.get(p.id);
+        walked.dest.set(p.id, { f: c.f, r: c.r });
+        if (followed.has(p.id)) { walked.vias.set(p.id, followed.get(p.id)); continue; }
+        const i = path.findIndex((q) => q.f === c.f && q.r === c.r);
+        walked.vias.set(p.id, i > 0 ? path.slice(1, i) : []);
+      }
+      walked.stuck = [...stuck];
+      return loose.length === 0;
+    }
+    // Who gives back: the piece standing in the failed piece's start (a follower loses its follow, a walker a step), else the nearest ancestor with a step left.
+    const start = cells.get(failed);
+    const occupant = taken.get(idx(start));
+    let giver = null;
+    if (occupant !== undefined && occupant !== failed) {
+      if (followed.has(occupant)) { noFollow.add(occupant); continue; }
+      if (cap.get(occupant) > 0) giver = occupant;
+    }
+    if (giver === null) {
+      let anc = parent.get(failed);
+      while (anc !== null && cap.get(anc) === 0) anc = parent.get(anc);
+      giver = anc;
+    }
+    if (giver === null) {
+      // Even the king has nothing left: the failed piece was split before the walk began; let it converge on its own.
+      parent.set(failed, null);
+      if (!loose.includes(failed)) loose.push(failed);
+      continue;
+    }
+    cap.set(giver, cap.get(giver) - 1);
   }
   return false;
 }
@@ -679,10 +837,10 @@ function retractSplit(world, army, cells, walked, facing, skip = null) {
  * facing } | { kind: 'wait' } | { kind: 'move', id, to: { f, r } } (a
  * piece's own chess move; the king's is a step the army follows).
  */
-export function planTurn(world, army, input) {
+export function planTurn(world, army, input, { trace = null } = {}) {
   const king = army.king;
   const kind = input?.kind;
-  const fail = (reason) => ({ ok: false, reason, facing: army.facing, at: { ...army.at }, moves: [] });
+  const fail = (reason, why = null) => ({ ok: false, reason, why, facing: army.facing, at: { ...army.at }, moves: [] });
   let facing = army.facing;
   let stepDelta = null;
   let fixed = null; // the king's own move: { id, to, capture }
@@ -722,7 +880,7 @@ export function planTurn(world, army, input) {
   const held = { ...at }; // the anchor after the pivot, before the step
   if (stepDelta) {
     const to = { f: at.f + stepDelta.df, r: at.r + stepDelta.dr };
-    if (!fixed && !anchorMay(world, army, to, distanceField(world, army, [kc0]), kc0)) return fail('blocked');
+    if (!fixed && !anchorMay(world, army, to, distanceField(world, army, [kc0]), kc0)) return fail('blocked', 'anchor');
     at = to;
   }
   // 3. THE WALK: every piece toward its slot around the anchor's new cell
@@ -742,34 +900,43 @@ export function planTurn(world, army, input) {
   // a battle ready cluster as much as possible"): a laggard that could not
   // move at all while the body went on is STUCK — it teleports beside the
   // body (ruling 15's "just teleport pieces that get stuck somewhere");
-  // for a straggler still on its way the walk gives back steps (the
-  // retraction) — the army waits; an army split before the walk began (a
-  // piece moved away by hand) walks on and converges.
+  // for a straggler still on its way the walk gives back steps (THE ROPE,
+  // `ropeSettle`) — the army waits; an army split before the walk began
+  // (a piece moved away by hand) walks on and converges.
   const kingStart = cells.get(king.id);
   const settleBody = (w) => {
     const kd = w.dest.get(king.id);
     const behind = (p) => p !== king && behindKing(world, army, w.dest.get(p.id), kd, facing) && !behindKing(world, army, cells.get(p.id), kingStart, facing);
-    const body = kingComponent(world, army, w.dest);
-    if (body.size === army.pieces.length && !army.pieces.some(behind)) return true;
-    const moved = (p) => { const d = w.dest.get(p.id), c = cells.get(p.id); return d.f !== c.f || d.r !== c.r; };
-    // A laggard the body went on without: stuck, unless a comrade was what stopped it (queued: it is waited for).
-    const stuckNow = new Set(army.pieces.filter((p) => !body.has(p.id) && !moved(p) && !w.queued?.has(p.id)).map((p) => p.id));
-    for (const id of stuckNow) if (!w.stuck.includes(id)) w.stuck.push(id);
-    if (kingComponent(world, army, w.dest, stuckNow).size + stuckNow.size === army.pieces.length && !army.pieces.some((p) => !stuckNow.has(p.id) && behind(p))) return true;
-    const copy = { ...w, dest: new Map([...w.dest].map(([id, c]) => [id, { ...c }])), vias: new Map([...w.vias].map(([id, v]) => [id, v.map((c) => ({ ...c }))])) };
-    if (retractSplit(world, army, cells, copy, facing, stuckNow)) { w.dest = copy.dest; w.vias = copy.vias; return true; }
-    return false;
+    if (kingComponent(world, army, w.dest).size === army.pieces.length && !army.pieces.some(behind)) return true;
+    return ropeSettle(world, army, cells, w, facing);
   };
+  const snap = (label, w, whole) => { if (trace) trace.push({ label, whole, at: { ...at }, dest: Object.fromEntries([...w.dest].map(([id, c]) => [id, { f: c.f, r: c.r }])), stuck: [...(w.stuck ?? [])], queued: [...(w.queued ?? [])] }); };
   let walked = walk(world, army, cells, at, facing, fixed);
+  snap('walk', walked, null);
   let whole = settleBody(walked);
+  snap('settled', walked, whole);
+  const anyMoved = (w) => army.pieces.some((p) => { const d = w.dest.get(p.id), c = cells.get(p.id); return d.f !== c.f || d.r !== c.r; });
   if (stepDelta && !fixed) {
     const kd = walked.dest.get(king.id);
     const ks = slotCell(army.pattern, 0, at, facing);
     if (Math.max(Math.abs(kd.f - ks.f), Math.abs(kd.r - ks.r)) > KING_LEASH || !whole) {
+      const stepped = { walked, whole };
       at = held;
       walked = walk(world, army, cells, at, facing, fixed);
+      snap('held walk', walked, null);
       whole = settleBody(walked);
+      snap('held settled', walked, whole);
       regroup = true;
+      // A REGROUP THAT MOVES NOBODY YIELDS TO THE STEP'S MOVES (2026-09-10,
+      // the fourth walk: "blocked in a lot of places I feel shouldn't be a
+      // problem" — the anchor held on a crate pair molded the slots into a
+      // swap no piece could start, and the step's own walk, whole and
+      // moving, was thrown away): the pieces take the step's walk, one
+      // body, WITH THE ANCHOR STILL HELD — the formation closes up on the
+      // step's cells and the anchor never runs ahead of an army that
+      // cannot follow (an anchor that stepped on while one rook walked
+      // ran nine cells ahead of the king).
+      if (!anyMoved(walked) && stepped.whole && anyMoved(stepped.walked)) { walked = stepped.walked; whole = true; }
     }
   }
   const { dest, targets, vias, stuck } = walked;
@@ -829,8 +996,9 @@ export function planTurn(world, army, input) {
     const via = teleport || pivot ? [] : (vias.get(p.id) ?? []).map((c) => ({ f: c.f, r: c.r }));
     moves.push({ id: p.id, from: cellOf(p), to: { f: to.f, r: to.r }, capture: fixed && p.id === fixed.id ? fixed.capture : null, teleport, via });
   }
+  if (trace) trace.push({ label: 'settle', whole, at: { ...at }, dest: Object.fromEntries([...dest].map(([id, c]) => [id, { f: c.f, r: c.r }])), stuck: [...stuck], queued: [] });
   // A step that moves nobody is the front meeting the wall.
-  if (kind === 'step' && !pivot && moves.length === 0) return fail('blocked');
+  if (kind === 'step' && !pivot && moves.length === 0) return fail('blocked', 'walk');
   return { ok: true, facing, at, pivot, regroup, moves, targets: Object.fromEntries([...targets].map(([id, t]) => [id, t])), teleports, teleportWhy: why };
 }
 
@@ -872,11 +1040,19 @@ export function assignTargets(world, army, at, facing, kc, fromKing, fromAnchor,
     else molded.push(p);
   }
   const slotOf = (p) => slotCell(army.pattern, p.slot, at, facing);
-  const mold = (p, near) => targetOf(world, army, slotOf(p), fromKing, kc, facing, { origin, floorAt: kc, taken, near })
-    ?? targetOf(world, army, slotOf(p), fromKing, kc, facing, { origin, floorAt: kc, taken });
+  // A molded target ties toward the ANCHOR, as the king's does (2026-09-10,
+  // the fourth walk: tied toward the king, a pawn threading a one-wide gap
+  // was given the gap cell it stood in, and the file behind it waited on
+  // a pawn told to stay).
+  const mold = (p, near) => targetOf(world, army, slotOf(p), fromKing, kc, facing, { tie: fromAnchor, origin, floorAt: kc, taken, near })
+    ?? targetOf(world, army, slotOf(p), fromKing, kc, facing, { tie: fromAnchor, origin, floorAt: kc, taken });
   for (const p of molded) claim(p, mold(p, taken.size ? taken : null));
   // THE SET IS CONNECTED: the component holding the king's target grows
-  // until it holds every target.
+  // until it holds every target — by the BODY's adjacency, corners
+  // included (2026-09-10, the fourth walk: judged corner-free, a slot on
+  // direct floor beyond a crate pair was "detached" from a king's target
+  // molded beside the crates, and re-molded back into the pocket — a swap
+  // of cells nobody could start; the molding itself stays corner-free).
   if (!tK) return targets;
   const component = () => {
     const seen = new Set([idx(tK)]);
@@ -885,7 +1061,7 @@ export function assignTargets(world, army, at, facing, kc, fromKing, fromAnchor,
       const i = stack.pop();
       const f = i % world.files, r = (i - f) / world.files;
       for (const [df, dr] of KING_STEPS) {
-        if (!world.inBounds(f + df, r + dr) || !touching(world, army, { f, r }, { f: f + df, r: r + dr })) continue;
+        if (!world.inBounds(f + df, r + dr)) continue;
         const j = world.idx(f + df, r + dr);
         if (taken.has(j) && !seen.has(j)) { seen.add(j); stack.push(j); }
       }
@@ -906,7 +1082,10 @@ export function assignTargets(world, army, at, facing, kc, fromKing, fromAnchor,
     if (!pick) break;
     const old = targets.get(pick.p.id);
     taken.delete(idx(old));
-    const t2 = targetOf(world, army, slotOf(pick.p), fromKing, kc, facing, { origin, floorAt: kc, taken, near: main });
+    // Given again BESIDE the king's component by the body's adjacency —
+    // the corner cell between a crate and a wall is where a set leads
+    // through such a gap (2026-09-10, the fourth walk).
+    const t2 = targetOf(world, army, slotOf(pick.p), fromKing, kc, facing, { tie: fromAnchor, origin, floorAt: kc, taken, near: main, corners: true });
     if (!t2) { taken.add(idx(old)); break; }
     claim(pick.p, t2);
   }
@@ -951,8 +1130,8 @@ function walk(world, army, cells, at, facing, fixed) {
   const slotDy = (p) => army.pattern.slots[p.slot]?.dy ?? 0;
   // The order: the front rows first (the pawns go through a door before
   // anyone), then the rest nearest-to-slot first, THE KING LAST OF ALL
-  // (the rook takes the doorway ahead of him; his retraction gives back
-  // any step past a comrade).
+  // (the rook takes the doorway ahead of him; the rope gives back any
+  // step of his that leaves a comrade behind).
   const order = [...army.pieces].sort((a, b) => {
     if (fixed) { if (a.id === fixed.id) return -1; if (b.id === fixed.id) return 1; }
     if (a === king) return 1;
@@ -1018,8 +1197,8 @@ function walk(world, army, cells, at, facing, fixed) {
         // may dip DETOUR cells behind him, round a crate pair; a piece that
         // starts behind him — a pivot's placement, a fixture — may move as
         // long as it falls no farther behind). The king himself plans
-        // freely: where he ends ahead of a comrade, the retraction gives
-        // his steps back (the third walk retired the planning rule that
+        // freely: where he ends ahead of a comrade, the rope gives his
+        // steps back (the third walk retired the planning rule that
         // forbade it — with two pieces level with him in a nook it froze
         // the whole army).
         const kd = dest.get(king.id);
@@ -1052,6 +1231,12 @@ function walk(world, army, cells, at, facing, fixed) {
         const queue = hereRound < 0 || (hereThrough >= 0 && hereRound > hereThrough + DETOUR_MAX);
         const field = queue ? freeFields.get(key(world, t.f, t.r)) : fieldRound;
         const dist = (f, r) => field[key(world, f, r)];
+        // Free to END on or pass through: nobody else ends there or passes
+        // through it this turn (one piece at a time through a doorway —
+        // letting a second piece END on a cell a comrade passes through
+        // parked a pawn in the doorway on the king's own cell, 2026-09-10),
+        // floor, no enemy, and any occupant leaves.
+        const myTarget = key(world, t.f, t.r);
         const free = (f, r) => {
           const k = key(world, f, r);
           const c = claims.get(k);
@@ -1064,7 +1249,6 @@ function walk(world, army, cells, at, facing, fixed) {
         // same length that does not (the king, planned last, is otherwise
         // starved of his own cell by pawns catching up across it); where the
         // doorway is the only way, the crossing stands and the king waits.
-        const myTarget = key(world, t.f, t.r);
         const crosses = (f, r) => { const k = key(world, f, r); return k !== myTarget && slotKeys.has(k); };
         const here = dist(start.f, start.r);
         const behind = bodyOf(start, kc, facing).dy < 0;
