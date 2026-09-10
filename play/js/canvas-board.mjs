@@ -47,8 +47,10 @@
 //               paints over the piece behind it, the dim over the world
 //               outside the crop, then the marks over the pieces, the
 //               crop's edge coordinates in a 3×5 pixel font, the debris
-//               FLIGHT's pixels (particles.mjs, through drawFlight), and a
-//               piece in mid-slide last. Nothing in it has a fractional
+//               FLIGHT's pixels (particles.mjs, through drawFlight). A
+//               piece in mid-slide paints in the tall pass by where its
+//               feet are that frame (it painted last, over everything,
+//               until 2026-09-10). Nothing in it has a fractional
 //               coordinate: buffer coordinates are integers.
 //   THE BLIT    one drawImage of the buffer (or the visible part of it)
 //               onto the screen canvas at scale k, smoothing off. The
@@ -1568,14 +1570,31 @@ export class CanvasBoard {
         g.fillRect(s.x, s.y, T, T);
       }
     }
-    // 2. the tall things, far row first: props and pieces interleaved by screen row (the dungeon's, faded)
-    for (const list of byRow) for (const s of list) {
-      if (dim && !s.sq) {
-        g.globalAlpha = 0.45;
-        this.#paintTall(s, t);
-        g.globalAlpha = 1;
-      } else this.#paintTall(s, t);
+    // 2. the tall things, far row first: props and pieces interleaved by
+    //    screen row (the dungeon's, faded) — and the pieces IN MID-SLIDE
+    //    among them, each by where its feet are this frame (a slider used
+    //    to paint last, over everything, and the walk's arrivals in their
+    //    plan's order, the king first: a tall king sliding beside the piece
+    //    north of him lost his head under it for the slide's length —
+    //    designer 2026-09-10, "their heads briefly render under the piece
+    //    to the north"). A slider on a row's own line paints after that row.
+    const sliding = [];
+    for (const s of this.slides) { const p = this.#slideAt(s, t); sliding.push({ x: p.x, y: p.y, paint: () => this.#paintSlideAt(s, p.x, p.y) }); }
+    for (const s of this.cellSlides) { const p = this.#cellSlideAt(s, t); if (p) sliding.push({ x: p.x, y: p.y, paint: () => this.#paintPiece(s.ch, p.x, p.y) }); }
+    sliding.sort((a, b) => a.y - b.y || a.x - b.x);
+    let si = 0;
+    for (let row = 0; row < byRow.length; row++) {
+      const lineY = H + row * T;
+      while (si < sliding.length && sliding[si].y < lineY) sliding[si++].paint();
+      for (const s of byRow[row]) {
+        if (dim && !s.sq) {
+          g.globalAlpha = 0.45;
+          this.#paintTall(s, t);
+          g.globalAlpha = 1;
+        } else this.#paintTall(s, t);
+      }
     }
+    while (si < sliding.length) sliding[si++].paint();
 
     // 3. marks over the pieces (the arena's by square, the walk's by cell)
     for (const list of byRow) for (const s of list) if (s.sq) this.#paintMarksOver(s);
@@ -1595,13 +1614,11 @@ export class CanvasBoard {
       }
       g.globalAlpha = 1;
     }
-    // 6. pieces in mid-slide, on top
-    for (const s of this.slides) this.#paintSlide(s, t);
-    for (const s of this.cellSlides) this.#paintCellSlide(s, t);
   }
 
-  /** A walk's arrival: the letter drawn between its old and new cells. */
-  #paintCellSlide(s, t) {
+  /** A walk's arrival this frame: the buffer origin of the sliding letter
+   *  between its old and new cells, or null when it is off the buffer. */
+  #cellSlideAt(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
     const e = ease(u);
     // Along the path (a catch-up walk carries waypoints, so a slide goes
@@ -1624,8 +1641,8 @@ export class CanvasBoard {
         d -= lens[i];
       }
     }
-    if (x < -2 * T || y < -2 * T || x > this.bufW + T || y > this.bufH + T) return;
-    this.#paintPiece(s.ch, x, y);
+    if (x < -2 * T || y < -2 * T || x > this.bufW + T || y > this.bufH + T) return null;
+    return { x, y };
   }
 
   /** Arena px (the arena's own north-up view, y down from its top rank) →
@@ -1829,11 +1846,16 @@ export class CanvasBoard {
     g.globalAlpha = 1;
   }
 
-  #paintSlide(s, t) {
+  /** A duel slide this frame: the buffer origin of the sliding sprite between its squares. */
+  #slideAt(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
     const a = this.#origin(s.from), b = this.#origin(s.to);
     const e = ease(u);
-    const x = Math.round(a.x + (b.x - a.x) * e), y = Math.round(a.y + (b.y - a.y) * e);
+    return { x: Math.round(a.x + (b.x - a.x) * e), y: Math.round(a.y + (b.y - a.y) * e) };
+  }
+
+  /** The sliding sprite of a duel slide, drawn at a buffer origin (#slideAt). */
+  #paintSlideAt(s, x, y) {
     const k = this.#kindOfSq(s.from);
     if (k?.furniture) {
       if (this.#edgeOn(k)) {

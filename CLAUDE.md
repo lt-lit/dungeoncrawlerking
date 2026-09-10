@@ -107,7 +107,7 @@ cells × 5 layers cannot carry the 100×100 overworld.
 terrain, debris over a ruin's stub, decor and the doorway over the
 debris, marks under, the tall things row by row far-to-near — props and
 pieces interleaved — marks over, the 3×5-font coordinates, the arrows as
-PIXEL ART, the flight's pixels, a piece in mid-slide), ONE blit at k =
+PIXEL ART, the flight's pixels; a piece in mid-slide is in the tall pass by its feet since 2026-09-10), ONE blit at k =
 ⌊device width ÷ (16 × files)⌋ (`integer`, the board centred in whole
 device pixels) or the exact quotient (`fill`), on-grid slides in whole
 native pixels, terrain fx with held end frames, the rumble as blit
@@ -780,7 +780,14 @@ IT STANDS — and one more ask the same day, DONE: "get rid of the big blue
 square when I make chess moves during exploration" — THE BOX OUTLINE on a
 selected piece is gone (`setCellMarks` lost `frame`, canvas-board its
 `BOXLINE` edge painter; the manual moves still filter on the box,
-unseen). THE REVISIT LIST is on record in README milestone 4d: the
+unseen); and THE SLIDE ORDER, the same day (designer: "when I move
+with the d-pad, tall pieces like the king, their heads briefly render
+under the piece to the north" — a piece in mid-slide painted LAST, over
+everything, and the walk's arrivals in plan order with the king first,
+so a comrade north of him painted over his head for the slide's length;
+a slider now paints in the tall pass by where its feet are that frame,
+duel slides included — canvas-board `#slideAt` / `#cellSlideAt`). THE
+REVISIT LIST is on record in README milestone 4d: the
 REGROUP RATE (14–18% of held inputs a turn the king spends waiting for
 the file — the army standing still on a held pad), the pivot in a
 two-wide nook (the one "behind" residue), a diagonal input from inside

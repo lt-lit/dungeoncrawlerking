@@ -503,7 +503,7 @@ nearer head paints over the piece behind it, then selection / check /
 target over the pieces, the coordinates, the debris FLIGHT's pixels
 (`particles.mjs` hands a frame to `drawFlight` on this board and draws
 SVG paths on the other — the flight model is unchanged) and a piece in
-mid-slide last. Nothing in it has a fractional coordinate. **One blit**
+mid-slide among the tall things by where its feet are that frame (it painted last, over everything, until 2026-09-10 — a sliding king's head went under the piece north of him). Nothing in it has a fractional coordinate. **One blit**
 (`drawImage`, smoothing off) puts it on the screen canvas at scale k =
 ⌊device width ÷ (16 × files)⌋, the board centred in whole device pixels
 (`integer`) or at the exact quotient (`fill`: uneven pixel widths, every
@@ -1410,7 +1410,18 @@ branch merges as it stands — and one more ask the same day, done: "get rid
 of the big blue square when I make chess moves during exploration" — the
 box outline on a selected piece is gone (`setCellMarks` lost its `frame`,
 canvas-board its `BOXLINE` edge painter; the manual moves still filter on
-the box, unseen). THE REVISIT LIST, for when it is looked at
+the box, unseen); and THE SLIDE ORDER, the same day (designer: "when I
+move with the d-pad, tall pieces like the king, their heads briefly
+render under the piece to the north"): a piece in mid-slide painted LAST,
+over everything, and the walk's arrivals in their plan's order with the
+king first, so a comrade north of him painted over his head for the
+slide's length and the tall pass put it back when they landed — now a
+slider paints IN the tall pass by where its feet are that frame (before
+the row whose line lies below them, after the row on whose line they
+stand), duel slides included (`#slideAt` / `#cellSlideAt`; a mid-pivot
+frame of the kit, sampled off the buffer, shows the knight's head whole
+over the pawn beside it where the old build clipped it). THE REVISIT
+LIST, for when it is looked at
 again: (1) THE REGROUP RATE — 14–18% of held inputs are a turn the king
 spends waiting for the file, which reads as the army standing still on
 a held pad (a walk could plan the file's move and his own step in one
