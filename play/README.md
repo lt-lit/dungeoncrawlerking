@@ -1336,6 +1336,73 @@ ui-smoke 280 ok (its east walk now runs to 80 inputs before the ring
 refuses — the army walks farther before a wall — and its box check reads
 the walk's tolerance), the other Node gates unchanged.
 
+THE FIFTH WALK'S VERDICT (designer, 2026-09-10, five screenshots: a pawn
+a rank behind the king after his diagonal step, a rook a rank behind him
+and touching, a pawn two ranks behind with the rook between, the box
+outline drawn with those two outside it): "Alright we're almost there.
+I'm now getting situations where pieces end up behind the king." So
+RULING 4 IS STRICT: nobody is behind the king's rank after any input —
+the third walk's "one rank behind and touching" and the fourth's two
+ranks are RETIRED (`behindKing` is `dy < 0`; `boxOf` is whole after every
+turn and `manualMoves` filters on it again; the harness counts BEHIND THE
+KING turns, `--behind N` samples them, and test-army asserts the box
+whole after every turn of its cluster walks). What the strict rule cost
+was measured on the harness and paid back in army.mjs, each rule on a
+replayed position: (1) THE KING WAITS — the rope gives back his steps
+for a comrade that would end behind him (a comrade queued at a door goes
+through first and he goes last) and never holds a piece stuck because the
+chain pulled its steps to zero (a laggard is one the WALK could not
+move); (2) a target is never molded behind the king's TARGET (`floorAt:
+origin`), not merely his cell; (3) THE KING'S PLAN NEVER HOLDS ACROSS
+PASSES — released at the start of every pass ("he stays": his cell an
+obstacle, nothing else booked), so the comrades take the cells they need
+and he plans round them, last (planned last, he had booked a corner cell
+as his via while the pawn and the rook beside him could not yet step,
+and his booking then kept them out); (4) THE LAST RESORT before a step
+is refused, only where the strict rope collapsed a walk that had moves:
+THE KING STEPS ASIDE — a walk with him pinned to one king step level
+with him or a rank back, never forward, his cell given to the comrades
+who could move only through it (a pocket's mouth, a gap he stands
+before), so they file in first — and only if no sidestep moves anyone
+THE BREAKER: the comrade he waited for in vain is stuck and teleports
+beside the body (ruling 15's "just teleport pieces that get stuck
+somewhere"); (5) no swaps in the rope (two pawns in a pocket had traded
+cells every turn through the follow step), a stuck piece's teleport
+never lands on its own cell, a cell shared with the king (laid on a
+stuck piece's start) stays taken through the placement, and a piece a
+stuck teleport detaches rallies beside the body; (6) the walk's STUCK is
+a piece with no way to its target AT ALL — a way that runs behind the
+king is a way, since he can step aside (the second walk's "none that
+does not end behind the king" is retired); (7) THE QUEUE SWAP — a comrade
+standing on its own target in a piece's way, able to reach that piece's
+target, trades targets with it, so a file of pawns in a one-wide
+passage moves as one instead of the front one being told to stay; (8)
+THE ANCHOR may enter stone only where floor lies BESIDE OR AHEAD of the
+stone (the floor behind it let it into a dead end's wall, and the slots
+molded beyond sent the army on a tour of the map), and a second step
+into stone in a row SNAPS it to the floor beside — it had been walking
+down a wall column parallel to a one-wide passage and molding the file's
+slots into a swap. Every stage snapshot of planTurn's `trace` carries
+`targets` and `vias` now ('walk' / 'settled' / 'held walk' / 'held
+settled' / 'aside' / 'breaker' / 'settle'), which is how each case above
+was read. MEASURED, the shipped set, 3000 inputs a fixture: held cardinal
+walks (11 200 turns) — nobody behind the king on any turn but ONE (a
+pivot in a nook two cells wide, where no cell ahead exists: seven
+'behind' teleports on that fixture, the residue), refused by the walk
+0–3 a fixture (37–51 after the fourth walk, 104–168 before it), 0–2
+stuck teleports, one body on EVERY turn, zero collisions, the king
+touching a comrade on every turn and never more than three behind his
+slot, 390–500 regroups (14–18% of inputs: the king waiting for the file,
+and the status says so); random walks with diagonals (11 200 turns) —
+refused by the walk 0–3, 0–2 teleports, nobody behind the king, split on
+no turn. Every position replayed flows and none needs a teleport: the
+crate pair, the crate-and-wall corner, the pocket whose only exit is a
+corner (the king steps back into the pocket and the pawns file out
+through his cell, one a turn), the wall spur, the one-wide passage, the
+door (the king last, one piece through a turn). test-army 119, selftest
+46/46, ui-smoke 259 ok (its box check reads `ok` again), the other
+Node gates unchanged.
+
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
 

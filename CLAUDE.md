@@ -745,7 +745,35 @@ refusals 28–47 (147–163), split on 0–4 turns a fixture, 6–24 teleports;
 every refused position replayed flows, the crate pair, the crate-and-wall
 corner, the corner-only pocket and the one-wide gap included. test-army
 115, selftest 46/46, ui-smoke 280 ok (its east walk runs 80 inputs to
-the ring; its box check reads the tolerance). NEXT: the DUEL START PR
+the ring; its box check reads the tolerance). THE FIFTH WALK'S VERDICT
+(designer, 2026-09-10, five screenshots: "Alright we're almost there.
+I'm now getting situations where pieces end up behind the king") — SO
+RULING 4 IS STRICT: nobody behind the king's rank after any input, the
+one- and two-rank tolerances retired (`behindKing` is `dy < 0`; `boxOf`
+whole after every turn; `manualMoves` filters on it; the harness counts
+BEHIND THE KING turns, `--behind N` samples them; test-army asserts the
+box whole through its walks). Paid for in army.mjs, each rule replayed:
+THE KING WAITS (the rope gives back his steps for a comrade that would
+end behind him; a piece the chain pulled to zero is not "stuck"); a
+target is never molded behind the king's TARGET; THE KING'S PLAN NEVER
+HOLDS ACROSS PASSES (released each pass as "he stays", so the comrades
+take the cells they need and he plans round them, last); THE LAST
+RESORT before a refusal, only where the strict rope collapsed a walk
+that had moves — THE KING STEPS ASIDE (a walk with him pinned one king
+step level or back, his cell given to the comrades who could move only
+through it), then THE BREAKER (the comrade he waited for in vain is
+stuck and teleports beside the body); no swaps in the rope, a stuck
+teleport never on its own cell, a shared cell stays taken, a detached
+piece rallies; the walk's STUCK is "no way at all"; THE QUEUE SWAP (a
+comrade on its own target in a piece's way trades targets with it); THE
+ANCHOR enters stone only beside or ahead of floor, and a second stone
+step in a row SNAPS it to the floor beside. Measured (3000 inputs a
+fixture, 22 400 turns): nobody behind the king on any turn but one (a
+pivot in a two-wide nook — the residue), walk refusals 0–3 a fixture
+(104–168 before the fourth walk), 0–7 teleports, one body on every turn,
+zero collisions, the king within three of his slot, 14–18% of inputs a
+regroup (the king waiting for the file). test-army 119, selftest 46/46,
+ui-smoke 259 ok. NEXT: the DUEL START PR
 (rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
 stand, `buildMatchup` measuring the gap between the camp lines and
 molding the enemy around the player's pieces, the box slid to hold the
@@ -1728,7 +1756,11 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   outward with a follow step, a deferral and an extension pass; the body
   eight-adjacent, a target never molded across a corner, two ranks behind
   the king tolerated, a regroup that moves nobody yielding the step's walk
-  with the anchor held) (Node gate `test-army.mjs` 115;
+  with the anchor held), and since the fifth verdict (2026-09-10) NOBODY
+  BEHIND THE KING, strictly (the king waits, steps aside as the last
+  resort — `sidesteps` — before the rope's breaker teleports the comrade
+  he waited for in vain; the queue swap; the anchor snapping to the floor
+  beside a wall) (Node gate `test-army.mjs` 119;
   `phase0/harness/walk-stress.mjs` the cohesion instrument); the run
   save (one object per run, `dck-run/2`, export / import as
   a file, no backward compatibility); the fixtures in `play/worlds/`
@@ -1820,7 +1852,7 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
-node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
+node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4] [--behind 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone), the turns with a piece BEHIND THE KING (must be none; --behind samples them); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
 node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 

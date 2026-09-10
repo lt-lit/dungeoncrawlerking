@@ -9,6 +9,7 @@
 //     [--hold 1]        a thumb on one arm of the pad: cardinals held 6–20 steps, no diagonals, no waits
 //     [--splits N]      print N sampled turns where the army is split but the king is not the one detached
 //     [--lag N]         print N sampled turns where the king ends three or more cells from his slot
+//     [--behind N]      print N sampled turns where a piece ends behind the king's rank (must be none)
 //     [--refused N]     print N sampled refused steps with their maps
 //     [--teleports N]   print N sampled turns with a teleport
 //     [--trace <turn>]  with --world: print every turn from turn−12 to turn (the maps and the moves)
@@ -31,6 +32,8 @@ const HOLD = arg('hold', null);
 const SPLITS = parseInt(arg('splits', '0'), 10);
 const LAG = parseInt(arg('lag', '0'), 10); // --lag N: print N sampled turns where the king ends three or more from his slot (the leash's tail)
 const lagSample = [];
+const BEHIND = parseInt(arg('behind', '0'), 10); // --behind N: print N sampled turns where a piece ends BEHIND THE KING'S RANK (ruling 4: must be none)
+const behindSample = [];
 const REFUSED = parseInt(arg('refused', '0'), 10);
 const TELEPORTS = parseInt(arg('teleports', '0'), 10); // --teleports N: print N sampled turns with a teleport (before / after maps, the reason)
 const teleportSample = []; // --refused N: print N sampled refused steps (the front met the wall, or the army could not move as one body)
@@ -65,7 +68,7 @@ function localMap(world, army, plan, radius = 6) {
   return lines.join('\n');
 }
 
-let grand = { turns: 0, refused: 0, regroups: 0, teleports: 0, why: {}, pivots: 0, detached: {}, detachedOnTarget: 0, detachedMoved: 0, detachedN: 0, detachedDist: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], lag: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], far: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], split: 0 };
+let grand = { turns: 0, refused: 0, regroups: 0, teleports: 0, why: {}, pivots: 0, behindTurns: 0, behindPieces: 0, detached: {}, detachedOnTarget: 0, detachedMoved: 0, detachedN: 0, detachedDist: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], lag: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], far: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], split: 0 };
 const worst = [];
 for (const w of worlds) {
   const json = JSON.parse(fs.readFileSync(path.join(ROOT, 'play/worlds', w.file ?? `${w.id}.json`), 'utf8'));
@@ -119,6 +122,10 @@ for (const w of worlds) {
     if (plan.pivot) grand.pivots++;
     for (const id of plan.teleports ?? []) { const w = `${plan.teleportWhy?.[id] ?? '?'}${plan.pivot ? '/pivot' : ''}`; grand.why[w] = (grand.why[w] ?? 0) + 1; }
     const k = army.king;
+    // BEHIND THE KING (ruling 4, the fifth walk): the box's row 0 is his rank; a piece behind it after any input is a defect.
+    const behindNow = army.pieces.filter((p) => p !== k && A.toBody(p.f - k.f, p.r - k.r, army.facing).dy < 0);
+    if (behindNow.length) { grand.behindTurns++; grand.behindPieces += behindNow.length; }
+    if (behindNow.length && BEHIND > 0 && behindSample.length < BEHIND && grand.behindTurns % 3 === 1) behindSample.push({ world: w.id, turn: t, input, pieces: behindNow.map((p) => `${p.ch}${p.f},${p.r}`).join(' '), facing: army.facing, regroup: !!plan.regroup, moves: plan.moves.map((m) => `${army.piece(m.id)?.ch}${m.from.f},${m.from.r}>${m.to.f},${m.to.r}${m.via?.length ? ` via ${m.via.map((c) => `${c.f},${c.r}`).join(' ')}` : ''}${m.teleport ? ' TP' : ''}`).join('  '), before, after: localMap(world, army, plan) });
     const lag = cheb(k, army.slotOf(k));
     const far = Math.min(...army.pieces.filter((p) => p !== k).map((p) => cheb(k, p)));
     grand.lag[Math.min(9, lag)]++;
@@ -161,6 +168,7 @@ for (const w of worlds) {
   }
 }
 console.log(`walk-stress: ${grand.turns} turns (${grand.refused} refused${grand.refusedWhy ? ` [${Object.entries(grand.refusedWhy).map(([k, v]) => `${k} ${v}`).join(', ')}]` : ''}, ${grand.pivots} pivots, ${grand.regroups} regroups, ${grand.teleports} teleports: ${Object.entries(grand.why).map(([k, v]) => `${k} ${v}`).join(', ')}) over ${worlds.map((w) => w.id).join(', ')}`);
+console.log(`behind the king: ${grand.behindTurns} turns, ${grand.behindPieces} pieces (must be 0)`);
 console.log(`king lag to slot   0..9: ${grand.lag.join(' ')}`);
 console.log(`king to nearest    0..9: ${grand.far.join(' ')}`);
 console.log(`army split turns: ${grand.split}; detached pieces ${grand.detachedN}: ${Object.entries(grand.detached).map(([k, v]) => `${k} ${v}`).join(', ')}; on target ${grand.detachedOnTarget}, moved this turn ${grand.detachedMoved}; distance to target 0..9: ${grand.detachedDist.join(' ')}`);
@@ -168,6 +176,9 @@ for (const c of teleportSample) console.log(`\n--- TELEPORT ${c.world} turn ${c.
 for (const c of refusedSample) console.log(`\n--- REFUSED ${c.world} turn ${c.turn}: ${c.reason}, facing ${c.facing}, input ${JSON.stringify(c.input)}\n${c.map}\n${c.trace}`);
 for (const c of splits) {
   console.log(`\n--- SPLIT ${c.world} turn ${c.turn}: ${c.comps} groups, facing ${c.facing}, input ${JSON.stringify(c.input)}${c.regroup ? ' REGROUP' : ''}\nmoves: ${c.moves}\ntargets: ${c.targets}\nBEFORE:\n${c.before}\nAFTER:\n${c.after}`);
+}
+for (const c of behindSample) {
+  console.log(`\n--- BEHIND ${c.world} turn ${c.turn}: ${c.pieces} behind the king, facing ${c.facing}, input ${JSON.stringify(c.input)}${c.regroup ? ' REGROUP' : ''}\nmoves: ${c.moves}\nBEFORE (K king, k his slot, @ anchor):\n${c.before}\nAFTER:\n${c.after}`);
 }
 for (const c of lagSample) {
   console.log(`\n--- LAG ${c.world} turn ${c.turn}: the king ${c.lag} from his slot, facing ${c.facing}, input ${JSON.stringify(c.input)}${c.regroup ? ' REGROUP' : ''}\nmoves: ${c.moves}\nBEFORE (K king, k his slot, @ anchor):\n${c.before}\nAFTER:\n${c.after}`);

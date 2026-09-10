@@ -538,9 +538,11 @@ const WAIT = { kind: 'wait' };
 // --- THE CLUSTER (designer 2026-09-09, the third walk: "when moving with just a d-pad the army should never be split. They should stay in a battle ready cluster as much as possible"): one 8-connected body after every d-pad turn — through a door, round a pillar, through clutter, at every turn of a random walk; a piece dragged away by hand rallies back while the body stands
 {
   const walkAll = (world, army, inputs, label) => {
-    let splits = 0, turns = 0;
-    for (const inp of inputs) { const p = A.advance(world, army, inp); if (!p.ok) continue; turns++; if (!A.isClustered(world, army)) splits++; }
+    let splits = 0, behind = 0, turns = 0;
+    for (const inp of inputs) { const p = A.advance(world, army, inp); if (!p.ok) continue; turns++; if (!A.isClustered(world, army)) splits++; if (!A.boxOf(army).ok) behind++; }
     expect(splits === 0, `${label}: one body after every turn (${splits} split turns of ${turns})\n${rows(world)}`);
+    // Ruling 4, the fifth walk (2026-09-10): nobody behind the king after any input — the box is whole after every turn.
+    expect(behind === 0, `${label}: nobody behind the king after any turn (${behind} turns of ${turns} with the box broken)`);
   };
   // The door: a 3-wide corridor, a one-wide door, a room beyond.
   const door = worldOf(['#######', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '###.###', '##...##', '##...##', '##...##', '##...##', '#######']);
