@@ -773,7 +773,19 @@ pivot in a two-wide nook — the residue), walk refusals 0–3 a fixture
 (104–168 before the fourth walk), 0–7 teleports, one body on every turn,
 zero collisions, the king within three of his slot, 14–18% of inputs a
 regroup (the king waiting for the file). test-army 119, selftest 46/46,
-ui-smoke 259 ok. NEXT: the DUEL START PR
+ui-smoke 259 ok. THE DESIGNER'S VERDICT ON THIS
+BUILD (2026-09-10): "Alright this will do for now, but we should
+probably take another look at this eventually" — the branch MERGES AS
+IT STANDS and THE REVISIT LIST is on record in README milestone 4d: the
+REGROUP RATE (14–18% of held inputs a turn the king spends waiting for
+the file — the army standing still on a held pad), the pivot in a
+two-wide nook (the one "behind" residue), a diagonal input from inside
+a one-wide north–south slot still refused, and the anchor refused at
+dead ends and the map's edge (143–265 a fixture, the map's own).
+`phase0/harness/walk-replay.mjs` rebuilds any position from the
+harness's `pieces:` line and replays one input with planTurn's stage
+traces, or holds it N turns printing the maps — read a screenshot's
+position into it before touching army.mjs again. NEXT: the DUEL START PR
 (rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
 stand, `buildMatchup` measuring the gap between the camp lines and
 molding the enemy around the player's pieces, the box slid to hold the
@@ -1761,7 +1773,7 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   resort — `sidesteps` — before the rope's breaker teleports the comrade
   he waited for in vain; the queue swap; the anchor snapping to the floor
   beside a wall) (Node gate `test-army.mjs` 119;
-  `phase0/harness/walk-stress.mjs` the cohesion instrument); the run
+  `phase0/harness/walk-stress.mjs` the cohesion instrument, `walk-replay.mjs` the position replayer); the run
   save (one object per run, `dck-run/2`, export / import as
   a file, no backward compatibility); the fixtures in `play/worlds/`
   (GENERATED floors since milestone 5). main.mjs § THE WALK is the page
@@ -1853,6 +1865,7 @@ node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
 node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4] [--behind 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone), the turns with a piece BEHIND THE KING (must be none; --behind samples them); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
+node harness/walk-replay.mjs <world> <df,dr> [--hold N] [--trace] [pieces: K1@f,r R2@f,r … anchor f,r facing n]  # THE WALK'S REPLAYER: rebuild a position from a walk-stress pieces: line (or start at the fixture's start), replay one input printing every stage of planTurn's trace (targets, vias, stuck, queued), or hold it N turns printing the map, the plan and the pieces: line after each — read a screenshot's position into it before touching army.mjs
 node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 

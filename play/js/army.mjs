@@ -815,7 +815,6 @@ function ropeSettle(world, army, cells, walked, facing, { breaker = false } = {}
         }
       }
       const movedAny = [...chosen].some(([id, c]) => { const st = cells.get(id); return c.f !== st.f || c.r !== st.r; });
-      walked.kingHeld = kingBlocker !== null && cap.get(king.id) < cap0.get(king.id); // the king gave back a step for a comrade (planTurn's last resort reads it)
       if (breaker && !movedAny && kingBlocker !== null && cap.get(king.id) < cap0.get(king.id)) {
         stuck.add(kingBlocker);
         kingBlocker = null;

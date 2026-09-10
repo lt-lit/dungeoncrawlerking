@@ -1402,6 +1402,26 @@ through his cell, one a turn), the wall spur, the one-wide passage, the
 door (the king last, one piece through a turn). test-army 119, selftest
 46/46, ui-smoke 259 ok (its box check reads `ok` again), the other
 Node gates unchanged.
+THE DESIGNER'S VERDICT (the same day): "Alright this will do for now,
+but we should probably take another look at this eventually." The
+branch merges as it stands. THE REVISIT LIST, for when it is looked at
+again: (1) THE REGROUP RATE — 14–18% of held inputs are a turn the king
+spends waiting for the file, which reads as the army standing still on
+a held pad (a walk could plan the file's move and his own step in one
+turn wherever his step keeps the row); (2) THE NOOK PIVOT — a turn in a
+nook two cells wide leaves a piece behind the king because no cell
+ahead of him exists (seven 'behind' teleports on vaults-3, the one
+residue); (3) THE SLOT DIAGONAL — a diagonal input from inside a
+one-wide north–south slot (the harness's gap-file case) is still
+refused; (4) DEAD ENDS — the anchor refuses at a dead end's wall and
+the map's edge (143–265 a fixture, all the map's own), which the
+status strip should say in words. THE INSTRUMENT FOR IT, committed:
+`phase0/harness/walk-replay.mjs <world> <df,dr> [--hold N] [pieces: …]`
+rebuilds a position from the `pieces:` line walk-stress prints (or
+starts at the fixture's start) and replays one input printing every
+stage of planTurn's trace with its targets and vias, or holds the input
+N turns printing the map, the plan and the position after each — the
+scratch scripts every case above was read on.
 
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
