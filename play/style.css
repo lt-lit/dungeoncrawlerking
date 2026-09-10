@@ -577,6 +577,9 @@ body.layout-wide #preview-controls { justify-content: flex-start; }
 #btnWalkBarrier { color: var(--gods); border-color: rgba(124, 200, 255, .35); }
 #walkInitiative { height: 2.7rem; max-width: 6.6rem; font-size: .72rem; color: var(--text); background: rgba(29, 30, 36, .85); border: 1px solid rgba(255, 255, 255, .14); border-radius: .55rem; padding: 0 .3rem; }
 #walk-diag { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--muted); text-align: center; }
+#wipe { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .14s ease-out; z-index: 60; }
+#wipe.on { opacity: 1; pointer-events: auto; }
+#wipe[hidden] { display: none; }
 #walk-diag[hidden] { display: none; }
 body.layout-wide #walk-stage { height: calc(100dvh - 4.4rem); }
 #screen-walk[hidden] { display: none; }

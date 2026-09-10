@@ -1447,9 +1447,9 @@ async function main() {
     const army = spawnArmy(world, makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }), world.start, world.start.facing, 'w');
     const run = R.newRun({ seed: 7, worldId: world.id, world, army, build: 'selftest' });
     if (run.schema !== R.RUN_SCHEMA || !run.start.world || !run.floors[world.id]) throw new Error('a new run carries the stamp, the start and the floor');
-    const plan = advance(world, army, { kind: 'step', dx: 1, dy: 0 });
+    const plan = advance(world, army, { kind: 'step', df: 1, dr: 0 });
     if (!plan.ok) throw new Error('the step should plan');
-    R.recordTurn(run, { kind: 'step', dx: 1, dy: 0 }, 1);
+    R.recordTurn(run, { kind: 'step', df: 1, dr: 0 }, 1);
     R.updateRun(run, { world, army, turn: 1 });
     const json = JSON.stringify(run);
     const back = JSON.parse(json);

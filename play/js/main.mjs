@@ -50,7 +50,7 @@ import { Atlas } from './atlas.mjs';
 import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
-import { makePattern, spawnArmy, planTurn, applyTurn, pieceMoves, Army, rotateBody } from './army.mjs';
+import { makePattern, spawnArmy, planTurn, applyTurn, manualMoves, boxOf, facingOfStep, formationFocus, Army } from './army.mjs';
 import { newRun, updateRun, recordTurn, recordDuel, runEnded, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
 import { planBarrier } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08) on THE BOX (milestone 5)
 import { generateWorld, STYLES, STYLE_NAMES } from './dungeon.mjs'; // THE DUNGEON GENERATOR (Phase 2 milestone 5, 2026-09-08)
@@ -117,9 +117,11 @@ const app = {
   // saved: the turn buttons wait for the army (brief §5.1), so today only
   // the debug turn buttons and `?facing=` move it.
   view: { facing: 0 },
-  // THE WALK (Phase 2 milestone 4b, 2026-09-08): the live run — { run, world,
-  // army, zoom, selected, targets, snapped, busy, turn } — and the world
-  // files the setup screen lists (play/worlds/manifest.json).
+  // THE WALK (Phase 2 milestone 4b, 2026-09-08; the controls session
+  // 2026-09-09): the live run — { run, world, army, zoom, selected, targets,
+  // busy, turn, note, duel, snapshot, look (the drag's offset), pending (one
+  // buffered input), held (the held pad's / keys' next step) } — and the
+  // world files the setup screen lists (play/worlds/manifest.json).
   walk: null,
   worlds: [],
   duel: null,
@@ -3340,22 +3342,35 @@ $('btnMenu').addEventListener('click', () => {
 });
 
 // ------------------------------------------------------------------ THE WALK
-// (Phase 2 milestone 4b, 2026-09-08 — brief §5.1's one movement rule on a
-// hand-built floor; play/js/army.mjs is the rule, world.mjs the floor,
-// run.mjs the save; the board is a WINDOW over the world at a fixed zoom,
-// the king centred, the world sliding under him.) The army IS the avatar:
-// the pad or the keys step the king, the two turns cost a move, a wait
-// passes one, a tapped piece makes its own move after a snap-zoom. Every
-// turn saves the run; the save exports and imports as a file. No enemies,
-// no line of sight, no trigger yet — the walk-around build the phone judges.
+// (Phase 2 milestone 4b, 2026-09-08 — REWORKED 2026-09-09 for THE CONTROLS
+// AND CAMERA SESSION, brief §5.1's eighteen rulings; play/js/army.mjs is
+// the rule, world.mjs the floor, run.mjs the save.) The board is a WINDOW
+// over the world, NORTH-UP ALWAYS (ruling 1 — it turns for a duel and turns
+// back after, each cut behind the wipe), the camera locked on the
+// FORMATION'S CENTRE and the world sliding under it. The d-pad and the keys
+// are WORLD-relative: a tap in a new direction turns the army in place (a
+// move), a hold walks it, the steps chained with no seam and one input
+// buffered (ruling 8); a refused step is a wall bump. A tapped piece's
+// chess moves are marked at the current zoom and the camera stays (ruling
+// 5); the box the army must always fit is NOT outlined — it was, until the
+// designer's 2026-09-10 "get rid of the big blue square when I make chess
+// moves during exploration" — the manual moves still filter on it (ruling 15).
+// DRAG the map to look around — the camera glides
+// back on the next move (ruling 17); PINCH, the wheel or + − zoom in whole
+// steps (ruling 6). No turn buttons, no zoom buttons, no swipe. Every turn
+// saves the run.
 
-const WALK_STEP_MS = 140; // one turn's slide and pan
+const WALK_STEP_MS = 150; // one turn's slide and pan (Pokémon walks a tile in ~267 ms and runs in ~133 — tuning on the phone)
+const WALK_PIVOT_MS = 220; // a pivot's beat: every piece to its turned cell
+const WALK_TELEPORT_MS = 260; // a stuck piece's dash home
 const WALK_MIN_TILES = 15; // the default zoom fits at least this many tiles across the short axis
-const WALK_SWIPE_PX = 24; // a pointer that travels this far on the map is a step, not a tap
-const WALK_OCTANTS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]; // body-relative steps by octant, 0 = right, counter-clockwise
+const WALK_DRAG_PX = 10; // a pointer that travels this far on the map is a drag (a look-around), not a tap
+const WALK_HOLD_MS = 180; // a press on the pad held past this WALKS; a shorter press is a tap (a turn in place, or one step when already facing that way)
+const WALK_KEY_CHORD_MS = 45; // keys pressed within this window are one chord (W then D = north-east)
+const WALK_BUMP_MS = 120; // the wall bump's beat
+const WALK_WIPE_MS = 160; // the blackout's fade, each way, around the walk ↔ duel cuts
+const WALK_OCTANTS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]; // WORLD steps by octant, 0 = east, counter-clockwise (2 north, 4 west, 6 south)
 const WALK_PAD_HUB = 0.13; // the d-pad's dead hub, as a fraction of its width
-const WALK_REPEAT_DELAY_MS = 320; // a held d-pad starts walking after this
-const WALK_REPEAT_MS = 150; // and steps this often (the slide is 140 ms)
 const ARENA_FILES = 10; // the arena the game is optimized around (designer 2026-09-08: the max arena is 10×10)
 
 const PIECE_NAMES = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
@@ -3371,54 +3386,63 @@ function walkZoomDefault() {
   return Math.max(1, Math.min(12, Math.floor(short / (WALK_MIN_TILES * 16))));
 }
 
-/** THE SNAP-ZOOM's target (designer 2026-09-08: "why would you not just
- *  use the same scale you'd use for a 10x10 duel?"): the k a 10×10 duel
- *  gets in this very box — the width fit on a phone, both axes under the
- *  wide layout — so a tapped piece is exactly as big as it is in a fight:
- *  k 6 on the phone, k 3 in a narrow desktop window, k 5 on a 1080p wide
- *  layout. Never a constant. */
-function duelZoomFor() {
-  const info = app.boardUI?.renderInfo;
-  if (!info || !(info.devW > 0)) return 4;
-  const headroom = info.headroom ?? 12;
-  const kw = Math.floor(info.devW / (ARENA_FILES * 16));
-  const wide = document.body.classList.contains('layout-wide');
-  const k = wide && info.devH > 0 ? Math.min(kw, Math.floor(info.devH / (ARENA_FILES * 16 + headroom))) : kw;
-  return Math.max(1, Math.min(12, k));
-}
-
-/** THE CAMERA'S FOCUS on the walk: a cell (the king, or a tapped piece)
- *  set ABOVE the screen's centre by half the height of the HUD's controls,
- *  so it stands in the uncovered map instead of under the pad. The
- *  board's lookAt / panTo take a WORLD-pixel offset, and "down the
- *  screen" is one body step backward turned by the facing (screen-up IS
- *  the facing on the walk). */
-function walkFocus(cell = null) {
+/** THE CAMERA'S FOCUS on the walk: the formation's centre (army.mjs
+ *  formationFocus, a fractional cell) set ABOVE the screen's centre by
+ *  half the height of the HUD's controls, so the army stands in the
+ *  uncovered map instead of under the pad, plus the look-around offset a
+ *  drag left (`W.look`, world pixels). The board's lookAt / panTo take a
+ *  cell and a world-pixel offset (x right, y down); north-up, the screen
+ *  and the world agree. */
+function walkFocus() {
   const W = app.walk;
   const ui = app.boardUI;
-  const at = cell ?? W.army.king;
   const k = ui?.zoom ?? W?.zoom ?? 4;
   const dpr = window.devicePixelRatio || 1;
   const controls = $('walk-controls');
   const covered = controls && !$('screen-walk').hidden ? (controls.getBoundingClientRect().height * dpr) / k : 0;
   const d = Math.round(covered / 2);
   if (ui) ui.overscroll = d; // the window may look past the map's edge by as much, under the controls
-  const back = rotateBody(0, -1, W.army.facing);
-  return { f: at.f, r: at.r, dx: back.df * d, dy: -back.dr * d };
+  const fo = formationFocus(W.army);
+  const f = Math.round(fo.f), r = Math.round(fo.r);
+  return { f, r, dx: Math.round((fo.f - f) * 16) + (W.look?.dx ?? 0), dy: Math.round(-(fo.r - r) * 16) + d + (W.look?.dy ?? 0) };
 }
 
-
-/** Centre the walk's camera on the king (a cut), HUD-aware. */
-function walkLookAtKing() {
+/** Point the walk's camera at its focus: a cut, or a glide over `ms`. */
+function walkLookAt(ms = 0) {
   const W = app.walk;
-  if (!W || !app.boardUI) return;
+  const ui = app.boardUI;
+  if (!W || !ui) return Promise.resolve();
   const fo = walkFocus();
-  app.boardUI.lookAt(fo.f, fo.r, fo.dx, fo.dy);
+  if (ms > 0) return ui.panTo(fo.f, fo.r, ms, fo.dx, fo.dy);
+  ui.lookAt(fo.f, fo.r, fo.dx, fo.dy);
+  return Promise.resolve();
+}
+
+/** THE WIPE: the blackout around a cut (the camera turning to the army's
+ *  facing for a duel, and back after). `cut` runs behind it; the sheet
+ *  lifts once it has run (and, for a duel, the board has painted). */
+async function wipe(cut) {
+  const el = $('wipe');
+  const ms = FX(WALK_WIPE_MS);
+  if (el && ms) {
+    el.hidden = false;
+    void el.getBoundingClientRect();
+    el.classList.add('on');
+    await wait(ms);
+  }
+  try {
+    await cut();
+  } finally {
+    if (el && ms) {
+      el.classList.remove('on');
+      await wait(ms);
+      el.hidden = true;
+    }
+  }
 }
 
 /** The first floor cell, for a world without a start marker. */
 function firstFloor(world) {
-
   for (let r = world.ranks - 1; r >= 0; r--) for (let f = 0; f < world.files; f++) if (world.isFloor(f, r)) return { f, r, facing: 0 };
   throw new Error('a world with no floor');
 }
@@ -3436,7 +3460,6 @@ function beginRun(worldJson, { resume = null } = {}) {
       if (runEnded(run)) throw new Error(`this run is over (${run.ended.termination ?? 'defeat'} at turn ${run.ended.turn}) — export it, or begin a new one`);
       ({ world, army } = openRun(run));
     } else {
-
       world = loadWorld(worldJson);
       const seed = setup.seed | 0 || 1;
       // The player's army: the 3×2 opening kit (brief §4.2: K + R + N and
@@ -3455,7 +3478,7 @@ function beginRun(worldJson, { resume = null } = {}) {
     return null;
   }
   if (app.boardUI) { app.boardUI.destroy(); app.boardUI = null; }
-  app.walk = { run, world, army, zoom: zoomFor() ?? null, selected: null, targets: [], snapped: null, busy: false, turn: run.turn | 0, note: '', duel: null, snapshot: null };
+  app.walk = { run, world, army, zoom: zoomFor() ?? null, selected: null, targets: [], busy: false, turn: run.turn | 0, note: '', duel: null, snapshot: null, look: null, pending: null, held: null };
   app.phase = 'walk';
   app.busy = false;
   showScreen('walk');
@@ -3470,42 +3493,38 @@ function beginRun(worldJson, { resume = null } = {}) {
   return app.walk;
 }
 
-
 /** Mount the board on the walk screen: the world, no crop, fit window,
- *  the screen viewport, the king centred. */
+ *  the screen viewport, NORTH-UP (ruling 1), the formation centred. */
 function mountWalkBoard() {
   const W = app.walk;
   if (!W) return;
   if (app.boardUI) app.boardUI.destroy();
-  app.boardUI = createBoard($('walk-board'), { world: W.world, crop: false, fit: 'window', viewport: 'screen', zoom: W.zoom ?? 4, facing: W.army.facing, showCoords: false, onCellTap: onWalkCellTap });
-  app.view.facing = W.army.facing;
+  app.boardUI = createBoard($('walk-board'), { world: W.world, crop: false, fit: 'window', viewport: 'screen', zoom: W.zoom ?? 4, facing: 0, showCoords: false, onCellTap: onWalkCellTap });
+  app.view.facing = 0;
   syncFacingUI();
   if (!W.zoom) {
     W.zoom = walkZoomDefault();
     app.boardUI.setZoom(W.zoom);
   }
   app.boardUI.dimOutside = false;
-  walkLookAtKing();
+  void walkLookAt(0);
   app.boardUI.setInteractive(true);
   applyTheme();
   debrisPaintWalk();
-  void app.boardUI.ready.then(() => walkLookAtKing());
+  void app.boardUI.ready.then(() => walkLookAt(0));
 }
-
 
 function walkPieceName(ch) {
   return PIECE_NAMES[ch.toLowerCase()] ?? ch;
 }
 
-/** The walk's status line: the turn, the facing, the zoom, a note. */
+/** The walk's status line: the turn, the facing, the pieces, the zoom, a note. */
 function walkStatus(note = null) {
   const W = app.walk;
   if (!W) return;
   if (note !== null) W.note = note;
   const facing = ['north', 'east', 'south', 'west'][W.army.facing];
-  $('walk-facing').textContent = facing;
-  $('walk-zoom').textContent = `k ${app.boardUI?.zoom ?? W.zoom ?? '?'}`;
-  $('walk-status').textContent = `turn ${W.turn} · facing ${facing} · ${W.army.pieces.length} pieces · king ${W.army.king.f},${W.army.king.r}${W.note ? ` · ${W.note}` : ''}`;
+  $('walk-status').textContent = `turn ${W.turn} · facing ${facing} · ${W.army.pieces.length} pieces · k ${app.boardUI?.zoom ?? W.zoom ?? '?'}${W.note ? ` · ${W.note}` : ''}`;
 }
 
 /** Save the run as it stands (after every turn; on leaving) — the floor,
@@ -3515,25 +3534,41 @@ function walkSave() {
   if (!W) return;
   if (W.duel) return void saveRun(W.run); // mid-duel the floor is the duel's: the save keeps the pre-drop floor and the pending entry
   const D = app.debris;
-
   const debris = D.ledger && D.envId === debrisRunEnvId(W) ? D.ledger.serialize() : undefined;
   updateRun(W.run, { world: W.world, army: W.army, turn: W.turn, debris });
   saveRun(W.run);
 }
 
+/** THE WALL BUMP (ruling 8): a refused step leans the view into the wall
+ *  and back — north-up, a world step's screen direction is (df, −dr). */
+function walkBump(df, dr) {
+  app.boardUI?.nudge(df, -dr, FX(WALK_BUMP_MS));
+}
 
 /**
  * One input → one turn: plan (army.mjs), apply, record, then the motion —
- * a facing change is a CUT, the arrivals slide in whole native pixels
- * while the camera glides to the king — and the save. A refused input
- * (a wall, a held way) costs nothing and says why.
+ * every arrival slides along its path in whole native pixels (a pivot's
+ * beat is longer, a teleport's dash longer still) while the camera glides
+ * to the formation's centre — and the save. A refused input costs nothing
+ * and says why (a refused step bumps). An input that lands while a turn
+ * is in motion is BUFFERED (one) and fires the moment the turn ends; a
+ * held pad or key (`W.held`) supplies the next step the same way, so a
+ * walk has no seam.
  */
 async function walkInput(input) {
   const W = app.walk;
-  if (!W || app.phase !== 'walk' || W.busy) return null;
+  if (!W || app.phase !== 'walk') return null;
+  if (W.busy) {
+    W.pending = input;
+    return null;
+  }
   const plan = planTurn(W.world, W.army, input);
   if (!plan.ok) {
+    if (plan.reason === 'blocked' && input.kind === 'step') walkBump(input.df, input.dr);
     walkStatus(plan.reason === 'blocked' ? 'blocked' : plan.reason);
+    // A held pad or key keeps bumping the wall, and walks on the moment the
+    // thumb steers off it (the chain would otherwise end at the wall).
+    if (W.held && input.kind === 'step') setTimeout(() => { const n = app.walk === W && !W.busy ? W.held?.() : null; if (n) void walkInput(n); }, FX(WALK_BUMP_MS) + 100);
     return plan;
   }
   W.busy = true;
@@ -3545,33 +3580,32 @@ async function walkInput(input) {
     applyTurn(W.world, W.army, plan);
     W.turn += 1;
     recordTurn(W.run, input, W.turn);
-    walkClearSelection(false);
+    walkClearSelection();
+    W.look = null; // the camera comes back to the army on a move (ruling 17)
     await debrisWalkTurn(plan, smashes);
     const ui = app.boardUI;
-
-    if (plan.facing !== ui.facing) {
-      ui.setFacing(plan.facing);
-      app.view.facing = plan.facing;
-      syncFacingUI();
-    }
     ui.refresh();
-    const ms = FX(WALK_STEP_MS);
-    const arrivals = plan.moves.map((m) => ({ from: m.from, to: m.to, ch: W.army.letter(before.get(m.id) ?? 'P') }));
-    const fo = walkFocus();
-    await Promise.all([ui.animateArrivals(arrivals, { ms }), ui.panTo(fo.f, fo.r, ms, fo.dx, fo.dy)]);
+    const ms = FX(plan.teleports?.length ? WALK_TELEPORT_MS : plan.pivot ? WALK_PIVOT_MS : WALK_STEP_MS);
+    const arrivals = plan.moves.map((m) => ({ from: m.from, to: m.to, via: m.via ?? [], ch: W.army.letter(before.get(m.id) ?? 'P') }));
+    await Promise.all([ui.animateArrivals(arrivals, { ms }), walkLookAt(ms)]);
     const smashed = plan.moves.find((m) => m.capture === 'furniture');
-    walkStatus(plan.individual ? `${walkPieceName(before.get(plan.moves[0].id) ?? 'p')} ${smashed ? 'smashes the crate' : 'moves'}` : input.kind === 'turn' ? `turned ${input.dir < 0 ? 'left' : 'right'}` : '');
+    const mover = plan.individual || (input.kind === 'move') ? walkPieceName(before.get(input.id) ?? 'p') : null;
+    walkStatus(mover ? `${mover} ${smashed ? 'smashes it' : 'moves'}${plan.teleports?.length ? ' · a straggler rejoins' : ''}` : plan.teleports?.length ? 'a straggler rejoins' : plan.regroup ? 'regrouping' : input.kind === 'face' ? `faces ${['north', 'east', 'south', 'west'][plan.facing]}` : '');
     debrisPaintWalk();
     walkSave();
-
   } finally {
     W.busy = false;
   }
+  // The buffered input, else the held walk's next step.
+  const next = W.pending ?? W.held?.() ?? null;
+  W.pending = null;
+  if (next && app.phase === 'walk') void walkInput(next);
   return plan;
 }
 
-/** A tap on the world: select one of our pieces (a snap-zoom onto it, its
- *  moves marked), tap a target to move it, tap elsewhere to let go. */
+/** A tap on the world: select one of our pieces (its chess moves marked at
+ *  the current zoom, the camera unmoved, no box outline), tap a target to
+ *  move it, tap elsewhere to let go. The king included (ruling 10). */
 function onWalkCellTap(f, r) {
   const W = app.walk;
   if (!W || W.busy) return;
@@ -3580,51 +3614,39 @@ function onWalkCellTap(f, r) {
     const t = W.targets.find((x) => x.f === f && x.r === r);
     if (t) {
       const id = W.selected;
-      walkClearSelection(true);
+      walkClearSelection();
       void walkInput({ kind: 'move', id, to: { f, r } });
       return;
     }
   }
   const p = W.army.pieceAt(f, r);
-  if (p && p !== W.army.king && p.id !== W.selected) {
+  if (p && p.id !== W.selected) {
     W.selected = p.id;
-    W.targets = pieceMoves(W.world, W.army, p, { captures: true });
+    W.targets = manualMoves(W.world, W.army, p);
     ui.setCellMarks({ selected: { f, r }, targets: W.targets });
-    if (W.snapped === null) {
-      W.snapped = W.zoom;
-      ui.setZoom(Math.max(W.zoom, duelZoomFor()));
-    }
-    const fo = walkFocus({ f, r });
-    ui.lookAt(fo.f, fo.r, fo.dx, fo.dy);
     walkStatus(`${walkPieceName(p.ch)}: ${W.targets.length} moves — tap one`);
     return;
   }
-  walkClearSelection(true);
+  walkClearSelection();
   walkStatus('');
 }
 
-function walkClearSelection(recentre) {
+function walkClearSelection() {
   const W = app.walk;
   const ui = app.boardUI;
   if (!W || !ui) return;
   W.selected = null;
   W.targets = [];
   ui.setCellMarks({});
-  if (W.snapped !== null) {
-    ui.setZoom(W.snapped);
-    W.snapped = null;
-  }
-  if (recentre) walkLookAtKing();
 }
 
-/** The zoom in whole steps (a CUT), the king kept centred. */
+/** The zoom in whole steps (a CUT), the focus kept. */
 function walkZoom(delta) {
   const W = app.walk;
   if (!W || !app.boardUI) return;
-  walkClearSelection(false);
   W.zoom = Math.max(1, Math.min(12, (W.zoom ?? 4) + delta));
   app.boardUI.setZoom(W.zoom);
-  walkLookAtKing();
+  void walkLookAt(0);
   walkStatus();
 }
 
@@ -3764,10 +3786,15 @@ async function debrisWalkTurn(plan, smashes) {
     if (wearLevel(D.ledger.trafficAt(f, r)) !== before) D.urls.delete(D.ledger.cellIndex(f, r));
   };
   for (const m of plan.moves) {
-    visit(m.to.f, m.to.r);
-    const df = Math.sign(m.to.f - m.from.f), dr = Math.sign(m.to.r - m.from.r);
-    const straight = m.from.f === m.to.f || m.from.r === m.to.r || Math.abs(m.to.f - m.from.f) === Math.abs(m.to.r - m.from.r);
-    if (straight) for (let f = m.from.f + df, r = m.from.r + dr; f !== m.to.f || r !== m.to.r; f += df, r += dr) visit(f, r);
+    if (m.teleport) { visit(m.to.f, m.to.r); continue; } // a straggler's dash home wears only where it lands
+    const path = [m.from, ...(m.via ?? []), m.to];
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1], b = path[i];
+      visit(b.f, b.r);
+      const df = Math.sign(b.f - a.f), dr = Math.sign(b.r - a.r);
+      const straight = a.f === b.f || a.r === b.r || Math.abs(b.f - a.f) === Math.abs(b.r - a.r);
+      if (straight) for (let f = a.f + df, r = a.r + dr; f !== b.f || r !== b.r; f += df, r += dr) visit(f, r);
+    }
   }
   for (const { m, k } of smashes) {
     await debrisEventCell({ k: 'smash', f: m.to.f, r: m.to.r, df: m.to.f - m.from.f, dr: m.to.r - m.from.r, src: debrisSrcOfCell(m.to.f, m.to.r, k) });
@@ -3874,7 +3901,7 @@ async function walkBarrier({ seed = null, turn = null, knobs = null } = {}) {
   }
   W.busy = true;
   try {
-    walkClearSelection(false);
+    walkClearSelection();
     const run = W.run;
     const dealSeed = seed ?? childSeed(run.seed >>> 0, `barrier:${run.turns.length}:${W.turn}`);
     const initiative = turn ?? (params.get('initiative') === 'b' || $('walkInitiative')?.value === 'b' ? 'b' : 'w');
@@ -3908,11 +3935,21 @@ async function walkBarrier({ seed = null, turn = null, knobs = null } = {}) {
 
     app.session = session;
     W.duel = { plan, seed: dealSeed, turn: initiative, startedAt: Date.now() };
-    showScreen('duel');
-    $('btnBack').hidden = true; // there is no leaving a duel
-    $('title').textContent = session.title;
-    mountDuelBoard(session);
-    await startDuel(session);
+    // THE CUT (ruling 1): the camera turns to the army's facing behind the
+    // wipe, which lifts once the duel has painted (or after a beat and a
+    // half — a cold engine should not keep the screen black).
+    let started = null;
+    await wipe(async () => {
+      showScreen('duel');
+      $('btnBack').hidden = true; // there is no leaving a duel
+      $('title').textContent = session.title;
+      mountDuelBoard(session);
+      started = startDuel(session);
+      await Promise.race([started, wait(FX(1500))]);
+      await app.boardUI?.ready;
+      app.boardUI?.paintNow?.();
+    });
+    await started;
     return plan;
   } finally {
     W.busy = false;
@@ -4002,15 +4039,28 @@ async function walkOut() {
   }
   W.duel = null;
   W.snapshot = null;
-  app.phase = 'walk';
-  showScreen('walk');
-  $('title').textContent = W.world.title || W.world.id;
-  debrisBindRun(W);
-  app.debris.ledger?.settleTraffic();
-  mountWalkBoard();
-  walkSave();
-  walkStatus(note);
-  setStatus('walk');
+  // The cut back (ruling 1): everything the walk needs — the phase, the
+  // screen, the board, the save, the status — lands synchronously, then
+  // the sheet holds until the north-up board has painted. The walk is busy
+  // for the transition, so no input lands on a board still mounting.
+  W.busy = true;
+  try {
+    await wipe(async () => {
+      app.phase = 'walk';
+      showScreen('walk');
+      $('title').textContent = W.world.title || W.world.id;
+      debrisBindRun(W);
+      app.debris.ledger?.settleTraffic();
+      mountWalkBoard();
+      walkSave();
+      walkStatus(note);
+      setStatus('walk');
+      await app.boardUI?.ready;
+      app.boardUI?.paintNow?.();
+    });
+  } finally {
+    W.busy = false;
+  }
   return entry;
 }
 
@@ -4101,42 +4151,56 @@ $('runFile').addEventListener('change', async (e) => {
 });
 $('btnRunExport').addEventListener('click', () => void exportRun());
 // THE D-PAD (designer 2026-09-08: "something that actually looks and FEELS
-// like an actual d-pad"): one cross, driven by WHERE the thumb is — the
-// angle from the hub picks one of eight directions (an arm, or between two
-// arms for a diagonal), the hub itself is dead, a press steps at once and
-// KEEPS STEPPING while held (a walk), the thumb slides to steer, the
-// pressed arm lights. Body-relative, as the keys are.
+// like an actual d-pad"; WORLD-relative since 2026-09-09, ruling 2): one
+// cross, driven by WHERE the thumb is — the angle from the hub picks one of
+// eight world directions (an arm, or between two arms for a diagonal), the
+// hub itself is dead. A press in a NEW direction turns the army in place
+// at once (a move); held past WALK_HOLD_MS it walks, one step chained on
+// the end of the last, the thumb sliding to steer. A press in the direction
+// the army already faces steps at once and keeps stepping while held. The
+// pressed arm lights.
 {
   const pad = $('walk-pad');
-  let held = null; // { id, dir, timer, repeat }
+  let held = null; // { id, dir, timer }
   const dirAt = (e) => {
     const r = pad.getBoundingClientRect();
     if (!(r.width > 0)) return null;
     const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
     if (Math.hypot(x, y) < WALK_PAD_HUB) return null;
-    const oct = Math.round(Math.atan2(-y, x) / (Math.PI / 4)) & 7; // 0 right, 2 forward, 4 left, 6 back
+    const oct = Math.round(Math.atan2(-y, x) / (Math.PI / 4)) & 7; // 0 east, 2 north, 4 west, 6 south
     return WALK_OCTANTS[oct];
   };
   const show = (dir) => { pad.dataset.dir = dir ? `${dir[0]},${dir[1]}` : ''; };
-  const fire = () => { if (held && app.phase === 'walk' && !app.walk?.busy) void walkInput({ kind: 'step', dx: held.dir[0], dy: held.dir[1] }); };
+  const stepOf = (dir) => ({ kind: 'step', df: dir[0], dr: dir[1] });
+  const startWalk = () => {
+    const W = app.walk;
+    if (!held || !W || app.phase !== 'walk') return;
+    W.held = () => (held ? stepOf(held.dir) : null);
+    void walkInput(stepOf(held.dir));
+  };
   const stop = (e) => {
     if (!held || (e && e.pointerId !== undefined && e.pointerId !== held.id)) return;
     clearTimeout(held.timer);
-    clearInterval(held.repeat);
     held = null;
+    if (app.walk) app.walk.held = null;
     show(null);
   };
   pad.addEventListener('pointerdown', (e) => {
-    if (app.phase !== 'walk' || e.button) return;
+    const W = app.walk;
+    if (app.phase !== 'walk' || e.button || !W) return;
     const dir = dirAt(e);
     if (!dir) return;
     e.preventDefault();
     try { pad.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
     stop();
-    held = { id: e.pointerId, dir, timer: null, repeat: null };
+    held = { id: e.pointerId, dir, timer: null };
     show(dir);
-    fire();
-    held.timer = setTimeout(() => { if (held) held.repeat = setInterval(fire, WALK_REPEAT_MS); }, WALK_REPEAT_DELAY_MS);
+    const facing = facingOfStep(W.army.facing, dir[0], dir[1]);
+    if (facing !== W.army.facing) {
+      // A tap turns in place; a hold walks after the turn.
+      void walkInput({ kind: 'face', facing });
+      held.timer = setTimeout(startWalk, WALK_HOLD_MS);
+    } else startWalk();
   });
   pad.addEventListener('pointermove', (e) => {
     if (!held || e.pointerId !== held.id) return;
@@ -4147,63 +4211,155 @@ $('btnRunExport').addEventListener('click', () => void exportRun());
   pad.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 $('btnWalkWait').addEventListener('click', () => void walkInput({ kind: 'wait' }));
-$('btnWalkTurnL').addEventListener('click', () => void walkInput({ kind: 'turn', dir: -1 }));
-$('btnWalkTurnR').addEventListener('click', () => void walkInput({ kind: 'turn', dir: 1 }));
-$('btnZoomIn').addEventListener('click', () => walkZoom(1));
-$('btnZoomOut').addEventListener('click', () => walkZoom(-1));
 $('btnWalkBarrier').addEventListener('click', () => void walkBarrier());
 $('btnWalkOut').addEventListener('click', () => void walkOut());
-// A SWIPE on the map is a step in its direction (eight ways, body-relative:
-// the camera is at the army's facing, so screen-up IS forward). A pointer
-// that travels under WALK_SWIPE_PX is a tap and reaches the board's own
-// click (the piece pick); a swipe swallows that click.
+// THE MAP'S GESTURES (2026-09-09, rulings 5, 6, 17): DRAG to look around
+// (the focus moves by the drag in whole native pixels and stays until the
+// next move, when the camera glides back to the army), PINCH to zoom in
+// whole steps (each crossing of the geometric midpoint between neighbouring
+// steps is a cut, re-anchored so a long pinch walks the steps one by one),
+// the WHEEL likewise; a pointer that travels under WALK_DRAG_PX is a tap
+// and reaches the board's own click (the piece pick); a drag or a pinch
+// swallows that click. No swipe-to-step.
 {
   const stage = $('walk-board');
-  let down = null;
+  const pointers = new Map(); // id → { x, y }
+  let drag = null; // { id, x0, y0, moved, look }
+  let pinch = null; // { d0, k0 }
   let swallow = false;
+  const swallowNext = () => { swallow = true; setTimeout(() => { swallow = false; }, 0); };
   stage.addEventListener('pointerdown', (e) => {
-    if (app.phase !== 'walk' || e.button) return;
-    down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    if (app.phase !== 'walk' || e.button || !app.walk) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moved: false, look: { ...(app.walk.look ?? { dx: 0, dy: 0 }) } };
+    else if (pointers.size === 2) {
+      drag = null;
+      const [a, b] = [...pointers.values()];
+      pinch = { d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), k0: app.walk.zoom ?? app.boardUI?.zoom ?? 4 };
+    }
+  });
+  stage.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p || !app.walk) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+      const k = app.walk.zoom ?? 4;
+      const ratio = d / pinch.d0;
+      if (k < 12 && ratio > Math.sqrt((k + 1) / k)) { walkZoom(1); pinch.d0 = d; }
+      else if (k > 1 && ratio < Math.sqrt((k - 1) / k)) { walkZoom(-1); pinch.d0 = d; }
+      return;
+    }
+    if (drag && e.pointerId === drag.id) {
+      const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+      if (!drag.moved && Math.hypot(dx, dy) < WALK_DRAG_PX) return;
+      drag.moved = true;
+      const dpr = window.devicePixelRatio || 1;
+      const k = app.boardUI?.k || 1;
+      app.walk.look = { dx: drag.look.dx - Math.round((dx * dpr) / k), dy: drag.look.dy - Math.round((dy * dpr) / k) }; // the map follows the finger: the focus moves the other way
+      void walkLookAt(0);
+    }
   });
   const end = (e) => {
-    if (!down || e.pointerId !== down.id) return;
-    const dx = e.clientX - down.x, dy = e.clientY - down.y;
-    down = null;
-    if (Math.hypot(dx, dy) < WALK_SWIPE_PX) return;
-    swallow = true;
-    setTimeout(() => { swallow = false; }, 0);
-    const a = Math.atan2(-dy, dx); // screen up = forward
-    const oct = Math.round(a / (Math.PI / 4)) & 7; // 0 right, 2 forward, 4 left, 6 back
-    const step = WALK_OCTANTS[oct];
-    void walkInput({ kind: 'step', dx: step[0], dy: step[1] });
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pinch) {
+      swallowNext();
+      if (pointers.size < 2) pinch = null;
+    }
+    if (drag && e.pointerId === drag.id) {
+      if (drag.moved) swallowNext();
+      drag = null;
+    }
   };
   stage.addEventListener('pointerup', end);
-  stage.addEventListener('pointercancel', () => { down = null; });
+  stage.addEventListener('pointercancel', end);
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
   stage.addEventListener('click', (e) => { if (swallow) { e.stopPropagation(); e.preventDefault(); } }, true);
+  stage.addEventListener('wheel', (e) => {
+    if (app.phase !== 'walk') return;
+    e.preventDefault();
+    if (e.deltaY) walkZoom(e.deltaY < 0 ? 1 : -1);
+  }, { passive: false });
 }
 
-
-document.addEventListener('keydown', (e) => {
-  if (app.phase !== 'walk' || !app.walk) return;
-  const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
-  if (!$('options').hidden) return;
-  const k = e.key;
-  const steps = { ArrowUp: [0, 1], w: [0, 1], W: [0, 1], ArrowDown: [0, -1], s: [0, -1], S: [0, -1], ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0], ArrowRight: [1, 0], d: [1, 0], D: [1, 0], 7: [-1, 1], 8: [0, 1], 9: [1, 1], 4: [-1, 0], 6: [1, 0], 1: [-1, -1], 2: [0, -1], 3: [1, -1] };
-  let input = null;
-  if (steps[k]) input = { kind: 'step', dx: steps[k][0], dy: steps[k][1] };
-  else if (k === 'q' || k === 'Q') input = { kind: 'turn', dir: -1 };
-  else if (k === 'e' || k === 'E') input = { kind: 'turn', dir: 1 };
-  else if (k === ' ' || k === '5' || k === 'x' || k === 'X') input = { kind: 'wait' };
-  else if (k === 'b' || k === 'B') { void walkBarrier(); e.preventDefault(); return; }
-  else if (k === '+' || k === '=') { walkZoom(1); e.preventDefault(); return; }
-
-  else if (k === '-' || k === '_') { walkZoom(-1); e.preventDefault(); return; }
-  else if (k === 'Escape') { walkClearSelection(true); walkStatus(''); return; }
-  if (!input) return;
-  e.preventDefault();
-  void walkInput(input);
-});
+// THE KEYS (ruling 7: chords): WASD / the arrows / the numpad are WORLD
+// directions, the direction the SUM of what is held (W and D together is
+// north-east); the first step waits WALK_KEY_CHORD_MS for a second key, a
+// press in a new direction turns first and walks if still held, and while
+// held the keys chain steps like the pad. Q / E face left / right (a
+// move), space / x / 5 wait, + − zoom, B drops the debug barrier, Escape
+// lets go of a selected piece.
+{
+  const KEYS = { ArrowUp: [0, 1], w: [0, 1], W: [0, 1], ArrowDown: [0, -1], s: [0, -1], S: [0, -1], ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0], ArrowRight: [1, 0], d: [1, 0], D: [1, 0], 7: [-1, 1], 8: [0, 1], 9: [1, 1], 4: [-1, 0], 6: [1, 0], 1: [-1, -1], 2: [0, -1], 3: [1, -1] };
+  const down = new Map(); // key → world direction
+  let chordTimer = null, holdTimer = null, walking = false;
+  const vec = () => {
+    let df = 0, dr = 0;
+    for (const [a, b] of down.values()) { df += a; dr += b; }
+    return [Math.sign(df), Math.sign(dr)];
+  };
+  const stepOf = () => { const [df, dr] = vec(); return df || dr ? { kind: 'step', df, dr } : null; };
+  const startWalk = () => {
+    holdTimer = null;
+    const W = app.walk;
+    if (!W || app.phase !== 'walk' || !down.size) return;
+    walking = true;
+    W.held = () => (down.size ? stepOf() : null);
+    const st = stepOf();
+    if (st) void walkInput(st);
+  };
+  const begin = () => {
+    chordTimer = null;
+    const W = app.walk;
+    const st = stepOf();
+    if (!W || app.phase !== 'walk' || !st) return;
+    const facing = facingOfStep(W.army.facing, st.df, st.dr);
+    if (facing !== W.army.facing) {
+      void walkInput({ kind: 'face', facing });
+      holdTimer = setTimeout(startWalk, WALK_HOLD_MS);
+    } else startWalk();
+  };
+  const release = () => {
+    walking = false;
+    clearTimeout(chordTimer);
+    clearTimeout(holdTimer);
+    chordTimer = holdTimer = null;
+    if (app.walk) app.walk.held = null;
+  };
+  const typing = (e) => { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA'); };
+  document.addEventListener('keydown', (e) => {
+    if (app.phase !== 'walk' || !app.walk || typing(e) || !$('options').hidden) return;
+    const k = e.key;
+    if (KEYS[k]) {
+      e.preventDefault();
+      if (e.repeat) return;
+      down.set(k, KEYS[k]);
+      if (!walking && !chordTimer && !holdTimer) chordTimer = setTimeout(begin, WALK_KEY_CHORD_MS);
+      return;
+    }
+    let input = null;
+    if (k === 'q' || k === 'Q') input = { kind: 'face', facing: (app.walk.army.facing + 3) % 4 };
+    else if (k === 'e' || k === 'E') input = { kind: 'face', facing: (app.walk.army.facing + 1) % 4 };
+    else if (k === ' ' || k === '5' || k === 'x' || k === 'X') input = { kind: 'wait' };
+    else if (k === 'b' || k === 'B') { void walkBarrier(); e.preventDefault(); return; }
+    else if (k === '+' || k === '=') { walkZoom(1); e.preventDefault(); return; }
+    else if (k === '-' || k === '_') { walkZoom(-1); e.preventDefault(); return; }
+    else if (k === 'Escape') { walkClearSelection(); walkStatus(''); return; }
+    if (!input) return;
+    e.preventDefault();
+    void walkInput(input);
+  });
+  document.addEventListener('keyup', (e) => {
+    if (!down.has(e.key)) return;
+    down.delete(e.key);
+    if (!down.size) release();
+  });
+  window.addEventListener('blur', () => { down.clear(); release(); });
+}
 
 // Test hook (Playwright E2E drives the game through this).
 window.__DCK = {
@@ -4351,6 +4507,12 @@ window.__DCK = {
     input: (input) => walkInput(input),
     select: (f, r) => onWalkCellTap(f, r),
     zoom: (k = null) => (k === null ? app.walk?.zoom ?? null : (walkZoom(k - (app.walk?.zoom ?? 0)), app.walk?.zoom ?? null)),
+    /** THE LOOK-AROUND (ruling 17): the drag's offset in world pixels, or null when the camera is on the army; settable. */
+    look: (v) => (v === undefined ? (app.walk?.look ? { ...app.walk.look } : null) : (app.walk && (app.walk.look = v ? { dx: v.dx | 0, dy: v.dy | 0 } : null, void walkLookAt(0)), app.walk?.look ?? null)),
+    /** THE BOX the army must always fit (ruling 15), as army.mjs boxOf reads it. */
+    box: () => (app.walk ? boxOf(app.walk.army) : null),
+    /** The camera's focus cell and offset. */
+    focus: () => (app.walk ? walkFocus() : null),
     export: () => (app.walk ? (walkSave(), JSON.parse(JSON.stringify(app.walk.run))) : loadSavedRun()),
     import: (obj) => importRun(obj),
     leave: () => walkLeave(),
@@ -4374,14 +4536,12 @@ window.__DCK = {
     },
     cell: (f, r) => (app.walk ? app.walk.world.cellView(f, r) : null),
     debris: () => (app.walk && app.debris.ledger ? app.debris.ledger.stats() : null),
-    /** The snap-zoom's target: the k a 10×10 duel gets in this box. */
-    duelZoom: () => duelZoomFor(),
 
 
     get state() {
       const W = app.walk;
       if (!W) return null;
-      return { worldId: W.world.id, turn: W.turn, facing: W.army.facing, king: { ...W.army.king }, pieces: W.army.pieces.map((p) => ({ ...p })), zoom: W.zoom, selected: W.selected, targets: W.targets.map((t) => ({ ...t })), busy: W.busy, rows: W.world.rows() };
+      return { worldId: W.world.id, turn: W.turn, facing: W.army.facing, at: { ...W.army.at }, king: { ...W.army.king }, pieces: W.army.pieces.map((p) => ({ ...p })), zoom: W.zoom, selected: W.selected, targets: W.targets.map((t) => ({ ...t })), busy: W.busy, look: W.look ? { ...W.look } : null, rows: W.world.rows() };
     },
     get busy() {
       return !!app.walk?.busy;

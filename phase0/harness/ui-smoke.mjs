@@ -920,11 +920,16 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs3.length === 0, `no page errors on the window page${errs3.length ? ` — ${errs3.join(' | ')}` : ''}`);
   await page3.close();
 }
-// --- THE WALK (Phase 2 milestone 4b, 2026-09-08): `?world=` begins a run on
-// the fixture; the pad's inputs move the army under the one rule, a turn
-// costs a move, a wall refuses, the run saves after every turn and exports
-// as one object, a tapped piece snaps the zoom and marks its moves, leaving
-// and resuming keep the turn, an import lands on the imported state.
+// --- THE WALK (Phase 2 milestone 4b, 2026-09-08; the controls and camera
+// session, 2026-09-09): `?gen=` begins a run on a generated floor; the
+// inputs are WORLD-relative and the facing follows the step (a step in a
+// new direction pivots first), a `face` input turns in place for a move, a
+// wall refuses, the run saves after every turn (schema dck-run/2) and
+// exports as one object, a tapped piece marks its chess moves WITHOUT
+// moving the camera or the zoom (no box outline since 2026-09-10), the pad's tap turns
+// and the keys face, a DRAG looks around and the next move brings the
+// camera back, a PINCH steps the zoom, leaving and resuming keep the turn,
+// an import lands on the imported state. The board is north-up throughout.
 {
   const page4 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs4 = [];
@@ -941,55 +946,85 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.start = K.walk.state;
     out.world = { id: K.app.walk.world.id, facing: K.app.walk.world.start.facing, theme: K.app.walk.world.theme, files: K.app.walk.world.files, ranks: K.app.walk.world.ranks };
     out.saved0 = K.walk.saved();
-    // A forward step facing east is +f for every piece.
-    const p1 = await K.walk.input({ kind: 'step', dx: 0, dy: 1 });
-    out.step = { ok: p1.ok, moves: p1.moves.length, state: K.walk.state };
-    // A turn costs a move: facing east → south, the king stays, the turn counts.
-    const p2 = await K.walk.input({ kind: 'turn', dir: 1 });
-    out.turn = { ok: p2.ok, state: K.walk.state, facing: K.renderer.info.facing };
+    // A step the way the army faces (east at the start) is +f for every piece, no pivot; the board stays north-up.
+    const fwd = [[0, 1], [1, 0], [0, -1], [-1, 0]][out.start.facing];
+    const p1 = await K.walk.input({ kind: 'step', df: fwd[0], dr: fwd[1] });
+    out.step = { ok: p1.ok, pivot: p1.pivot, moves: p1.moves.length, state: K.walk.state, boardFacing: K.renderer.info.facing };
+    // A face input costs a move: the facing turns a quarter right, the king stays, the board does not turn.
+    const p2 = await K.walk.input({ kind: 'face', facing: (out.start.facing + 1) % 4 });
+    out.turn = { ok: p2.ok, pivot: p2.pivot, state: K.walk.state, facing: K.renderer.info.facing };
     // A wait.
     const p3 = await K.walk.input({ kind: 'wait' });
     out.wait = { ok: p3.ok, turn: K.walk.state.turn };
-    // Step right until a wall refuses (the ring at the latest).
-    let refused = null;
-    for (let i = 0; i < 40 && !refused; i++) { const p = await K.walk.input({ kind: 'step', dx: 1, dy: 0 }); if (!p.ok) refused = p.reason; }
-    out.refused = { reason: refused, turn: K.walk.state.turn, status: document.getElementById('walk-status').textContent };
+    // Step east until a wall refuses (the ring at the latest); the first east step pivots the army east.
+    let refused = null, pivots = 0;
+    for (let i = 0; i < 80 && !refused; i++) { const p = await K.walk.input({ kind: 'step', df: 1, dr: 0 }); if (!p.ok) refused = p.reason; else if (p.pivot) pivots++; }
+    out.refused = { reason: refused, turn: K.walk.state.turn, status: document.getElementById('walk-status').textContent, pivots, facing: K.walk.state.facing };
     // The save after every turn: the stored run's turn equals the state's; the export is one object of the schema with the turn list.
     const saved = K.walk.saved();
     const exp = K.walk.export();
     out.save = { schema: exp.schema, turn: saved.turn, turns: exp.turns.length, worldId: exp.worldId, hasStart: !!exp.start?.world, hasFloor: !!exp.floors?.[exp.floor]?.world, key: localStorage.getItem('dck.run.v1') ? 1 : 0 };
-    // Tap a non-king piece: the zoom snaps up, its moves are marked; tap elsewhere: back.
-    const pc = K.walk.state.pieces.find((p) => p.ch !== 'K');
+    // Tap a piece (the king included): its chess moves are marked, the zoom and the focus stay, no box outline (the box is read off the debug surface); tap elsewhere: let go.
+    const settle = async () => { await new Promise((r) => setTimeout(r, 30)); while (K.walk.busy) await new Promise((r) => setTimeout(r, 20)); };
+    // The first piece with a chess move to offer (a pawn against a wall has none).
+    const pc = K.walk.state.pieces.filter((p) => p.ch !== 'K').find((p) => { K.walk.select(p.f, p.r); const n = K.walk.state.targets.length; K.walk.select(-1, -1); return n > 0; }) ?? K.walk.state.pieces[1];
     const z0 = K.walk.zoom();
+    const f0 = K.walk.focus();
     K.walk.select(pc.f, pc.r);
-    out.tap = { z0, z1: K.renderer.info.k, duelK: K.walk.duelZoom(), selected: K.walk.state.selected, targets: K.walk.state.targets.length };
+    const f1 = K.walk.focus();
+    out.tap = { z0, z1: K.renderer.info.k, selected: K.walk.state.selected, targets: K.walk.state.targets.length, focusSame: f0.f === f1.f && f0.r === f1.r && f0.dx === f1.dx && f0.dy === f1.dy, box: K.walk.box(), chessOnly: K.walk.state.targets.every((t) => pc.ch === 'N' ? Math.abs(t.f - pc.f) * Math.abs(t.r - pc.r) === 2 : pc.ch === 'R' ? t.f === pc.f || t.r === pc.r : true) };
     K.walk.select(-1, -1);
     out.tap.z2 = K.renderer.info.k;
     out.tap.cleared = K.walk.state.selected === null;
-    // The zoom buttons step k as a cut (in first: the headless phone sits at the floor, k 1).
-    document.getElementById('btnZoomIn').click();
+    const kg = K.walk.state.king;
+    K.walk.select(kg.f, kg.r);
+    out.tapKing = { selected: K.walk.state.selected, targets: K.walk.state.targets.length, allAdjacent: K.walk.state.targets.every((t) => Math.max(Math.abs(t.f - kg.f), Math.abs(t.r - kg.r)) === 1) };
+    K.walk.select(-1, -1);
+    // The zoom steps as a cut through the surface (the buttons are gone; + − and the wheel drive it).
+    K.walk.zoom(z0 + 1);
     out.zoomIn = K.renderer.info.k;
-    document.getElementById('btnZoomOut').click();
+    K.walk.zoom(z0);
     out.zoomOut = K.renderer.info.k;
-    // The pad and the keys drive inputs too.
+    // The pad: a TAP on the south arm while facing east turns the army south (a move); the keys: 'q' faces left.
     const t0 = K.walk.state.turn;
     { const pad = document.getElementById('walk-pad'); const pr = pad.getBoundingClientRect(); const px = pr.left + pr.width / 2, py = pr.top + pr.height * 0.86; const pev = (type) => pad.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: px, clientY: py, pointerId: 9, button: 0, buttons: 1 })); pev('pointerdown'); out.padLit = pad.dataset.dir; pev('pointerup'); }
-    await new Promise((r) => setTimeout(r, 50));
-    while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
+    await settle();
+    out.padTap = { turns: K.walk.state.turn - t0, facing: K.walk.state.facing };
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', bubbles: true }));
-    await new Promise((r) => setTimeout(r, 50));
-    while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
+    await settle();
     out.pad = { turns: K.walk.state.turn - t0, facing: K.walk.state.facing };
-    // A swipe on the map is a step in its direction: a pointer that travels 60 px right steps right (body-relative); a short one is a tap.
-    const t1 = K.walk.state.turn, k1 = { ...K.walk.state.king };
+    // A key chord: W and D together is one north-east input (facing east keeps east, so no pivot); the key held past the chord window and released.
+    const t2 = K.walk.state.turn, kq = { ...K.walk.state.king };
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 90));
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'w', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', bubbles: true }));
+    await settle();
+    const lastInput = K.walk.saved().turns.at(-1);
+    const chordInputs = K.walk.saved().turns.filter((i) => i.kind !== 'duel').slice(t2);
+    out.chord = { turns: K.walk.state.turn - t2, last: lastInput, allNE: chordInputs.every((i) => i.kind === 'step' && i.df === 1 && i.dr === 1), king: { ...K.walk.state.king }, from: kq, facing: K.walk.state.facing };
+    // A DRAG on the map looks around: the focus moves, no turn is spent; the next move brings the camera back.
+    const t1 = K.walk.state.turn;
     const el = document.getElementById('walk-board');
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const pe = (type, x, y) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 7, button: 0, buttons: 1 }));
-    pe('pointerdown', cx, cy); pe('pointerup', cx + 60, cy);
-    await new Promise((r) => setTimeout(r, 50));
-    while (K.walk.busy) await new Promise((r) => setTimeout(r, 20));
-    out.swipe = { turns: K.walk.state.turn - t1, king: { ...K.walk.state.king }, from: k1, facing: K.walk.state.facing };
+    const pe = (type, x, y, id = 7) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: id, button: 0, buttons: 1 }));
+    const before = K.walk.focus();
+    pe('pointerdown', cx, cy); pe('pointermove', cx + 30, cy + 10); pe('pointermove', cx + 60, cy + 20); pe('pointerup', cx + 60, cy + 20);
+    await settle();
+    out.drag = { turns: K.walk.state.turn - t1, look: K.walk.look(), focusBefore: before, focusAfter: K.walk.focus(), facing: K.walk.state.facing };
+    await K.walk.input({ kind: 'wait' });
+    out.drag.lookAfterMove = K.walk.look();
+    // A PINCH steps the zoom: two pointers spreading apart step k up, closing step it down.
+    const zp = K.walk.zoom();
+    pe('pointerdown', cx - 40, cy, 11); pe('pointerdown', cx + 40, cy, 12);
+    pe('pointermove', cx - 80, cy, 11); pe('pointermove', cx + 80, cy, 12);
+    out.pinchUp = K.walk.zoom();
+    pe('pointermove', cx - 20, cy, 11); pe('pointermove', cx + 20, cy, 12);
+    out.pinchDown = K.walk.zoom();
+    pe('pointerup', cx - 20, cy, 11); pe('pointerup', cx + 20, cy, 12);
+    out.pinchBase = zp;
     // Leave: the setup shows the resume card; resume: the same turn and facing.
     const snap = K.walk.state;
     K.walk.leave();
@@ -1012,16 +1047,21 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.info.fit === 'window' && wk.info.viewport === 'screen' && Number.isInteger(wk.info.k) && wk.info.k >= 1 && wk.info.crop === null, `the board is a window over the world at k ${wk.info.k} with no crop`);
   expect(wk.start.worldId === 'vaults-1' && wk.start.facing === wk.world.facing && wk.start.pieces.length === 6 && wk.start.turn === 0, `the run begins on the generated floor facing its start's way with the 3×2 kit (${wk.start.pieces.length} pieces, turn ${wk.start.turn})`);
   expect(wk.saved0 && wk.saved0.turn === 0, 'the run is saved at turn 0');
-  expect(wk.step.ok && wk.step.moves === 6 && wk.step.state.king.f === wk.start.king.f + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][0] && wk.step.state.king.r === wk.start.king.r + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][1] && wk.step.state.turn === 1, `a forward step moves all six one cell ahead (${wk.step.moves} moves, king ${wk.step.state.king.f})`);
-  expect(wk.turn.ok && wk.turn.state.facing === (wk.start.facing + 1) % 4 && wk.turn.facing === (wk.start.facing + 1) % 4 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.turn === 2, `a right turn faces a quarter round and costs a move; the camera turned with it (facing ${wk.turn.facing})`);
+  expect(wk.step.ok && !wk.step.pivot && wk.step.moves === 6 && wk.step.state.king.f === wk.start.king.f + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][0] && wk.step.state.king.r === wk.start.king.r + [[0, 1], [1, 0], [0, -1], [-1, 0]][wk.start.facing][1] && wk.step.state.turn === 1 && wk.step.boardFacing === 0, `a step the way the army faces moves all six one cell ahead, no pivot, the board north-up (${wk.step.moves} moves, king ${wk.step.state.king.f})`);
+  expect(wk.turn.ok && wk.turn.pivot && wk.turn.state.facing === (wk.start.facing + 1) % 4 && wk.turn.facing === 0 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.king.r === wk.step.state.king.r && wk.turn.state.turn === 2, `a face input pivots the army a quarter right for a move; the king stays and the board stays north-up (army facing ${wk.turn.state.facing}, board ${wk.turn.facing})`);
   expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
-  expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status), `a step into a wall is refused and says so (${wk.refused.reason}, turn ${wk.refused.turn})`);
-  expect(wk.save.schema === 'dck-run/1' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
-  expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === Math.max(wk.tap.z0, wk.tap.duelK) && wk.tap.duelK >= 1 && wk.tap.z2 === wk.tap.z0 && wk.tap.cleared, `a tapped piece snaps the zoom ${wk.tap.z0} → ${wk.tap.z1} (a 10×10 duel's k here: ${wk.tap.duelK}) with ${wk.tap.targets} moves marked; a tap elsewhere lets go and zooms back`);
-  expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom buttons step k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
-  expect(wk.pad.turns === 2 && wk.pad.facing === wk.start.facing && wk.padLit === '0,-1', `the d-pad (a press on its south arm lit ${JSON.stringify(wk.padLit)}) and the keys drive turns (${wk.pad.turns} turns; q turned left to facing ${wk.pad.facing})`);
-  // facing east, "right" is south: the king's r falls by one (or the step was refused by a wall, which still counts as handled: no turn).
-  expect(wk.swipe.turns <= 1 && (wk.swipe.turns === 0 || (wk.swipe.king.f === wk.swipe.from.f + [[1, 0], [0, -1], [-1, 0], [0, 1]][wk.swipe.facing][0] && wk.swipe.king.r === wk.swipe.from.r + [[1, 0], [0, -1], [-1, 0], [0, 1]][wk.swipe.facing][1])), `a swipe right on the map is one step right (${wk.swipe.turns} turn; king ${wk.swipe.from.f},${wk.swipe.from.r} → ${wk.swipe.king.f},${wk.swipe.king.r} facing ${wk.swipe.facing})`);
+  expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status) && wk.refused.pivots === 1 && wk.refused.facing === 1, `stepping east pivots the army east once and walks until a wall refuses and says so (${wk.refused.reason}, turn ${wk.refused.turn}, ${wk.refused.pivots} pivot)`);
+  expect(wk.save.schema === 'dck-run/2' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
+  expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === wk.tap.z0 && wk.tap.z2 === wk.tap.z0 && wk.tap.focusSame && wk.tap.cleared && wk.tap.chessOnly, `a tapped piece marks ${wk.tap.targets} chess moves with the zoom (${wk.tap.z0}) and the focus unmoved; a tap elsewhere lets go`);
+  expect(wk.tap.box && wk.tap.box.ok && wk.tap.box.rect.f1 - wk.tap.box.rect.f0 === 9 && wk.tap.box.rect.r1 - wk.tap.box.rect.r0 === 9, `the box the army must fit is a 10×10 on the king's rank, nobody behind him (${JSON.stringify(wk.tap.box?.rect)}, depth ${wk.tap.box?.minDy}…${wk.tap.box?.maxDy}, span ${wk.tap.box?.spread})`);
+  expect(wk.tapKing.selected !== null && wk.tapKing.targets > 0 && wk.tapKing.allAdjacent, `the king can be tapped and offers his own chess moves (${wk.tapKing.targets}, all adjacent)`);
+  expect(wk.zoomIn === wk.tap.z0 + 1 && wk.zoomOut === wk.tap.z0, `the zoom steps k as a cut (${wk.tap.z0} → ${wk.zoomIn} → ${wk.zoomOut})`);
+  expect(wk.padTap.turns === 1 && wk.padTap.facing === 2 && wk.padLit === '0,-1', `a tap on the pad's south arm (lit ${JSON.stringify(wk.padLit)}) turns the army south in place for one move (${wk.padTap.turns} turn, facing ${wk.padTap.facing})`);
+  expect(wk.pad.turns === 2 && wk.pad.facing === 1, `q faces left, south → east, for a move (${wk.pad.turns} turns, facing ${wk.pad.facing})`);
+  // With motion off (fx=0) a held chord chains a step per tick, so the count is the hold's; every input it made must be the one north-east step.
+  expect(wk.chord.turns === 0 || (wk.chord.allNE && wk.chord.last?.kind === 'step' && wk.chord.last.df === 1 && wk.chord.last.dr === 1 && wk.chord.facing === 1), `W and D together are one north-east input, and facing east stays east (${wk.chord.turns} turn(s), all north-east ${wk.chord.allNE}, last input ${JSON.stringify(wk.chord.last)})`);
+  expect(wk.drag.turns === 0 && wk.drag.look && (wk.drag.look.dx !== 0 || wk.drag.look.dy !== 0) && (wk.drag.focusAfter.dx !== wk.drag.focusBefore.dx || wk.drag.focusAfter.dy !== wk.drag.focusBefore.dy) && wk.drag.lookAfterMove === null, `a drag looks around without spending a turn (look ${JSON.stringify(wk.drag.look)}) and the next move brings the camera back`);
+  expect(wk.pinchUp > wk.pinchBase && wk.pinchDown === wk.pinchBase, `a pinch steps the zoom up and back down in whole steps (${wk.pinchBase} → ${wk.pinchUp} → ${wk.pinchDown})`);
   expect(wk.leave.phase === 'setup' && wk.leave.resume && /turn/.test(wk.leave.resumeText), `leaving keeps the run: the setup offers "${wk.leave.resumeText}"`);
   expect(wk.resume.phase === 'walk' && wk.resume.sameTurn && wk.resume.sameFacing && wk.resume.sameKing, 'resuming lands on the same turn, facing and king');
   expect(wk.importBad.ok === false && /dck-run\/0/.test(wk.importBad.note), `a save of another schema is refused with one line (${wk.importBad.note})`);
@@ -1118,7 +1158,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.ended = await K.walk.concede('black');
     out.overlay = { hidden: document.getElementById('overlay').hidden, title: document.getElementById('overlay-title').textContent, walkOut: document.getElementById('btnWalkOut').hidden, label: document.getElementById('btnWalkOut').textContent, again: document.getElementById('btnAgain').hidden, redeal: document.getElementById('btnOverlayRedeal').hidden, menu: document.getElementById('btnMenu').hidden, undo: document.getElementById('btnOverlayUndo').hidden };
     document.getElementById('btnWalkOut').click();
-    for (let i = 0; i < 100 && K.app.phase !== 'walk'; i++) await new Promise((r) => setTimeout(r, 30));
+    for (let i = 0; i < 200 && (K.app.phase !== 'walk' || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 30));
     const st = K.walk.state;
     const saved = K.walk.saved();
     out.after = { phase: K.app.phase, screen: !document.getElementById('screen-walk').hidden, pieces: st.pieces.length, kingOnFloor: K.walk.cell(st.king.f, st.king.r)?.v === 'K', lower: st.rows.join('').replace(/[^a-z]/g, '').length, turn: st.turn, turns: saved.turns.length, last: saved.turns.at(-1), pending: saved.pending, debris: !!saved.floors[saved.floor]?.debris, status: document.getElementById('walk-status').textContent, session: K.app.session, duel: !!K.app.duel };

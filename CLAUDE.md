@@ -107,7 +107,7 @@ cells × 5 layers cannot carry the 100×100 overworld.
 terrain, debris over a ruin's stub, decor and the doorway over the
 debris, marks under, the tall things row by row far-to-near — props and
 pieces interleaved — marks over, the 3×5-font coordinates, the arrows as
-PIXEL ART, the flight's pixels, a piece in mid-slide), ONE blit at k =
+PIXEL ART, the flight's pixels; a piece in mid-slide is in the tall pass by its feet since 2026-09-10), ONE blit at k =
 ⌊device width ÷ (16 × files)⌋ (`integer`, the board centred in whole
 device pixels) or the exact quotient (`fill`), on-grid slides in whole
 native pixels, terrain fx with held end frames, the rumble as blit
@@ -554,7 +554,7 @@ become PIECE FACTORIES feeding the same assembler (a generated room is a
 tagged piece like a hand-authored one), so both roads meet and the
 library never runs dry; styles = which tags a floor draws from + which
 plan shapes. NEXT, IN THE DESIGNER'S ORDER: (1) a session on THE
-CONTROLS AND THE CAMERA (theirs to lead; the open items on record: the
+CONTROLS AND THE CAMERA — ✅ HELD 2026-09-09, the paragraph below (theirs to lead; the open items on record: the
 turn as a cut with no animation, the zoom as ± cuts and no pinch, the
 walk's default zoom fitting fifteen tiles, the d-pad's held repeat and
 the swipe, the tap-a-piece snap-zoom and its target pick, the duel box
@@ -563,6 +563,245 @@ on a phone with the dimmed dungeon beside it only, the desktop layout
 LAYER for the generator (the lattice, the tags, the plan graph, exact
 seams), the arenas retagged, pieces authored for assembly in batches;
 (3) milestone 6.
+
+**THE CONTROLS AND CAMERA CONVERSATION ✅ HELD 2026-09-09 (designer-led;
+brief §5.1 carries the EIGHTEEN RULINGS in full — read them there before
+touching the walk; this is the digest). THE RULINGS: (1) the camera is
+NORTH-UP on the walk, always — it turns for a duel and back after, each
+cut a blackout wipe; the turn buttons are gone. (2) THE D-PAD TURNS THE
+ARMY "like a typical third person video game": inputs are WORLD-relative,
+the FACING FOLLOWS THE STEP (cardinal → that way; a diagonal keeps the
+facing when it is one of its components, else the perpendicular one,
+never about-face), a TAP in a new direction turns in place (a move), a
+HOLD walks. (3) a duel starts WITH THE PIECES WHERE THEY STAND — nothing
+summoned, 4c's stamp-is-the-pattern retired. (4) nobody is ever behind
+the king — by the pivot and the box invariant, never by refusing a duel.
+(5) NO CAMERA JERK on a tap; the snap-zoom is gone. (6) PINCH TO ZOOM,
+quantized to whole k, the wheel on a desktop, no zoom buttons. (7) WASD /
+arrow DIAGONALS by held-key chords. (8) POKÉMON FEEL: tap turns, hold
+walks, seamless chained steps with one buffered input, a wall bump, the
+battle wipe. (9) THE GAP IS BETWEEN THE PAWN LINES (the camp lines),
+never the front-most pieces. (10) THE KING MOVES BY HIS OWN CHESS MOVE on
+the walk, captures included, and the army takes its auto-formation move
+with it. (11) EVERY INTERACTION WITH THE ENVIRONMENT IS AN ACTUAL CHESS
+MOVE: a manual move offers chess moves only (the king-step option lives
+inside the auto move alone), `^` is taken only by a chess move and never
+by the d-pad, a front pawn cannot open the door dead ahead ("that is the
+puzzle"), enemy pieces are never captured on the map. (12) THE ANCHOR IS
+THE FORMATION'S FRONT-CENTRE, NOT THE KING (designer: "I'd want the pawns
+to file in first and the king to go last"; the back line will be
+editable): the d-pad moves that cell, it must be floor, every piece incl.
+the king walks to its slot, the camera follows the formation's centre.
+(13) CATCH-UP: two steps a turn when the path is longer than one, three
+while behind the king — a pawn walks at the king's own speed and could
+never make up a lost step (the designer's "half the army, usually pawns,
+trailing way behind"). (14) TURNS PIVOT, WALKS WALK: a facing change
+wheels the formation in place about the king, every piece sliding
+straight to its turned cell (molded), one beat — a teleport dressed as a
+slide, because an about-face in a three-wide corridor is a sliding
+puzzle walking cannot solve. (15) THE ARMY ALWAYS FITS THE BOX — a 10×10
+with the king on its first row, "not necessarily centered", slid along
+his rank — after every input: a manual move that would break it is not
+offered (the box was outlined while a piece was selected until 2026-09-10 — designer: "get rid of the big blue square when I make chess moves during exploration" — the filter stays, the outline is gone), a STUCK piece (no
+path by its OWN moves — a knight beyond a thin wall has its hop back and
+is not stuck) is teleported to its slot ("who gives a fuck"), nothing is
+ever sealed off (the walk-out moves the whole army to the nearest floor
+that holds it). (16) THE DROP: the box slides to hold every piece,
+centred on the formation when there is slack; the enemy molds across the
+pawn-line gap and around the player's pieces; the one refusal is a
+position decided at load; milestone 6's trigger is four AXES on the king.
+(17) DRAG TO LOOK AROUND, the camera gliding back on the next army
+input; the swipe-to-step is gone. (18) the knight keeps its hop over
+walls. BUILD ORDER: the CONTROLS AND CAMERA PR (1, 2, 5–8, 10–15, 17, 18
+— the movement model is inseparable from the controls; branch
+`claude/exploration-controls-camera-714e6f`), then the DUEL START PR
+(3, 9, 16: barrier.mjs + armygen.mjs buildMatchup + the walk-out).
+Supersedes in this file: milestone 4b's "a rotation costs a move" (a
+tap-to-turn still does; a step's turn is the step's), the body-relative
+d-pad and swipe in 4c's HUD note, the snap-zoom and `duelZoomFor`, the
+walk's "king centred" camera, and — for the walk only — "the camera
+turns with the army".**
+**THE CONTROLS PR ✅ BUILT 2026-09-09, the same session** (`play/README.md`
+§ "The canvas board", milestone 4d — the record; `play/js/army.mjs`
+rewritten, main.mjs § THE WALK rewritten). Rulings 1, 2, 5–8, 10–15, 17
+and 18 are live: the anchor is the formation's front-centre (`pattern.
+anchor`, `army.at`), inputs are world-relative (`dck-run/2`), the facing
+follows the step (`facingOfStep`), turns pivot (`pivotPlacement`), walks
+walk with catch-up (front rows first, the king last, stayers and
+finals as obstacles, one piece per doorway cell per turn, `via`
+waypoints), the box invariant teleports the stuck and the strays
+(`boxOf`), manual moves are chess moves only (`manualMoves`), the king's
+move is a step the army follows; the board is north-up with the wipe
+around the duel's cuts, the camera on the formation's centre, the pad
+taps-to-turn / holds-to-walk with chained steps and a buffered input,
+key chords, drag-to-look, pinch and wheel zoom, the wall bump, the box
+outline on selection. Gates: test-army 97, selftest 46/46, ui-smoke 241
+ok, test-barrier 108, test-world 125, test-dungeon 96,
+test-debris 60, test-camera 80, test-logreport 47. THE FIRST WALK'S
+VERDICT, the same day (three screenshots: "the king is lagging behind
+sometimes… without manual moves"; "bumping into single blocks the army
+should just be able to flow around"), FIXED the same day: the anchor may
+stand one cell into stone beside reachable floor (`anchorMay` — a crate
+or a pillar is flowed around) and "blocked" is a step that moves nobody;
+a catching-up path prefers one that does not cut through a comrade's
+slot (the king was being starved of his own cell); the king hurries
+three, ties toward the anchor, and THE KING'S LEASH (`KING_LEASH` 3)
+turns a step he could not follow into a REGROUP (the anchor holds, the
+walk runs, nothing refused). test-army 106. THE SECOND WALK'S VERDICT
+(designer, the same day, four screenshots on Vaults 4: "It mostly works…
+I'm still seeing the king in weird spots despite seeing him make
+multiple moves… I feel the pieces should at least be able to stay
+adjacent if I'm only using d-pad movement"), MEASURED then fixed the
+same day with a new instrument, `phase0/harness/walk-stress.mjs` (random
+d-pad walks over the generated fixtures, `--hold` a thumb on one arm;
+the king's lag to his slot, his distance to the nearest comrade, the
+army's connectivity, teleports by reason, the worst turns as maps,
+`--trace <turn>`): the teleports WERE the weird spots — 4842 in 11 000
+random turns, almost all the box rule firing after the KING STEPPED
+DIAGONALLY AHEAD of a comrade still queued at a door, which the rule
+then read as "behind him" and threw across the map. Now (army.mjs, all
+in the walk itself): THE KING NEVER OVERTAKES a comrade and no comrade
+ENDS behind him (a way round a crate pair may dip `DETOUR` 2 cells
+behind him within the turn), so the box row is kept by the walk and the
+teleport is only for the truly stuck; a piece's plan HOLDS across the
+planning passes unless a re-plan ends strictly nearer (the king and a
+rook waiting on each other had swapped plans every pass); a comrade who
+has not planned yet is not an obstacle (a pawn planned before the pawn
+in front of it was detouring round the back of the formation); a way
+round the comrades longer than the way through them by `DETOUR_MAX` 3
+is not walked — the piece QUEUES up to the crowd; THE TARGETS OF A WALK
+ARE ONE CONNECTED SET (`assignTargets`: the king's first, slots as they
+are, the rest molded BESIDE a target already given, never behind the
+king's cell, a cell behind his TARGET costing `BEHIND_COST` 2 per rank —
+a pawn placed across a wall's corner had walked a parallel corridor for
+twenty turns with the king forbidden to overtake it; the pivot places by
+the same rule); STUCK means no way to the target that does not end
+behind the king (a pawn in a pocket beside him rejoins by teleport); and
+`KING_LEASH` is 2. Measured (held cardinal walks, 11 100 turns): the
+king never more than two behind his slot, two on 17% of turns, two or
+more from every comrade on 5.7%, 0–8 teleports a world (stuck or a
+pivot's leftovers); random walks with diagonals: lag three gone,
+teleports 4842 → 9–15 a world, regroups 588 → 90–130. test-army 106 (the
+chain fixture's rook now stands where every pattern's royal-rearmost
+rule puts it), selftest 46/46, ui-smoke 287 ok (its key-chord check
+judges the chord's inputs, not their count — with motion off a held
+chord chains a step per tick, and the north-east step it makes was
+refused on the old build), the other Node gates unchanged. THE THIRD
+WALK'S VERDICT (designer, the same day, five screenshots of "regrouping"
+turns with the army spread round a wall stub: "Still getting odd
+positioning sometimes. Maybe we're overthinking it. The whole goal of
+this is to make it so when moving with just a d-pad the army should
+never be split. They should stay in a battle ready cluster as much as
+possible") made THE CLUSTER THE INVARIANT: after every d-pad turn the
+army is ONE BODY — every piece TOUCHING another by chains, a diagonal
+counting only when one of its orthogonal cells is crossable (a piece
+across a wall's corner is not in the body — that corner was how pieces
+slipped onto the far side of thin walls). army.mjs: `settleBody` judges
+the walk's end; a laggard that could not move at all while the body went
+on is STUCK and teleports beside the body ("just teleport pieces that
+get stuck somewhere") unless a comrade was what stopped it (`queued`,
+waited for); THE RETRACTION (`retractSplit`) gives back last steps until
+the army is one body — the outside pieces' steps that did not bring them
+nearer, then the body's own, THE KING FIRST — so the army waits for a
+straggler still on its way; the second verdict's never-overtake planning
+rule is RETIRED (it froze a run 1800 turns with two pieces level with the
+king in a nook): the king plans freely, LAST in the order again, and the
+retraction gives his steps back only when a comrade would end BEHIND him
+(`behindKing`: behind his row and not touching — one rank behind but
+touching, the queued rook at a door, is tolerated by walk and box loop
+alike; the drop molds it); a plan made while a comrade still meant to
+leave its cell is void once that comrade stays. Measured (held cardinal
+walks, 10 300 turns): split on 0.2% of turns, zero collisions, the king
+touching a comrade on every turn, 4–32 teleports a fixture; random walks
+with diagonals: split on 4–8 turns a fixture. test-army 115 (+ THE
+CLUSTER block), `walk-stress.mjs` grew `--teleports` / `--refused`
+samples, a collision check and the would-be targets on a refused traced
+turn; selftest 46/46, ui-smoke 331 ok. THE FOURTH WALK'S VERDICT (designer,
+2026-09-10, five screenshots, every one "blocked" with open floor ahead:
+"Alright they're much better at staying together. but now I'm getting
+blocked in a lot of places I feel shouldn't be a problem"), MEASURED then
+fixed the same day (7–11% of held cardinal inputs refused by the walk;
+`--refused N` now prints the refused step's stage traces and a `pieces:`
+line that rebuilds the position, `--lag N` the king's worst lags, and the
+maps show `%` / `x` for an anchor / slot one cell into stone): the greedy
+retraction is REPLACED BY THE ROPE (`ropeSettle`: the army settled from
+the king outward, each piece taking the farthest cell on its walk path
+adjacent to a piece already laid, a FOLLOW step for one with nothing to
+touch, the chain giving back a step only then, a deferral and an
+EXTENSION pass so the lay is order-blind); THE BODY IS EIGHT-ADJACENT
+(`adjacent`, corners included — the corner-free `touching` now only says
+where a target may be MOLDED, and the target set's connectivity and its
+bridging re-mold use the body's adjacency, so a set leads through a
+crate-and-wall gap by its corner cell instead of collapsing into a swap);
+a molded target ties toward the ANCHOR; TWO RANKS behind the king is the
+walk's tolerance (`behindKing`, read alike by the box loop, the drop and
+`manualMoves`, which offers a move that leaves the box no worse); a
+REGROUP THAT MOVES NOBODY yields the step's own whole walk with the
+anchor still held (it never runs ahead of the army). Measured (held
+cardinal walks, 11 000 turns): walk refusals 37–51 a fixture (104–168),
+one body on EVERY turn, zero collisions, the king never more than three
+behind his slot, 3–7 teleports; random walks with diagonals: walk
+refusals 28–47 (147–163), split on 0–4 turns a fixture, 6–24 teleports;
+every refused position replayed flows, the crate pair, the crate-and-wall
+corner, the corner-only pocket and the one-wide gap included. test-army
+115, selftest 46/46, ui-smoke 280 ok (its east walk runs 80 inputs to
+the ring; its box check reads the tolerance). THE FIFTH WALK'S VERDICT
+(designer, 2026-09-10, five screenshots: "Alright we're almost there.
+I'm now getting situations where pieces end up behind the king") — SO
+RULING 4 IS STRICT: nobody behind the king's rank after any input, the
+one- and two-rank tolerances retired (`behindKing` is `dy < 0`; `boxOf`
+whole after every turn; `manualMoves` filters on it; the harness counts
+BEHIND THE KING turns, `--behind N` samples them; test-army asserts the
+box whole through its walks). Paid for in army.mjs, each rule replayed:
+THE KING WAITS (the rope gives back his steps for a comrade that would
+end behind him; a piece the chain pulled to zero is not "stuck"); a
+target is never molded behind the king's TARGET; THE KING'S PLAN NEVER
+HOLDS ACROSS PASSES (released each pass as "he stays", so the comrades
+take the cells they need and he plans round them, last); THE LAST
+RESORT before a refusal, only where the strict rope collapsed a walk
+that had moves — THE KING STEPS ASIDE (a walk with him pinned one king
+step level or back, his cell given to the comrades who could move only
+through it), then THE BREAKER (the comrade he waited for in vain is
+stuck and teleports beside the body); no swaps in the rope, a stuck
+teleport never on its own cell, a shared cell stays taken, a detached
+piece rallies; the walk's STUCK is "no way at all"; THE QUEUE SWAP (a
+comrade on its own target in a piece's way trades targets with it); THE
+ANCHOR enters stone only beside or ahead of floor, and a second stone
+step in a row SNAPS it to the floor beside. Measured (3000 inputs a
+fixture, 22 400 turns): nobody behind the king on any turn but one (a
+pivot in a two-wide nook — the residue), walk refusals 0–3 a fixture
+(104–168 before the fourth walk), 0–7 teleports, one body on every turn,
+zero collisions, the king within three of his slot, 14–18% of inputs a
+regroup (the king waiting for the file). test-army 119, selftest 46/46,
+ui-smoke 259 ok. THE DESIGNER'S VERDICT ON THIS
+BUILD (2026-09-10): "Alright this will do for now, but we should
+probably take another look at this eventually" — the branch MERGES AS
+IT STANDS — and one more ask the same day, DONE: "get rid of the big blue
+square when I make chess moves during exploration" — THE BOX OUTLINE on a
+selected piece is gone (`setCellMarks` lost `frame`, canvas-board its
+`BOXLINE` edge painter; the manual moves still filter on the box,
+unseen); and THE SLIDE ORDER, the same day (designer: "when I move
+with the d-pad, tall pieces like the king, their heads briefly render
+under the piece to the north" — a piece in mid-slide painted LAST, over
+everything, and the walk's arrivals in plan order with the king first,
+so a comrade north of him painted over his head for the slide's length;
+a slider now paints in the tall pass by where its feet are that frame,
+duel slides included — canvas-board `#slideAt` / `#cellSlideAt`). THE
+REVISIT LIST is on record in README milestone 4d: the
+REGROUP RATE (14–18% of held inputs a turn the king spends waiting for
+the file — the army standing still on a held pad), the pivot in a
+two-wide nook (the one "behind" residue), a diagonal input from inside
+a one-wide north–south slot still refused, and the anchor refused at
+dead ends and the map's edge (143–265 a fixture, the map's own).
+`phase0/harness/walk-replay.mjs` rebuilds any position from the
+harness's `pieces:` line and replays one input with planTurn's stage
+traces, or holds it N turns printing the maps — read a screenshot's
+position into it before touching army.mjs again. NEXT: the DUEL START PR
+(rulings 3, 9, 16 — barrier.mjs `planBox` reading the pieces where they
+stand, `buildMatchup` measuring the gap between the camp lines and
+molding the enemy around the player's pieces, the box slid to hold the
+army, the walk-out keeping survivors in place and moving a whole army out
+of a sealed pocket), then milestone 6. THE PHONE VERDICT IS THE GATE.**
 
 **MILESTONE 6 — ENEMIES + LOS + THE TRIGGER, on generated floors: what the
 conversation SETTLED and what it only PROPOSED.** Settled (designer): the
@@ -573,7 +812,10 @@ WORLD direction (his facing does not gate it: an enemy behind him can
 catch him; at the drop the army turns to the axis as a cut and the
 pattern stamps forward as 4c does — flanking stays §11), his rank the
 box's row 0, CENTRED on his file (four to the left, five to the right —
-nothing slides, designer 2026-09-09); a duel
+nothing slides, designer 2026-09-09 — SUPERSEDED the same day by the
+controls session's ruling 16: the box SLIDES along his rank to hold every
+piece and centres the formation when there is slack; four AXES, not four
+placements); a duel
 starts the moment a HUNTING enemy's king stands on the FAR ROW of one —
 anywhere on it: brief §5.3's band alignment is back and 4c's strict
 colinearity retired, read from "both kings in the right rows" and NOT
@@ -1521,17 +1763,35 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   world session, the walk-out, the run's ledger). Node gate
   `test-barrier.mjs`.
 - `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
-
-  (Phase 2 milestone 4b, 2026-09-08): brief §5.1's one movement rule as
-  a pure module (the pattern, the move generator on the world grid, the
-  BFS targets, the turn planner; Node gate `test-army.mjs`), the run save
-  (one object per run, `dck-run/1`, export / import as a file, no
-  backward compatibility), and the fixtures in `play/worlds/` (GENERATED
-  floors since milestone 5 — the hand-built w01 and the seeded w02 were
-  retired 2026-09-08); main.mjs § THE
-  WALK is the page (`#screen-walk`: the pad, the turns, the zoom, the
-  save; `?world=` / `?run=resume` / `?save=`); `play/README.md` § "The
-  canvas board", milestone 4b.
+  (Phase 2 milestone 4b, 2026-09-08; REWRITTEN 2026-09-09 for the controls
+  and camera session, brief §5.1's eighteen rulings): the movement model
+  as a pure module — the pattern with its front-centre ANCHOR, the army's
+  `at`, world-relative inputs, the facing following the step, the PIVOT on
+  a turn, the walk with CATCH-UP (front rows first, the king last), the
+  BOX invariant with its stuck / stray teleports, manual moves as chess
+  moves only, the king's move the army follows, and since the second
+  walk's verdict (2026-09-09) THE ROW KEPT BY THE WALK ITSELF — the king
+  targets one connected set (`assignTargets`), a plan that holds across
+  the passes, and since the third verdict THE CLUSTER INVARIANT — one
+  body after every d-pad turn (`settleBody`, `retractSplit`, `isClustered`,
+  the stuck teleport beside the body), and since the fourth verdict
+  (2026-09-10) THE ROPE (`ropeSettle`: the army settled from the king
+  outward with a follow step, a deferral and an extension pass; the body
+  eight-adjacent, a target never molded across a corner, two ranks behind
+  the king tolerated, a regroup that moves nobody yielding the step's walk
+  with the anchor held), and since the fifth verdict (2026-09-10) NOBODY
+  BEHIND THE KING, strictly (the king waits, steps aside as the last
+  resort — `sidesteps` — before the rope's breaker teleports the comrade
+  he waited for in vain; the queue swap; the anchor snapping to the floor
+  beside a wall) (Node gate `test-army.mjs` 119;
+  `phase0/harness/walk-stress.mjs` the cohesion instrument, `walk-replay.mjs` the position replayer); the run
+  save (one object per run, `dck-run/2`, export / import as
+  a file, no backward compatibility); the fixtures in `play/worlds/`
+  (GENERATED floors since milestone 5). main.mjs § THE WALK is the page
+  (`#screen-walk`: the north-up board, the tap-to-turn / hold-to-walk
+  pad, key chords, drag, pinch, the wipe, the bump; `?world=` /
+  `?run=resume` / `?save=`); `play/README.md` § "The canvas board",
+  milestones 4b and 4d.
 - `play/js/world.mjs` — THE WORLD (Phase 2 milestone 4a, 2026-09-08): the
   floor's data (any size, stage schema 2 with `@` the start and digits the
   enemy spawns; terrain / pieces / skins / the Director's layers; a save
@@ -1615,6 +1875,8 @@ node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only
 node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop transform against brute force at every facing, the world's read / write paths, a world file, a save round trip; Node only
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
+node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4] [--behind 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone), the turns with a piece BEHIND THE KING (must be none; --behind samples them); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
+node harness/walk-replay.mjs <world> <df,dr> [--hold N] [--trace] [pieces: K1@f,r R2@f,r … anchor f,r facing n]  # THE WALK'S REPLAYER: rebuild a position from a walk-stress pieces: line (or start at the fixture's start), replay one input printing every stage of planTurn's trace (targets, vias, stuck, queued), or hold it N turns printing the map, the plan and the pieces: line after each — read a screenshot's position into it before touching army.mjs
 node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 

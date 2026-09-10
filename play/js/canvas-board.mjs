@@ -47,8 +47,10 @@
 //               paints over the piece behind it, the dim over the world
 //               outside the crop, then the marks over the pieces, the
 //               crop's edge coordinates in a 3×5 pixel font, the debris
-//               FLIGHT's pixels (particles.mjs, through drawFlight), and a
-//               piece in mid-slide last. Nothing in it has a fractional
+//               FLIGHT's pixels (particles.mjs, through drawFlight). A
+//               piece in mid-slide paints in the tall pass by where its
+//               feet are that frame (it painted last, over everything,
+//               until 2026-09-10). Nothing in it has a fractional
 //               coordinate: buffer coordinates are integers.
 //   THE BLIT    one drawImage of the buffer (or the visible part of it)
 //               onto the screen canvas at scale k, smoothing off. The
@@ -140,6 +142,7 @@ const COORD_SHADOW = 'rgba(0,0,0,0.6)';
 const JITTER = [[0, 0], [-1, 1], [1, -1], [-1, 0], [1, 1], [0, 0]];
 /** The rumble's blit jitter in native pixels by phase (style.css board-quake). */
 const RUMBLE = [[0, 0], [-1, 0], [1, 0], [-1, 0], [1, 0], [0, 0]];
+const NUDGE = [1, 2, 2, 1, 0]; // the wall bump's lean, in tile pixels, over its beat
 /** The window's margin beyond the visible tiles (viewport 'screen'). */
 const MARGIN = 1;
 
@@ -826,7 +829,10 @@ export class CanvasBoard {
     this.invalidate();
   }
 
-  /** Cell-keyed marks for the walk: the selected cell, its targets [{ f, r, capture }]. */
+  /** Cell-keyed marks for the walk: the selected cell and its targets [{ f, r,
+   *  capture }]. (THE BOX's outline — a `frame` rectangle one pixel wide —
+   *  was a mark here from 2026-09-09 until the designer's 2026-09-10 "get rid
+   *  of the big blue square when I make chess moves during exploration".) */
   setCellMarks({ selected = null, targets = [] } = {}) {
     this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])) };
     this.invalidate();
@@ -1110,7 +1116,7 @@ export class CanvasBoard {
   async animateArrivals(moves, { ms = 200 } = {}) {
     if (!ms || !moves.length) return;
     const t0 = now();
-    const list = moves.map((m) => ({ ...m, t0, ms }));
+    const list = moves.map((m) => ({ ...m, path: [m.from, ...(m.via ?? []), m.to], t0, ms }));
     this.cellSlides = [...(this.cellSlides ?? []), ...list];
     for (const m of list) this.hiddenCells.add(this.world.idx(m.to.f, m.to.r));
     this.#run();
@@ -1144,6 +1150,15 @@ export class CanvasBoard {
     this.#run();
   }
 
+  /** THE WALL BUMP (2026-09-09): the blit leans `dx`, `dy` (screen
+   *  direction, −1 / 0 / 1) by up to two native pixels and comes back over
+   *  `ms` — a refused step reads as the army bumping the wall. */
+  nudge(dx, dy, ms) {
+    if (!ms || (!dx && !dy)) return;
+    this.nudging = { t0: now(), ms, dx: Math.sign(dx), dy: Math.sign(dy) };
+    this.#run();
+  }
+
   /** The FEN cell of a square: a piece letter, '*', '^' or null. */
   #letterAt(sq) {
     const c = this.cells.get(sq);
@@ -1156,6 +1171,7 @@ export class CanvasBoard {
     const t = now();
     if (this.slides.length || this.flight || this.cellSlides.length || this.pan) return true;
     if (this.rumbling && t < this.rumbling.t0 + this.rumbling.ms) return true;
+    if (this.nudging && t < this.nudging.t0 + this.nudging.ms) return true;
     for (const f of this.fx.values()) if (!f.done && t < f.t0 + f.ms) return true;
     return false;
   }
@@ -1237,8 +1253,9 @@ export class CanvasBoard {
     this.#blit();
     for (const r of this.paintWaiters.splice(0)) r();
     if (this.animating) this.invalidate();
-    else if (this.rumbling) {
+    else if (this.rumbling || this.nudging) {
       this.rumbling = null;
+      this.nudging = null;
       this.invalidate(); // one clean frame after the shake
     } else this.loop = false;
   }
@@ -1260,6 +1277,11 @@ export class CanvasBoard {
       const [dx, dy] = RUMBLE[Math.min(RUMBLE.length - 1, Math.floor(u * RUMBLE.length))];
       jx = dx * Math.round(this.k);
       jy = dy * Math.round(this.k);
+    } else if (this.nudging) {
+      const u = Math.min(1, (now() - this.nudging.t0) / this.nudging.ms);
+      const lean = NUDGE[Math.min(NUDGE.length - 1, Math.floor(u * NUDGE.length))];
+      jx = this.nudging.dx * lean * Math.round(this.k);
+      jy = this.nudging.dy * lean * Math.round(this.k);
     }
     const k = this.k;
     const b = this.blitRect;
@@ -1548,14 +1570,31 @@ export class CanvasBoard {
         g.fillRect(s.x, s.y, T, T);
       }
     }
-    // 2. the tall things, far row first: props and pieces interleaved by screen row (the dungeon's, faded)
-    for (const list of byRow) for (const s of list) {
-      if (dim && !s.sq) {
-        g.globalAlpha = 0.45;
-        this.#paintTall(s, t);
-        g.globalAlpha = 1;
-      } else this.#paintTall(s, t);
+    // 2. the tall things, far row first: props and pieces interleaved by
+    //    screen row (the dungeon's, faded) — and the pieces IN MID-SLIDE
+    //    among them, each by where its feet are this frame (a slider used
+    //    to paint last, over everything, and the walk's arrivals in their
+    //    plan's order, the king first: a tall king sliding beside the piece
+    //    north of him lost his head under it for the slide's length —
+    //    designer 2026-09-10, "their heads briefly render under the piece
+    //    to the north"). A slider on a row's own line paints after that row.
+    const sliding = [];
+    for (const s of this.slides) { const p = this.#slideAt(s, t); sliding.push({ x: p.x, y: p.y, paint: () => this.#paintSlideAt(s, p.x, p.y) }); }
+    for (const s of this.cellSlides) { const p = this.#cellSlideAt(s, t); if (p) sliding.push({ x: p.x, y: p.y, paint: () => this.#paintPiece(s.ch, p.x, p.y) }); }
+    sliding.sort((a, b) => a.y - b.y || a.x - b.x);
+    let si = 0;
+    for (let row = 0; row < byRow.length; row++) {
+      const lineY = H + row * T;
+      while (si < sliding.length && sliding[si].y < lineY) sliding[si++].paint();
+      for (const s of byRow[row]) {
+        if (dim && !s.sq) {
+          g.globalAlpha = 0.45;
+          this.#paintTall(s, t);
+          g.globalAlpha = 1;
+        } else this.#paintTall(s, t);
+      }
     }
+    while (si < sliding.length) sliding[si++].paint();
 
     // 3. marks over the pieces (the arena's by square, the walk's by cell)
     for (const list of byRow) for (const s of list) if (s.sq) this.#paintMarksOver(s);
@@ -1575,20 +1614,35 @@ export class CanvasBoard {
       }
       g.globalAlpha = 1;
     }
-    // 6. pieces in mid-slide, on top
-    for (const s of this.slides) this.#paintSlide(s, t);
-    for (const s of this.cellSlides) this.#paintCellSlide(s, t);
   }
 
-  /** A walk's arrival: the letter drawn between its old and new cells. */
-  #paintCellSlide(s, t) {
+  /** A walk's arrival this frame: the buffer origin of the sliding letter
+   *  between its old and new cells, or null when it is off the buffer. */
+  #cellSlideAt(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
-    const a = this.#tileOf(s.from.f, s.from.r), b = this.#tileOf(s.to.f, s.to.r);
-    const oa = this.#originOfTile(a.col, a.row), ob = this.#originOfTile(b.col, b.row);
     const e = ease(u);
-    const x = Math.round(oa.x + (ob.x - oa.x) * e), y = Math.round(oa.y + (ob.y - oa.y) * e);
-    if (x < -2 * T || y < -2 * T || x > this.bufW + T || y > this.bufH + T) return;
-    this.#paintPiece(s.ch, x, y);
+    // Along the path (a catch-up walk carries waypoints, so a slide goes
+    // AROUND a crate, never through it): the eased progress spread over the
+    // segments by their length.
+    const pts = (s.path ?? [s.from, s.to]).map((c) => { const tl = this.#tileOf(c.f, c.r); return this.#originOfTile(tl.col, tl.row); });
+    const lens = [];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); lens.push(l); total += l; }
+    let x = pts[pts.length - 1].x, y = pts[pts.length - 1].y;
+    if (total > 0) {
+      let d = e * total;
+      for (let i = 0; i < lens.length; i++) {
+        if (d <= lens[i] || i === lens.length - 1) {
+          const tt = lens[i] > 0 ? Math.min(1, d / lens[i]) : 1;
+          x = Math.round(pts[i].x + (pts[i + 1].x - pts[i].x) * tt);
+          y = Math.round(pts[i].y + (pts[i + 1].y - pts[i].y) * tt);
+          break;
+        }
+        d -= lens[i];
+      }
+    }
+    if (x < -2 * T || y < -2 * T || x > this.bufW + T || y > this.bufH + T) return null;
+    return { x, y };
   }
 
   /** Arena px (the arena's own north-up view, y down from its top rank) →
@@ -1792,11 +1846,16 @@ export class CanvasBoard {
     g.globalAlpha = 1;
   }
 
-  #paintSlide(s, t) {
+  /** A duel slide this frame: the buffer origin of the sliding sprite between its squares. */
+  #slideAt(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
     const a = this.#origin(s.from), b = this.#origin(s.to);
     const e = ease(u);
-    const x = Math.round(a.x + (b.x - a.x) * e), y = Math.round(a.y + (b.y - a.y) * e);
+    return { x: Math.round(a.x + (b.x - a.x) * e), y: Math.round(a.y + (b.y - a.y) * e) };
+  }
+
+  /** The sliding sprite of a duel slide, drawn at a buffer origin (#slideAt). */
+  #paintSlideAt(s, x, y) {
     const k = this.#kindOfSq(s.from);
     if (k?.furniture) {
       if (this.#edgeOn(k)) {
