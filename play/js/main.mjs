@@ -3352,8 +3352,10 @@ $('btnMenu').addEventListener('click', () => {
 // move), a hold walks it, the steps chained with no seam and one input
 // buffered (ruling 8); a refused step is a wall bump. A tapped piece's
 // chess moves are marked at the current zoom and the camera stays (ruling
-// 5); the box the army must always fit is outlined while a piece is
-// selected (ruling 15). DRAG the map to look around — the camera glides
+// 5); the box the army must always fit is NOT outlined — it was, until the
+// designer's 2026-09-10 "get rid of the big blue square when I make chess
+// moves during exploration" — the manual moves still filter on it (ruling 15).
+// DRAG the map to look around — the camera glides
 // back on the next move (ruling 17); PINCH, the wheel or + − zoom in whole
 // steps (ruling 6). No turn buttons, no zoom buttons, no swipe. Every turn
 // saves the run.
@@ -3602,7 +3604,7 @@ async function walkInput(input) {
 }
 
 /** A tap on the world: select one of our pieces (its chess moves marked at
- *  the current zoom, the camera unmoved, the box outlined), tap a target to
+ *  the current zoom, the camera unmoved, no box outline), tap a target to
  *  move it, tap elsewhere to let go. The king included (ruling 10). */
 function onWalkCellTap(f, r) {
   const W = app.walk;
@@ -3621,7 +3623,7 @@ function onWalkCellTap(f, r) {
   if (p && p.id !== W.selected) {
     W.selected = p.id;
     W.targets = manualMoves(W.world, W.army, p);
-    ui.setCellMarks({ selected: { f, r }, targets: W.targets, frame: boxOf(W.army).rect });
+    ui.setCellMarks({ selected: { f, r }, targets: W.targets });
     walkStatus(`${walkPieceName(p.ch)}: ${W.targets.length} moves — tap one`);
     return;
   }

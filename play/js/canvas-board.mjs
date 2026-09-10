@@ -133,7 +133,6 @@ const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
 const TARGET = 'rgba(215,180,106,0.53)'; // .cell.target::after #d7b46a88
-const BOXLINE = 'rgba(126,176,255,0.6)'; // THE BOX's outline on the walk (2026-09-09): the arena the army must always fit
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
 const COORD = 'rgba(255,255,255,0.4)';
 const COORD_SHADOW = 'rgba(0,0,0,0.6)';
@@ -828,12 +827,12 @@ export class CanvasBoard {
     this.invalidate();
   }
 
-  /** Cell-keyed marks for the walk: the selected cell, its targets [{ f, r,
-   *  capture }], and `frame` — a rectangle of world cells { f0, r0, f1, r1 }
-   *  outlined one pixel wide (THE BOX, 2026-09-09: the arena the army must
-   *  always fit, shown while a piece is selected). */
-  setCellMarks({ selected = null, targets = [], frame = null } = {}) {
-    this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])), frame: frame ? { ...frame } : null };
+  /** Cell-keyed marks for the walk: the selected cell and its targets [{ f, r,
+   *  capture }]. (THE BOX's outline — a `frame` rectangle one pixel wide —
+   *  was a mark here from 2026-09-09 until the designer's 2026-09-10 "get rid
+   *  of the big blue square when I make chess moves during exploration".) */
+  setCellMarks({ selected = null, targets = [] } = {}) {
+    this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])) };
     this.invalidate();
   }
 
@@ -1853,7 +1852,6 @@ export class CanvasBoard {
   #paintCellMarks({ idx, x, y, k }) {
     const g = this.bctx;
     const cm = this.cellMarks;
-    if (cm.frame) this.#paintFrameEdges(idx, x, y, cm.frame);
     if (cm.selected === idx) this.#frame1(x, y, GOLD);
     if (cm.targets.has(idx)) {
       const capture = cm.targets.get(idx);
@@ -1862,28 +1860,6 @@ export class CanvasBoard {
         g.fillStyle = TARGET;
         g.fillRect(x + 6, y + 6, 4, 4);
       }
-    }
-  }
-
-  /** The one-pixel outline of a rectangle of world cells, drawn on the cells
-   *  along its boundary: an edge is painted where the neighbour across it
-   *  lies outside the rectangle (or off the world). Facing-agnostic — the
-   *  neighbour's screen tile says which side of this tile the edge is. */
-  #paintFrameEdges(idx, x, y, fr) {
-    const w = this.world;
-    const f = idx % w.files, r = (idx - f) / w.files;
-    if (f < fr.f0 || f > fr.f1 || r < fr.r0 || r > fr.r1) return;
-    const me = this.#tileOf(f, r);
-    const g = this.bctx;
-    g.fillStyle = BOXLINE;
-    for (const [df, dr] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
-      const nf = f + df, nr = r + dr;
-      if (nf >= fr.f0 && nf <= fr.f1 && nr >= fr.r0 && nr <= fr.r1) continue;
-      const t = this.#tileOf(nf, nr);
-      if (t.row < me.row) g.fillRect(x, y, T, 1);
-      else if (t.row > me.row) g.fillRect(x, y + T - 1, T, 1);
-      else if (t.col < me.col) g.fillRect(x, y, 1, T);
-      else g.fillRect(x + T - 1, y, 1, T);
     }
   }
 

@@ -602,7 +602,7 @@ slide, because an about-face in a three-wide corridor is a sliding
 puzzle walking cannot solve. (15) THE ARMY ALWAYS FITS THE BOX — a 10×10
 with the king on its first row, "not necessarily centered", slid along
 his rank — after every input: a manual move that would break it is not
-offered (the box outlined while a piece is selected), a STUCK piece (no
+offered (the box was outlined while a piece was selected until 2026-09-10 — designer: "get rid of the big blue square when I make chess moves during exploration" — the filter stays, the outline is gone), a STUCK piece (no
 path by its OWN moves — a knight beyond a thin wall has its hop back and
 is not stuck) is teleported to its slot ("who gives a fuck"), nothing is
 ever sealed off (the walk-out moves the whole army to the nearest floor
@@ -776,7 +776,11 @@ regroup (the king waiting for the file). test-army 119, selftest 46/46,
 ui-smoke 259 ok. THE DESIGNER'S VERDICT ON THIS
 BUILD (2026-09-10): "Alright this will do for now, but we should
 probably take another look at this eventually" — the branch MERGES AS
-IT STANDS and THE REVISIT LIST is on record in README milestone 4d: the
+IT STANDS — and one more ask the same day, DONE: "get rid of the big blue
+square when I make chess moves during exploration" — THE BOX OUTLINE on a
+selected piece is gone (`setCellMarks` lost `frame`, canvas-board its
+`BOXLINE` edge painter; the manual moves still filter on the box,
+unseen). THE REVISIT LIST is on record in README milestone 4d: the
 REGROUP RATE (14–18% of held inputs a turn the king spends waiting for
 the file — the army standing still on a held pad), the pivot in a
 two-wide nook (the one "behind" residue), a diagonal input from inside

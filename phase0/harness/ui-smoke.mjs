@@ -926,7 +926,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // new direction pivots first), a `face` input turns in place for a move, a
 // wall refuses, the run saves after every turn (schema dck-run/2) and
 // exports as one object, a tapped piece marks its chess moves WITHOUT
-// moving the camera or the zoom and outlines the box, the pad's tap turns
+// moving the camera or the zoom (no box outline since 2026-09-10), the pad's tap turns
 // and the keys face, a DRAG looks around and the next move brings the
 // camera back, a PINCH steps the zoom, leaving and resuming keep the turn,
 // an import lands on the imported state. The board is north-up throughout.
@@ -964,7 +964,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const saved = K.walk.saved();
     const exp = K.walk.export();
     out.save = { schema: exp.schema, turn: saved.turn, turns: exp.turns.length, worldId: exp.worldId, hasStart: !!exp.start?.world, hasFloor: !!exp.floors?.[exp.floor]?.world, key: localStorage.getItem('dck.run.v1') ? 1 : 0 };
-    // Tap a piece (the king included): its chess moves are marked, the zoom and the focus stay, the box is outlined; tap elsewhere: let go.
+    // Tap a piece (the king included): its chess moves are marked, the zoom and the focus stay, no box outline (the box is read off the debug surface); tap elsewhere: let go.
     const settle = async () => { await new Promise((r) => setTimeout(r, 30)); while (K.walk.busy) await new Promise((r) => setTimeout(r, 20)); };
     // The first piece with a chess move to offer (a pawn against a wall has none).
     const pc = K.walk.state.pieces.filter((p) => p.ch !== 'K').find((p) => { K.walk.select(p.f, p.r); const n = K.walk.state.targets.length; K.walk.select(-1, -1); return n > 0; }) ?? K.walk.state.pieces[1];

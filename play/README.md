@@ -1082,9 +1082,11 @@ MAP a DRAG (past `WALK_DRAG_PX` 10) pans the focus in whole native pixels
 step), a PINCH steps the zoom on each crossing of the geometric midpoint
 between neighbouring k (re-anchored per step; the wheel likewise), and a
 TAP selects a piece — the king included — marking its chess moves at the
-current zoom with the camera unmoved and THE BOX OUTLINED (canvas-board
-`setCellMarks({ frame })`, one pixel in `BOXLINE`, facing-agnostic: an
-edge is painted where the neighbour lies outside the rectangle); a
+current zoom with the camera unmoved and NO BOX OUTLINE — one was drawn
+(`setCellMarks({ frame })`, one pixel in `BOXLINE`, an edge wherever the
+neighbour lay outside the rectangle) until the designer's 2026-09-10 "get
+rid of the big blue square when I make chess moves during exploration";
+the manual moves still filter on the box, unseen; a
 catch-up path animates along its waypoints (`animateArrivals` takes
 `via`; `#paintCellSlide` walks the polyline). The status strip reads
 turn · facing · pieces · k · a note. The debug turn in Options → Look and
@@ -1404,7 +1406,11 @@ door (the king last, one piece through a turn). test-army 119, selftest
 Node gates unchanged.
 THE DESIGNER'S VERDICT (the same day): "Alright this will do for now,
 but we should probably take another look at this eventually." The
-branch merges as it stands. THE REVISIT LIST, for when it is looked at
+branch merges as it stands — and one more ask the same day, done: "get rid
+of the big blue square when I make chess moves during exploration" — the
+box outline on a selected piece is gone (`setCellMarks` lost its `frame`,
+canvas-board its `BOXLINE` edge painter; the manual moves still filter on
+the box, unseen). THE REVISIT LIST, for when it is looked at
 again: (1) THE REGROUP RATE — 14–18% of held inputs are a turn the king
 spends waiting for the file, which reads as the army standing still on
 a held pad (a walk could plan the file's move and his own step in one
