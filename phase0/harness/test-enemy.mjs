@@ -215,10 +215,11 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   const kr = e.army.king.r;
   for (let i = 0; i < 6; i++) enemyTurn(w, player, e, { seed: 1 });
   check(e.army.king.r === kr || e.army.king.r === kr - 1 || e.army.king.r === kr + 1, 'it parks at the door (a closed door is a wall to a hunter)');
-  // Open the door: sight returns, the hunt resumes through it.
+  // Open the door: the search leads through it, sight returns, the hunt resumes.
   w.setTerrain(14, 15, FLOOR);
-  const r1 = enemyTurn(w, player, e, { seed: 1 });
-  check(r1.saw && e.state === 'hunt', 'with the door open it sees the king again and hunts');
+  let sawAgain = 0;
+  for (let i = 0; i < 10 && e.state !== 'hunt'; i++) { enemyTurn(w, player, e, { seed: 1 }); sawAgain++; }
+  check(e.state === 'hunt' && e.army.king.r < kr + 1, `with the door open the search leads through it and it sees the king again within ${sawAgain} turns (king at r ${e.army.king.r})`);
   let fired = null;
   for (let i = 0; i < 40 && !fired; i++) { enemyTurn(w, player, e, { seed: 1 }); fired = triggerFor(w, player, e, { seed: 1, turn: 'b' }); }
   check(!!fired, 'the hunt through the doorway reaches a far row');

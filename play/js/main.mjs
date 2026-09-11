@@ -51,7 +51,7 @@ import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pix
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
 import { makePattern, spawnArmy, walkOutArmy, planTurn, applyTurn, manualMoves, boxOf, facingOfStep, formationFocus, bagOfPattern, Army, OPENING_KIT } from './army.mjs';
-import { spawnEnemies, enemyTurn, updateSight, triggerFor, hunterGoals, lineOfSight, liftInside, settleBack, describeEnemy, enemyDealSide, serializeEnemy, loadEnemy } from './enemy.mjs'; // THE ENEMIES (Phase 2 milestone 6, 2026-09-10)
+import { spawnEnemies, enemyTurn, updateSight, triggerFor, hunterGoals, axisArmies, lineOfSight, liftInside, settleBack, describeEnemy, enemyDealSide, serializeEnemy, loadEnemy } from './enemy.mjs'; // THE ENEMIES (Phase 2 milestone 6, 2026-09-10)
 import { newRun, updateRun, recordTurn, recordDuel, runEnded, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
 import { planBarrier, planBox } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08) on THE BOX (milestone 5); planBox for THE TRIGGER (milestone 6)
 import { generateWorld, STYLES, STYLE_NAMES } from './dungeon.mjs'; // THE DUNGEON GENERATOR (Phase 2 milestone 5, 2026-09-08)
@@ -3638,7 +3638,9 @@ async function walkInput(input) {
  */
 function walkEnemies(W, arrivals, plans) {
   const t0 = performance.now();
-  const opts = { ffish: app.ffish, seed: childSeed(W.run.seed >>> 0, `enemies:${W.turn}`) };
+  // The player's army along the four axes — the pivots the drop would make
+  // — once per input, for every hunter's goals and trigger.
+  const opts = { ffish: app.ffish, seed: childSeed(W.run.seed >>> 0, `enemies:${W.turn}`), alongs: W.enemies.length ? axisArmies(W.world, W.army) : null };
   const notes = [];
   const noteOf = (e, was) => {
     if (e.state === was) return;

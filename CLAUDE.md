@@ -907,8 +907,48 @@ front files into the vaults' 3-wide passages three deep, so the walk's
 numbers on record are 3-wide numbers), THE DUEL START (rulings 3, 9, 16:
 the player's pieces where they stand, the box slid by `boxOf`, the gap
 between the camp lines, the enemy molded around the player's pieces, a
-walk-out that keeps survivors in place), then ENEMIES (`play/js/enemy.mjs`
-— the record below says what was built). The phone verdict is the gate.**
+walk-out that keeps survivors in place), then ENEMIES (`play/js/enemy.mjs`).
+**ALL THREE ✅ BUILT 2026-09-10/11** (`play/README.md` § "The canvas
+board", milestone 6 — the record). THE KIT: one constant, the staging
+area shaped by its slots, the fixtures regenerated; walk-stress on 4 wide
+— one body on every turn, nobody behind the king, zero teleports, the
+REGROUP RATE 27% of held inputs (14–18% on 3 wide: a four-piece front
+files into three-wide passages three deep — the revisit list's first
+item, heavier now). THE DUEL START: `planBox` reads `standingCells`, the
+box is `boxOf` (the barrier's `boxPlacement` keeps only the lone king's
+centred box for the lint), `buildMatchup` takes `white.cells` and
+`gapAt: 'camp'`, an axis other than the facing is refused as the army
+stands and dealt after `walkBarrier`'s `face` turn, `walkOutArmy`
+keeps survivors in place and reverts promotions, `nearestHold` moves a
+sealed king's whole army; test-barrier 160. THE ENEMIES: `enemy.mjs` —
+`spawnEnemies` from the digits, `lineOfSight` (a ray through the cell
+centres, the corner rule), sentry / hunt / search, `hunterGoals` on the
+four axes through `armyAlongFast` (the pivot's placement, once per input
+via `axisArmies`) and `farRowTargets` with the ffish lint, `triggerFor`
+(the exact pivot on the one or two axes the king is nine off along),
+`enemyTurn` (the king's neighbour nearest a goal by the BFS, driven by
+THE KING'S OWN MOVE where it is offered — a d-pad step's catch-up carried
+him past the far-row cell — each candidate judged by its outcome, a
+regroup toward the goal above a sidestep, a WAYPOINT for an unreachable
+target, a STALL by a recurring position → the pivot escape → a REST),
+`liftInside` / `settleBack` for bystanders; main.mjs `walkEnemies` in
+the walk's loop (sight, the trigger with the player's initiative, each
+enemy's turn with the trigger after it, one slide), `walkResolveTrigger`
+and THE CHOOSER, `walkBarrier` with an enemy / a far-row file / an axis,
+the badges and the threat display on the board, `dck-run/3`,
+`?enemies=off`, `Army.stamp` clearing only its own cells, the lint's
+cached Board (`setFen`). MEASURED (`hunt-stress.mjs`, sight granted,
+grid-only): the player standing 13 of 16 spawns caught (median 28 turns,
+max 83), 3 missed at 120 — formations tangled in crate pockets, the same
+item as the regroup rate; fleeing 16 of 16 (median 35, max 98); enemy
+work 29 ms a turn standing, 56 fleeing, in Node. Gates: test-enemy 66,
+test-barrier 160, test-army 121, test-dungeon 96, test-world 125,
+selftest 46, ui-smoke with THE ENEMIES block, replay-smoke 63. THE
+PHONE VERDICT IS THE GATE. Held over, on purpose: patrol routes, a sight
+range and fog, aggro between hunters, an enemy that smashes crates, a
+planner over formation states for the pocket tangles, per-theme edge-on
+door art, a phone height for the duel box, the analyzer mounting the
+whole world.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
@@ -1789,14 +1829,26 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   vaults). Node gate `test-dungeon.mjs`; `gen-worlds.mjs` writes the
   fixtures, `world-shots.mjs` the gallery. `play/README.md` § "The
   dungeon generator".
+- `play/js/enemy.mjs` — THE ENEMIES (Phase 2 milestone 6, 2026-09-10): an
+  enemy is the same army on the black side, spawned from the digits;
+  sight king to king; sentry / hunt / search; the hunter's goals through
+  the trigger function itself; the enemy's turn on the walk's own planner;
+  the trigger with its initiative; bystanders lifted and set back. Node
+  gate `test-enemy.mjs`; `hunt-stress.mjs` the convergence instrument.
+  main.mjs § THE WALK runs the loop, the chooser and the drop.
 - `play/js/barrier.mjs` — THE BOX (Phase 2 milestone 5, 2026-09-08, on
   4c's barrier by hand): the arena is ALWAYS 10×10 on the player's king
-  (his rank row 0, his facing arena-north), placed by one rule
-  (`boxPlacement`, shared with the generator's lint), the enemy king on
+  (his rank row 0, the axis arena-north), placed by THE WALK'S OWN RULE
+  since THE DUEL START (2026-09-10 — `boxOf`, slid to hold every piece;
+  `boxPlacement` keeps the lone king's centred box for the generator's
+  lint), THE PIECES WHERE THEY STAND (`standingCells`), the enemy king on
   the far row on the king's file or the nearest that deals (the band),
-  the gap an output with a floor of 2, the summoning on ground connected
-  to its king; main.mjs § THE BARRIER BY HAND is the page (the drop, the
-  world session, the walk-out, the run's ledger). Node gate
+  the gap an output measured BETWEEN THE CAMP LINES with a floor of 2,
+  the enemy molded around the player's pieces on ground connected to its
+  king, an axis other than the facing dealt after the pivot,
+  `farRowTargets` the hunter's goals and the threat display; main.mjs
+  § THE BARRIER BY HAND is the page (the drop, the world session, the
+  walk-out with survivors in place, the run's ledger). Node gate
   `test-barrier.mjs`.
 - `play/js/army.mjs` + `run.mjs` + `play/worlds/` — THE ARMY AND THE WALK
   (Phase 2 milestone 4b, 2026-09-08; REWRITTEN 2026-09-09 for the controls
@@ -1913,7 +1965,9 @@ node harness/test-world.mjs          # THE WORLD (play/js/world.mjs): the crop t
 node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief §5.1's one movement rule on its own cases — unison, the about-face, the pillar, the stragglers, the chain, molding, never a capture, the individual move; Node only
 node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4] [--behind 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone), the turns with a piece BEHIND THE KING (must be none; --behind samples them); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
 node harness/walk-replay.mjs <world> <df,dr> [--hold N] [--trace] [pieces: K1@f,r R2@f,r … anchor f,r facing n]  # THE WALK'S REPLAYER: rebuild a position from a walk-stress pieces: line (or start at the fixture's start), replay one input printing every stage of planTurn's trace (targets, vias, stuck, queued), or hold it N turns printing the map, the plan and the pieces: line after each — read a screenshot's position into it before touching army.mjs
-node harness/test-barrier.mjs        # THE BOX (play/js/barrier.mjs): the fixed 10×10 arena at every facing, its placement, the far-row band, the gap floor of 2, the king-connected stamp, off-map walls, the run's duel entry, the lenient walk-out; Node only
+node harness/test-barrier.mjs        # THE BOX + THE DUEL START (play/js/barrier.mjs): the fixed 10×10 arena at every facing placed by the walk's own rule, the pieces where they stand, the far-row band, the gap between the camp lines with a floor of 2, the enemy molded around the player's pieces, off-map walls, an axis behind the army refused then dealt after the pivot, the walk-out's survivors and returns; Node only
+node harness/test-enemy.mjs          # THE ENEMIES (play/js/enemy.mjs): the band, the spawns from the digits and the stamp that clears only its own cells, sight and the corner rule, sentry / hunt / search, the hunter's goals and the trigger with its initiative, the ambush through the pivot, search and the door, bystanders, the save; Node only
+node harness/hunt-stress.mjs [--flee] [--turns 120] [--world vaults-2]  # THE HUNT'S CONVERGENCE: every spawn of every fixture hunts the kit at the start with sight granted (the player standing, or fleeing on a held cardinal walk) — turns to the trigger, parks, misses, the enemy work per turn
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 
 node harness/gen-worlds.mjs [--duel] # THE GENERATOR's fixtures in play/worlds/ (vaults-1…4, generated at fixed seeds, linted as written; --duel adds the duelable-ground coverage) + their manifest

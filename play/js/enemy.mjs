@@ -29,13 +29,18 @@
 // Sight lost sends it to the last-seen cell, where it stands (a sentry
 // again). A duel starts the moment a HUNTING king stands on a far-row
 // cell with a legal deal; the side whose move completed it moves first.
-import { Army, makePattern, spawnArmy, planTurn, applyTurn, distanceField, facingOfStep, bagOfPattern, KING_STEPS } from './army.mjs';
+import { Army, makePattern, spawnArmy, planTurn, applyTurn, manualMoves, distanceField, facingOfStep, bagOfPattern, pivotPlacement, anchorCell, boxOf, KING_STEPS } from './army.mjs';
 import { FLOOR, HOLE, worldToArena } from './world.mjs';
 import { childSeed } from './prng.mjs';
 import { planBox, farRowTargets, boxAt, BOX } from './barrier.mjs';
 import { normFacing } from './camera.mjs';
 
 export const ENEMY_STATES = ['sentry', 'hunt', 'search'];
+/** Recurring positions before a hunter pivots its formation loose. */
+export const STALL_MAX = 3;
+/** A second tangle within this many turns of that pivot is a REST of this many turns. */
+export const REST_AFTER = 8;
+export const REST_TURNS = 6;
 
 /** The composition band at a width (designer 2026-09-10: nine to thirteen
  *  points at width 3 — width + 4 per piece, ±2 — which no queen fits). */
@@ -94,11 +99,11 @@ export function spawnEnemies(world, runSeed, { archetype = 'heavies-deep' } = {}
 }
 
 export function serializeEnemy(e) {
-  return { id: e.id, n: e.n, width: e.width, seed: e.seed, spawn: { ...e.spawn }, army: e.army.serialize(), state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen };
+  return { id: e.id, n: e.n, width: e.width, seed: e.seed, spawn: { ...e.spawn }, army: e.army.serialize(), state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen, waypoint: e.waypoint ? { ...e.waypoint } : null, prev: e.prev ? { ...e.prev } : null };
 }
 
 export function loadEnemy(obj) {
-  return { id: obj.id, n: obj.n, width: obj.width, seed: obj.seed, spawn: { ...obj.spawn }, army: Army.load(obj.army), state: ENEMY_STATES.includes(obj.state) ? obj.state : 'sentry', lastSeen: obj.lastSeen ? { ...obj.lastSeen } : null, seen: !!obj.seen };
+  return { id: obj.id, n: obj.n, width: obj.width, seed: obj.seed, spawn: { ...obj.spawn }, army: Army.load(obj.army), state: ENEMY_STATES.includes(obj.state) ? obj.state : 'sentry', lastSeen: obj.lastSeen ? { ...obj.lastSeen } : null, seen: !!obj.seen, waypoint: obj.waypoint ? { ...obj.waypoint } : null, prev: obj.prev ? { ...obj.prev } : null };
 }
 
 /**
@@ -157,6 +162,31 @@ export function armyAlong(world, army, axis) {
   return new Army({ side: army.side, facing: fc, pattern: army.pattern, pieces, at: plan.at });
 }
 
+/**
+ * The same, FAST: the pivot's placement alone (army.mjs pivotPlacement —
+ * the molded cells about the king, without the walk's box loop and rope
+ * that a `face` turn runs after it), or null when that placement does not
+ * fit a box along the axis. The hunter's GOALS read this (a far row is a
+ * far row whichever of the two the pieces take); the TRIGGER and the drop
+ * read the exact one.
+ */
+export function armyAlongFast(world, army, axis) {
+  const fc = normFacing(axis);
+  if (fc === army.facing) return army;
+  const kc = { f: army.king.f, r: army.king.r };
+  const placed = pivotPlacement(world, army, fc, kc);
+  const pieces = army.pieces.map((p) => { const c = placed.get(p.id) ?? p; return { ...p, f: c.f, r: c.r }; });
+  const along = new Army({ side: army.side, facing: fc, pattern: army.pattern, pieces, at: anchorCell(army.pattern, kc, fc) });
+  return boxOf(along).ok ? along : null;
+}
+
+/** The player's army along each of the four axes — the fast pivots, ~3 ms
+ *  each — computed ONCE per input by the page and handed to every
+ *  hunter's goals. `exact: true` plans the real turns instead. */
+export function axisArmies(world, army, { exact = false } = {}) {
+  return [0, 1, 2, 3].map((axis) => (exact ? armyAlong(world, army, axis) : armyAlongFast(world, army, axis)));
+}
+
 /** The deal's enemy side for an enemy on the map: its bag as it walks. */
 export function enemyDealSide(enemy) {
   return { army: bagOfPattern(enemy.army.pattern), order: 'as-given' };
@@ -169,12 +199,13 @@ export function enemyDealSide(enemy) {
  * given. Returns { goals: [{ f, r, axis, file }] in world cells, axes:
  * [{ axis, crop, kingFile, pivot }] }.
  */
-export function hunterGoals(world, player, enemy, { ffish = null, seed = 1 } = {}) {
+export function hunterGoals(world, player, enemy, { ffish = null, seed = 1, alongs = null } = {}) {
   const side = enemyDealSide(enemy);
   const goals = [];
   const axes = [];
+  const along4 = alongs ?? axisArmies(world, player);
   for (let axis = 0; axis < 4; axis++) {
-    const along = armyAlong(world, player, axis);
+    const along = along4[axis];
     if (!along) continue;
     const t = farRowTargets(world, along, { enemy: side, seed, axis, ffish });
     if (!t.ok) continue;
@@ -191,11 +222,19 @@ export function hunterGoals(world, player, enemy, { ffish = null, seed = 1 } = {
  * enemy's — the deal's initiative, brief §4.4). Returns the candidate
  * { enemy, axis, file, plan, pivot, turn } or null.
  */
-export function triggerFor(world, player, enemy, { ffish = null, seed = 1, turn = 'w' } = {}) {
+export function triggerFor(world, player, enemy, { ffish = null, seed = 1, turn = 'w', alongs = null } = {}) {
   if (enemy.state !== 'hunt') return null;
   const k = enemy.army.king;
+  // The cheap half first: is the king nine ranks off along some axis at all?
+  if (Math.abs(k.f - player.king.f) !== BOX - 1 && Math.abs(k.r - player.king.r) !== BOX - 1) return null;
   const side = enemyDealSide(enemy);
-  for (let axis = 0; axis < 4; axis++) {
+  void alongs; // the trigger plans the EXACT pivot (what the drop makes), on the one or two axes the king is nine off along
+  const axes = [];
+  if (k.r - player.king.r === BOX - 1) axes.push(0);
+  if (k.f - player.king.f === BOX - 1) axes.push(1);
+  if (player.king.r - k.r === BOX - 1) axes.push(2);
+  if (player.king.f - k.f === BOX - 1) axes.push(3);
+  for (const axis of axes) {
     const along = armyAlong(world, player, axis);
     if (!along) continue;
     const box = boxAt(world, along, axis);
@@ -212,11 +251,13 @@ export function triggerFor(world, player, enemy, { ffish = null, seed = 1, turn 
  *  hunt → search when sight is lost. Returns whether it sees. */
 export function updateSight(world, player, enemy) {
   const saw = lineOfSight(world, enemy.army.king, player.king);
+  const was = enemy.state;
   if (saw) {
     enemy.state = 'hunt';
     enemy.lastSeen = { f: player.king.f, r: player.king.r };
     enemy.seen = true;
   } else if (enemy.state === 'hunt') enemy.state = 'search';
+  if (enemy.state !== was) enemy.waypoint = null;
   return saw;
 }
 
@@ -231,12 +272,19 @@ export function updateSight(world, player, enemy) {
  * needs a hunter that still sees). Mutates the enemy and the world.
  * Returns { plan, saw, state, goal, arrived, blocked }.
  */
-export function enemyTurn(world, player, enemy, { ffish = null, seed = 1 } = {}) {
-  const saw = updateSight(world, player, enemy);
-  const out = { plan: null, saw, state: enemy.state, goal: null, arrived: false, blocked: false, goals: 0, goalList: [] };
+export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs = null, sight = null } = {}) {
+  let saw;
+  if (sight === true) {
+    // The instrument's knob (hunt-stress.mjs): sight granted, the chase alone measured.
+    enemy.state = 'hunt';
+    enemy.lastSeen = { f: player.king.f, r: player.king.r };
+    enemy.seen = true;
+    saw = true;
+  } else saw = updateSight(world, player, enemy);
+  const out = { plan: null, saw, state: enemy.state, goal: null, arrived: false, blocked: false, goals: 0, goalList: [], pivot: false, stalled: false, resting: false };
   let goals = [];
   if (enemy.state === 'hunt') {
-    goals = hunterGoals(world, player, enemy, { ffish, seed }).goals;
+    goals = hunterGoals(world, player, enemy, { ffish, seed, alongs }).goals;
     out.goalList = goals; // the threat display reads these (one computation a turn)
   } else if (enemy.state === 'search') {
     const k = enemy.army.king;
@@ -244,79 +292,191 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1 } = {})
     else {
       enemy.state = 'sentry';
       enemy.lastSeen = null;
+      enemy.waypoint = null;
       out.state = enemy.state;
       out.arrived = true;
       return out;
     }
   } else return out;
   out.goals = goals.length;
-  const k = enemy.army.king;
-  // The king's neighbours that bring it STRICTLY nearer a target (a step
-  // that does not is drift — a formation that cannot stand on the goal
-  // cell would otherwise slide along the wall forever); none → it parks.
+  // A REST: a formation that tangled twice in a row on the same clutter
+  // stands for a few turns rather than thrash (the player moves, the goals
+  // move, the tangle may open).
+  if ((enemy.rest ?? 0) > 0) {
+    enemy.rest -= 1;
+    out.resting = true;
+    return out;
+  }
+  const army = enemy.army;
+  const k = army.king;
+  const prev = enemy.prev ?? null;
+  // The king's neighbours that bring it STRICTLY nearer a target (`steps`),
+  // and the ones that keep it as near (`level`, never straight back to the
+  // cell it came from) for when the formation cannot make a nearer step.
   const stepsToward = (targets) => {
-    const field = distanceField(world, enemy.army, targets);
+    const field = distanceField(world, army, targets);
     const d0 = field[world.idx(k.f, k.r)];
-    if (d0 === 0) return { onGoal: true, steps: [] };
-    const steps = [];
+    if (d0 === 0) return { onGoal: true, steps: [], level: [], field, d0 };
+    const steps = [], level = [];
     for (const [df, dr] of KING_STEPS) {
       const f = k.f + df, r = k.r + dr;
       if (!world.inBounds(f, r)) continue;
       const d = field[world.idx(f, r)];
-      if (d >= 0 && (d0 < 0 || d < d0)) steps.push({ df, dr, d });
+      if (d < 0) continue;
+      if (d0 < 0 || d < d0) steps.push({ df, dr, d });
+      else if (d === d0 && !(prev && prev.f === f && prev.r === r)) level.push({ df, dr, d });
     }
-    steps.sort((a, b) => a.d - b.d || Math.abs(a.df) + Math.abs(a.dr) - (Math.abs(b.df) + Math.abs(b.dr)));
-    return { onGoal: false, steps };
+    const byNear = (a, b) => a.d - b.d || Math.abs(a.df) + Math.abs(a.dr) - (Math.abs(b.df) + Math.abs(b.dr));
+    steps.sort(byNear);
+    level.sort(byNear);
+    return { onGoal: false, steps, level, field, d0 };
   };
-  // Toward the targets by the BFS; when none is reachable, toward the
-  // reachable cell nearest one of them (the mouth of wherever it hides —
-  // a hunter parks against the wall line, a searcher at the closed door).
-  const approach = (targets) => {
+  // Toward the targets by the BFS; when none is reachable, toward a
+  // WAYPOINT — the reachable cell nearest one of them (the mouth of
+  // wherever it hides: a hunter parks against the wall line, a searcher at
+  // the closed door) — HELD until reached (a cell recomputed every turn
+  // relative to the moving king had the army pacing between two cells).
+  const approach = (targets, kind) => {
     const first = stepsToward(targets);
-    if (first.onGoal || first.steps.length) return first;
-    const reach = distanceField(world, enemy.army, [{ f: k.f, r: k.r }]);
-    let best = null;
-    for (let i = 0; i < world.size; i++) {
-      if (reach[i] < 0) continue;
-      const f = i % world.files, r = (i - f) / world.files;
-      for (const t of targets) {
-        const d = Math.max(Math.abs(f - t.f), Math.abs(r - t.r));
-        const m = Math.abs(f - t.f) + Math.abs(r - t.r); // the straighter of two equally near cells
-        if (!best || d < best.d || (d === best.d && (m < best.m || (m === best.m && reach[i] < best.n)))) best = { f, r, d, m, n: reach[i] };
-      }
+    if (first.onGoal || first.steps.length || first.level.length) {
+      enemy.waypoint = null;
+      return first;
     }
-    if (!best || (best.f === k.f && best.r === k.r)) return { onGoal: true, steps: [] };
-    return stepsToward([{ f: best.f, r: best.r }]);
+    let wp = enemy.waypoint && enemy.waypoint.kind === kind ? enemy.waypoint : null;
+    if (wp && wp.f === k.f && wp.r === k.r) {
+      enemy.waypoint = null;
+      return { ...first, onGoal: true };
+    }
+    if (!wp) {
+      const reach = distanceField(world, army, [{ f: k.f, r: k.r }]);
+      let best = null;
+      for (let i = 0; i < world.size; i++) {
+        if (reach[i] < 0) continue;
+        const f = i % world.files, r = (i - f) / world.files;
+        for (const t of targets) {
+          const d = Math.max(Math.abs(f - t.f), Math.abs(r - t.r));
+          const m = Math.abs(f - t.f) + Math.abs(r - t.r); // the straighter of two equally near cells
+          if (!best || d < best.d || (d === best.d && (m < best.m || (m === best.m && reach[i] < best.n)))) best = { f, r, d, m, n: reach[i] };
+        }
+      }
+      if (!best || (best.f === k.f && best.r === k.r)) {
+        enemy.waypoint = null;
+        return { ...first, onGoal: true };
+      }
+      wp = { f: best.f, r: best.r, kind };
+      enemy.waypoint = wp;
+    }
+    const s = stepsToward([{ f: wp.f, r: wp.r }]);
+    if (!s.onGoal && !s.steps.length && !s.level.length) {
+      enemy.waypoint = null;
+      return { ...s, onGoal: true };
+    }
+    return s;
   };
-  let { onGoal, steps } = goals.length ? stepsToward(goals) : { onGoal: false, steps: [] };
-  if (onGoal) {
+  let got = approach(goals, enemy.state === 'hunt' ? 'goal' : 'search');
+  if (got.onGoal && enemy.state === 'hunt' && got.d0 !== 0) {
+    // No legal cell reachable: walk at the player's king.
+    const pk = player.king;
+    const near = KING_STEPS.map(([df, dr]) => ({ f: pk.f + df, r: pk.r + dr })).filter((c) => world.inBounds(c.f, c.r) && world.at(c.f, c.r) === FLOOR);
+    got = approach(near.length ? near : [{ f: pk.f, r: pk.r }], 'king');
+  }
+  if (got.onGoal) {
     out.arrived = true;
     return out;
   }
-  if (!steps.length) {
-    if (enemy.state === 'hunt') {
-      // No legal cell reachable: walk at the player's king.
-      const pk = player.king;
-      const near = KING_STEPS.map(([df, dr]) => ({ f: pk.f + df, r: pk.r + dr })).filter((c) => world.inBounds(c.f, c.r) && world.at(c.f, c.r) === FLOOR);
-      ({ onGoal, steps } = approach(near.length ? near : [{ f: pk.f, r: pk.r }]));
-    } else ({ onGoal, steps } = approach(goals));
-    if (onGoal) {
-      out.arrived = true;
+  const { steps, level, field, d0 } = got;
+  // THE STEP, judged by its OUTCOME: the plan of each candidate in order,
+  // the first that moves the king nearer taken; else the plan that moves
+  // him nearest; else the first plan that runs (a regroup — the pawns
+  // filing through a door while the king waits is progress). A STALL is a
+  // position the army has stood in before within the last few turns (a
+  // formation tangled on clutter cycles; a file through a door does not),
+  // and after STALL_MAX of them the army PIVOTS to face its way (ruling
+  // 14's wheel re-molds the formation about the king — a human player's
+  // own way out of a tangle); a second tangle within a few turns of that
+  // is the REST above.
+  const from = { f: k.f, r: k.r };
+  const kingAfter = (plan) => plan.moves.find((m) => m.id === k.id)?.to ?? from;
+  const posHash = () => `${army.pieces.map((p) => `${p.f},${p.r}`).join(';')}|${army.facing}`;
+  if ((enemy.stall ?? 0) >= STALL_MAX) {
+    if ((enemy.sinceEscape ?? 99) < REST_AFTER) {
+      enemy.rest = REST_TURNS;
+      enemy.stall = 0;
+      enemy.hist = [];
+      enemy.sinceEscape = 99;
+      out.resting = true;
+      return out;
+    }
+    const want = steps[0] ?? level[0] ?? null;
+    const wantFacing = want ? facingOfStep(army.facing, want.df, want.dr) : (army.facing + 1) % 4;
+    for (const fc of [wantFacing, (army.facing + 1) % 4, (army.facing + 3) % 4, (army.facing + 2) % 4]) {
+      if (fc === army.facing) continue;
+      const pv = planTurn(world, army, { kind: 'face', facing: fc });
+      if (!pv.ok) continue;
+      applyTurn(world, army, pv);
+      out.plan = pv;
+      out.pivot = true;
+      enemy.stall = 0;
+      enemy.hist = [];
+      enemy.sinceEscape = 0;
+      if (sight !== true) updateSight(world, player, enemy);
+      out.state = enemy.state;
       return out;
     }
   }
+  // The order of merit: the king nearer; a regroup on a NEARER direction
+  // (the pawns file on, the king waits — a corridor's normal gait); only
+  // then a level move of the king; a regroup on a level direction last.
+  // THE KING'S OWN MOVE FIRST (ruling 10 — his chess move, the army taking
+  // its formation move with it): a `move` input pins him to the cell the
+  // BFS chose, where a d-pad step's catch-up could carry him two cells and
+  // straight past the far-row cell he was walking to; the step is the
+  // fallback where his move is not offered (the box would not hold).
+  const kingMoves = manualMoves(world, army, k);
+  const inputFor = (s) => {
+    const to = { f: k.f + s.df, r: k.r + s.dr };
+    const mm = kingMoves.find((m) => m.f === to.f && m.r === to.r && !m.capture);
+    return mm ? { kind: 'move', id: k.id, to } : { kind: 'step', df: s.df, dr: s.dr };
+  };
+  let best = null;
   for (const s of steps) {
-    const plan = planTurn(world, enemy.army, { kind: 'step', df: s.df, dr: s.dr });
+    const plan = planTurn(world, army, inputFor(s));
     if (!plan.ok) continue;
-    applyTurn(world, enemy.army, plan);
-    out.plan = plan;
-    out.goal = s;
-    // Sight after the move: a hunter that stepped out of sight is searching, not hunting.
-    updateSight(world, player, enemy);
-    out.state = enemy.state;
+    const ka = kingAfter(plan);
+    const moved = !(ka.f === from.f && ka.r === from.r);
+    const d = field[world.idx(ka.f, ka.r)];
+    const score = moved ? (d >= 0 && d < d0 ? d : 300 + (d >= 0 ? d : 90)) : 500 + s.d;
+    if (!best || score < best.score) best = { plan, s, score, moved };
+    if (moved && d >= 0 && d < d0) break;
+  }
+  if (!best || best.score >= 500) for (const s of level) {
+    const plan = planTurn(world, army, inputFor(s));
+    if (!plan.ok) continue;
+    const ka = kingAfter(plan);
+    const moved = !(ka.f === from.f && ka.r === from.r);
+    const d = field[world.idx(ka.f, ka.r)];
+    const score = moved ? 600 + (d >= 0 ? d : 90) : 1000;
+    if (!best || score < best.score) best = { plan, s, score, moved };
+  }
+  if (!best) {
+    out.blocked = true;
     return out;
   }
-  out.blocked = true;
+  applyTurn(world, army, best.plan);
+  out.plan = best.plan;
+  out.goal = best.s;
+  if (best.moved) enemy.prev = from;
+  enemy.sinceEscape = (enemy.sinceEscape ?? 99) + 1;
+  const h = posHash();
+  const hist = enemy.hist ?? [];
+  if (hist.includes(h)) {
+    enemy.stall = (enemy.stall ?? 0) + 1;
+    out.stalled = true;
+  } else enemy.stall = 0;
+  enemy.hist = [...hist, h].slice(-6);
+  // Sight after the move: a hunter that stepped out of sight is searching, not hunting.
+  if (sight !== true) updateSight(world, player, enemy);
+  out.state = enemy.state;
   return out;
 }
 

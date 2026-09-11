@@ -67,7 +67,9 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `node harness/gen-worlds.mjs [--duel]` (THE GENERATOR's fixtures + their manifest — generated floors at fixed seeds, linted as written; § "The dungeon generator"),
   `node harness/test-dungeon.mjs` (the generator's gate: the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's),
   `node harness/world-shots.mjs` (each fixture painted whole + the walk screen, for the eye — the generator's gallery),
-  `node harness/test-barrier.mjs` (THE BOX: the fixed 10×10 arena, its placement, the band, the king-connected stamp),
+  `node harness/test-barrier.mjs` (THE BOX + THE DUEL START: the fixed 10×10 arena placed by the walk's own rule, the pieces where they stand, the band, the gap between the camp lines, the enemy molded around the player's pieces, the walk-out's survivors),
+  `node harness/test-enemy.mjs` (THE ENEMIES: the spawns, sight, sentry / hunt / search, the hunter's goals, the trigger with its initiative, bystanders, the save),
+  `node harness/hunt-stress.mjs [--flee]` (the hunt's convergence over the fixtures: turns to the trigger, parks, misses, the enemy work per turn),
   `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
   the turned camera equals the world itself rotated), `node
   harness/camera-guard.mjs dump|compare <dir> [--allow door,turned]`
@@ -1439,6 +1441,172 @@ starts at the fixture's start) and replays one input printing every
 stage of planTurn's trace with its targets and vias, or holds the input
 N turns printing the map, the plan and the position after each — the
 scratch scripts every case above was read on.
+
+**Milestone 6 — THE ENEMIES (2026-09-10, the enemies session; three PRs
+in one branch).** The designer opened with the kit and the enemy size
+("I'm thinking we make the player's starter army 4 wide. 1 rook, 1
+knight, 1 bishop, 4 pawns. Enemies will be 3 wide for now") and ruled on
+six picks with "sounds good, go ahead" (CLAUDE.md § "THE ENEMIES
+SESSION" carries them: the 4×2 kit, the far row as a band, crates and
+doors block sight, a rear or side catch pivots the army to the axis, the
+enemy band at width 3 is nine to thirteen points with no queens, sentries
+first). WHAT WAS BUILT, in the order it went in:
+
+THE KIT (`army.mjs OPENING_KIT`, the one constant): K + R + N + B and
+four pawns, value 15, laid N K R B over P P P P — a width of four has no
+middle, so the king stands second from the left and the anchor on his
+file. It was copy-pasted in six places before; the page, the generator's
+start and lints, walk-stress, walk-replay and the tests import it now.
+The generator's staging area is shaped by the kit's own slots
+(`stagingOf`: floor under every slot, one row behind the king, four rows
+ahead of its front), `SPAWN_WIDTHS` reads all threes, the four fixtures
+were regenerated (the starts moved on vaults-1, -3 and -4; the kit stands
+on its slots at every start and its first step moves all eight). MEASURED
+on the 4-wide kit (walk-stress, 3000 inputs a fixture): held cardinal
+walks (11 370 turns) — one body on EVERY turn, nobody behind the king,
+zero teleports, the king within four of his slot (two on 45%, three on
+89 turns, four on 6), 630 refusals of which 6 the walk's and the rest the
+map's own dead ends and edges, and THE REGROUP RATE UP: 3096 regroups,
+27% of held inputs (14–18% on the 3-wide kit — a four-piece front files
+into the vaults' three-wide passages three deep, so the king waits for
+the file more often; the revisit list's first item, now heavier); random
+walks with diagonals (11 209 turns) — 16 walk refusals, 3 teleports, 2319
+regroups (21%), split on no turn, nobody behind the king.
+
+THE DUEL START (brief §5.1 rulings 3, 9, 16; `barrier.mjs` rewritten,
+`armygen.mjs buildMatchup` taught `white.cells` and `gapAt: 'camp'`):
+THE PIECES STAND WHERE THEY STAND — the deal's white cells are the walk's
+own through the crop (`standingCells`), nothing is summoned and 4c's
+stamp-is-the-pattern is retired; THE BOX IS THE WALK'S OWN RULE — the
+barrier's `boxPlacement` (file 4 always) and the walk's `boxOf` (slid
+along the king's rank to hold every piece, the formation centred when
+there is slack) were two placements, and the barrier reads `boxOf` now
+(a lone king, the generator's lint, still gets the centred box); THE GAP
+IS BETWEEN THE CAMP LINES (each side's pawn line, `campLineRank`) with a
+floor of 2, so a piece pre-moved ahead of the pawns sits inside the gap
+and THE ENEMY MOLDS AROUND IT (its `reach` excludes every white cell;
+`buildMatchup` refuses an overlap besides); an AXIS other than the
+army's facing is refused as the army stands and dealt after THE PIVOT —
+`walkBarrier` plans a `face` turn on the world first (the drop's, never
+a walk turn; the pending entry carries the axis, the run's duel entry
+carries `axis` and `pivoted`); `planBox` takes `axis` and `enemyFile`,
+`farRowTargets` lists every far-row cell that deals along an axis (the
+hunter's goals and the threat display, one function). THE WALK-OUT
+(`army.mjs walkOutArmy`): the survivors stand where they stood when the
+duel ended (each survivor takes the slot of its letter nearest its cell;
+a letter beyond the kit's count of it is a promoted pawn and reverts at
+its cell), the captured return beside the body (the spawn's molding
+around the fixed survivors — `spawnArmy` gained `fixed` and `stamp:
+false`), and a king whose pocket cannot hold the army moves it WHOLE to
+the nearest floor that can (ruling 15; `nearestHold`), the lenient spawn
+the last resort. A drop on a real floor costs 0.57 ms per axis of
+far-row checks grid-only. `test-barrier.mjs` was rewritten (160: the
+walk's box on a standing army, the slide, the pieces where they stand at
+every facing, a pre-moved rook inside the gap with the enemy molded
+around it, a pawn ahead of its wall leaving the camp line, the band, the
+thin wall, the sealed and the doored line, the depth outputs, the axes
+behind the army refused then dealt after the pivot, the walk-out's
+survivors, promotions and returns, the sealed king's whole army).
+
+THE ENEMIES (`play/js/enemy.mjs` the pure half — `phase0/harness/
+test-enemy.mjs` 66; main.mjs § THE WALK runs the loop and the drop):
+AN ENEMY IS THE SAME ARMY — an army.mjs Army on the black side with a
+pattern from its spawn's digit (the width) and a bag drawn from the
+run's seed in the band (`enemyBudget`: width + 4 per piece, ±2; no queen
+fits at width 3), spawned at the digit facing the way the start lies
+(`facingToward`), driven through `planTurn` with step inputs, so the
+cluster, the box and nobody-behind-the-king hold for it as for the
+player; `Army.stamp` clears only THE CELLS IT LAST WROTE (two enemy
+armies share the lowercase letters and the old stamp erased the other
+army; `remember`, `lift`). SIGHT (`lineOfSight`): king to king, a ray
+through the cell centres — walls, doors and crates block, holes do not,
+pieces never do, a ray through the corner between two cells passes when
+either is see-through — checked after EVERY move. THE STATES: a SENTRY
+stands until it sees the king; a HUNTER walks by BFS over ground it can
+cross (its own pieces pass; the player's, furniture, holes and walls
+block — a closed door is a wall to it) to THE TRIGGER'S far-row cells
+(`hunterGoals`: the four boxes on the player's king, the axes behind him
+through the pivot the drop would make — `armyAlongFast`, the pivot's
+placement alone, computed once per input for every hunter (`axisArmies`)
+— each far-row cell where `planBox` comes out legal for THIS enemy's bag,
+with the ffish lint: a far-row cell the player's rook covers is no goal),
+sight lost sends it SEARCHING to the last-seen cell, where it stands (a
+sentry again); with no goal reachable a hunter walks at the player's
+king, and a target it cannot reach becomes a WAYPOINT (the reachable
+cell nearest it, held until reached — a cell recomputed every turn had
+the army pacing between two cells). THE STEP is the king's neighbour
+nearest a goal by the BFS (strictly nearer first, level steps when the
+formation cannot make a nearer one, never straight back), each candidate
+planned in turn and JUDGED BY ITS OUTCOME — the king nearer, else a
+regroup on a nearer direction (the pawns filing through a door while the
+king waits is a corridor's normal gait), else a sidestep; a position
+the army has stood in within the last six turns is a STALL, and after
+`STALL_MAX` 3 the army PIVOTS to face its way (ruling 14's wheel
+re-molds the formation about the king — a human player's own way out of
+a tangle), a second tangle within `REST_AFTER` 8 turns of that a REST of
+`REST_TURNS` 6. THE TRIGGER (`triggerFor`): a HUNTING king on a far-row
+cell of one of the four boxes (the exact pivot planned for the one or
+two axes it is nine off along) with a legal deal — the side whose move
+completed the alignment moves first (brief §4.4); the page checks it
+after the player's move for every hunter (his ambush, White) and after
+each enemy's turn (its initiative, Black), the world freezing at the
+first; SEVERAL AT ONCE open THE CHOOSER (`#walk-chooser`: one button per
+candidate, inputs refused while it waits, `__DCK.walk.choose`). SPEED
+PARITY: one enemy turn per input that costs one (never a refused step),
+the player's turn then each enemy in spawn order, every arrival in the
+ONE slide with the player's so a held pad keeps its cadence. THE DROP
+(`walkBarrier` with `enemy` / `enemyFile` / `axis`): the enemy's letters
+leave the floor (inside the crop or trailing outside it) and its bag is
+molded into the box; a BYSTANDER's pieces inside the box are lifted for
+the duel and set back after on the nearest floor (`liftInside`,
+`settleBack`); the pending entry names the enemy, the axis and its far-
+row file, so a reload re-drops the same duel. A WIN removes the whole
+enemy army; the other enemies keep their state through the frozen duel
+(a second hunter already on a far row catches the player on his next
+input). THE SAVE is `dck-run/3` — the enemies in the floor's entry
+(army, state, last-seen cell, seed, waypoint); the turn list stays
+inputs only. ON THE BOARD: THE THREAT DISPLAY (brief §5.4 — the far-row
+cells of every hunter's goals framed red, `setCellMarks` `threats`) and
+a BADGE over every king that is not a sentry (`!` hunting, `?`
+searching, the 3×5 font grew both glyphs). `?enemies=off` walks an empty
+floor (the labs, the old smoke blocks); `__DCK.walk` grew `enemies`,
+`sight`, `goals`, `threats`, `candidates`, `choose`, `enemyMs`,
+`placeEnemy` and `setEnemyState` (the last two test-only). The lint
+(`lintMatchupFen`) keeps ONE ffish Board per variant and re-sets it
+(`setFen`) instead of constructing two per cell — a construction costs
+~3 ms on the WASM pair, a `setFen` ~0.03 — since a hunter lints forty
+far-row cells a turn. MEASURED (`phase0/harness/hunt-stress.mjs`: every
+spawn of every fixture hunts the kit at the start with sight granted,
+grid-only): the player STANDING — 13 of 16 caught (median 28 turns, max
+83; 8 through a pivot), 3 missed at 120 turns; FLEEING (a held cardinal
+walk away) — 16 of 16 caught (median 35, max 98; 11 through a pivot,
+one of them the player's own step into the line); the enemy work 29 ms a
+turn standing, 56 fleeing, in Node; the browser's first hunting turn
+with the lint measured 111 ms before the fast pivots and the lint's
+cached Board, 54 after. THE HUNTER'S KING MOVES BY HIS OWN MOVE (ruling
+10) where the box offers it — a d-pad step's catch-up had carried him
+two cells at once and straight past the far-row cell he was walking to,
+the corridor hunt of the smoke missing its far-row cell for nine inputs;
+pinned by his move he lands on it in six. THE RESIDUE, on record: the
+three standing misses are
+formations tangled in crate pockets (the hunter's greedy step over king
+cells cannot solve what the walk's regroup cannot — the same item as
+the regroup rate on the revisit list; a planner over formation states is
+the fix if the phone asks for it); a hunter that gets closer than nine
+backs off to the far row, which a player can stall by following (the
+conversation's known oddity); the lint's cost still scales with the
+hunters. Gates: test-enemy 66 (the band, the spawns from the digits and
+the stamp that clears only its own cells, sight and the corner rule, the
+state machine on open ground with the trigger's initiative, the player's
+ambush and the axis behind him through the pivot, search and the door,
+the pillar's cell no goal, the wall line, bystanders, the spawn's facing,
+the save), ui-smoke THE ENEMIES block (four sentries on the fixture,
+a hunter stood in the west corridor caught after nine inputs with its
+initiative, the ambush through the pivot on the north far row with the
+player's, a reload mid-duel, the chooser with two hunters at once, the
+other hunter's catch on the next input, the floor clear after four
+duels), the old walk and barrier blocks on `?enemies=off`. THE PHONE
+VERDICT IS THE GATE.
 
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)
