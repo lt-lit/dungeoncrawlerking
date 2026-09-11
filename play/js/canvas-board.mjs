@@ -100,11 +100,12 @@
 //               a turn never reshuffles the floor; `hashCoords` overrides
 //               them — the facing-walk gate's inverse map); a DOOR whose
 //               wall line runs up the screen stands EDGE-ON (the door set's
-//               edge-on LEAF, a 16×32 prop drawn in-house to the designer's
-//               reference — a tall thin leaf from the side — standing in the
-//               wall band, which paints on under it; 2026-09-11, brief §11;
-//               a generated slab stood in from the camera milestone until
-//               then) and a double door's halves are dealt on the screen. FIT: 'width' (the phone — k from the container's
+//               edge-on LEAF — the designer's own 5×16 profile door,
+//               lib/inhouse/door-profile.png — standing in the wall band,
+//               which paints on under it, drawn in the tall pass as
+//               furniture; 2026-09-11, brief §11; a generated slab stood in
+//               from the camera milestone until then) and a double door's
+//               halves are dealt on the screen. FIT: 'width' (the phone — k from the container's
 //               width, the canvas as tall as the crop) or 'box' (the camera
 //               owns the screen: the container's device box is the canvas,
 //               k the largest step that fits the crop AND its headroom row
@@ -1382,16 +1383,13 @@ export class CanvasBoard {
 
   /** The furniture sprite a cell shows: the door leaf / its half of a
    *  double ON THE SCREEN (the camera deals the halves), the EDGE-ON leaf
-   *  when the door's wall line runs up the screen (a 16×32 prop standing
-   *  in the band, which the flat pass paints under it), a prop (crate /
+   *  when the door's wall line runs up the screen (the designer's profile
+   *  door, standing in the band the flat pass paints under it), a prop (crate /
    *  chest / barrel / wreckage, by the cell's variant), or the crate for
    *  an unskinned '^'. { tile, prop } — a prop is 16×32. */
   #furnitureSprite(k, [hf, hr]) {
     if (k.skin === 'door') {
-      if (this.#edgeOn(k)) {
-        const tile = this.#tile('door-edge');
-        return { tile, prop: !!tile && tile.h === 2 * T };
-      }
+      if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), prop: false };
       const half = doorHalf(k.door2, this.facing);
       return { tile: this.#tile(half ? `door2-${half}` : 'door'), prop: false };
     }

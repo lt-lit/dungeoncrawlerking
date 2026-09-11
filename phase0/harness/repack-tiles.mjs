@@ -702,9 +702,10 @@ const NS_DOORWAYS = [['doorway-ns', 5], ['doorway-n', 1], ['doorway-s', 4]];
 function emitEdgeDoor(theme, emit) {
   const tint = THEMES[theme].tint?.door;
   const leaf = edgeLeafTile();
-  // A 16×32 prop box (the leaf rises into the square north); the plank
-  // timber is the base the face-on leaf was scaled by, so the two match.
-  emit('door-edge', tint ? recolourHue(leaf, hex(tint), false, hex('#895a45')) : leaf, { composed: `the edge-on leaf drawn in-house (lib/inhouse.mjs), a 16×32 prop${tint ? `, wood to ${tint}` : ''}` });
+  // The designer's 5×16 profile door (lib/inhouse/door-profile.png) in the
+  // band's middle; the plank timber is the base the face-on leaf was
+  // scaled by, so the two match on every theme.
+  emit('door-edge', tint ? recolourHue(leaf, hex(tint), false, hex('#895a45')) : leaf, { composed: `the designer's profile door (lib/inhouse/door-profile.png) in the band${tint ? `, wood to ${tint}` : ''}` });
   for (const [role, sides] of NS_DOORWAYS) emit(role, doorwayTileNS(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 5 ? 'north–south doorway: a post in the door material capping both walls' : `north–south doorway: the ${sides === 1 ? 'north' : 'south'} post alone` });
 }
 

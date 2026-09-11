@@ -31,17 +31,10 @@
 // square north.
 export const TILE = 16;
 export const PIECE_ORDER = 'pnrbqk';
-/** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles
- *  placeProp; the edge-on door leaf since 2026-09-11 — it rises into the
- *  square north like a tall urn). */
-const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage', 'door-edge']);
+/** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles placeProp). */
+const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage']);
 /** The atlas row of the in-house drawings (the classic set + the cracks). */
 const CLASSIC = 'classic';
-/** The classic row's 16×32 boxes: its edge-on leaf alone — its crate,
- *  barrel and chest are 16×16 drawings, whatever the themed roles are
- *  (2026-09-11: reporting the prop height for every prop role floated the
- *  classic crates a square north; the pixel guard's mirror rows caught it). */
-const CLASSIC_PROPS = new Set(['door-edge']);
 /** The classic set's one tile per family: any wall case is its block, a
  *  ruin its heap, the wreckage and a double door's half its crate and door. */
 const CLASSIC_ROLE = { wall: 'wall', crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', 'door-edge': 'door-edge', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble', ruin: 'rubble' };
@@ -151,13 +144,13 @@ export class Atlas {
     const row = this.index.themes[CLASSIC];
     const cell = row?.tiles[name];
     if (!cell) return null;
-    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: CLASSIC_PROPS.has(name) ? 2 * TILE : TILE, role: name, theme: null };
+    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: TILE, role: name, theme: null };
   }
 
   /** The classic (in-house) set's sprite for a role, or null: one block for
    *  every wall case, the heap for every ruin, the crate for the wreckage,
-   *  the leaf for a double door's half, its own edge-on leaf (a 16×32
-   *  prop, like the themes'); no floor, hole, decor or doorway
+   *  the leaf for a double door's half, the designer's profile door in
+   *  its own colours (door-edge); no floor, hole, decor or doorway
    *  (the flat colours and the gradient pit are the canvas board's own). */
   classicTile(role) {
     const b = baseRole(role);
