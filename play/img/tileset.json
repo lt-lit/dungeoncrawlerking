@@ -134,10 +134,7 @@
   "crack-2",
   "crack-3",
   "crack-4",
-  "door-edge",
-  "doorway-ns",
-  "doorway-n",
-  "doorway-s"
+  "door-edge"
  ],
  "themes": {
   "hall": {
@@ -867,18 +864,6 @@
     "door-edge": {
      "col": 132,
      "composed": "the designer's profile door (lib/inhouse/door-profile.png) in the band"
-    },
-    "doorway-ns": {
-     "col": 133,
-     "composed": "north–south doorway: a post in the door material capping both walls"
-    },
-    "doorway-n": {
-     "col": 134,
-     "composed": "north–south doorway: the north post alone"
-    },
-    "doorway-s": {
-     "col": 135,
-     "composed": "north–south doorway: the south post alone"
     }
    }
   },
@@ -1600,18 +1585,6 @@
     "door-edge": {
      "col": 132,
      "composed": "the designer's profile door (lib/inhouse/door-profile.png) in the band, wood to #7d6455"
-    },
-    "doorway-ns": {
-     "col": 133,
-     "composed": "north–south doorway: a post in the door material capping both walls"
-    },
-    "doorway-n": {
-     "col": 134,
-     "composed": "north–south doorway: the north post alone"
-    },
-    "doorway-s": {
-     "col": 135,
-     "composed": "north–south doorway: the south post alone"
     }
    }
   },
@@ -2359,18 +2332,6 @@
     "door-edge": {
      "col": 132,
      "composed": "the designer's profile door (lib/inhouse/door-profile.png) in the band, wood to #5c4a3c"
-    },
-    "doorway-ns": {
-     "col": 133,
-     "composed": "north–south doorway: a post in the door material capping both walls"
-    },
-    "doorway-n": {
-     "col": 134,
-     "composed": "north–south doorway: the north post alone"
-    },
-    "doorway-s": {
-     "col": 135,
-     "composed": "north–south doorway: the south post alone"
     }
    }
   },

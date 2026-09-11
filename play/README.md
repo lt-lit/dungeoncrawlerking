@@ -2084,30 +2084,40 @@ the crypt's leaves darker than their face-on doors; the castle's body is
 face-on tiles' own values), and the classic set wears the same sprite
 mapped into its own wood and iron (`CLASSIC_LEAF`); the hall's tile is
 the file byte for byte and every theme's has the file's exact shape
-(test-debris). (2) IT STANDS IN THE DOORWAY: the flat pass paints the
-doorway under it (`#paintFlat` — the wall's two ends capped by the
-north–south post tiles of (3), floor between; a first cut ran the wall
-band on under the leaf and the designer's verdict was "you can't just
-slap it on top of a wall, why do I see wall in front of and behind the
-door?"), and the leaf is FURNITURE in the tall pass (`#furnitureSprite`
-returns it for an edge-on door, a 16×16 sprite like the face-on leaf),
-standing from one capped end to the other, so a piece to its south
-stands in front of it, a breach bursts it like any furniture and leaves
-the same caps, and a slide carries it; the door SET option swaps the
+(test-debris). (2) IT STANDS IN THE GAP IT IS: canvas-board `#wallMask`
+treats a door standing edge-on, or an opened doorway whose walls stand
+above and below it on the screen (`#gapUp`), as NOT SOLID for the wall
+masks of the cells around it — classifyTerrain's world mask still counts
+every door and doorway as solid so a line runs through a break, which is
+right across the screen where a leaf fills its tile, and the exception
+is taken in SCREEN space at paint time, recomputed from the neighbours'
+kinds only for a wall with such a gap beside it — so the walls above and
+below END with their own autotile end cases, the brick face on a south
+end and the bevelled top on a north end, exactly as a wall ends at floor
+anywhere. The door's own tile is floor, and the leaf is FURNITURE in the
+tall pass (`#furnitureSprite` returns it for an edge-on door, a 16×16
+sprite like the face-on leaf), standing from the north wall's face to the
+south wall's edge, so a piece to its south stands in front of it, a
+breach bursts it like any furniture and leaves the gap between the same
+two wall ends, and a slide carries it; the door SET option swaps the
 leaf (`atlas.mjs tileOf` routes `door-edge` like `door` and the double).
-A stacked double keeps no cap between its leaves, so it reads as the
-long door it is. (3) THE DOORWAY it
-leaves is the north–south post tiles `doorway-ns` / `doorway-n` /
-`doorway-s` (`repack-tiles doorwayTileNS`): a cap on the end of each
-standing wall, twelve wide like the band, a lit row over a dark row in
-the theme's post material, the wall's outline down both sides and along
-the inner edge; `#doorwayTile` reads them in place of the quarter turn,
-the breach's flash shows them under the bursting leaf, and a stacked
-double's shared side gets no post (`#edgeMask`: the pair is one
-opening). The atlas grew four roles (132 → 136), appended after the
+A stacked double is two leaves in a row between the two wall ends. TWO
+CUTS WENT BEFORE THIS: the flat pass ran the wall band on under the leaf
+(designer: "you can't just slap it on top of a wall, why do I see wall
+in front of and behind the door?"), then generated CAPS — the
+north–south post tiles `doorway-ns` / `-n` / `-s`, a lit row over a dark
+row in the post material at the band's end — framed the door and the
+opened doorway alike (designer: "these lazy ass door frames completely
+abandon the wall autotiling. Shouldn't we be seeing the bricks?"); the
+post tiles are gone from the atlas and the repack tool, and an opened
+north–south doorway paints nothing of its own — its walls' end cases are
+its frame. (3) THE EAST–WEST DOORWAY keeps round 11's generated posts
+(`doorway` / `-8` / `-2`, for a doorway whose walls stand across the
+screen); the same autotile-end treatment is one flag away if wanted.
+The atlas grew ONE role (132 → 133, `door-edge`), appended after the
 crack; every old tile is byte-identical. `camera-guard.mjs compare
---allow door` admits exactly the door squares and the doorways they
-leave. THE GUARD EARNED ITS KEEP on the tall cut: reporting the prop
+--allow door` admits the door squares, the doorways they leave and every
+square touching one (the walls whose ends changed). THE GUARD EARNED ITS KEEP on the tall cut: reporting the prop
 height for every prop role of the classic row had floated the classic
 crates a square north, and only the guard's mirror rows saw it (its
 facing-0 rows drift after ply 0 on the pristine build — a pre-existing

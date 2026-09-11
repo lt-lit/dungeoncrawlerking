@@ -191,7 +191,12 @@ for (const c of CASES) {
         const diff = Object.keys(want.squares).filter((sq) => want.squares[sq] !== got.squares[sq]);
         const skins = p.input.skins ?? {};
         const opened = new Set(p.input.opened ?? []);
-        const isDoorish = (sq) => skins[sq] === 'door' || opened.has(sq);
+        // A door square, the doorway it leaves, or any square touching one:
+        // the walls beside a door whose line runs up the screen end with
+        // their own autotile cases since 2026-09-11 (canvas-board #wallMask).
+        const doorAt = (sq) => skins[sq] === 'door' || opened.has(sq);
+        const around = (sq) => { const m = sq.match(/^([a-l])(\d+)$/); if (!m) return []; const out = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (df || dr) out.push(String.fromCharCode(m[1].charCodeAt(0) + df) + (+m[2] + dr)); return out; };
+        const isDoorish = (sq) => doorAt(sq) || around(sq).some(doorAt);
         // `turned`: at a facing other than north the paint of a square
         // whose art has a DIRECTION legitimately differs from the old
         // flipped path, which mirrored positions and nothing else — a

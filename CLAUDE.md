@@ -72,8 +72,10 @@ door whose wall line runs UP the screen stands EDGE-ON — THE DESIGNER'S
 OWN SPRITE since 2026-09-11 ("the placeholder looks like ass"; "Use this
 one"): `phase0/lib/inhouse/door-profile.png`, a 5×16 side-view door in
 pixel-poem's timber, recoloured per theme like the face-on leaf, standing
-in the DOORWAY — the wall's two ends capped (the NORTH–SOUTH DOORWAY
-POSTS), floor between, the leaf from end to end — drawn in the tall
+in the GAP it is — the walls above and below END with their own autotile
+end cases, the brick face on a south end (canvas-board `#wallMask`: an
+edge-on door, or an opened doorway whose line runs up the screen, is not
+solid for the wall masks around it, in screen space) — drawn in the tall
 pass as furniture; a generated slab stood in from the camera, 2026-09-08,
 and before that a north–south door was a WEAK SPOT wearing the crack —
 and an authored double is
@@ -1073,25 +1075,31 @@ dominates the sprite, and the histogram would have scaled the castle's
 and the crypt's leaves darker than their face-on doors), the classic set
 wears it mapped into its own wood and iron (`CLASSIC_LEAF`); the hall's
 tile is the file byte for byte (test-debris asserts that, the file's
-shape on every theme, and every prop height). IT STANDS IN THE DOORWAY:
-canvas-board's flat pass paints the doorway under it — the wall's two
-ends capped, floor between (a first cut ran the band on under the leaf;
-designer: "you can't just slap it on top of a wall, why do I see wall in
-front of and behind the door?") — and `#furnitureSprite` returns it for
-an edge-on door, so it is drawn in the tall pass as furniture from one
-capped end to the other (a piece south of it in front), bursts on a
-breach leaving the same caps, and slides; the door SET option swaps it
-(`atlas.mjs tileOf` routes
-`door-edge` like the leaf and the double; the posts stay the theme's). THE
-NORTH–SOUTH DOORWAY posts `doorway-ns` / `-n` / `-s` (`doorwayTileNS`: a
-cap on the end of each standing wall, twelve wide like the band, lit over
-dark in the post material, outlined — the east–west tile turned a
-quarter, sixteen wide, stood in until now) are generated every run in
-both paths, never read back, appended after the crack with the leaf so
-every pack tile keeps its column (382 old tiles byte-identical, 13 new,
-roles 132 → 136); `#doorwayTile` reads them, the breach's flash shows the
-doorway under the bursting leaf, and a stacked double's shared side gets
-no post (`#edgeMask` — one opening, two leaves). THE GUARD EARNED ITS KEEP
+shape on every theme, and every prop height). IT STANDS IN THE GAP IT
+IS: canvas-board `#wallMask` treats an edge-on door, or an opened doorway
+whose walls stand above and below it on the screen (`#gapUp`), as NOT
+SOLID for the wall masks of the cells around it — the exception taken in
+SCREEN space at paint time, from the neighbours' kinds, while
+classifyTerrain's world mask keeps every door solid so a line runs
+through a break where a leaf fills its tile — so the walls above and
+below end with their own autotile end cases (the brick face on a south
+end, the bevelled top on a north end), the door's tile is floor, and
+`#furnitureSprite` returns the leaf for an edge-on door, drawn in the
+tall pass as furniture (a piece south of it in front), bursting on a
+breach and sliding; the door SET option swaps it (`atlas.mjs tileOf`
+routes
+`door-edge` like the leaf and the double). TWO CUTS WENT BEFORE: the flat
+pass ran the wall band on under the leaf (designer: "you can't just slap
+it on top of a wall, why do I see wall in front of and behind the
+door?"), then generated CAPS — north–south post tiles, a lit row over a
+dark row in the post material on the band's end — framed the closed door
+and the opened doorway (designer: "these lazy ass door frames completely
+abandon the wall autotiling. Shouldn't we be seeing the bricks?"); the
+post tiles are retired from the atlas and the repack tool, an opened
+north–south doorway paints nothing of its own (its walls' end cases are
+its frame), and the east–west doorway keeps round 11's generated posts.
+`door-edge` is appended after the crack so every pack tile keeps its
+column (382 old tiles byte-identical, roles 132 → 133). THE GUARD EARNED ITS KEEP
 on the way: a tall 16×32 cut reported the prop height for every prop role
 of the classic row and floated the classic crates a square north — the
 mirror (facing-2) rows of `camera-guard.mjs compare --allow door` caught
@@ -1099,8 +1107,9 @@ it (its facing-0 rows drift after ply 0 on the pristine build, a
 pre-existing gap on record). Gates green on the shipped build: test-camera
 80, test-debris 67, strip-ruin-chips, test-world 125, selftest 46/46,
 ui-smoke, facing-walk 108/108, replay-smoke 63, camera-guard compare with
-every mirror row identical but the door squares. Zoomed crops per theme
-(a dpr-3 phone, k 6) went to the designer with each cut.
+every mirror row identical but the door squares and the squares touching
+them (the walls whose ends changed). Zoomed crops per theme (a dpr-3
+phone, k 6) went to the designer with each cut.
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
