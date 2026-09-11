@@ -16,7 +16,7 @@
 // beside the body, promotions reverted, a sealed king's whole army moved.
 import { loadWorld, arenaToWorld, worldToArena, cropTransform, HOLE, FLOOR, WALL } from '../../play/js/world.mjs';
 import { makePattern, spawnArmy, walkOutArmy, nearestHold, rotateBody, bagOfPattern, patternOf, planTurn, applyTurn, boxOf, OPENING_KIT } from '../../play/js/army.mjs';
-import { planBarrier, planBox, boxPlacement, boxAt, reachOf, standingCells, farRowTargets, BOX, GAP_MIN } from '../../play/js/barrier.mjs';
+import { planBarrier, planBox, boxPlacement, boxAt, reachOf, standingCells, farRowTargets, BOX, GAP_MIN, FAR_HALF } from '../../play/js/barrier.mjs';
 import { layoutArmy, buildMatchup } from '../../play/js/armygen.mjs';
 import { newRun, recordDuel, inputsOf, runEnded, updateRun, openRun } from '../../play/js/run.mjs';
 import { parseBoard, splitFen } from '../../play/js/fen.mjs';
@@ -157,7 +157,7 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
   }
 }
 
-// ---- 3. the band: the far-row cell on the king's file is a pillar → the nearest file that deals; farRowTargets
+// ---- 3. the band: the far-row cell on the king's file is a pillar → the nearest file that deals; farRowTargets over THE FAR HALF (rows 5…9 of every legal file)
 {
   const rows = Array.from({ length: 30 }, (_, i) => (i === 0 || i === 29 ? '#'.repeat(30) : '#' + '.'.repeat(28) + '#'));
   // the king at (14, 10) facing north: the far row is r 19 → top-down row 29 - 19 = 10; a pillar at f 14
@@ -174,10 +174,10 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
   check(wide.ok && kingsOf(wide.deal.fen).k.f === 0, 'planBox deals the enemy king on file 0 of the far row when asked');
   check(!planBox(w, army, { enemy: KIT_ENEMY, seed: 1, enemyFile: 10 }).ok, 'a file outside the box refuses');
   const targets = farRowTargets(w, army, { enemy: KIT_ENEMY, seed: 1 });
-  check(targets.ok && targets.cells.length === 9 && !targets.cells.some((c) => c.f === 4) && targets.cells.every((c) => c.r === 9 && c.plan.ok && w.at(c.world.f, c.world.r) === FLOOR), `farRowTargets: nine far-row cells deal, the pillar's does not (${targets.cells.map((c) => c.f).join(',')})`);
+  check(targets.ok && targets.cells.length === 9 * (BOX - FAR_HALF) && !targets.cells.some((c) => c.f === 4) && targets.cells.every((c) => c.r >= FAR_HALF && c.r <= 9 && c.far === (c.r === 9) && c.plan.ok && w.at(c.world.f, c.world.r) === FLOOR) && targets.cells.filter((c) => c.far).length === 9, `farRowTargets: nine files deal, five rows of the far half each, the pillar's file does not, the far row marked (${targets.cells.length} cells, files ${[...new Set(targets.cells.map((c) => c.f))].join(',')})`);
   const open = openFloor(30, 30);
   const a2 = spawnArmy(open, makePattern(KIT, { seed: 1 }), { f: 14, r: 10 }, 0, 'w');
-  check(farRowTargets(open, a2, { enemy: KIT_ENEMY, seed: 1 }).cells.length === 10, 'on open ground every far-row cell deals');
+  check(farRowTargets(open, a2, { enemy: KIT_ENEMY, seed: 1 }).cells.length === 10 * (BOX - FAR_HALF), 'on open ground every cell of the far half deals — ten files, five rows');
 }
 
 // ---- 4. the summoning lands only on ground connected to its king, and never on a player's piece

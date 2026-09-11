@@ -1216,18 +1216,21 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(an.world === bar.world.id && typeof an.stage === 'string' && an.stage.startsWith(`${bar.world.id}@`) && an.theme === bar.world.theme, `the analyzer opens the barrier log on its own crop (${an.stage}, theme ${an.theme}, ${an.skins} skins)`);
   await page5.close();
 }
-// --- THE ENEMIES (Phase 2 milestone 6, 2026-09-10 — the enemies session):
-// on the fixture the four spawns stand as sentries with their letters on
-// the floor and in the save; a wait moves none of them. THE HUNT: an enemy
-// stood in the west corridor in sight of the king (44, 21) sees him on the
-// next input, hunts along the rank to the far-row cell (47, 21) and the
-// barrier falls with ITS initiative; a concession walks the army out where
-// it stood with that enemy gone. THE AMBUSH THROUGH THE PIVOT: an enemy
-// stood on the north far row (55, 31) is caught by the player's own wait —
-// his initiative, the army pivoted north for the drop; a reload mid-duel
-// re-drops the same enemy on the same seed. THE CHOOSER: two enemies on
-// two far rows at once — the player picks; the other keeps hunting through
-// the frozen duel and catches him on the next input.
+// --- THE ENEMIES (Phase 2 milestone 6, 2026-09-10 — the enemies session;
+// 2026-09-11 any-piece sight and THE FAR HALF): on the fixture the four
+// spawns stand as sentries with their letters on the floor and in the
+// save; a wait moves none of them. THE HUNT: an enemy stood in the west
+// corridor in sight of the army (44, 21) sees it on the next input, hunts
+// along the rank to the far-row cell (47, 21) — the band's outer edge, the
+// nearest cell of the far half — and the barrier falls with ITS
+// initiative; a concession walks the army out where it stood with that
+// enemy gone. THE AMBUSH THROUGH THE PIVOT, IN THE FAR HALF: an enemy
+// stood SIX ranks north of the king is caught by the player's own wait —
+// his initiative, the army pivoted north for the drop, the enemy dealt
+// onto the far row, its standing row in the run and the log; a reload
+// mid-duel re-drops the same enemy on the same seed. THE CHOOSER: two
+// enemies on two far rows at once — the player picks; the other keeps
+// hunting through the frozen duel and catches him on the next input.
 {
   const page6 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs6 = [];
@@ -1251,7 +1254,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.wait = { moved: K.walk.enemies.map((e) => `${e.king.f},${e.king.r}`).join(' ') !== kings0, states: K.walk.enemies.map((e) => e.state).join(','), threats: K.walk.threats.length, ms: K.walk.enemyMs };
     // THE HUNT: enemy 2 stood at (44, 21) facing east, in sight down the rank; the far-row cell (47, 21) is three steps east.
     const standing = cells();
-    out.hunt = { placed: K.walk.placeEnemy(2, 44, 21, 1), sight: K.walk.sight(2), goalsWest: (K.walk.goals(2) ?? []).filter((g) => g.axis === 3).map((g) => `${g.f},${g.r}`).join(' ') };
+    out.hunt = { placed: K.walk.placeEnemy(2, 44, 21, 1), sight: K.walk.sight(2), goalsWest: (K.walk.goals(2) ?? []).filter((g) => g.axis === 3).map((g) => `${g.f},${g.r}`).join(' '), far: (K.walk.goals(2) ?? []).filter((g) => g.axis === 3 && g.far).length, near: (K.walk.goals(2) ?? []).filter((g) => g.axis === 3 && !g.far).length };
     await K.walk.input({ kind: 'wait' });
     await settle();
     out.hunt.afterOne = { state: K.walk.enemies.find((e) => e.id === 2)?.state, threats: K.walk.threats.length, status: document.getElementById('walk-status').textContent, ms: K.walk.enemyMs, king: { ...K.walk.enemies.find((e) => e.id === 2).king } };
@@ -1259,23 +1262,34 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.hunt.duel = { phase: K.app.phase, duel: K.walk.duel, lower: lower(), enemiesKept: K.walk.enemies.length, black: K.app.duel ? K.app.duel.fen().split(' ')[0].replace(/[^a-z]/g, '').length : null, logEnemy: K.log.build()?.world?.enemy ?? null };
     out.hunt.ended = await walkOut('black');
     out.hunt.after = { phase: K.app.phase, enemies: K.walk.enemies.map((e) => `${e.id}:${e.state}`).join(' '), lower: lower(), same: cells() === standing, facing: K.walk.state.facing, last: K.walk.saved().turns.at(-1) };
-    // THE AMBUSH THROUGH THE PIVOT: enemy 3 on the north far row (55, 31), facing south; the player's wait completes the alignment.
-    out.ambush = { placed: K.walk.placeEnemy(3, 55, 31, 2), sight: K.walk.sight(3) };
+    // THE AMBUSH THROUGH THE PIVOT, IN THE FAR HALF: enemy 3 six ranks north of the king (the nearest row the floor holds it on), facing south; the player's wait completes the alignment.
+    // Its king on the nearest row of the far half the floor holds it on, on a file whose deal is legal (a cell of its own goals).
+    const kk = { ...K.walk.state.king };
+    out.ambush = { placed: false, off: null };
+    for (const off of [6, 7, 8, 9]) {
+      for (const df of [0, -1, 1]) {
+        if (!K.walk.placeEnemy(3, kk.f + df, kk.r + off, 2)) continue;
+        const ek = K.walk.enemies.find((x) => x.id === 3).king;
+        if ((K.walk.goals(3) ?? []).some((g) => g.f === ek.f && g.r === ek.r)) { out.ambush.placed = true; out.ambush.off = off; out.ambush.at = { ...ek }; break; }
+      }
+      if (out.ambush.placed) break;
+    }
+    out.ambush.sight = K.walk.sight(3);
     out.ambush.turns = await untilDuel(3);
-    out.ambush.duel = { phase: K.app.phase, duel: K.walk.duel, facing: K.walk.state.facing, pending: K.walk.saved()?.pending ?? null, crop: K.walk.crop };
+    out.ambush.duel = { phase: K.app.phase, duel: K.walk.duel, facing: K.walk.state.facing, pending: K.walk.saved()?.pending ?? null, crop: K.walk.crop, logRow: K.log.build()?.world?.enemyRow ?? null };
     return out;
   });
   const hd = en.hunt.duel.duel, ad = en.ambush.duel.duel;
   expect(en.start.schema === 'dck-run/3' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
   expect(!en.wait.moved && en.wait.states === 'sentry,sentry,sentry,sentry' && en.wait.threats === 0, `a wait moves no sentry, lights no threat (${en.wait.ms?.toFixed(1)} ms of enemy work)`);
-  expect(en.hunt.placed && en.hunt.sight && /47,21/.test(en.hunt.goalsWest), `enemy 2 stood at (44, 21) sees the king; the west far row offers (47, 21) (${en.hunt.goalsWest})`);
+  expect(en.hunt.placed && en.hunt.sight && /47,21/.test(en.hunt.goalsWest) && en.hunt.far > 0 && en.hunt.near > 0, `enemy 2 stood at (44, 21) sees the army; the west band offers (47, 21) on its far row (${en.hunt.far} far-row cells, ${en.hunt.near} nearer cells of the far half)`);
   expect(en.hunt.afterOne.state === 'hunt' && en.hunt.afterOne.threats > 0 && /sees you/.test(en.hunt.afterOne.status), `on the next input it hunts: the threat display lights ${en.hunt.afterOne.threats} cells, the strip says so (its king at ${en.hunt.afterOne.king.f}, ${en.hunt.afterOne.king.r}; ${en.hunt.afterOne.ms?.toFixed(1)} ms of enemy work)`);
   expect(en.hunt.afterOne.ms < 120, `the enemy work of a hunting turn stays under the walk's step (${en.hunt.afterOne.ms?.toFixed(1)} ms)`);
   expect(en.hunt.duel.phase === 'playing' && hd && hd.turn === 'b' && hd.enemyId === 2 && hd.axis === 3 && !hd.pivoted && hd.enemyFile !== undefined, `THE HUNT: the barrier falls after ${en.hunt.turns + 1} inputs with the enemy's initiative (turn ${hd?.turn}, enemy ${hd?.enemyId}, axis ${hd?.axis})`);
   expect(en.hunt.duel.black === 6 && en.hunt.duel.lower === 24 && en.hunt.duel.enemiesKept === 4 && en.hunt.duel.logEnemy?.id === 2, `the hunter's own bag is molded into the box (${en.hunt.duel.black} black pieces), the other three stand on the map, the log names the enemy`);
   expect(en.hunt.ended === 'ended' && en.hunt.after.phase === 'walk' && en.hunt.after.enemies === '1:sentry 3:sentry 4:sentry' && en.hunt.after.lower === 18 && en.hunt.after.same && en.hunt.after.facing === 3 && en.hunt.after.last?.kind === 'duel' && en.hunt.after.last.axis === 3, `a win removes the whole enemy army: ${en.hunt.after.enemies}, ${en.hunt.after.lower} letters, the survivors where they stood, the run's entry carries the axis`);
-  expect(en.ambush.placed && en.ambush.sight && en.ambush.duel.phase === 'playing' && ad && ad.turn === 'w' && ad.enemyId === 3 && ad.axis === 0 && ad.pivoted && en.ambush.duel.facing === 0 && en.ambush.duel.crop?.facing === 0, `THE AMBUSH THROUGH THE PIVOT: an enemy on the north far row is caught by the player's wait — his initiative (turn ${ad?.turn}), the army pivoted north (facing ${en.ambush.duel.facing}, pivoted ${ad?.pivoted})`);
-  expect(en.ambush.duel.pending && en.ambush.duel.pending.enemyId === 3 && en.ambush.duel.pending.axis === 0 && en.ambush.duel.pending.seed === ad?.seed, `the pending entry names the enemy, the axis and the seed`);
+  expect(en.ambush.placed && en.ambush.off === 6 && en.ambush.sight && en.ambush.duel.phase === 'playing' && ad && ad.turn === 'w' && ad.enemyId === 3 && ad.axis === 0 && ad.pivoted && ad.enemyRow === 6 && en.ambush.duel.logRow === 6 && en.ambush.duel.facing === 0 && en.ambush.duel.crop?.facing === 0, `THE AMBUSH THROUGH THE PIVOT, IN THE FAR HALF: an enemy six ranks north is caught by the player's wait — his initiative (turn ${ad?.turn}), the army pivoted north (facing ${en.ambush.duel.facing}, pivoted ${ad?.pivoted}), the enemy's row ${ad?.enemyRow} in the run and ${en.ambush.duel.logRow} in the log`);
+  expect(en.ambush.duel.pending && en.ambush.duel.pending.enemyId === 3 && en.ambush.duel.pending.axis === 0 && en.ambush.duel.pending.enemyRow === 6 && en.ambush.duel.pending.seed === ad?.seed, `the pending entry names the enemy, the axis, the row and the seed`);
   // A reload mid-duel: the same enemy, the same seed, from move one.
   await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?run=resume&${q6}`);
   await page6.waitForFunction(() => window.__DCK?.app?.phase === 'playing' && window.__DCK.app.session?.kind === 'world', null, { timeout: 120000 });

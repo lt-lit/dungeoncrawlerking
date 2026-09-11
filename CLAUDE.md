@@ -886,8 +886,10 @@ places). ENEMIES ARE 3 WIDE FOR NOW: the spawn digit is still the width,
 `SPAWN_WIDTHS` reads all threes until §8's ladder returns, and the two
 pieces are drawn from the run's seed in a NINE-TO-THIRTEEN band (no
 queens at width 3). (2) THE FAR ROW IS A BAND, any file of it (§5.3's
-unconfirmed reading, confirmed). (3) CRATES AND DOORS BLOCK SIGHT, holes
-do not; king to king, no cap, no fog, after every move. (4) A REAR OR
+unconfirmed reading, confirmed; THE FAR HALF since 2026-09-11 — the
+paragraph below). (3) CRATES AND DOORS BLOCK SIGHT, holes
+do not; king to king, no cap, no fog, after every move (ANY TWO PIECES
+since 2026-09-11). (4) A REAR OR
 SIDE CATCH PIVOTS THE ARMY to the axis at the drop (ruling 14's wheel),
 then the pieces are read where they stand — never a refusal of rear
 axes. (5) the enemy band above. (6) SENTRIES FIRST; a closed door is a
@@ -949,6 +951,60 @@ range and fog, aggro between hunters, an enemy that smashes crates, a
 planner over formation states for the pocket tangles, per-theme edge-on
 door art, a phone height for the duel box, the analyzer mounting the
 whole world.**
+
+**THE FIRST PHONE LOGS ✅ READ 2026-09-11 — ANY-PIECE SIGHT AND THE FAR
+HALF (designer, two replay logs from the phone: "First one had a lot of
+trouble starting the duel. You understand that duel activation can force
+the player's army to turn right? Or maybe the line of sight is too
+strict. Maybe we should count it as any two pieces seeing eachother, not
+just the kings" — and, on the measurements, "Do both, go ahead").**
+MEASURED FIRST, before a line changed: THE PIVOT never refused (1,200
+random placements and 2,246 walked turns across the four fixtures, every
+axis) — a rear or side catch turning the army is ruling 4 working, not
+the trouble; the first log's duel came on the south axis with the
+enemy's initiative and enemy 3's king two cells behind its spawn, on the
+far row — the shape of a sentry that noticed late and backed off (the
+log holds no walk inputs; the run save export would replay the 181
+turns); KING-TO-KING SIGHT held on 2–3% of enemy-and-position pairs
+across the fixtures against 7–12% for any two pieces, and from farther
+(median ten cells against seven; around the log's two spawns 128 and 66
+of about 540 nearby floor cells against 344 and 220 —
+`phase0/harness/sight-map.mjs`, an ASCII map of where a spawn sees you);
+and THE RETREAT DANCE: the far row alone meant a hunter that first
+saw the player inside nine had to back off to nine at SPEED PARITY, and
+a player walking at it kept the distance forever — of six charges that
+began under king sight, four never started in 250 turns while the enemy
+retreated 15–86 times, and the same six with a wait after first sight
+started within ten turns (`phase0/harness/charge-stress.mjs`: a crude
+thumb walking the kit at every sentry, `--kings` the old rule, `--policy
+wait` the wait). BUILT the same day, both: (1) SIGHT IS BETWEEN
+ARMIES — `enemy.mjs armiesSee`, any piece of one seeing any piece of the
+other, the kings first, at most 64 rays; `updateSight` reads it, the
+last-seen cell stays the king's; `__DCK.walk.sight` too. (2) THE FAR
+HALF — `barrier.mjs FAR_HALF` 5: a hunting king anywhere on rows 5…9 of
+a box, on a file whose deal is legal, triggers (`triggerFor` returns
+`row`; the deal molds it onto the far row as ever — its walking pieces
+were never read, so its standing cell only names the axis and the file);
+`farRowTargets` lists every floor cell of the far half of a legal file
+(`far` marks the far row), so the hunter's goals, THE THREAT DISPLAY
+(the far row framed, the band tinted — canvas-board `THREAT_TINT`) and
+the trigger stay ONE function; a hunter inside five backs off to five,
+never to nine; the drop records the standing row (`enemyRow` on the
+pending entry, the run's duel entry, the duel getter and the log's
+`world` block). MEASURED AFTER: charge-stress — sixteen charges, nine
+sighted, nine started with a wait after first sight, eight walking on
+(the ninth the driver stuck behind the enemy's formation in a corridor),
+the dance zero; hunt-stress unchanged (13/16 standing, 16/16 fleeing —
+from afar the far row is still the nearest goal). Gates: test-enemy 80
+(a walled kings' line seen pawn to pawn, a blind pair behind a wall
+line, seven ranks off triggering at once with the player's initiative
+and the deal on the far row, ten off not yet, four off backing to five,
+a charge from twelve met at nine), test-barrier 160 (the band's cells
+per legal file, the far row marked), ui-smoke 256 ok (the ambush
+through the pivot now SIX ranks off, its row in the run and the log),
+selftest 46/46, replay-smoke 63, the other Node gates unchanged. THE
+PHONE VERDICT IS THE GATE — and the run save export of a troubled walk
+is the instrument to send with it.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
@@ -1831,10 +1887,12 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   dungeon generator".
 - `play/js/enemy.mjs` — THE ENEMIES (Phase 2 milestone 6, 2026-09-10): an
   enemy is the same army on the black side, spawned from the digits;
-  sight king to king; sentry / hunt / search; the hunter's goals through
-  the trigger function itself; the enemy's turn on the walk's own planner;
-  the trigger with its initiative; bystanders lifted and set back. Node
-  gate `test-enemy.mjs`; `hunt-stress.mjs` the convergence instrument.
+  sight BETWEEN ARMIES (any piece seeing any piece, since 2026-09-11 —
+  king to king before); sentry / hunt / search; the hunter's goals through
+  the trigger function itself — THE FAR HALF of the four boxes since
+  2026-09-11; the enemy's turn on the walk's own planner; the trigger
+  with its initiative; bystanders lifted and set back. Node gate
+  `test-enemy.mjs`; `hunt-stress.mjs` the convergence instrument.
   main.mjs § THE WALK runs the loop, the chooser and the drop.
 - `play/js/barrier.mjs` — THE BOX (Phase 2 milestone 5, 2026-09-08, on
   4c's barrier by hand): the arena is ALWAYS 10×10 on the player's king
@@ -1842,7 +1900,9 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   since THE DUEL START (2026-09-10 — `boxOf`, slid to hold every piece;
   `boxPlacement` keeps the lone king's centred box for the generator's
   lint), THE PIECES WHERE THEY STAND (`standingCells`), the enemy king on
-  the far row on the king's file or the nearest that deals (the band),
+  the far row on the king's file or the nearest that deals (the band; THE
+  TRIGGER accepts it anywhere in THE FAR HALF, rows `FAR_HALF` 5…9, since
+  2026-09-11 — the deal still molds it onto the far row),
   the gap an output measured BETWEEN THE CAMP LINES with a floor of 2,
   the enemy molded around the player's pieces on ground connected to its
   king, an axis other than the facing dealt after the pivot,
@@ -1966,8 +2026,10 @@ node harness/test-army.mjs           # THE ARMY RULE (play/js/army.mjs): brief �
 node harness/walk-stress.mjs [--steps 3000] [--world vaults-4] [--hold 1] [--trace <turn>] [--splits 3] [--teleports 4] [--refused 3] [--lag 4] [--behind 3]  # THE WALK'S COHESION INSTRUMENT: random d-pad walks over the generated fixtures (--hold: a thumb on one arm) — the king's lag to his slot, his distance to the nearest comrade, the army's connectivity (the cluster invariant: split turns must stay near zero), teleports by reason, collisions, refusals split into the anchor's and the walk's, the worst turns as local maps (% / x an anchor / slot in stone), the turns with a piece BEHIND THE KING (must be none; --behind samples them); --refused prints a refused step's stage traces and a pieces: line that rebuilds the position, --lag the king's worst lags, --trace the turns before one (a refused step prints the targets it would have assigned)
 node harness/walk-replay.mjs <world> <df,dr> [--hold N] [--trace] [pieces: K1@f,r R2@f,r … anchor f,r facing n]  # THE WALK'S REPLAYER: rebuild a position from a walk-stress pieces: line (or start at the fixture's start), replay one input printing every stage of planTurn's trace (targets, vias, stuck, queued), or hold it N turns printing the map, the plan and the pieces: line after each — read a screenshot's position into it before touching army.mjs
 node harness/test-barrier.mjs        # THE BOX + THE DUEL START (play/js/barrier.mjs): the fixed 10×10 arena at every facing placed by the walk's own rule, the pieces where they stand, the far-row band, the gap between the camp lines with a floor of 2, the enemy molded around the player's pieces, off-map walls, an axis behind the army refused then dealt after the pivot, the walk-out's survivors and returns; Node only
-node harness/test-enemy.mjs          # THE ENEMIES (play/js/enemy.mjs): the band, the spawns from the digits and the stamp that clears only its own cells, sight and the corner rule, sentry / hunt / search, the hunter's goals and the trigger with its initiative, the ambush through the pivot, search and the door, bystanders, the save; Node only
+node harness/test-enemy.mjs          # THE ENEMIES (play/js/enemy.mjs): the band, the spawns from the digits and the stamp that clears only its own cells, sight and the corner rule, sight between ARMIES (any piece seeing any piece), sentry / hunt / search, the hunter's goals and the trigger with its initiative, THE FAR HALF (a hunter seven off starts the duel at once, four off backs to five), the ambush through the pivot, search and the door, bystanders, the save; Node only
 node harness/hunt-stress.mjs [--flee] [--turns 120] [--world vaults-2]  # THE HUNT'S CONVERGENCE: every spawn of every fixture hunts the kit at the start with sight granted (the player standing, or fleeing on a held cardinal walk) — turns to the trigger, parks, misses, the enemy work per turn
+node harness/charge-stress.mjs [--policy charge|wait] [--kings] [--turns 250] [--world vaults-2]  # THE CHARGE (2026-09-11): a crude thumb walks the kit AT every sentry under the game's sight rule (--kings the old king-to-king one), the player walking on or pressing wait after first sight — first sight's turn and distance, whether and when the duel starts and whose initiative, THE RETREAT DANCE (turns the player stepped nearer and the enemy king stepped away; must stay near zero)
+node harness/sight-map.mjs [--world vaults-4] [--enemy 3] [--radius 13]  # WHERE A SPAWN SEES YOU: an ASCII map around one enemy's spawn — k its king sees your king there, a some piece of its army sees some piece of the kit stood there, . nothing
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 
 node harness/gen-worlds.mjs [--duel] # THE GENERATOR's fixtures in play/worlds/ (vaults-1…4, generated at fixed seeds, linted as written; --duel adds the duelable-ground coverage) + their manifest

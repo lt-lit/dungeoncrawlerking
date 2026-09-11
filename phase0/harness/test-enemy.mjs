@@ -11,8 +11,8 @@
 // a hunter, the bystander lifted and set back, and the save round trip.
 import { loadWorld, HOLE, FLOOR, FURNITURE, worldToArena } from '../../play/js/world.mjs';
 import { makePattern, spawnArmy, planTurn, applyTurn, OPENING_KIT, Army } from '../../play/js/army.mjs';
-import { spawnEnemies, lineOfSight, updateSight, enemyTurn, hunterGoals, triggerFor, threatCells, armyAlong, liftInside, settleBack, serializeEnemy, loadEnemy, enemyBudget, describeEnemy, facingToward } from '../../play/js/enemy.mjs';
-import { boxAt, BOX } from '../../play/js/barrier.mjs';
+import { spawnEnemies, lineOfSight, armiesSee, updateSight, enemyTurn, hunterGoals, triggerFor, threatCells, armyAlong, liftInside, settleBack, serializeEnemy, loadEnemy, enemyBudget, describeEnemy, facingToward } from '../../play/js/enemy.mjs';
+import { boxAt, BOX, FAR_HALF } from '../../play/js/barrier.mjs';
 import { newRun, updateRun, openRun, RUN_SCHEMA } from '../../play/js/run.mjs';
 import { makeArmy } from '../../play/js/armygen.mjs';
 import { mulberry32 } from '../../play/js/prng.mjs';
@@ -139,9 +139,9 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   check(saw && e.state === 'hunt' && e.lastSeen.f === 14 && e.lastSeen.r === 20, 'a sentry that sees the king hunts, the last-seen cell his');
   const g = hunterGoals(w, player, e, { seed: 1 });
   check(g.axes.length === 4 && g.axes.every((a) => a.pivot === (a.axis !== 0)), `the goals span four axes, three of them through the drop's pivot (${g.axes.map((a) => a.axis + (a.pivot ? 'p' : '')).join(' ')})`);
-  check(g.goals.length === 40 && g.goals.every((c) => w.at(c.f, c.r) === FLOOR), `on open ground every far-row cell of every axis is a goal (${g.goals.length})`);
+  check(g.goals.length === 4 * 10 * (BOX - FAR_HALF) && g.goals.every((c) => w.at(c.f, c.r) === FLOOR), `on open ground every cell of the far half of every axis is a goal (${g.goals.length})`);
   const north = g.goals.filter((c) => c.axis === 0);
-  check(north.every((c) => c.r === 20 + 9) && new Set(north.map((c) => c.f)).size === 10, 'the north box\'s far row is nine ranks ahead of the king, ten files wide');
+  check(north.every((c) => c.r >= 20 + FAR_HALF && c.r <= 20 + 9 && c.far === (c.r === 20 + 9)) && new Set(north.map((c) => c.f)).size === 10 && north.filter((c) => c.far).length === 10, 'the north box\'s far half runs five to nine ranks ahead of the king, ten files wide, the far row marked');
   // The hunt: turns until the trigger fires, the player standing still.
   let fired = null, turns = 0, moved = 0;
   for (; turns < 60 && !fired; turns++) {
@@ -161,7 +161,7 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   }
   // The threat display: the far-row cells of the hunter's goals.
   const t = threatCells(w, player, [e], { seed: 1 });
-  check(t.length === 40, `the threat display lights ${t.length} cells while the enemy hunts`);
+  check(t.length === 4 * 10 * (BOX - FAR_HALF) && t.filter((c) => c.far).length === 40, `the threat display lights ${t.length} cells while the enemy hunts, the four far rows marked`);
   e.state = 'sentry';
   check(threatCells(w, player, [e], { seed: 1 }).length === 0, 'and none when it does not');
 }
@@ -228,8 +228,8 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   const p2 = spawnArmy(w2, kit(), { f: 10, r: 3 }, 0, 'w');
   const a2 = spawnArmy(w2, makePattern({ width: 3, royal: 'K', pieces: ['N', 'B'] }, { seed: 1 }), { f: 10, r: 20 }, 2, 'b');
   const e2 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 10, r: 20 }, army: a2, state: 'search', lastSeen: { f: 10, r: 18 }, seen: true };
-  // No sight: wall the king in.
-  for (const [f, r] of [[9, 4], [10, 4], [11, 4], [9, 3], [11, 3]]) w2.setTerrain(f, r, '*');
+  // No sight: a wall line across the hall between the armies (any piece seeing any piece would be sight).
+  for (let f = 1; f < 19; f++) w2.setTerrain(f, 8, '*');
   let arrived = false;
   for (let i = 0; i < 6 && !arrived; i++) { const r = enemyTurn(w2, p2, e2, { seed: 1 }); arrived = r.arrived; }
   check(arrived && e2.state === 'sentry' && e2.lastSeen === null && e2.army.king.r === 18, `arrived at the last-seen cell with nobody there: a sentry again (r ${e2.army.king.r})`);
@@ -248,7 +248,7 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   const e = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 14, r: 30 }, army, state: 'hunt', lastSeen: { f: 14, r: 5 }, seen: true };
   const g = hunterGoals(w, player, e, { seed: 1 });
   const north = g.goals.filter((c) => c.axis === 0);
-  check(north.length === 9 && !north.some((c) => c.f === 14 && c.r === 14), `the pillar's cell is no goal (${north.length} of the north far row)`);
+  check(north.length === 9 * (BOX - FAR_HALF) && !north.some((c) => c.f === 14), `the pillar's file is no goal (${north.length} cells of the north band, none on file 14)`);
   let fired = null;
   for (let i = 0; i < 40 && !fired; i++) { enemyTurn(w, player, e, { seed: 1 }); fired = triggerFor(w, player, e, { seed: 1, turn: 'b' }); }
   check(fired && fired.file !== 4, `the hunter takes a neighbouring far-row file (${fired?.file})`);
@@ -339,6 +339,80 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   const es = spawnEnemies(w, 3);
   check(es.length === 1 && es[0].army.facing === 0 && es[0].army.pieces.length === 6, 'the enemy on the fixture faces the start');
   check(es[0].army.pieces.every((p) => w.at(p.f, p.r) === FLOOR), 'every piece on floor');
+}
+
+// ---- 9. SIGHT BETWEEN ARMIES and THE FAR HALF (designer 2026-09-11, on the first phone logs: "Do both, go ahead")
+{
+  // A wall stub on the kings' line; a pawn of each army sees a pawn of the other past it.
+  const w = openFloor(30, 40);
+  const player = spawnArmy(w, kit(), { f: 14, r: 5 }, 0, 'w');
+  const enemyPat = makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }, { seed: 1 });
+  const army = spawnArmy(w, enemyPat, { f: 13, r: 24 }, 2, 'b');
+  const e = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 13, r: 24 }, army, state: 'sentry', lastSeen: null, seen: false };
+  const pk = player.king, ek = e.army.king;
+  // Wall the king-to-king ray: every cell of the straight line between them but the ends.
+  const blocked = [];
+  for (let r = pk.r + 1; r < ek.r; r++) {
+    const f = Math.round(pk.f + (ek.f - pk.f) * (r - pk.r) / (ek.r - pk.r));
+    if (w.at(f, r) === FLOOR && !w.pieceAt(f, r)) { w.setTerrain(f, r, '*'); blocked.push(`${f},${r}`); }
+  }
+  check(!lineOfSight(w, ek, pk) && blocked.length > 0, `the kings' line is walled (${blocked.length} cells)`);
+  check(armiesSee(w, e.army, player), 'but some piece of each army sees some piece of the other');
+  check(updateSight(w, player, e) && e.state === 'hunt' && e.lastSeen.f === pk.f && e.lastSeen.r === pk.r, 'so the sentry hunts, the last-seen cell still the KING\'s');
+  // Sight reads the same from either army.
+  check(armiesSee(w, player, e.army), 'and the player\'s army sees the enemy\'s the same way');
+  // A blind pair: the enemy sealed behind a wall line — no piece sees any piece.
+  const w2 = openFloor(30, 40);
+  const p2 = spawnArmy(w2, kit(), { f: 14, r: 5 }, 0, 'w');
+  const a2 = spawnArmy(w2, enemyPat, { f: 14, r: 24 }, 2, 'b');
+  for (let f = 1; f < 29; f++) w2.setTerrain(f, 15, '*');
+  const e2 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 14, r: 24 }, army: a2, state: 'sentry', lastSeen: null, seen: false };
+  check(!armiesSee(w2, e2.army, p2) && !updateSight(w2, p2, e2) && e2.state === 'sentry', 'a wall line across the hall: nobody sees anybody, the sentry stands');
+
+  // THE FAR HALF: a hunting king SEVEN ranks ahead starts the duel at once — the deal molds it onto the far row.
+  const w3 = openFloor(30, 40);
+  const p3 = spawnArmy(w3, kit(), { f: 14, r: 5 }, 0, 'w');
+  const a3 = spawnArmy(w3, enemyPat, { f: 14, r: 5 + 7 }, 2, 'b');
+  const e3 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 14, r: 12 }, army: a3, state: 'sentry', lastSeen: null, seen: false };
+  check(updateSight(w3, p3, e3) && e3.state === 'hunt', 'seven ranks off, in sight: it hunts');
+  const c3 = triggerFor(w3, p3, e3, { seed: 1, turn: 'w' });
+  check(c3 && c3.axis === 0 && c3.row === 7 && c3.turn === 'w' && c3.plan.ok, `seven ranks off triggers at once on the north axis, row ${c3?.row} of the box, with the player's initiative`);
+  check(c3 && c3.plan.deal.world.enemyKingSquare === `${String.fromCharCode(97 + c3.file)}10` && /k/.test(c3.plan.deal.fen.split(' ')[0].split('/')[0]), 'the deal molds its king onto the far row');
+  const g3 = hunterGoals(w3, p3, e3, { seed: 1 });
+  check(g3.goals.some((c) => c.f === e3.army.king.f && c.r === e3.army.king.r && !c.far), 'its own cell is one of the goals, not a far one');
+  // The threat display marks the far rows and tints the rest.
+  const t3 = threatCells(w3, p3, [e3], { seed: 1 });
+  check(t3.filter((c) => c.far).every((c) => Math.abs(c.r - p3.king.r) === 9 || Math.abs(c.f - p3.king.f) === 9) && t3.filter((c) => !c.far).every((c) => Math.abs(c.r - p3.king.r) < 9 && Math.abs(c.f - p3.king.f) < 9), 'far marks exactly the far rows');
+  // Ten ranks off: beyond the band, no duel; FOUR ranks off: inside the near half, no duel — the hunter backs off to five and the duel starts.
+  const w4 = openFloor(30, 40);
+  const p4 = spawnArmy(w4, kit(), { f: 14, r: 5 }, 0, 'w');
+  const a4 = spawnArmy(w4, enemyPat, { f: 14, r: 5 + 10 }, 2, 'b');
+  const e4 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 14, r: 15 }, army: a4, state: 'hunt', lastSeen: { f: 14, r: 5 }, seen: true };
+  check(!triggerFor(w4, p4, e4, { seed: 1, turn: 'w' }), 'ten ranks off: beyond the band, no duel yet');
+  const w5 = openFloor(30, 40);
+  const p5 = spawnArmy(w5, kit(), { f: 14, r: 5 }, 0, 'w');
+  const a5 = spawnArmy(w5, enemyPat, { f: 14, r: 5 + 4 }, 2, 'b');
+  const e5 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 14, r: 9 }, army: a5, state: 'hunt', lastSeen: { f: 14, r: 5 }, seen: true };
+  check(!triggerFor(w5, p5, e5, { seed: 1, turn: 'w' }), 'four ranks off: inside the near half, no duel');
+  let fired5 = null, turns5 = 0;
+  for (; turns5 < 6 && !fired5; turns5++) { enemyTurn(w5, p5, e5, { seed: 1 }); fired5 = triggerFor(w5, p5, e5, { seed: 1, turn: 'b' }); }
+  check(fired5 && turns5 <= 2 && fired5.row === FAR_HALF, `it backs off to the band's near edge and the duel starts in ${turns5} turn(s) (row ${fired5?.row}, its initiative)`);
+  // THE RETREAT DANCE IS GONE: a player walking at a hunter that first saw him seven ranks off fights at once — and one that
+  // saw him from twelve is met at nine, his initiative, on the step that closes it.
+  const w6 = openFloor(30, 44);
+  const p6 = spawnArmy(w6, kit(), { f: 14, r: 5 }, 0, 'w');
+  const a6 = spawnArmy(w6, enemyPat, { f: 14, r: 5 + 12 }, 2, 'b');
+  const e6 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 14, r: 17 }, army: a6, state: 'hunt', lastSeen: { f: 14, r: 5 }, seen: true };
+  let fired6 = null, turns6 = 0;
+  for (; turns6 < 8 && !fired6; turns6++) {
+    const step = planTurn(w6, p6, { kind: 'step', df: 0, dr: 1 });
+    if (step.ok) applyTurn(w6, p6, step);
+    fired6 = triggerFor(w6, p6, e6, { seed: 1, turn: 'w' });
+    if (fired6) break;
+    enemyTurn(w6, p6, e6, { seed: 1 });
+    fired6 = triggerFor(w6, p6, e6, { seed: 1, turn: 'b' });
+  }
+  check(fired6 && turns6 <= 3 && fired6.row === 9, `walking at a hunter twelve ranks off meets it at nine within ${turns6 + 1} turns (row ${fired6?.row}, initiative ${fired6?.turn})`);
 }
 
 console.log(`test-enemy: ${ok}/${ok + bad} checks passed`);

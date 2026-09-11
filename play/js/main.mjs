@@ -51,7 +51,7 @@ import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pix
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
 import { makePattern, spawnArmy, walkOutArmy, planTurn, applyTurn, manualMoves, boxOf, facingOfStep, formationFocus, bagOfPattern, Army, OPENING_KIT } from './army.mjs';
-import { spawnEnemies, enemyTurn, updateSight, triggerFor, hunterGoals, axisArmies, lineOfSight, liftInside, settleBack, describeEnemy, enemyDealSide, serializeEnemy, loadEnemy } from './enemy.mjs'; // THE ENEMIES (Phase 2 milestone 6, 2026-09-10)
+import { spawnEnemies, enemyTurn, updateSight, triggerFor, hunterGoals, axisArmies, armiesSee, liftInside, settleBack, describeEnemy, enemyDealSide, serializeEnemy, loadEnemy } from './enemy.mjs'; // THE ENEMIES (Phase 2 milestone 6, 2026-09-10)
 import { newRun, updateRun, recordTurn, recordDuel, runEnded, openRun, checkRun, loadSavedRun, saveRun, clearSavedRun, runFileName, RUN_SCHEMA } from './run.mjs';
 import { planBarrier, planBox } from './barrier.mjs'; // THE BARRIER BY HAND (Phase 2 milestone 4c, 2026-09-08) on THE BOX (milestone 5); planBox for THE TRIGGER (milestone 6)
 import { generateWorld, STYLES, STYLE_NAMES } from './dungeon.mjs'; // THE DUNGEON GENERATOR (Phase 2 milestone 5, 2026-09-08)
@@ -3495,7 +3495,7 @@ function beginRun(worldJson, { resume = null } = {}) {
   walkStatus();
   // A duel was in flight when the run was last saved: the barrier drops
   // again on the same seed — the same crop, the same enemy — from move one.
-  if (run.pending) void app.boardUI.ready.then(() => walkBarrier({ seed: run.pending.seed, turn: run.pending.turn, knobs: run.pending.enemy, axis: run.pending.axis ?? null, enemyId: run.pending.enemyId ?? null, enemyFile: run.pending.enemyFile ?? null }));
+  if (run.pending) void app.boardUI.ready.then(() => walkBarrier({ seed: run.pending.seed, turn: run.pending.turn, knobs: run.pending.enemy, axis: run.pending.axis ?? null, enemyId: run.pending.enemyId ?? null, enemyFile: run.pending.enemyFile ?? null, enemyRow: run.pending.enemyRow ?? null }));
   return app.walk;
 }
 
@@ -3666,9 +3666,14 @@ function walkEnemies(W, arrivals, plans) {
         plans.push(r.plan);
         for (const m of r.plan.moves) arrivals.push({ from: m.from, to: m.to, via: m.via ?? [], ch: e.army.letter(e.army.piece(m.id)?.ch ?? 'P') });
       }
-      // THE THREAT DISPLAY (brief §5.4): the far rows lit while any enemy
-      // hunts — the hunter's own goals this turn, computed once.
-      if (e.state === 'hunt') for (const g of r.goalList) threats.set(`${g.f},${g.r}`, { f: g.f, r: g.r });
+      // THE THREAT DISPLAY (brief §5.4): the band lit while any enemy
+      // hunts — the hunter's own goals this turn, computed once; `far`
+      // marks the far row (framed on the board, the rest tinted).
+      if (e.state === 'hunt') for (const g of r.goalList) {
+        const key = `${g.f},${g.r}`;
+        const had = threats.get(key);
+        threats.set(key, { f: g.f, r: g.r, far: !!(g.far || had?.far) });
+      }
       const c = triggerFor(W.world, W.army, e, { ...opts, turn: 'b' });
       if (c) {
         cands = [c];
@@ -3721,7 +3726,7 @@ async function walkChoose(enemyId) {
 /** The drop a trigger's candidate asks for: this enemy, on this axis, on this far-row file, the initiative of whoever completed the alignment. */
 function walkDropOn(c) {
   walkStatus(c.turn === 'b' ? 'a summoner catches you — the barrier falls' : 'you step into a summoner\'s line — the barrier falls');
-  return walkBarrier({ enemy: c.enemy, axis: c.axis, enemyFile: c.file, turn: c.turn });
+  return walkBarrier({ enemy: c.enemy, axis: c.axis, enemyFile: c.file, enemyRow: c.row ?? null, turn: c.turn });
 }
 
 /** A tap on the world: select one of our pieces (its chess moves marked at
@@ -4044,7 +4049,7 @@ function mountDuelBoard(session) {
  * initiative from the walk's toggle, the enemy from the setup screen's
  * Black knobs. Returns the plan (ok or refused with one line).
  */
-async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null, enemy = null, enemyId = null, enemyFile = null } = {}) {
+async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null, enemy = null, enemyId = null, enemyFile = null, enemyRow = null } = {}) {
   const W = app.walk;
   if (!W || app.phase !== 'walk' || W.busy || app.duel) return null;
   if (!app.ffish || !app.engine) {
@@ -4076,7 +4081,7 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
     // THE PENDING ENTRY: the run is saved with the floor as it stands and
     // the duel's seed, BEFORE the floor changes — a reload re-drops it.
     walkSave();
-    run.pending = { seed: dealSeed, turn: initiative, enemy: foe ? null : enemyKnobs, enemyId: foe?.id ?? null, enemyFile: enemyFile ?? null, at: W.turn, axis: wantAxis };
+    run.pending = { seed: dealSeed, turn: initiative, enemy: foe ? null : enemyKnobs, enemyId: foe?.id ?? null, enemyFile: enemyFile ?? null, enemyRow: enemyRow ?? null, at: W.turn, axis: wantAxis };
     saveRun(run);
     // The floor as it was, for an engine error mid-duel (before the pivot:
     // an error hands the walk back as it stood).
@@ -4127,9 +4132,13 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
       if (cells.length) lifted.push({ id: e.id, cells });
     }
     const session = makeWorldSession(plan, W, enemyKnobs, foe);
+    // THE ROW the enemy king stood on in the box at the drop (the far half,
+    // 5…9 — the deal molds it onto the far row; the log and the run keep the
+    // standing row for the phone's post-mortems).
+    if (session.worldLog) session.worldLog.enemyRow = enemyRow ?? null;
 
     app.session = session;
-    W.duel = { plan, seed: dealSeed, turn: initiative, startedAt: Date.now(), axis: wantAxis, pivoted, enemyId: foe?.id ?? null, lifted };
+    W.duel = { plan, seed: dealSeed, turn: initiative, startedAt: Date.now(), axis: wantAxis, pivoted, enemyId: foe?.id ?? null, enemyRow: enemyRow ?? null, lifted };
     // THE CUT (ruling 1): the camera turns to the army's facing behind the
     // wipe, which lifts once the duel has painted (or after a beat and a
     // half — a cold engine should not keep the screen black).
@@ -4184,7 +4193,7 @@ async function walkOut() {
 
   refreshSavedLogs();
   const finalFen = d.fen();
-  const entry = { crop: { ...session.crop }, seed: W.duel?.seed ?? session.deal.seed, turn: W.duel?.turn ?? session.deal.turn, axis: W.duel?.axis ?? session.crop.facing, pivoted: !!W.duel?.pivoted, stage: session.deal.stageId, result: r.result, winner: r.winner, termination, plies: d.ply, quakes: r.quakes?.length ?? 0, fen: finalFen, logId: logId(), at: new Date().toISOString() };
+  const entry = { crop: { ...session.crop }, seed: W.duel?.seed ?? session.deal.seed, turn: W.duel?.turn ?? session.deal.turn, axis: W.duel?.axis ?? session.crop.facing, pivoted: !!W.duel?.pivoted, enemyRow: W.duel?.enemyRow ?? null, stage: session.deal.stageId, result: r.result, winner: r.winner, termination, plies: d.ply, quakes: r.quakes?.length ?? 0, fen: finalFen, logId: logId(), at: new Date().toISOString() };
   // The duel comes down (as Back does on the setup page).
   const probesQuiet = cancelIdleProbes();
   evalProbe.queue.length = 0;
@@ -4723,9 +4732,9 @@ window.__DCK = {
       const W = app.walk;
       return W ? W.enemies.map((e) => ({ id: e.id, n: e.n, width: e.width, state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen, facing: e.army.facing, king: { ...e.army.king }, pieces: e.army.pieces.map((p) => ({ ...p })), bag: bagOfPattern(e.army.pattern).back.join('') })) : null;
     },
-    /** Does enemy `id` see the player's king now? */
-    sight: (id) => { const W = app.walk; const e = W?.enemies.find((x) => x.id === id); return e ? lineOfSight(W.world, e.army.king, W.army.king) : null; },
-    /** The far-row cells where a duel with enemy `id` would be legal (the hunter's goals; grid + the ffish lint). */
+    /** Does enemy `id` see the player's army now (any of its pieces seeing any of his)? */
+    sight: (id) => { const W = app.walk; const e = W?.enemies.find((x) => x.id === id); return e ? armiesSee(W.world, e.army, W.army) : null; },
+    /** The band's cells where a duel with enemy `id` would be legal (the hunter's goals; grid + the ffish lint; `far` the far row's). */
     goals: (id) => { const W = app.walk; const e = W?.enemies.find((x) => x.id === id); return e ? hunterGoals(W.world, W.army, e, { ffish: app.ffish, seed: 1 }).goals.map((g) => ({ ...g })) : null; },
     /** THE THREAT DISPLAY's cells. */
     get threats() { return app.walk ? app.walk.threats.map((c) => ({ ...c })) : null; },
@@ -4774,7 +4783,7 @@ window.__DCK = {
     arenaFen: (turn = 'w') => (app.session?.kind === 'world' && app.walk ? app.walk.world.arenaFen(app.session.crop, turn) : null),
     get duel() {
       const W = app.walk;
-      return W?.duel ? { seed: W.duel.seed, turn: W.duel.turn, files: W.duel.plan.stage.files, ranks: W.duel.plan.stage.ranks, gap: W.duel.plan.deal.gap, gapFront: W.duel.plan.deal.gapFront, kingFile: W.duel.plan.kingFile, enemyFile: W.duel.plan.enemyFile, axis: W.duel.axis, pivoted: !!W.duel.pivoted, enemyId: W.duel.enemyId ?? null, lifted: (W.duel.lifted ?? []).map((l) => ({ id: l.id, cells: l.cells.length })), fen: W.duel.plan.deal.fen } : null;
+      return W?.duel ? { seed: W.duel.seed, turn: W.duel.turn, files: W.duel.plan.stage.files, ranks: W.duel.plan.stage.ranks, gap: W.duel.plan.deal.gap, gapFront: W.duel.plan.deal.gapFront, kingFile: W.duel.plan.kingFile, enemyFile: W.duel.plan.enemyFile, axis: W.duel.axis, pivoted: !!W.duel.pivoted, enemyId: W.duel.enemyId ?? null, enemyRow: W.duel.enemyRow ?? null, lifted: (W.duel.lifted ?? []).map((l) => ({ id: l.id, cells: l.cells.length })), fen: W.duel.plan.deal.fen } : null;
     },
     cell: (f, r) => (app.walk ? app.walk.world.cellView(f, r) : null),
     debris: () => (app.walk && app.debris.ledger ? app.debris.ledger.stats() : null),

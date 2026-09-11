@@ -68,8 +68,10 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `node harness/test-dungeon.mjs` (the generator's gate: the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's),
   `node harness/world-shots.mjs` (each fixture painted whole + the walk screen, for the eye — the generator's gallery),
   `node harness/test-barrier.mjs` (THE BOX + THE DUEL START: the fixed 10×10 arena placed by the walk's own rule, the pieces where they stand, the band, the gap between the camp lines, the enemy molded around the player's pieces, the walk-out's survivors),
-  `node harness/test-enemy.mjs` (THE ENEMIES: the spawns, sight, sentry / hunt / search, the hunter's goals, the trigger with its initiative, bystanders, the save),
+  `node harness/test-enemy.mjs` (THE ENEMIES: the spawns, sight between armies, sentry / hunt / search, the hunter's goals over the far half, the trigger with its initiative, bystanders, the save),
   `node harness/hunt-stress.mjs [--flee]` (the hunt's convergence over the fixtures: turns to the trigger, parks, misses, the enemy work per turn),
+  `node harness/charge-stress.mjs [--policy wait] [--kings]` (a crude thumb walks the kit at every sentry: first sight, the duel's start and initiative, the retreat dance — `--kings` replays the old king-to-king sight),
+  `node harness/sight-map.mjs --world vaults-4 --enemy 3` (an ASCII map of where a spawn sees you: its king your king, any piece any piece),
   `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
   the turned camera equals the world itself rotated), `node
   harness/camera-guard.mjs dump|compare <dir> [--allow door,turned]`
@@ -1607,6 +1609,64 @@ player's, a reload mid-duel, the chooser with two hunters at once, the
 other hunter's catch on the next input, the floor clear after four
 duels), the old walk and barrier blocks on `?enemies=off`. THE PHONE
 VERDICT IS THE GATE.
+
+**THE FIRST PHONE LOGS (2026-09-11) — SIGHT BETWEEN ARMIES AND THE FAR
+HALF.** Two replay logs from the phone, both duels won; the designer on
+the first: "First one had a lot of trouble starting the duel. You
+understand that duel activation can force the player's army to turn
+right? Or maybe the line of sight is too strict. Maybe we should count
+it as any two pieces seeing eachother, not just the kings." MEASURED
+before anything changed: (1) THE PIVOT is not the trouble — a rear or
+side catch wheels the army to the axis at the drop by ruling 4, and it
+never refused at 1,200 random kit placements and 2,246 walked turns
+across the fixtures, on any axis. (2) The first log's duel came on the
+south axis with the enemy's initiative; enemy 3's king stood two cells
+behind its spawn, on the far row — a sentry that noticed late and backed
+off (the log has no walk inputs; the run save export would replay the
+181 turns). (3) KING-TO-KING SIGHT was strict: on random kit positions
+the kings saw each other on 1.7–3.1% of enemy-and-position pairs
+(median seven cells), any two pieces on 6.6–11.9% (median ten); around
+the log's two spawns the enemy king saw the player's from 128 and 66 of
+about 540 nearby floor cells, any piece any piece from 344 and 220
+(`phase0/harness/sight-map.mjs`, an ASCII map of where a spawn sees
+you). (4) THE RETREAT DANCE, the larger fault: the trigger wanted the enemy king
+EXACTLY nine off, on the far row, so a hunter that first saw the player
+inside nine had to back off — one step per input, SPEED PARITY — and a
+player who kept walking at it never let it: `phase0/harness/charge-
+stress.mjs` (a crude thumb walking the kit at every sentry, sixteen
+hunts; `--kings` the old sight rule, `--policy wait`) had six start under
+king sight, four of them never triggering in 250 turns while the enemy
+retreated 15–86 times, and the same six with a wait pressed after first
+sight triggering within ten turns; under any-piece sight nine started
+and eight triggered while walking on. The designer: "Do both, go
+ahead." BUILT: SIGHT IS BETWEEN ARMIES — `enemy.mjs armiesSee`, any
+piece of one army seeing any piece of the other (the kings first, at
+most 64 rays; pieces never block), read by `updateSight` (the last-seen
+cell stays the king's — the hunt's goals are his boxes) and
+`__DCK.walk.sight`. THE FAR HALF — `barrier.mjs FAR_HALF` 5: a hunting
+king anywhere on rows 5…9 of a box, on a file whose deal is legal,
+triggers; the deal molds it onto the far row as ever (ruling 16 never
+read its walking pieces, so its standing cell only names the axis and
+the file); `farRowTargets` lists every floor cell of the far half of
+each legal file, `far` marking the far row, so the hunter's goals, the
+threat display and the trigger stay ONE function; `triggerFor`'s cheap
+half is "five to nine off along some axis" and it returns `row`; a
+hunter inside five backs off to five, never to nine; THE THREAT DISPLAY
+frames the far row and tints the rest of the band (canvas-board
+`THREAT_TINT`); the drop records the standing row — `enemyRow` on the
+pending entry, the run's duel entry, `__DCK.walk.duel` and the log's
+`world` block. MEASURED AFTER: charge-stress — nine sighted, nine
+started with a wait after first sight, eight walking on (the ninth the
+driver stuck behind the enemy's formation in a corridor), the dance
+zero; hunt-stress unchanged (13/16 standing, 16/16 fleeing — from afar
+the far row is still the nearest goal). Gates: test-enemy 80 (a walled
+kings' line seen pawn to pawn, a blind pair behind a wall line, seven
+off triggering at once with the player's initiative and the deal on the
+far row, ten off not yet, four off backing to five, a charge from twelve
+met at nine), test-barrier 160 (five rows per legal file, the far row
+marked), ui-smoke 256 ok (the ambush through the pivot now six
+ranks off, its row in the run and the log), selftest 46/46, replay-smoke
+63, the other Node gates unchanged. THE PHONE VERDICT IS THE GATE.
 
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)

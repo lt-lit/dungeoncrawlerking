@@ -13,26 +13,34 @@
 // king in formation on the map and are re-molded at the drop (ruling 16),
 // so only its king's cell decides a duel.
 //
-// SENTRY → HUNT → SEARCH (brief §5.2): a sentry stands until its king
-// SEES yours — king to king on the cell grid, a ray through cell centres;
-// walls, doors and crates block, holes do not; no range cap, no fog —
-// checked after EVERY move. A hunter walks toward THE TRIGGER: the far
-// rows of the four 10×10 boxes on the player's king (one per world axis,
-// each slid to hold his army — barrier.mjs, the walk's own boxOf — and
-// for an axis other than his facing the box of the army AS THE DROP
-// WOULD PIVOT IT), the cells where the deal comes out legal for THIS
-// enemy's bag (planBox: molded around the player's pieces, the gap
-// between the camp lines, the lint), by a BFS over ground it can cross
-// (its own pieces pass; the player's, furniture, holes and walls block —
-// a closed door is a wall to it). With no legal cell reachable it walks
-// at the player's king and parks at the mouth of wherever he hides.
-// Sight lost sends it to the last-seen cell, where it stands (a sentry
-// again). A duel starts the moment a HUNTING king stands on a far-row
-// cell with a legal deal; the side whose move completed it moves first.
+// SENTRY → HUNT → SEARCH (brief §5.2): a sentry stands until ANY OF ITS
+// PIECES SEES ANY OF YOURS (designer 2026-09-11 — king to king until
+// then, which on the first phone logs left a sentry blind to an army
+// walking up to it: the kings saw each other from a quarter of the floor
+// around a spawn, any two pieces from two thirds) — a ray through cell
+// centres; walls, doors and crates block, holes do not, pieces never; no
+// range cap, no fog — checked after EVERY move. A hunter walks toward
+// THE TRIGGER: THE FAR HALF (barrier.mjs FAR_HALF — rows 5…9) of the four
+// 10×10 boxes on the player's king (one per world axis, each slid to
+// hold his army — barrier.mjs, the walk's own boxOf — and for an axis
+// other than his facing the box of the army AS THE DROP WOULD PIVOT IT),
+// the cells of the files where the deal comes out legal for THIS enemy's
+// bag (planBox: its king molded onto the far row, around the player's
+// pieces, the gap between the camp lines, the lint), by a BFS over
+// ground it can cross (its own pieces pass; the player's, furniture,
+// holes and walls block — a closed door is a wall to it). With no legal
+// cell reachable it walks at the player's king and parks at the mouth of
+// wherever he hides. Sight lost sends it to the last-seen cell, where it
+// stands (a sentry again). A duel starts the moment a HUNTING king
+// stands in the far half of a box on a file with a legal deal; the side
+// whose move completed it moves first. (The far ROW alone triggered
+// until 2026-09-11: a hunter that first saw the player inside nine had
+// to back off to nine at speed parity, which a player walking at it
+// never let it do — the retreat dance the first phone logs showed.)
 import { Army, makePattern, spawnArmy, planTurn, applyTurn, manualMoves, distanceField, facingOfStep, bagOfPattern, pivotPlacement, anchorCell, boxOf, KING_STEPS } from './army.mjs';
 import { FLOOR, HOLE, worldToArena } from './world.mjs';
 import { childSeed } from './prng.mjs';
-import { planBox, farRowTargets, boxAt, BOX } from './barrier.mjs';
+import { planBox, farRowTargets, boxAt, BOX, FAR_HALF } from './barrier.mjs';
 import { normFacing } from './camera.mjs';
 
 export const ENEMY_STATES = ['sentry', 'hunt', 'search'];
@@ -147,6 +155,21 @@ export function lineOfSight(world, a, b) {
 }
 
 /**
+ * SIGHT BETWEEN TWO ARMIES (designer 2026-09-11): any piece of `a` sees
+ * any piece of `b` — the kings first (the likeliest pair), then every
+ * other pair, at most 64 rays. Pieces never block a ray.
+ */
+export function armiesSee(world, a, b) {
+  const ka = a.king, kb = b.king;
+  if (ka && kb && lineOfSight(world, ka, kb)) return true;
+  for (const pa of a.pieces) for (const pb of b.pieces) {
+    if (pa === ka && pb === kb) continue;
+    if (lineOfSight(world, pa, pb)) return true;
+  }
+  return false;
+}
+
+/**
  * The player's army AS IT WOULD STAND along an axis: itself along its
  * facing; along another, the army after the pivot the drop would make
  * (ruling 14's wheel — a `face` turn planned on the world, not applied),
@@ -196,8 +219,9 @@ export function enemyDealSide(enemy) {
  * THE HUNTER'S GOALS: every far-row cell of the four boxes on the player's
  * king where the deal comes out legal for this enemy's bag — the trigger
  * function itself (barrier.mjs farRowTargets), grid-only unless `ffish` is
- * given. Returns { goals: [{ f, r, axis, file }] in world cells, axes:
- * [{ axis, crop, kingFile, pivot }] }.
+ * given. Returns { goals: [{ f, r, axis, file, far }] in world cells —
+ * every cell of the far half on a legal file, `far` the far row itself —
+ * axes: [{ axis, crop, kingFile, pivot }] }.
  */
 export function hunterGoals(world, player, enemy, { ffish = null, seed = 1, alongs = null } = {}) {
   const side = enemyDealSide(enemy);
@@ -210,47 +234,52 @@ export function hunterGoals(world, player, enemy, { ffish = null, seed = 1, alon
     const t = farRowTargets(world, along, { enemy: side, seed, axis, ffish });
     if (!t.ok) continue;
     axes.push({ axis, crop: t.crop, kingFile: t.kingFile, pivot: along !== player });
-    for (const c of t.cells) goals.push({ f: c.world.f, r: c.world.r, axis, file: c.f });
+    for (const c of t.cells) goals.push({ f: c.world.f, r: c.world.r, axis, file: c.f, far: !!c.far });
   }
   return { goals, axes };
 }
 
 /**
- * THE TRIGGER for one enemy: a HUNTING king standing on a far-row cell of
- * one of the player's four boxes where the deal is legal. `turn` is the
- * side whose move completed the alignment ('w' the player's, 'b' the
- * enemy's — the deal's initiative, brief §4.4). Returns the candidate
- * { enemy, axis, file, plan, pivot, turn } or null.
+ * THE TRIGGER for one enemy: a HUNTING king standing in THE FAR HALF
+ * (rows FAR_HALF…9) of one of the player's four boxes, on a file where
+ * the deal is legal — the deal molds it onto the far row of that file.
+ * `turn` is the side whose move completed the alignment ('w' the
+ * player's, 'b' the enemy's — the deal's initiative, brief §4.4). Returns
+ * the candidate { enemy, axis, file, row, plan, pivot, turn } or null.
  */
 export function triggerFor(world, player, enemy, { ffish = null, seed = 1, turn = 'w', alongs = null } = {}) {
   if (enemy.state !== 'hunt') return null;
   const k = enemy.army.king;
-  // The cheap half first: is the king nine ranks off along some axis at all?
-  if (Math.abs(k.f - player.king.f) !== BOX - 1 && Math.abs(k.r - player.king.r) !== BOX - 1) return null;
-  const side = enemyDealSide(enemy);
-  void alongs; // the trigger plans the EXACT pivot (what the drop makes), on the one or two axes the king is nine off along
+  const pk = player.king;
+  // The cheap half first: is the king five to nine ranks off along some axis at all?
+  const inBand = (d) => d >= FAR_HALF && d <= BOX - 1;
   const axes = [];
-  if (k.r - player.king.r === BOX - 1) axes.push(0);
-  if (k.f - player.king.f === BOX - 1) axes.push(1);
-  if (player.king.r - k.r === BOX - 1) axes.push(2);
-  if (player.king.f - k.f === BOX - 1) axes.push(3);
+  if (inBand(k.r - pk.r)) axes.push(0);
+  if (inBand(k.f - pk.f)) axes.push(1);
+  if (inBand(pk.r - k.r)) axes.push(2);
+  if (inBand(pk.f - k.f)) axes.push(3);
+  if (!axes.length) return null;
+  const side = enemyDealSide(enemy);
+  void alongs; // the trigger plans the EXACT pivot (what the drop makes), on the one or two axes the king is in band along
   for (const axis of axes) {
     const along = armyAlong(world, player, axis);
     if (!along) continue;
     const box = boxAt(world, along, axis);
     if (!box.ok) continue;
     const a = worldToArena(box.crop, k.f, k.r);
-    if (!a || a.r !== BOX - 1) continue;
+    if (!a || a.r < FAR_HALF) continue;
     const plan = planBox(world, along, { enemy: side, enemyFile: a.f, axis, seed, turn, ffish });
-    if (plan.ok) return { enemy, axis, file: a.f, plan, pivot: along !== player, turn };
+    if (plan.ok) return { enemy, axis, file: a.f, row: a.r, plan, pivot: along !== player, turn };
   }
   return null;
 }
 
-/** Update an enemy's sight of the player's king: sentry → hunt on sight,
- *  hunt → search when sight is lost. Returns whether it sees. */
+/** Update an enemy's sight of the player's army — any of its pieces
+ *  seeing any of his: sentry → hunt on sight, hunt → search when sight is
+ *  lost; the last-seen cell is his KING's (the hunt's goals are his
+ *  king's boxes). Returns whether it sees. */
 export function updateSight(world, player, enemy) {
-  const saw = lineOfSight(world, enemy.army.king, player.king);
+  const saw = armiesSee(world, enemy.army, player);
   const was = enemy.state;
   if (saw) {
     enemy.state = 'hunt';
@@ -481,14 +510,19 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs
 }
 
 /**
- * THE THREAT DISPLAY's cells (brief §5.4): the far-row cells lit while any
- * enemy hunts — the union of every hunter's goals — in world cells.
+ * THE THREAT DISPLAY's cells (brief §5.4): the band's cells lit while any
+ * enemy hunts — the union of every hunter's goals — in world cells, `far`
+ * on the far row's (the board frames those and tints the rest).
  */
 export function threatCells(world, player, enemies, { ffish = null, seed = 1 } = {}) {
   const seen = new Map();
   for (const e of enemies) {
     if (e.state !== 'hunt') continue;
-    for (const g of hunterGoals(world, player, e, { ffish, seed }).goals) seen.set(`${g.f},${g.r}`, { f: g.f, r: g.r });
+    for (const g of hunterGoals(world, player, e, { ffish, seed }).goals) {
+      const key = `${g.f},${g.r}`;
+      const had = seen.get(key);
+      seen.set(key, { f: g.f, r: g.r, far: !!(g.far || had?.far) });
+    }
   }
   return [...seen.values()];
 }

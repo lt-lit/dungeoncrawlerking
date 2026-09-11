@@ -56,6 +56,16 @@ import { childSeed } from './prng.mjs';
 export const BOX = 10;
 /** The least gap a deal may leave between the two camp lines (designer 2026-09-08; between the pawn lines since 2026-09-10, ruling 9). */
 export const GAP_MIN = 2;
+/**
+ * THE FAR HALF (designer 2026-09-11, on the first phone logs: "Do both, go
+ * ahead"): a hunting enemy king standing on ANY row of the far half of a
+ * box — rows 5…9, this row and beyond — starts the duel; the deal molds
+ * it onto the far row as ever, so its standing cell only names the axis
+ * and the file. Before, the far row alone did, and a hunter that first
+ * saw the player inside nine had to back off to nine at speed parity —
+ * which a player walking at it never let it do (the retreat dance).
+ */
+export const FAR_HALF = 5;
 
 /**
  * The floor run through a cell across a facing: how many floor cells lie
@@ -295,18 +305,29 @@ export function planBarrier(world, army, opts = {}) {
 }
 
 /**
- * EVERY FAR-ROW CELL THAT DEALS along an axis (milestone 6's hunter targets
- * and the threat display): the arena files of row 9 where planBox comes
- * out legal, with the plan of each. Grid-only unless `ffish` is given.
+ * EVERY CELL OF THE BAND THAT DEALS along an axis (milestone 6's hunter
+ * targets and the threat display): for each arena file where planBox
+ * comes out legal (the enemy king molded onto the far row of that file),
+ * every floor cell of THE FAR HALF (rows FAR_HALF…9) not under a player's
+ * piece, with the file's plan; `far` marks the far row itself. Grid-only
+ * unless `ffish` is given.
  */
 export function farRowTargets(world, army, opts = {}) {
   const facing = opts.axis === null || opts.axis === undefined ? army.facing : normFacing(opts.axis);
   const box = boxAt(world, army, facing);
   const out = { axis: facing, ok: box.ok, crop: box.crop, kingFile: box.kingFile, cells: [] };
   if (!box.ok) return out;
+  // The band's cells of a legal file: every floor cell of the far half not
+  // under one of the player's pieces, the far row first (`far`).
+  const stage = world.arenaStage(box.crop, { id: opts.id ?? null });
+  const held = new Set((standingCells(army, box.crop, stage) ?? []).map((c) => c.r * BOX + c.f));
   for (let ef = 0; ef < BOX; ef++) {
     const plan = planBox(world, army, { ...opts, axis: facing, enemyFile: ef });
-    if (plan.ok) out.cells.push({ f: ef, r: BOX - 1, world: arenaToWorld(box.crop, ef, BOX - 1), plan });
+    if (!plan.ok) continue;
+    for (let r = BOX - 1; r >= FAR_HALF; r--) {
+      if (stage.grid[r][ef] !== null || held.has(r * BOX + ef)) continue;
+      out.cells.push({ f: ef, r, far: r === BOX - 1, world: arenaToWorld(box.crop, ef, r), plan });
+    }
   }
   return out;
 }
