@@ -1003,8 +1003,9 @@ a charge from twelve met at nine), test-barrier 160 (the band's cells
 per legal file, the far row marked), ui-smoke 256 ok (the ambush
 through the pivot now SIX ranks off, its row in the run and the log),
 selftest 46/46, replay-smoke 63, the other Node gates unchanged. THE
-PHONE VERDICT IS THE GATE — and the run save export of a troubled walk
-is the instrument to send with it.**
+PHONE VERDICT CAME THE SAME DAY (designer: "Alright seems to work a lot
+better") — the far half and any-piece sight are IN; the run save export
+of a troubled walk stays the instrument to send with the next report.**
 
 **THE WANDERERS ✅ BUILT 2026-09-11 (designer, on the far-half build:
 "Alright seems to work a lot better. Can we get some wandering

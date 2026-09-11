@@ -1666,7 +1666,8 @@ far row, ten off not yet, four off backing to five, a charge from twelve
 met at nine), test-barrier 160 (five rows per legal file, the far row
 marked), ui-smoke 256 ok (the ambush through the pivot now six
 ranks off, its row in the run and the log), selftest 46/46, replay-smoke
-63, the other Node gates unchanged. THE PHONE VERDICT IS THE GATE.
+63, the other Node gates unchanged. THE PHONE VERDICT came the same day
+(designer: "Alright seems to work a lot better") — in.
 
 **THE WANDERERS (2026-09-11).** The verdict on the far-half build came
 the same day — "Alright seems to work a lot better. Can we get some
