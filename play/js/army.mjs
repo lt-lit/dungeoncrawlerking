@@ -220,6 +220,7 @@ export class Army {
     this.pattern = pattern;
     this.pieces = pieces;
     this.at = at ? { f: at.f, r: at.r } : pieces[0] ? anchorCell(pattern, pieces[0], this.facing) : { f: 0, r: 0 };
+    this.stamped = null; // the cells its letters hold (stamp / remember)
   }
 
   get king() {
@@ -248,10 +249,33 @@ export class Army {
     return slotCell(this.pattern, p.slot, this.at, this.facing);
   }
 
-  /** Write the pieces into the world's piece grid (clearing our old letters). */
+  /**
+   * Write the pieces into the world's piece grid, clearing THE CELLS THIS
+   * ARMY LAST WROTE and no others (milestone 6: two enemy armies share the
+   * lowercase letters, and the old stamp cleared every letter of its side
+   * — the second army erased the first). `stamped` is the set of cells it
+   * holds; an army built from a save learns it on its first turn
+   * (applyTurn) from its pieces' cells, which is where its letters are.
+   */
   stamp(world) {
-    for (let i = 0; i < world.pieces.length; i++) if (this.owns(world.pieces[i])) world.pieces[i] = null;
+    const keep = new Set(this.pieces.map((p) => world.idx(p.f, p.r)));
+    for (const i of this.stamped ?? []) if (!keep.has(i) && this.owns(world.pieces[i])) world.pieces[i] = null;
     for (const p of this.pieces) world.pieces[world.idx(p.f, p.r)] = this.letter(p.ch);
+    this.stamped = keep;
+  }
+
+  /** Remember the cells this army's letters stand on (an army loaded from a save, before its first stamp). */
+  remember(world) {
+    if (!this.stamped) this.stamped = new Set(this.pieces.map((p) => world.idx(p.f, p.r)));
+  }
+
+  /** Take the army's letters OFF the world (a duel's drop, a bystander lifted out of the box); the pieces keep their cells. */
+  lift(world) {
+    for (const p of this.pieces) {
+      const i = world.idx(p.f, p.r);
+      if (this.owns(world.pieces[i])) world.pieces[i] = null;
+    }
+    this.stamped = new Set();
   }
 
   serialize() {
@@ -1495,6 +1519,7 @@ function walk(world, army, cells, at, facing, fixed) {
  *  the map). Returns the plan. */
 export function applyTurn(world, army, plan) {
   if (!plan.ok) return plan;
+  army.remember(world);
   army.facing = plan.facing;
   army.at = { f: plan.at.f, r: plan.at.r };
   for (const m of plan.moves) {

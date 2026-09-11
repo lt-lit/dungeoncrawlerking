@@ -553,6 +553,7 @@ export function registerDealVariant(ffish, variant) {
  * ffish lints on a composed matchup FEN — the checks grid math cannot do.
  * Caller supplies ffish (headless callers may skip). Returns { ok, reasons }.
  */
+const lintBoards = new WeakMap(); // ffish → (variant name → a Board reused through setFen)
 export function lintMatchupFen(ffish, variantName, fen) {
   const reasons = [];
   if (ffish.validateFen(fen, variantName) !== 1) {
@@ -563,12 +564,22 @@ export function lintMatchupFen(ffish, variantName, fen) {
     parts[1] = parts[1] === 'w' ? 'b' : 'w';
     return parts.join(' ');
   })();
-  const b = new ffish.Board(variantName, fen);
+  // ONE Board per variant, re-set per lint (milestone 6: a hunter lints
+  // forty far-row cells a turn — a Board construction costs ~3 ms on the
+  // WASM pair, a setFen ~0.03; the cached Boards live as long as ffish).
+  let boards = lintBoards.get(ffish);
+  if (!boards) {
+    boards = new Map();
+    lintBoards.set(ffish, boards);
+  }
+  let b = boards.get(variantName);
+  if (!b) {
+    b = new ffish.Board(variantName, fen);
+    boards.set(variantName, b);
+  } else b.setFen(fen);
   if (b.numberLegalMoves() === 0) reasons.push('decided-at-start');
   if (b.isCheck()) reasons.push('mover-in-check');
-  b.delete();
-  const b2 = new ffish.Board(variantName, flip);
-  if (b2.isCheck()) reasons.push('non-mover-in-check');
-  b2.delete();
+  b.setFen(flip);
+  if (b.isCheck()) reasons.push('non-mover-in-check');
   return { ok: reasons.length === 0, reasons };
 }
