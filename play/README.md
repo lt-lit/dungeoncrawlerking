@@ -2084,14 +2084,19 @@ the crypt's leaves darker than their face-on doors; the castle's body is
 face-on tiles' own values), and the classic set wears the same sprite
 mapped into its own wood and iron (`CLASSIC_LEAF`); the hall's tile is
 the file byte for byte and every theme's has the file's exact shape
-(test-debris). (2) IT STANDS IN THE WALL: the flat pass paints the wall
-band's own case under it (`#paintFlat`), and the leaf is FURNITURE in
-the tall pass (`#furnitureSprite` returns it for an edge-on door, a
-16×16 sprite like the face-on leaf), so a piece to its south stands in
-front of it, a breach bursts it like any furniture, and a slide carries
-it; the door SET option swaps the leaf (`atlas.mjs tileOf` routes
-`door-edge` like `door` and the double). A stacked double is two of them
-in a column, which reads as the long door it is. (3) THE DOORWAY it
+(test-debris). (2) IT STANDS IN THE DOORWAY: the flat pass paints the
+doorway under it (`#paintFlat` — the wall's two ends capped by the
+north–south post tiles of (3), floor between; a first cut ran the wall
+band on under the leaf and the designer's verdict was "you can't just
+slap it on top of a wall, why do I see wall in front of and behind the
+door?"), and the leaf is FURNITURE in the tall pass (`#furnitureSprite`
+returns it for an edge-on door, a 16×16 sprite like the face-on leaf),
+standing from one capped end to the other, so a piece to its south
+stands in front of it, a breach bursts it like any furniture and leaves
+the same caps, and a slide carries it; the door SET option swaps the
+leaf (`atlas.mjs tileOf` routes `door-edge` like `door` and the double).
+A stacked double keeps no cap between its leaves, so it reads as the
+long door it is. (3) THE DOORWAY it
 leaves is the north–south post tiles `doorway-ns` / `doorway-n` /
 `doorway-s` (`repack-tiles doorwayTileNS`): a cap on the end of each
 standing wall, twelve wide like the band, a lit row over a dark row in

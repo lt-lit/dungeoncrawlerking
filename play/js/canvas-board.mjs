@@ -101,8 +101,8 @@
 //               them — the facing-walk gate's inverse map); a DOOR whose
 //               wall line runs up the screen stands EDGE-ON (the door set's
 //               edge-on LEAF — the designer's own 5×16 profile door,
-//               lib/inhouse/door-profile.png — standing in the wall band,
-//               which paints on under it, drawn in the tall pass as
+//               lib/inhouse/door-profile.png — standing in the doorway
+//               between the wall's capped ends, drawn in the tall pass as
 //               furniture; 2026-09-11, brief §11; a generated slab stood in
 //               from the camera milestone until then) and a double door's
 //               halves are dealt on the screen. FIT: 'width' (the phone — k from the container's
@@ -1384,7 +1384,7 @@ export class CanvasBoard {
   /** The furniture sprite a cell shows: the door leaf / its half of a
    *  double ON THE SCREEN (the camera deals the halves), the EDGE-ON leaf
    *  when the door's wall line runs up the screen (the designer's profile
-   *  door, standing in the band the flat pass paints under it), a prop (crate /
+   *  door, standing in the doorway the flat pass paints under it), a prop (crate /
    *  chest / barrel / wreckage, by the cell's variant), or the crate for
    *  an unskinned '^'. { tile, prop } — a prop is 16×32. */
   #furnitureSprite(k, [hf, hr]) {
@@ -1687,10 +1687,15 @@ export class CanvasBoard {
     } else if (k.furniture && (k.cracked || k.weak)) {
       this.#draw(this.#crackedTile(sm, ck), x, y);
     } else if (this.#edgeOn(k)) {
-      // A door whose wall line runs up the screen: the wall's own case
-      // runs on under it — the leaf stands in the band, drawn in the tall
-      // pass (#furnitureSprite) so a piece to the south is in front of it.
-      this.#draw(this.#wallTile(sm), x, y);
+      // A door whose wall line runs up the screen: the DOORWAY under it —
+      // the wall's two ends capped, floor between (designer 2026-09-11:
+      // "you can't just slap it on top of a wall"; a first cut ran the
+      // band on under the leaf) — and the leaf stands from end to end,
+      // drawn in the tall pass (#furnitureSprite) so a piece to the south
+      // is in front of it. A stacked pair keeps no cap between its leaves
+      // (#edgeMask); the classic set has no doorway art, so floor alone.
+      const frame = this.#doorwayTile(this.#edgeMask(k, sm4));
+      if (frame) this.#draw(frame, x, y);
     }
     if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
     // Decor: a prop on a standing wall's face (never on a cracked wall), or

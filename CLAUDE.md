@@ -72,9 +72,9 @@ door whose wall line runs UP the screen stands EDGE-ON — THE DESIGNER'S
 OWN SPRITE since 2026-09-11 ("the placeholder looks like ass"; "Use this
 one"): `phase0/lib/inhouse/door-profile.png`, a 5×16 side-view door in
 pixel-poem's timber, recoloured per theme like the face-on leaf, standing
-in the middle of the wall band, drawn in the tall pass as furniture; the
-doorway it leaves is a cap on the wall band's end (the NORTH–SOUTH
-DOORWAY POSTS); a generated slab stood in from the camera, 2026-09-08,
+in the DOORWAY — the wall's two ends capped (the NORTH–SOUTH DOORWAY
+POSTS), floor between, the leaf from end to end — drawn in the tall
+pass as furniture; a generated slab stood in from the camera, 2026-09-08,
 and before that a north–south door was a WEAK SPOT wearing the crack —
 and an authored double is
 `door2-l`/`-r`, dealt on the screen, pairs along a file included), crate, chest (the LID is the line:
@@ -1073,11 +1073,15 @@ dominates the sprite, and the histogram would have scaled the castle's
 and the crypt's leaves darker than their face-on doors), the classic set
 wears it mapped into its own wood and iron (`CLASSIC_LEAF`); the hall's
 tile is the file byte for byte (test-debris asserts that, the file's
-shape on every theme, and every prop height). IT STANDS IN THE WALL:
-canvas-board's flat pass paints the wall band's case under it and
-`#furnitureSprite` returns it for an edge-on door, so it is drawn in the
-tall pass as furniture (a piece south of it in front), bursts on a breach
-and slides; the door SET option swaps it (`atlas.mjs tileOf` routes
+shape on every theme, and every prop height). IT STANDS IN THE DOORWAY:
+canvas-board's flat pass paints the doorway under it — the wall's two
+ends capped, floor between (a first cut ran the band on under the leaf;
+designer: "you can't just slap it on top of a wall, why do I see wall in
+front of and behind the door?") — and `#furnitureSprite` returns it for
+an edge-on door, so it is drawn in the tall pass as furniture from one
+capped end to the other (a piece south of it in front), bursts on a
+breach leaving the same caps, and slides; the door SET option swaps it
+(`atlas.mjs tileOf` routes
 `door-edge` like the leaf and the double; the posts stay the theme's). THE
 NORTH–SOUTH DOORWAY posts `doorway-ns` / `-n` / `-s` (`doorwayTileNS`: a
 cap on the end of each standing wall, twelve wide like the band, lit over
