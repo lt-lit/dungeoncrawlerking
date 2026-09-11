@@ -1088,13 +1088,19 @@ reads the new post tiles, the breach's flash shows the doorway under the
 bursting leaf, and a stacked double's shared side gets no post
 (`#edgeMask` — one opening, two leaves). `camera-guard.mjs --allow door`
 admits the door squares, their doorways and the square up the screen
-from a door, where the leaf rises. Gates green: test-camera 80,
-test-debris 60, strip-ruin-chips, test-world 125, selftest 46/46,
-ui-smoke, facing-walk 108/108, replay-smoke 63, and camera-guard compare
-on a dump of the pristine build (its live-versus-detached self-check
-drifts after ply 0 on the pristine build too — a pre-existing gap in the
-guard, on record; every facing-0 failure was checked square by square to
-lie inside that drift). Zoomed crops per theme (a dpr-3 phone, k 6) went
+from a door, where the leaf rises. THE GUARD EARNED ITS KEEP: the first
+tall-leaf cut reported the prop height for every prop role of the
+classic row too, and the classic crates floated a square north — the
+mirror (facing-2) rows caught it (the facing-0 rows could not: the
+guard's live-versus-detached self-check drifts after ply 0 on the
+pristine build, a pre-existing gap on record, and "inside that drift" is
+where the crates sat); `atlas.mjs CLASSIC_PROPS` names the classic row's
+one box, and test-debris asserts the prop heights, the classic row's
+sizes, the door-set routing and the leaf's box. Gates green: test-camera
+80, test-debris 65, strip-ruin-chips, test-world 125, selftest 46/46,
+ui-smoke, facing-walk 108/108, replay-smoke 63, camera-guard compare on
+a dump of the pristine build with every mirror row identical but the
+door squares. Zoomed crops per theme (a dpr-3 phone, k 6) went
 to the designer with each cut; the reference build is the one on the
 branch.
 

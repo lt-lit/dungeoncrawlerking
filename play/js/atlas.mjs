@@ -37,6 +37,11 @@ export const PIECE_ORDER = 'pnrbqk';
 const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage', 'door-edge']);
 /** The atlas row of the in-house drawings (the classic set + the cracks). */
 const CLASSIC = 'classic';
+/** The classic row's 16×32 boxes: its edge-on leaf alone — its crate,
+ *  barrel and chest are 16×16 drawings, whatever the themed roles are
+ *  (2026-09-11: reporting the prop height for every prop role floated the
+ *  classic crates a square north; the pixel guard's mirror rows caught it). */
+const CLASSIC_PROPS = new Set(['door-edge']);
 /** The classic set's one tile per family: any wall case is its block, a
  *  ruin its heap, the wreckage and a double door's half its crate and door. */
 const CLASSIC_ROLE = { wall: 'wall', crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', 'door-edge': 'door-edge', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble', ruin: 'rubble' };
@@ -146,7 +151,7 @@ export class Atlas {
     const row = this.index.themes[CLASSIC];
     const cell = row?.tiles[name];
     if (!cell) return null;
-    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: PROP_ROLES.has(name) ? 2 * TILE : TILE, role: name, theme: null };
+    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: CLASSIC_PROPS.has(name) ? 2 * TILE : TILE, role: name, theme: null };
   }
 
   /** The classic (in-house) set's sprite for a role, or null: one block for

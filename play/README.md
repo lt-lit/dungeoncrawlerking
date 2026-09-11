@@ -2100,7 +2100,10 @@ gets no post (`#edgeMask`: the pair is one opening). The atlas grew four
 roles (132 → 136), appended after the crack; every old tile is
 byte-identical. `camera-guard.mjs compare --allow door` admits the door
 squares, the doorways they leave and the square up the screen from a
-door, where the tall leaf rises. Zoomed crops per theme (a dpr-3 phone,
+door, where the tall leaf rises — and its MIRROR rows caught the first
+cut reporting the prop height for the classic row's crates too, which
+floated them a square north (`atlas.mjs CLASSIC_PROPS`; test-debris now
+asserts every prop height and the leaf's box). Zoomed crops per theme (a dpr-3 phone,
 k 6: d8 closed, the g5+h5 double edge-on east-up, d8 opened) went to the
 designer with each cut.
 

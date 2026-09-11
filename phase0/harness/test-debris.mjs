@@ -184,6 +184,35 @@ const T = D.T;
   expect(/const RUIN = \{[^}]*chips: 0/.test(repack), 'the repack tool generates chip-free ruins');
 }
 
+// ---- THE ATLAS'S PROP BOXES (2026-09-11, the edge-on door): a prop role is
+// a 16×32 box on every theme, the edge-on leaf among them since it stands
+// in the wall band and rises into the square north; the classic row's
+// crate, barrel and chest are 16×16 drawings and must NOT report the box
+// (reporting it floated the classic crates a square north — the pixel
+// guard's mirror rows caught it); the leaf routes through the door set.
+{
+  const { Atlas } = await import('../../play/js/atlas.mjs');
+  const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'play/img/tileset.json'), 'utf8'));
+  const atlas = new Atlas(index, null, null);
+  const themed = ['crate', 'chest', 'barrel', 'wreckage', 'door-edge'].every((r) => index.themes.hall.tiles[r] && atlas.tileOf('hall', r).h === 2 * T);
+  expect(themed, 'the themed crate / chest / barrel / wreckage and the edge-on leaf are 16×32 boxes');
+  expect(atlas.tileOf('hall', 'door').h === T && atlas.tileOf('hall', 'doorway-ns').h === T, 'the face-on leaf and the north–south doorway posts are 16×16');
+  const classic = ['crate', 'chest', 'barrel', 'wreckage'].every((r) => atlas.classicTile(r).h === T);
+  expect(classic && atlas.classicTile('door-edge').h === 2 * T, 'the classic row: crate / chest / barrel / wreckage 16 tall, its edge-on leaf a 16×32 box');
+  expect(atlas.tileOf('hall', 'door-edge', { doors: 'crypt' }).theme === 'crypt' && atlas.tileOf('hall', 'doorway-ns', { doors: 'crypt' }).theme === 'hall', 'the door set swaps the edge-on leaf and leaves the posts to the theme');
+  // The leaf's shape: nothing above row 10 of the box, nothing outside
+  // columns 3–12, opaque down to the box's last row — it stands on the
+  // square's bottom edge and rises six rows into the square north.
+  const png = decodePng(fs.readFileSync(path.join(ROOT, 'play/img/tileset.png')));
+  const shapeOk = Object.keys(index.themes).every((theme) => {
+    const t = index.themes[theme], c = t.tiles['door-edge'];
+    let top = 99, bottom = -1, left = 99, right = -1;
+    for (let y = 0; y < 2 * T; y++) for (let x = 0; x < T; x++) if (png.data[((t.row * index.row + y) * png.width + c.col * T + x) * 4 + 3]) { top = Math.min(top, y); bottom = Math.max(bottom, y); left = Math.min(left, x); right = Math.max(right, x); }
+    return top === 10 && bottom === 2 * T - 1 && left === 3 && right === 12;
+  });
+  expect(shapeOk, 'every edge-on leaf spans rows 10–31 and columns 3–12 of its box (hall, castle, crypt, classic)');
+}
+
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(`\n${notes.length} ok, ${failures.length} failed`);
