@@ -1707,9 +1707,10 @@ cell), ui-smoke 270 ok (THE WANDERERS block: four roamers on the
 fixture over thirty waits — kings off their spawns, no shared cell, the
 letters whole, the leash kept, a second run of the same seed walking the
 same beats; the enemies block on `?enemies=sentry`), the other gates
-unchanged. THE PHONE VERDICT IS THE GATE. Held over: patrol ROUTES as a
-list of cells in the world file, a per-spawn mode, aggro between
-wanderers.
+unchanged. Held over: patrol ROUTES as a list of cells in the world
+file, a per-spawn mode, aggro between wanderers. (A standing rule from
+the same day: the designer's "seems to work" includes the phone — no
+separate phone verdict is asked for again.)
 
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)

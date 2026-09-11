@@ -1,5 +1,12 @@
 # Dungeon Crawler King — repo guide
 
+**A VERDICT IS A VERDICT (designer 2026-09-11, a standing rule): when
+the designer says a build "seems to work", that INCLUDES the phone. Do
+not ask for a separate phone verdict, do not wait on one, and do not
+write "the phone verdict is the gate" again — record the verdict and
+move on. The phrase where it appears in the records below is history,
+not an instruction.**
+
 Design source of truth: `dungeon-crawler-king-prototype-brief.md`.
 Phase 0 (spikes + calibration harness) is **complete** — read
 `phase0/PHASE0-RESULTS.md` before touching anything engine-related; it
@@ -1040,9 +1047,8 @@ cell), ui-smoke 270 ok (THE WANDERERS block: four roamers on the
 fixture over thirty waits — kings off their spawns, no shared cell, the
 letters whole, the leash kept, a second run of the same seed walking the
 same beats; the enemies block on `?enemies=sentry`), the other gates
-unchanged. THE PHONE VERDICT IS THE GATE. Held over: patrol ROUTES as a
-list of cells in the world file, a per-spawn mode, aggro between
-wanderers.**
+unchanged. Held over: patrol ROUTES as a list of cells in the world
+file, a per-spawn mode, aggro between wanderers.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
