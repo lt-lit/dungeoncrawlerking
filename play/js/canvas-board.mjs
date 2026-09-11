@@ -135,6 +135,8 @@ const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
 const TARGET = 'rgba(215,180,106,0.53)'; // .cell.target::after #d7b46a88
+const THREAT = 'rgba(229,72,77,0.55)'; // the threat display's far row (--bad at half)
+const THREAT_TINT = 'rgba(229,72,77,0.16)'; // the rest of the band (the far half of a hunter's box)
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
 const COORD = 'rgba(255,255,255,0.4)';
 const COORD_SHADOW = 'rgba(0,0,0,0.6)';
@@ -210,7 +212,7 @@ export class CanvasBoard {
     // The board's state, all data: the world, the crop, what marks it wears.
     this.fen = null;
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
-    this.cellMarks = { selected: null, targets: new Map() }; // the walk's (setCellMarks)
+    this.cellMarks = { selected: null, targets: new Map(), threats: new Map(), badges: new Map() }; // the walk's (setCellMarks): a selection, its targets, THE THREAT DISPLAY (milestone 6: the band where a hunter's duel would start — the far row framed, the rest tinted) and the badges over the enemy kings
     this.debrisBufs = new Map(); // cell index → 16×16 RGBA in WORLD orientation (the test surface: the buffer the cell wears)
     this.debrisCanvas = new Map(); // cell index → a 16×16 canvas of it, turned to the screen
     this.fx = new Map(); // sq → { kind, t0, ms, hold, done }
@@ -833,8 +835,13 @@ export class CanvasBoard {
    *  capture }]. (THE BOX's outline — a `frame` rectangle one pixel wide —
    *  was a mark here from 2026-09-09 until the designer's 2026-09-10 "get rid
    *  of the big blue square when I make chess moves during exploration".) */
-  setCellMarks({ selected = null, targets = [] } = {}) {
-    this.cellMarks = { selected: selected ? this.world.idx(selected.f, selected.r) : null, targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])) };
+  setCellMarks({ selected = null, targets = [], threats = [], badges = [] } = {}) {
+    this.cellMarks = {
+      selected: selected ? this.world.idx(selected.f, selected.r) : null,
+      targets: new Map(targets.map((t) => [this.world.idx(t.f, t.r), t.capture ?? null])),
+      threats: new Map(threats.map((c) => [this.world.idx(c.f, c.r), { far: !!c.far }])),
+      badges: new Map(badges.map((b) => [this.world.idx(b.f, b.r), { text: String(b.text ?? ''), color: b.color ?? BAD }])),
+    };
     this.invalidate();
   }
 
@@ -1598,7 +1605,7 @@ export class CanvasBoard {
 
     // 3. marks over the pieces (the arena's by square, the walk's by cell)
     for (const list of byRow) for (const s of list) if (s.sq) this.#paintMarksOver(s);
-    if (this.cellMarks.selected !== null || this.cellMarks.targets.size) for (const list of byRow) for (const s of list) this.#paintCellMarks(s);
+    if (this.cellMarks.selected !== null || this.cellMarks.targets.size || this.cellMarks.threats.size || this.cellMarks.badges.size) for (const list of byRow) for (const s of list) this.#paintCellMarks(s);
     // 4. coordinates
     this.#paintCoords();
     // 4b. the arrows, above the pieces (the DOM's layer sits above the cells)
@@ -1874,6 +1881,20 @@ export class CanvasBoard {
   #paintCellMarks({ idx, x, y, k }) {
     const g = this.bctx;
     const cm = this.cellMarks;
+    // THE THREAT DISPLAY (brief §5.4): the band where a hunter's duel would
+    // start — the far row a red frame, the rest of the far half a tint —
+    // under the selection's marks.
+    const threat = cm.threats.get(idx);
+    if (threat) {
+      if (threat.far) this.#frame1(x, y, THREAT, 1);
+      else {
+        g.fillStyle = THREAT_TINT;
+        g.fillRect(x, y, T, T);
+      }
+    }
+    // A BADGE over an enemy king: its state, in the 3×5 font at the cell's top edge.
+    const badge = cm.badges.get(idx);
+    if (badge && badge.text) drawText(g, badge.text, x + T - 1 - textWidth(badge.text), y - 3, badge.color, COORD_SHADOW);
     if (cm.selected === idx) this.#frame1(x, y, GOLD);
     if (cm.targets.has(idx)) {
       const capture = cm.targets.get(idx);

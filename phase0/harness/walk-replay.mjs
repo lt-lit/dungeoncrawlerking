@@ -29,7 +29,7 @@ if (!wid || !dS) {
   console.error('usage: node harness/walk-replay.mjs <world> <df,dr> [--hold N] [--trace] [pieces: K1@f,r … anchor f,r facing n]');
   process.exit(2);
 }
-const KIT = { width: 3, royal: 'K', pieces: ['R', 'N'] };
+const KIT = A.OPENING_KIT; // THE OPENING KIT (army.mjs): four wide since 2026-09-10
 
 const json = JSON.parse(fs.readFileSync(path.join(ROOT, 'play/worlds', `${wid}.json`), 'utf8'));
 const world = loadWorld(json);

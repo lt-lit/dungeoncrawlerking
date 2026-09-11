@@ -583,3 +583,11 @@ body.layout-wide #preview-controls { justify-content: flex-start; }
 #walk-diag[hidden] { display: none; }
 body.layout-wide #walk-stage { height: calc(100dvh - 4.4rem); }
 #screen-walk[hidden] { display: none; }
+/* THE CHOOSER (milestone 6): several hunters aligned at once — pick one. */
+#walk-chooser { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .5); z-index: 6; pointer-events: auto; }
+#walk-chooser[hidden] { display: none; }
+#walk-chooser-card { display: flex; flex-direction: column; gap: .5rem; max-width: 22rem; margin: 1rem; padding: 1rem; background: var(--panel, #1d1e24); border: 1px solid rgba(255, 255, 255, .14); border-radius: .6rem; }
+#walk-chooser-title { margin: 0; font-size: 1.15rem; }
+#walk-chooser-detail { margin: 0; color: var(--muted); font-size: .85rem; }
+#walk-chooser-buttons { display: flex; flex-direction: column; gap: .4rem; }
+#walk-chooser-buttons button { padding: .5rem .7rem; font-size: .95rem; }

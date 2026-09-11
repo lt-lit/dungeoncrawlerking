@@ -43,6 +43,12 @@ const WAIT = { kind: 'wait' };
   const pawns = pat.slots.filter((s) => s.ch === 'P');
   expect(pawns.length === 3 && pawns.every((s) => s.dy === 1), `three pawns one row ahead (${JSON.stringify(pawns)})`);
   expect(pat.anchor.dx === 0 && pat.anchor.dy === 1, `the anchor is the front-centre, one ahead of the king (${JSON.stringify(pat.anchor)})`);
+  // THE OPENING KIT (2026-09-10, the enemies session): four wide — K + R + N + B and four pawns, laid N K R B over P P P P; the anchor on the king's file.
+  const kit = A.makePattern(A.OPENING_KIT);
+  expect(A.OPENING_KIT.width === 4 && kit.slots.length === 8 && kit.value === 15, `the opening kit is 4 wide, 8 slots, value 15 (${kit.slots.length} slots, value ${kit.value})`);
+  const kitBack = kit.slots.filter((s) => s.dy === 0).sort((a, b) => a.dx - b.dx).map((s) => s.ch).join('');
+  const kitFront = kit.slots.filter((s) => s.dy === 1).map((s) => s.dx).sort((a, b) => a - b);
+  expect(kitBack === 'NKRB' && kitFront.join(',') === '-1,0,1,2' && kit.anchor.dx === 0 && kit.anchor.dy === 1, `the kit's back row is N K R B, four pawns ahead of it, the anchor on the king's file (${kitBack}, pawns at ${kitFront.join(',')}, anchor ${JSON.stringify(kit.anchor)})`);
   const wide = A.makePattern({ width: 6, royal: 'K', budget: 30 }, { seed: 3 });
   expect(wide.anchor.dy === Math.max(...wide.slots.map((s) => s.dy)) && Math.abs(wide.anchor.dx) <= 1, `a 6-wide pattern's anchor sits on its front row near the king's file (${JSON.stringify(wide.anchor)})`);
   // Body → world under the facings: forward is north / east / south / west; right is east / south / west / north.

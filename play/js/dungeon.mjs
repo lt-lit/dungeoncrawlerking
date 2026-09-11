@@ -61,7 +61,7 @@ import { THEMES } from './stage.mjs';
 import { mulberry32, childSeed, randInt, shuffle } from './prng.mjs';
 import { boxPlacement, BOX, planBarrier } from './barrier.mjs';
 import { loadWorld } from './world.mjs';
-import { makePattern } from './army.mjs';
+import { makePattern, spawnArmy, OPENING_KIT } from './army.mjs';
 
 /** The bed's envelope per 10×10 box (see the header; test-dungeon.mjs re-measures it). */
 export const LINT = {
@@ -79,8 +79,9 @@ export const STYLES = {
   vaults: { title: 'The Vaults', skeleton: 'prefab', theme: 'crypt', enemies: 4, cols: 6, rows: 4, notes: 'THE PROVING GROUNDS LAID AS ONE FLOOR: the wave-6 arenas as pieces, each used once, turned by seed, their edge exits joined.' },
 };
 export const STYLE_NAMES = Object.keys(STYLES);
-/** The widths the enemy spawns get, nearest the start first (brief §8: the level telegraph is the army). */
-export const SPAWN_WIDTHS = [3, 3, 4, 5, 5, 6, 6, 7, 8];
+/** The widths the enemy spawns get, nearest the start first (brief §8: the level telegraph is the army).
+ *  ALL THREES FOR NOW (designer 2026-09-10: "Enemies will be 3 wide for now"); the ladder 3, 3, 4, 5, 5, 6, 6, 7, 8 waits for §8. */
+export const SPAWN_WIDTHS = [3, 3, 3, 3, 3, 3, 3, 3, 3];
 
 const NAME_TO_SKIN = { door: 'D', barrel: 'B', crate: 'K', chest: 'X', masonry: 'R', wreckage: 'W' };
 const DIRS8 = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
@@ -427,14 +428,16 @@ export function duelCoverage(json, { samples = 120, seed = 1 } = {}) {
   const cells = [];
   for (let r = 0; r < world.ranks; r++) for (let f = 0; f < world.files; f++) if (world.at(f, r) === '.') cells.push({ f, r });
   const picked = shuffle(rng, cells).slice(0, samples);
-  const pattern = makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }, { seed: 1 });
+  const pattern = makePattern(OPENING_KIT, { seed: 1 });
   const enemy = { spec: { width: 3, pieces: ['R', 'N'] } };
   let legal = 0;
   const tiles = new Map();
   for (const c of picked) {
     let ok = false;
     for (let d = 0; d < 4 && !ok; d++) {
-      const army = { king: c, facing: d, pattern };
+      // The kit as it would STAND there (the deal reads the pieces where they stand, 2026-09-10): a hypothetical spawn, the world's piece grid untouched.
+      let army = null;
+      try { army = spawnArmy(world, pattern, c, d, 'w', { stamp: false }); } catch { continue; }
       ok = planBarrier(world, army, { enemy, seed: 1 }).ok;
     }
     if (ok) legal++;
@@ -711,25 +714,50 @@ function clearAround(F, x, y, d, { wide = 1, back = 1, ahead = 1 } = {}) {
   return true;
 }
 
+/** THE STAGING AREA of a pattern: its own slots (body offsets from the
+ *  king) plus `ahead` full rows in front of its front row and one behind
+ *  the king, so a kit of any width stands on its slots and its first
+ *  steps move it as one. */
+function stagingOf(pattern, ahead = 4) {
+  const dxs = pattern.slots.map((s) => s.dx), dys = pattern.slots.map((s) => s.dy);
+  const x0 = Math.min(...dxs), x1 = Math.max(...dxs), front = Math.max(...dys);
+  const cells = [];
+  for (let dy = -1; dy <= front + ahead; dy++) for (let dx = x0; dx <= x1; dx++) cells.push({ dx, dy });
+  return cells;
+}
+
+/** Is every cell of a staging area floor around (x, y) facing d? */
+function stagingClear(F, x, y, d, cells) {
+  const A = AHEAD[d], R = RIGHT[d];
+  for (const { dx, dy } of cells) if (F.at(x + A[0] * dy + R[0] * dx, y + A[1] * dy + R[1] * dx) !== '.') return false;
+  return true;
+}
+
 /**
- * THE START: a STAGING AREA — floor three wide from one row behind the
- * king to four ahead, so the kit stands molded on its slots and its first
- * steps move it as one — with a legal box that way for the kit (the first
- * drop on a fresh floor must deal), drawn by seed; a floor with no such
- * area falls back to any wide cell with four cells of run ahead. Returns
- * { x, y, d } or null.
+ * THE START: a STAGING AREA — floor under every slot of THE OPENING KIT
+ * (army.mjs OPENING_KIT: four wide, two deep since 2026-09-10), one row
+ * behind the king and four rows ahead of its front, so the kit stands
+ * molded on its slots and its first steps move it as one — with a legal
+ * box that way for the kit (the first drop on a fresh floor must deal),
+ * drawn by seed; a floor with no such area falls back to any wide cell
+ * with four cells of run ahead. Returns { x, y, d } or null.
  */
 function placeStart(F, rng, { id }) {
   const cells = [];
   for (let y = 1; y < F.ranks - 1; y++) for (let x = 1; x < F.files - 1; x++) if (F.g[y][x] === '.' && clearAround(F, x, y, 0)) cells.push({ x, y });
   const order = shuffle(rng, cells);
-  const pattern = makePattern({ width: 3, royal: 'K', pieces: ['R', 'N'] }, { seed: 1 });
+  const pattern = makePattern(OPENING_KIT, { seed: 1 });
+  const staging = stagingOf(pattern, 4);
   const enemy = { spec: { width: 3, pieces: ['R', 'N'] } };
   const world = loadWorld({ schema: 2, id, map: F.rows() });
-  const deals = (c, d) => planBarrier(world, { king: { f: c.x, r: F.ranks - 1 - c.y }, facing: d, pattern }, { enemy, seed: 1 }).ok; // map y down → world r up
+  const deals = (c, d) => { // map y down → world r up; the kit as it would stand there (an unstamped spawn), the deal on its cells
+    let army = null;
+    try { army = spawnArmy(world, pattern, { f: c.x, r: F.ranks - 1 - c.y }, d, 'w', { stamp: false }); } catch { return false; }
+    return planBarrier(world, army, { enemy, seed: 1 }).ok;
+  };
   for (const staged of [true, false]) {
     for (const c of order.slice(0, staged ? order.length : 200)) {
-      const facings = [0, 1, 2, 3].filter((d) => (staged ? clearAround(F, c.x, c.y, d, { ahead: 4 }) : runAhead(F, c.x, c.y, d) >= 4));
+      const facings = [0, 1, 2, 3].filter((d) => (staged ? stagingClear(F, c.x, c.y, d, staging) : runAhead(F, c.x, c.y, d) >= 4));
       for (const d of facings) if (deals(c, d)) return { x: c.x, y: c.y, d };
     }
   }

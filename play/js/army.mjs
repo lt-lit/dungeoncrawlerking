@@ -62,6 +62,15 @@ const DIAG = [[1, 1], [1, -1], [-1, -1], [-1, 1]];
 export const INPUTS = ['step', 'face', 'wait', 'move'];
 /** THE BOX the army must always fit (ruling 15): 10×10, the king on its first row. barrier.mjs's BOX is the same number (it imports this module, so the number is restated here). */
 export const BOX = 10;
+/**
+ * THE OPENING KIT (brief §4.2; designer 2026-09-10, the enemies session):
+ * K + R + N + B and FOUR pawns, value 15 — the ONE constant every reader
+ * imports (the page's walk, the generator's start and its lints, the
+ * harnesses; it was copy-pasted in six places before). The molder lays it
+ * N K R B over P P P P: a width of four has no middle, so the king stands
+ * second from the left and the anchor on his file.
+ */
+export const OPENING_KIT = Object.freeze({ width: 4, royal: 'K', pieces: Object.freeze(['R', 'N', 'B']) });
 /** CATCH-UP (ruling 13): steps a turn when the path is longer than one, and while behind the king. */
 export const CATCH_UP = 2;
 export const CATCH_UP_BEHIND = 3;
@@ -211,6 +220,7 @@ export class Army {
     this.pattern = pattern;
     this.pieces = pieces;
     this.at = at ? { f: at.f, r: at.r } : pieces[0] ? anchorCell(pattern, pieces[0], this.facing) : { f: 0, r: 0 };
+    this.stamped = null; // the cells its letters hold (stamp / remember)
   }
 
   get king() {
@@ -239,10 +249,33 @@ export class Army {
     return slotCell(this.pattern, p.slot, this.at, this.facing);
   }
 
-  /** Write the pieces into the world's piece grid (clearing our old letters). */
+  /**
+   * Write the pieces into the world's piece grid, clearing THE CELLS THIS
+   * ARMY LAST WROTE and no others (milestone 6: two enemy armies share the
+   * lowercase letters, and the old stamp cleared every letter of its side
+   * — the second army erased the first). `stamped` is the set of cells it
+   * holds; an army built from a save learns it on its first turn
+   * (applyTurn) from its pieces' cells, which is where its letters are.
+   */
   stamp(world) {
-    for (let i = 0; i < world.pieces.length; i++) if (this.owns(world.pieces[i])) world.pieces[i] = null;
+    const keep = new Set(this.pieces.map((p) => world.idx(p.f, p.r)));
+    for (const i of this.stamped ?? []) if (!keep.has(i) && this.owns(world.pieces[i])) world.pieces[i] = null;
     for (const p of this.pieces) world.pieces[world.idx(p.f, p.r)] = this.letter(p.ch);
+    this.stamped = keep;
+  }
+
+  /** Remember the cells this army's letters stand on (an army loaded from a save, before its first stamp). */
+  remember(world) {
+    if (!this.stamped) this.stamped = new Set(this.pieces.map((p) => world.idx(p.f, p.r)));
+  }
+
+  /** Take the army's letters OFF the world (a duel's drop, a bystander lifted out of the box); the pieces keep their cells. */
+  lift(world) {
+    for (const p of this.pieces) {
+      const i = world.idx(p.f, p.r);
+      if (this.owns(world.pieces[i])) world.pieces[i] = null;
+    }
+    this.stamped = new Set();
   }
 
   serialize() {
@@ -258,13 +291,18 @@ export class Army {
 const key = (world, f, r) => r * world.files + f;
 const cellOf = (p) => ({ f: p.f, r: p.r });
 
-/** An enemy letter on a cell? */
+/** A piece of ANOTHER army on a cell? The other side's letters, and — since
+ *  the wanderers (2026-09-11) — a same-side letter that is not one of THIS
+ *  army's pieces: two enemy armies share the lowercase letters, and a
+ *  stranger is an obstacle, never a comrade to walk through. */
 function enemyAt(world, army, f, r) {
   const ch = world.pieceAt(f, r);
-  return !!ch && !army.owns(ch);
+  if (!ch) return false;
+  if (!army.owns(ch)) return true;
+  return typeof army.pieceAt === 'function' ? !army.pieceAt(f, r) : false;
 }
 
-/** A cell the BFS may cross: floor, no enemy piece (friendly pieces pass). */
+/** A cell the BFS may cross: floor, no piece of another army (this army's own pass). */
 function crossable(world, army, f, r) {
   return world.at(f, r) === FLOOR && !enemyAt(world, army, f, r);
 }
@@ -467,7 +505,7 @@ export function pieceMoves(world, army, p, { manual = false, viaComrades = false
     if (t !== FLOOR) return 'blocked';
     const ch = world.pieceAt(f, r);
     if (!ch) return 'free';
-    return army.owns(ch) ? (viaComrades ? 'comrade' : 'blocked') : 'blocked';
+    return army.owns(ch) && army.pieceAt(f, r) ? (viaComrades ? 'comrade' : 'blocked') : 'blocked';
   };
   const land = (f, r, l) => {
     if (l === 'free') push(f, r);
@@ -1486,6 +1524,7 @@ function walk(world, army, cells, at, facing, fixed) {
  *  the map). Returns the plan. */
 export function applyTurn(world, army, plan) {
   if (!plan.ok) return plan;
+  army.remember(world);
   army.facing = plan.facing;
   army.at = { f: plan.at.f, r: plan.at.r };
   for (const m of plan.moves) {
@@ -1521,18 +1560,28 @@ export function formationFocus(army) {
  * reachable from the king, at or ahead of him first (the same molding).
  * Pieces get ids 1… in slot order. Throws when the king's cell is not
  * floor. `lenient` (the walk-out of a closed board): a piece the king's
- * pocket cannot hold takes the nearest vacant floor anywhere.
+ * pocket cannot hold takes the nearest vacant floor anywhere. `fixed` (a
+ * map slot → cell; the walk-out, 2026-09-10): those slots take the cells
+ * given — the survivors of a duel stand where they stood — and only the
+ * rest are placed. `stamp: false` leaves the world's piece grid alone (a
+ * hypothetical army, the generator's lint).
  */
-export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient = false } = {}) {
+export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient = false, fixed = null, stamp = true } = {}) {
   if (world.at(at.f, at.r) !== FLOOR) throw new Error(`spawn: (${at.f}, ${at.r}) is not floor`);
   const fc = normFacing(facing);
   const army = new Army({ side, facing: fc, pattern, pieces: [], at: anchorCell(pattern, at, fc) });
   army.pieces.push({ id: 1, ch: pattern.slots[0].ch, slot: 0, f: at.f, r: at.r });
   const taken = new Set([world.idx(at.f, at.r)]);
+  if (fixed) for (const c of fixed.values()) taken.add(world.idx(c.f, c.r));
   const fromKing = distanceField(world, army, [at]);
   const direct = directFrom(world, fromKing, at);
   const vacant = (f, r) => world.at(f, r) === FLOOR && !world.pieceAt(f, r);
   for (let i = 1; i < pattern.slots.length; i++) {
+    const fx = fixed?.get(i) ?? null;
+    if (fx) {
+      army.pieces.push({ id: i + 1, ch: pattern.slots[i].ch, slot: i, f: fx.f, r: fx.r });
+      continue;
+    }
     const want = slotCell(pattern, i, army.at, fc);
     let cell = null;
     if (world.inBounds(want.f, want.r) && vacant(want.f, want.r) && !taken.has(world.idx(want.f, want.r)) && direct(want.f, want.r)) cell = want;
@@ -1563,6 +1612,111 @@ export function spawnArmy(world, pattern, at, facing = 0, side = 'w', { lenient 
     taken.add(world.idx(cell.f, cell.r));
     army.pieces.push({ id: i + 1, ch: pattern.slots[i].ch, slot: i, f: cell.f, r: cell.r });
   }
-  army.stamp(world);
+  if (stamp) army.stamp(world);
   return army;
+}
+
+/**
+ * THE NEAREST FLOOR THAT CAN HOLD an army of `n` pieces (ruling 15:
+ * "nothing is ever sealed off" — after a duel, if the king's pocket
+ * cannot hold the army, the whole army moves to the nearest floor that
+ * can): the vacant-floor region of at least `n` cells whose nearest cell
+ * to `from` (Chebyshev) is the nearest of all; that cell, or null.
+ */
+export function nearestHold(world, from, n) {
+  const n0 = world.size;
+  const region = new Int32Array(n0).fill(-1);
+  const sizes = [];
+  const vacant = (i) => { const f = i % world.files, r = (i - f) / world.files; return world.at(f, r) === FLOOR && !world.pieceAt(f, r); };
+  for (let s = 0; s < n0; s++) {
+    if (region[s] >= 0 || !vacant(s)) continue;
+    const id = sizes.length;
+    const stack = [s];
+    region[s] = id;
+    let size = 0;
+    while (stack.length) {
+      const i = stack.pop();
+      size++;
+      const f = i % world.files, r = (i - f) / world.files;
+      for (const [df, dr] of KING_STEPS) {
+        const nf = f + df, nr = r + dr;
+        if (!world.inBounds(nf, nr)) continue;
+        const j = world.idx(nf, nr);
+        if (region[j] >= 0 || !vacant(j)) continue;
+        region[j] = id;
+        stack.push(j);
+      }
+    }
+    sizes.push(size);
+  }
+  let best = null;
+  for (let i = 0; i < n0; i++) {
+    if (region[i] < 0 || sizes[region[i]] < n) continue;
+    const f = i % world.files, r = (i - f) / world.files;
+    const d = Math.max(Math.abs(f - from.f), Math.abs(r - from.r));
+    const k = [d, Math.abs(f - from.f) + Math.abs(r - from.r), f, r];
+    if (!best || lexLess(k, best.k)) best = { f, r, k };
+  }
+  return best ? { f: best.f, r: best.r } : null;
+}
+
+/**
+ * THE WALK-OUT of a won duel (2026-09-10, the duel start — ruling 3's
+ * other half): the survivors stand WHERE THEY STOOD when the duel ended,
+ * the captured return beside the body (the spawn's molding around the
+ * survivors), promotions revert (a promoted piece is a pawn again at its
+ * cell — brief §8). `survivors` are the side's letters on the board after
+ * the duel, in world cells: [{ ch, f, r }], the king among them (or
+ * `kingCell` is his). Each survivor takes the slot of its letter nearest
+ * its cell; a letter beyond the pattern's count of it is a promoted pawn.
+ * The world's piece grid must already be clear of the side's old letters
+ * (the crop's letters after a duel). When the king's pocket cannot hold
+ * the army, THE WHOLE ARMY MOVES to the nearest floor that can (ruling
+ * 15); failing even that, the lenient spawn.
+ */
+export function walkOutArmy(world, pattern, kingCell, facing, survivors, side = 'w') {
+  const fc = normFacing(facing);
+  const slots = pattern.slots;
+  const at = anchorCell(pattern, kingCell, fc);
+  const fixed = new Map();
+  const free = survivors.filter((s) => !(s.f === kingCell.f && s.r === kingCell.r)).map((s) => ({ ch: s.ch.toUpperCase(), f: s.f, r: s.r }));
+  const cellOfSlot = (i) => slotCell(pattern, i, at, fc);
+  const assign = (idxs, pool) => {
+    const open = [...idxs];
+    const cand = [...pool];
+    while (open.length && cand.length) {
+      let best = null;
+      for (const i of open) {
+        const sc = cellOfSlot(i);
+        for (const s of cand) {
+          const d = Math.max(Math.abs(s.f - sc.f), Math.abs(s.r - sc.r));
+          if (!best || d < best.d) best = { i, s, d };
+        }
+      }
+      fixed.set(best.i, { f: best.s.f, r: best.s.r });
+      open.splice(open.indexOf(best.i), 1);
+      cand.splice(cand.indexOf(best.s), 1);
+    }
+    return cand;
+  };
+  const letters = [...new Set(slots.slice(1).map((s) => s.ch.toUpperCase()).filter((ch) => ch !== 'P'))];
+  const pawnPool = free.filter((s) => s.ch === 'P' || !letters.includes(s.ch));
+  for (const ch of letters) {
+    const idxs = slots.map((s, i) => (i > 0 && s.ch.toUpperCase() === ch ? i : -1)).filter((i) => i >= 0);
+    pawnPool.push(...assign(idxs, free.filter((s) => s.ch === ch)));
+  }
+  assign(slots.map((s, i) => (i > 0 && s.ch.toUpperCase() === 'P' ? i : -1)).filter((i) => i >= 0), pawnPool);
+  try {
+    return spawnArmy(world, pattern, kingCell, fc, side, { fixed });
+  } catch {
+    const cell = nearestHold(world, kingCell, slots.length);
+    if (cell && !(cell.f === kingCell.f && cell.r === kingCell.r)) {
+      try {
+        return spawnArmy(world, pattern, cell, fc, side, {});
+      } catch {
+        /* the region holds the count but not the molding — fall through */
+      }
+    }
+    return spawnArmy(world, pattern, kingCell, fc, side, { fixed, lenient: true });
+  }
 }

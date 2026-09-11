@@ -22,13 +22,15 @@
 // input, paste or `?save=` URL.
 import { World } from './world.mjs';
 import { Army } from './army.mjs';
+import { serializeEnemy, loadEnemy } from './enemy.mjs';
 
-export const RUN_SCHEMA = 'dck-run/2'; // 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor
+export const RUN_SCHEMA = 'dck-run/4'; // 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor; 3 (2026-09-10, milestone 6): THE ENEMIES ride in the floor's entry (state, last-seen cell, seed), the pending duel names its enemy and axis; 4 (2026-09-11, the wanderers): an enemy carries its mode and its roam (the waypoint, the pause, the draw count), the pending duel the enemy's standing row
 export const RUN_KEY = 'dck.run.v1';
 
 /** A fresh run object from its parts. */
-export function newRun({ id = null, seed, worldId, world, army, build = null, options = null } = {}) {
+export function newRun({ id = null, seed, worldId, world, army, enemies = [], build = null, options = null } = {}) {
   const now = new Date().toISOString();
+  const es = enemies.map(serializeEnemy);
   return {
     schema: RUN_SCHEMA,
     build,
@@ -38,8 +40,8 @@ export function newRun({ id = null, seed, worldId, world, army, build = null, op
     savedAt: now,
     worldId,
     floor: worldId,
-    floors: { [worldId]: { world: world.serialize(), army: army.serialize() } },
-    start: { world: world.serialize(), army: army.serialize() },
+    floors: { [worldId]: { world: world.serialize(), army: army.serialize(), enemies: es } },
+    start: { world: world.serialize(), army: army.serialize(), enemies: es },
     turn: 0,
     turns: [],
     options,
@@ -49,9 +51,10 @@ export function newRun({ id = null, seed, worldId, world, army, build = null, op
 /** Write the live floor and army into the run (before a save). The floor's
  *  DEBRIS ledger (4c: one per floor, debris.mjs serialize) rides along when
  *  given and is kept when not. */
-export function updateRun(run, { world, army, turn = null, debris = undefined }) {
+export function updateRun(run, { world, army, enemies = undefined, turn = null, debris = undefined }) {
   const kept = run.floors[run.floor]?.debris ?? null;
-  run.floors[run.floor] = { world: world.serialize(), army: army.serialize(), debris: debris === undefined ? kept : debris };
+  const keptEnemies = run.floors[run.floor]?.enemies ?? [];
+  run.floors[run.floor] = { world: world.serialize(), army: army.serialize(), enemies: enemies === undefined ? keptEnemies : enemies.map(serializeEnemy), debris: debris === undefined ? kept : debris };
   if (turn !== null) run.turn = turn;
   run.savedAt = new Date().toISOString();
   return run;
@@ -84,12 +87,12 @@ export function runEnded(run) {
   return !!run?.ended;
 }
 
-/** The live floor and army out of a run: { world, army, debris } (the
- *  ledger serialized, or null for a clean floor). */
+/** The live floor, army and enemies out of a run: { world, army, enemies,
+ *  debris } (the ledger serialized, or null for a clean floor). */
 export function openRun(run) {
   const fl = run.floors?.[run.floor];
   if (!fl) throw new Error(`run ${run.id}: no floor "${run.floor}"`);
-  return { world: World.load(fl.world), army: Army.load(fl.army), debris: fl.debris ?? null };
+  return { world: World.load(fl.world), army: Army.load(fl.army), enemies: (fl.enemies ?? []).map(loadEnemy), debris: fl.debris ?? null };
 }
 
 
