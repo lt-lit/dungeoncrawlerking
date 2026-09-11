@@ -1583,7 +1583,7 @@ walk away) — 16 of 16 caught (median 35, max 98; 11 through a pivot,
 one of them the player's own step into the line); the enemy work 29 ms a
 turn standing, 56 fleeing, in Node; the browser's first hunting turn
 with the lint measured 111 ms before the fast pivots and the lint's
-cached Board, 54 after. THE HUNTER'S KING MOVES BY HIS OWN MOVE (ruling
+cached Board, 51 after. THE HUNTER'S KING MOVES BY HIS OWN MOVE (ruling
 10) where the box offers it — a d-pad step's catch-up had carried him
 two cells at once and straight past the far-row cell he was walking to,
 the corridor hunt of the smoke missing its far-row cell for nine inputs;

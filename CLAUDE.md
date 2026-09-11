@@ -943,7 +943,7 @@ max 83), 3 missed at 120 — formations tangled in crate pockets, the same
 item as the regroup rate; fleeing 16 of 16 (median 35, max 98); enemy
 work 29 ms a turn standing, 56 fleeing, in Node. Gates: test-enemy 66,
 test-barrier 160, test-army 121, test-dungeon 96, test-world 125,
-selftest 46, ui-smoke with THE ENEMIES block, replay-smoke 63. THE
+selftest 46, ui-smoke 319 ok with THE ENEMIES block, replay-smoke 63. THE
 PHONE VERDICT IS THE GATE. Held over, on purpose: patrol routes, a sight
 range and fog, aggro between hunters, an enemy that smashes crates, a
 planner over formation states for the pocket tangles, per-theme edge-on
