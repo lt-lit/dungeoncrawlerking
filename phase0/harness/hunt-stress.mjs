@@ -35,7 +35,7 @@ for (const w of worlds) {
     const world = loadWorld(json);
     const at = world.start;
     const player = A.spawnArmy(world, A.makePattern(A.OPENING_KIT), { f: at.f, r: at.r }, at.facing ?? 0, 'w');
-    const enemies = spawnEnemies(world, 1);
+    const enemies = spawnEnemies(world, 1, { mode: 'sentry' });
     // Every other enemy leaves the floor; this one hunts from its spawn with sight granted.
     for (let i = 0; i < enemies.length; i++) if (i !== n) enemies[i].army.lift(world);
     const e = enemies[n];

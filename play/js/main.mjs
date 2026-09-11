@@ -3473,7 +3473,7 @@ function beginRun(worldJson, { resume = null } = {}) {
       // THE ENEMIES (milestone 6): one per spawn digit on the map, its width
       // the digit, its bag drawn from the run's seed, a sentry until it sees
       // the king; `?enemies=off` walks an empty floor (the labs, the smokes).
-      enemies = params.get('enemies') === 'off' ? [] : spawnEnemies(world, seed);
+      enemies = params.get('enemies') === 'off' ? [] : spawnEnemies(world, seed, { mode: params.get('enemies') === 'sentry' ? 'sentry' : 'roam' });
       run = newRun({ seed, worldId: world.id, world, army, enemies, build: APP_BUILD, options: { army: params.get('army') === 'setup' ? { ...setup.white } : 'kit', enemies: params.get('enemies') === 'off' ? 'off' : 'spawns' } });
       saveRun(run);
     }
@@ -3644,7 +3644,7 @@ function walkEnemies(W, arrivals, plans) {
   const notes = [];
   const noteOf = (e, was) => {
     if (e.state === was) return;
-    if (e.state === 'hunt') notes.push(was === 'sentry' ? 'a summoner sees you' : 'a summoner finds you again');
+    if (e.state === 'hunt') notes.push(was === 'search' ? 'a summoner finds you again' : 'a summoner sees you');
     else if (e.state === 'search') notes.push('a summoner loses sight of you');
     else notes.push('a summoner gives up the search');
   };
@@ -3775,7 +3775,7 @@ function walkMarks() {
   const ui = app.boardUI;
   if (!W || !ui || app.phase !== 'walk') return;
   const sel = W.selected ? W.army.piece(W.selected) : null;
-  const badges = W.enemies.filter((e) => e.state !== 'sentry').map((e) => ({ f: e.army.king.f, r: e.army.king.r, text: e.state === 'hunt' ? '!' : '?', color: e.state === 'hunt' ? '#e5484d' : '#f2c14e' }));
+  const badges = W.enemies.filter((e) => e.state === 'hunt' || e.state === 'search').map((e) => ({ f: e.army.king.f, r: e.army.king.r, text: e.state === 'hunt' ? '!' : '?', color: e.state === 'hunt' ? '#e5484d' : '#f2c14e' }));
   ui.setCellMarks({ selected: sel ? { f: sel.f, r: sel.r } : null, targets: W.targets, threats: W.threats ?? [], badges });
 }
 
@@ -4730,7 +4730,7 @@ window.__DCK = {
     /** THE ENEMIES (milestone 6): every enemy on the floor with its state, its king, its pieces and its bag. */
     get enemies() {
       const W = app.walk;
-      return W ? W.enemies.map((e) => ({ id: e.id, n: e.n, width: e.width, state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen, facing: e.army.facing, king: { ...e.army.king }, pieces: e.army.pieces.map((p) => ({ ...p })), bag: bagOfPattern(e.army.pattern).back.join('') })) : null;
+      return W ? W.enemies.map((e) => ({ id: e.id, n: e.n, width: e.width, mode: e.mode ?? 'roam', state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen, facing: e.army.facing, king: { ...e.army.king }, spawn: { ...e.spawn }, pieces: e.army.pieces.map((p) => ({ ...p })), bag: bagOfPattern(e.army.pattern).back.join(''), roam: e.roam ? { target: e.roam.target ? { ...e.roam.target } : null, pause: e.roam.pause, n: e.roam.n } : null })) : null;
     },
     /** Does enemy `id` see the player's army now (any of its pieces seeing any of his)? */
     sight: (id) => { const W = app.walk; const e = W?.enemies.find((x) => x.id === id); return e ? armiesSee(W.world, e.army, W.army) : null; },
@@ -4760,8 +4760,8 @@ window.__DCK = {
       walkSave();
       return true;
     },
-    /** Test-only: set enemy `id`'s state ('sentry' / 'hunt' / 'search'). */
-    setEnemyState: (id, state) => { const W = app.walk; const e = W?.enemies.find((x) => x.id === id); if (!e) return false; e.state = state; if (state === 'sentry') e.lastSeen = null; walkMarks(); return true; },
+    /** Test-only: set enemy `id`'s state ('sentry' / 'roam' / 'hunt' / 'search'). */
+    setEnemyState: (id, state) => { const W = app.walk; const e = W?.enemies.find((x) => x.id === id); if (!e) return false; e.state = state; if (state === 'sentry' || state === 'roam') { e.lastSeen = null; if (e.roam) e.roam.target = null; } walkMarks(); return true; },
     /** The camera's focus cell and offset. */
     focus: () => (app.walk ? walkFocus() : null),
     export: () => (app.walk ? (walkSave(), JSON.parse(JSON.stringify(app.walk.run))) : loadSavedRun()),

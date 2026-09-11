@@ -12,7 +12,7 @@
 // and with whose initiative, and THE RETREAT DANCE: turns after first sight on
 // which the player stepped nearer and the enemy king stepped away. Usage
 // (from phase0/):
-//   node harness/charge-stress.mjs [--turns 250] [--world vaults-2] [--policy charge|wait] [--kings]
+//   node harness/charge-stress.mjs [--turns 250] [--world vaults-2] [--policy charge|wait] [--kings] [--roam]
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,6 +27,7 @@ const TURNS = parseInt(arg('turns', '250'), 10);
 const POLICY = arg('policy', 'charge');
 const ONLY = arg('world', null);
 const KINGS = argv.includes('--kings');
+const ROAM = argv.includes('--roam'); // the charged enemy wanders its beat until it sees the kit (a sentry by default)
 const K8 = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const cheb = (a, b) => Math.max(Math.abs(a.f - b.f), Math.abs(a.r - b.r));
 const sees = (world, e, player) => (KINGS ? lineOfSight(world, e.army.king, player.king) : armiesSee(world, e.army, player));
@@ -62,7 +63,7 @@ for (const w of worlds) {
     const world = loadWorld(json);
     const at = world.start;
     const player = A.spawnArmy(world, A.makePattern(A.OPENING_KIT), { f: at.f, r: at.r }, at.facing ?? 0, 'w');
-    const enemies = spawnEnemies(world, 1);
+    const enemies = spawnEnemies(world, 1, { mode: ROAM ? 'roam' : 'sentry' });
     for (let i = 0; i < enemies.length; i++) if (i !== n) enemies[i].army.lift(world);
     const e = enemies[n];
     if (!e) continue;
@@ -99,4 +100,4 @@ for (const w of worlds) {
   }
 }
 const med = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[s.length >> 1] : '-'; };
-console.log(`charge-stress (sight ${KINGS ? 'king to king' : 'between armies'}, after first sight the player ${POLICY === 'wait' ? 'presses wait' : 'keeps walking'}): ${G.runs} charges — sighted ${G.runs - G.neverSeen} (median first sight turn ${med(G.seenAt)}, median king distance ${med(G.distAt)}), duels ${G.started} (median turn ${med(G.startedTurn)}, max ${G.startedTurn.length ? Math.max(...G.startedTurn) : '-'}; initiative w ${G.init.w} / b ${G.init.b}, ${G.pivots} through a pivot; box rows ${G.rows.join(',')}), never sighted ${G.neverSeen} (the thumb is crude — it sticks in the vaults); median dance turns ${med(G.dance)}`);
+console.log(`charge-stress (sight ${KINGS ? 'king to king' : 'between armies'}, ${ROAM ? 'wanderers' : 'sentries'}, after first sight the player ${POLICY === 'wait' ? 'presses wait' : 'keeps walking'}): ${G.runs} charges — sighted ${G.runs - G.neverSeen} (median first sight turn ${med(G.seenAt)}, median king distance ${med(G.distAt)}), duels ${G.started} (median turn ${med(G.startedTurn)}, max ${G.startedTurn.length ? Math.max(...G.startedTurn) : '-'}; initiative w ${G.init.w} / b ${G.init.b}, ${G.pivots} through a pivot; box rows ${G.rows.join(',')}), never sighted ${G.neverSeen} (the thumb is crude — it sticks in the vaults); median dance turns ${med(G.dance)}`);

@@ -70,7 +70,7 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
   `node harness/test-barrier.mjs` (THE BOX + THE DUEL START: the fixed 10×10 arena placed by the walk's own rule, the pieces where they stand, the band, the gap between the camp lines, the enemy molded around the player's pieces, the walk-out's survivors),
   `node harness/test-enemy.mjs` (THE ENEMIES: the spawns, sight between armies, sentry / hunt / search, the hunter's goals over the far half, the trigger with its initiative, bystanders, the save),
   `node harness/hunt-stress.mjs [--flee]` (the hunt's convergence over the fixtures: turns to the trigger, parks, misses, the enemy work per turn),
-  `node harness/charge-stress.mjs [--policy wait] [--kings]` (a crude thumb walks the kit at every sentry: first sight, the duel's start and initiative, the retreat dance — `--kings` replays the old king-to-king sight),
+  `node harness/charge-stress.mjs [--policy wait] [--kings] [--roam]` (a crude thumb walks the kit at every sentry, or at every wanderer with `--roam`: first sight, the duel's start and initiative, the retreat dance — `--kings` replays the old king-to-king sight),
   `node harness/sight-map.mjs --world vaults-4 --enemy 3` (an ASCII map of where a spawn sees you: its king your king, any piece any piece),
   `node harness/facing-walk.mjs [--shots]` (every arena × three facings:
   the turned camera equals the world itself rotated), `node
@@ -1667,6 +1667,48 @@ met at nine), test-barrier 160 (five rows per legal file, the far row
 marked), ui-smoke 256 ok (the ambush through the pivot now six
 ranks off, its row in the run and the log), selftest 46/46, replay-smoke
 63, the other Node gates unchanged. THE PHONE VERDICT IS THE GATE.
+
+**THE WANDERERS (2026-09-11).** The verdict on the far-half build came
+the same day — "Alright seems to work a lot better. Can we get some
+wandering enemies?" — so every spawn now ROAMS by default (`enemy.mjs`
+state `roam`, an enemy's `mode`; `?enemies=sentry` the old rule,
+`?enemies=off` none). A wanderer walks ITS BEAT: `pickRoamTarget` draws a
+waypoint — a floor cell its king can reach by the walk's own BFS (its
+pieces pass; every other army, furniture, holes and walls block), within
+`ROAM_LEASH` 12 cells of its spawn so the level telegraph stays where the
+generator put it, at least `ROAM_MIN` 4 off so the walk is a walk and not
+a shuffle, not under a piece — uniform by ONE draw from the enemy's own
+seed numbered by its draw count (`roamDraw`, `roam.n`), so a run replays
+from its inputs; it walks there on the hunt's own machinery (`approach`,
+the king's own move where it is offered, the stall / pivot / rest), one
+step per input like everything else, stands a PAUSE of `ROAM_PAUSE` 2–6
+turns (drawn) and draws the next; a waypoint it cannot reach any more (a
+comrade army in the corridor) is dropped for another. Sight is checked
+after every move, so a wanderer that walks into view of your army is a
+hunter at once — and its search, finding nobody at the last-seen cell,
+goes back to the beat (`restState`). THE STRANGER RULE fell out of it
+(army.mjs `enemyAt` / `landing`): two enemy armies share the lowercase
+letters, and the walk read any same-side letter as a comrade to route
+through — with one moving army that never bit; with two, a wanderer
+would have walked through another and its stamp erased the other's
+letters — so a same-side letter that is not one of THIS army's own pieces
+is an obstacle now. The save carries `mode` and `roam` (`dck-run/4`);
+the badges stay hunt `!` / search `?`; `enemyTurn` reports `paused` and
+`target`. MEASURED: charge-stress `--roam` on vaults-2 — four charges at
+wanderers, four sighted, four duels (median first sight ten cells off,
+eight against sentries); hunt-stress unchanged, its enemies spawned as
+sentries on purpose. Gates: test-enemy 100 (the default spawn a
+wanderer, the beat within the leash with pauses and arrivals, the trail
+replayed from the seed and through a save at turn 40, another seed
+another beat, ten waypoints on bare floor, the search ending on the
+beat, sight on the beat, two wanderers in one corridor never sharing a
+cell), ui-smoke 270 ok (THE WANDERERS block: four roamers on the
+fixture over thirty waits — kings off their spawns, no shared cell, the
+letters whole, the leash kept, a second run of the same seed walking the
+same beats; the enemies block on `?enemies=sentry`), the other gates
+unchanged. THE PHONE VERDICT IS THE GATE. Held over: patrol ROUTES as a
+list of cells in the world file, a per-spawn mode, aggro between
+wanderers.
 
 
 ## The dungeon generator (Phase 2 milestone 5, 2026-09-08)

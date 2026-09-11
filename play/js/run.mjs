@@ -24,7 +24,7 @@ import { World } from './world.mjs';
 import { Army } from './army.mjs';
 import { serializeEnemy, loadEnemy } from './enemy.mjs';
 
-export const RUN_SCHEMA = 'dck-run/3'; // 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor; 3 (2026-09-10, milestone 6): THE ENEMIES ride in the floor's entry (state, last-seen cell, seed), the pending duel names its enemy and axis
+export const RUN_SCHEMA = 'dck-run/4'; // 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor; 3 (2026-09-10, milestone 6): THE ENEMIES ride in the floor's entry (state, last-seen cell, seed), the pending duel names its enemy and axis; 4 (2026-09-11, the wanderers): an enemy carries its mode and its roam (the waypoint, the pause, the draw count), the pending duel the enemy's standing row
 export const RUN_KEY = 'dck.run.v1';
 
 /** A fresh run object from its parts. */

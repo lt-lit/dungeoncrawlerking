@@ -1006,6 +1006,43 @@ selftest 46/46, replay-smoke 63, the other Node gates unchanged. THE
 PHONE VERDICT IS THE GATE — and the run save export of a troubled walk
 is the instrument to send with it.**
 
+**THE WANDERERS ✅ BUILT 2026-09-11 (designer, on the far-half build:
+"Alright seems to work a lot better. Can we get some wandering
+enemies?").** Every spawn ROAMS by default (`enemy.mjs` state `roam`,
+the enemy's `mode`; `?enemies=sentry` the old rule, `?enemies=off` none):
+a WAYPOINT WALK ON ITS BEAT — `pickRoamTarget`: a floor cell its king can
+reach by the walk's own BFS (its pieces pass; every other army, furniture,
+holes and walls block), within `ROAM_LEASH` 12 of its spawn (the level
+telegraph stays where the generator put it) and at least `ROAM_MIN` 4
+off, not under a piece, uniform by ONE DRAW from the enemy's own seed
+numbered by `roam.n` (`roamDraw`), so a run replays from its inputs; at
+the waypoint a PAUSE of `ROAM_PAUSE` 2–6 turns (drawn), then the next;
+the same `enemyTurn` machinery as the hunt (`approach`, the king's own
+move, the stall / pivot / rest), speed parity; sight after every move,
+so a wanderer that walks into view hunts at once, and a search that
+finds nobody goes back to the beat (`restState`: the mode's state);
+`enemyTurn` reports `paused` and `target`. THE STRANGER RULE (army.mjs
+`enemyAt` / `landing`): two enemy armies share the lowercase letters, so
+a same-side letter that is not one of THIS army's pieces is an obstacle,
+never a comrade — before it the walk would have routed one wanderer
+through another and the stamp erased its letters. The save carries
+`mode` and `roam` (`dck-run/4`); the badges stay hunt / search only.
+MEASURED: charge-stress `--roam` on vaults-2 (wanderers instead of
+sentries): four charges, four sighted, four duels, median first sight
+ten cells off (eight against sentries); hunt-stress unchanged (its
+enemies spawn as sentries). Gates: test-enemy 100 (the default spawn a
+wanderer, the beat within the leash with pauses and arrivals, the trail
+replayed from the seed and through a save at turn 40, another seed
+another beat, ten waypoints on bare floor, the search ending on the
+beat, sight on the beat, two wanderers in one corridor never sharing a
+cell), ui-smoke 270 ok (THE WANDERERS block: four roamers on the
+fixture over thirty waits — kings off their spawns, no shared cell, the
+letters whole, the leash kept, a second run of the same seed walking the
+same beats; the enemies block on `?enemies=sentry`), the other gates
+unchanged. THE PHONE VERDICT IS THE GATE. Held over: patrol ROUTES as a
+list of cells in the world file, a per-spawn mode, aggro between
+wanderers.**
+
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
 THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
@@ -1888,12 +1925,14 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
 - `play/js/enemy.mjs` — THE ENEMIES (Phase 2 milestone 6, 2026-09-10): an
   enemy is the same army on the black side, spawned from the digits;
   sight BETWEEN ARMIES (any piece seeing any piece, since 2026-09-11 —
-  king to king before); sentry / hunt / search; the hunter's goals through
-  the trigger function itself — THE FAR HALF of the four boxes since
-  2026-09-11; the enemy's turn on the walk's own planner; the trigger
-  with its initiative; bystanders lifted and set back. Node gate
-  `test-enemy.mjs`; `hunt-stress.mjs` the convergence instrument.
-  main.mjs § THE WALK runs the loop, the chooser and the drop.
+  king to king before); roam / sentry / hunt / search — THE WANDERERS
+  (2026-09-11): a waypoint walk on the spawn's beat, seeded; the hunter's
+  goals through the trigger function itself — THE FAR HALF of the four
+  boxes since 2026-09-11; the enemy's turn on the walk's own planner; the
+  trigger with its initiative; bystanders lifted and set back. Node gate
+  `test-enemy.mjs`; `hunt-stress.mjs` the convergence instrument,
+  `charge-stress.mjs` the encounter instrument, `sight-map.mjs` the
+  sight map. main.mjs § THE WALK runs the loop, the chooser and the drop.
 - `play/js/barrier.mjs` — THE BOX (Phase 2 milestone 5, 2026-09-08, on
   4c's barrier by hand): the arena is ALWAYS 10×10 on the player's king
   (his rank row 0, the axis arena-north), placed by THE WALK'S OWN RULE
@@ -1933,7 +1972,7 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   he waited for in vain; the queue swap; the anchor snapping to the floor
   beside a wall) (Node gate `test-army.mjs` 119;
   `phase0/harness/walk-stress.mjs` the cohesion instrument, `walk-replay.mjs` the position replayer); the run
-  save (one object per run, `dck-run/2`, export / import as
+  save (one object per run, `dck-run/4` since the wanderers, export / import as
   a file, no backward compatibility); the fixtures in `play/worlds/`
   (GENERATED floors since milestone 5). main.mjs § THE WALK is the page
   (`#screen-walk`: the north-up board, the tap-to-turn / hold-to-walk
@@ -2028,7 +2067,7 @@ node harness/walk-replay.mjs <world> <df,dr> [--hold N] [--trace] [pieces: K1@f,
 node harness/test-barrier.mjs        # THE BOX + THE DUEL START (play/js/barrier.mjs): the fixed 10×10 arena at every facing placed by the walk's own rule, the pieces where they stand, the far-row band, the gap between the camp lines with a floor of 2, the enemy molded around the player's pieces, off-map walls, an axis behind the army refused then dealt after the pivot, the walk-out's survivors and returns; Node only
 node harness/test-enemy.mjs          # THE ENEMIES (play/js/enemy.mjs): the band, the spawns from the digits and the stamp that clears only its own cells, sight and the corner rule, sight between ARMIES (any piece seeing any piece), sentry / hunt / search, the hunter's goals and the trigger with its initiative, THE FAR HALF (a hunter seven off starts the duel at once, four off backs to five), the ambush through the pivot, search and the door, bystanders, the save; Node only
 node harness/hunt-stress.mjs [--flee] [--turns 120] [--world vaults-2]  # THE HUNT'S CONVERGENCE: every spawn of every fixture hunts the kit at the start with sight granted (the player standing, or fleeing on a held cardinal walk) — turns to the trigger, parks, misses, the enemy work per turn
-node harness/charge-stress.mjs [--policy charge|wait] [--kings] [--turns 250] [--world vaults-2]  # THE CHARGE (2026-09-11): a crude thumb walks the kit AT every sentry under the game's sight rule (--kings the old king-to-king one), the player walking on or pressing wait after first sight — first sight's turn and distance, whether and when the duel starts and whose initiative, THE RETREAT DANCE (turns the player stepped nearer and the enemy king stepped away; must stay near zero)
+node harness/charge-stress.mjs [--policy charge|wait] [--kings] [--roam] [--turns 250] [--world vaults-2]  # THE CHARGE (2026-09-11): a crude thumb walks the kit AT every sentry (--roam: at every WANDERER on its beat) under the game's sight rule (--kings the old king-to-king one), the player walking on or pressing wait after first sight — first sight's turn and distance, whether and when the duel starts and whose initiative, THE RETREAT DANCE (turns the player stepped nearer and the enemy king stepped away; must stay near zero)
 node harness/sight-map.mjs [--world vaults-4] [--enemy 3] [--radius 13]  # WHERE A SPAWN SEES YOU: an ASCII map around one enemy's spawn — k its king sees your king there, a some piece of its army sees some piece of the kit stood there, . nothing
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
 

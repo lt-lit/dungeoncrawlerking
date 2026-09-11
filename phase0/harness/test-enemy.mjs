@@ -10,8 +10,8 @@
 // enemy's initiative, the player's ambush with his, a closed door a wall to
 // a hunter, the bystander lifted and set back, and the save round trip.
 import { loadWorld, HOLE, FLOOR, FURNITURE, worldToArena } from '../../play/js/world.mjs';
-import { makePattern, spawnArmy, planTurn, applyTurn, OPENING_KIT, Army } from '../../play/js/army.mjs';
-import { spawnEnemies, lineOfSight, armiesSee, updateSight, enemyTurn, hunterGoals, triggerFor, threatCells, armyAlong, liftInside, settleBack, serializeEnemy, loadEnemy, enemyBudget, describeEnemy, facingToward } from '../../play/js/enemy.mjs';
+import { makePattern, spawnArmy, planTurn, applyTurn, OPENING_KIT, Army, distanceField } from '../../play/js/army.mjs';
+import { spawnEnemies, lineOfSight, armiesSee, updateSight, enemyTurn, hunterGoals, triggerFor, threatCells, armyAlong, liftInside, settleBack, serializeEnemy, loadEnemy, enemyBudget, describeEnemy, facingToward, restState, pickRoamTarget, ROAM_LEASH, ROAM_MIN, ROAM_PAUSE } from '../../play/js/enemy.mjs';
 import { boxAt, BOX, FAR_HALF } from '../../play/js/barrier.mjs';
 import { newRun, updateRun, openRun, RUN_SCHEMA } from '../../play/js/run.mjs';
 import { makeArmy } from '../../play/js/armygen.mjs';
@@ -61,8 +61,13 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   const w = worldOf(rows);
   check(w.spawns.length === 2 && w.spawns[0].n === 1 && w.spawns[1].n === 2, 'two spawns read from the digits');
   const player = spawnArmy(w, kit(), { f: w.start.f, r: w.start.r }, 0, 'w');
-  const enemies = spawnEnemies(w, 7);
-  check(enemies.length === 2 && enemies.every((e) => e.width === 3 && e.army.pieces.length === 6 && e.state === 'sentry' && e.army.side === 'b'), `two 3-wide enemies spawned as sentries (${enemies.map((e) => e.army.pieces.length).join(',')} pieces)`);
+  const enemies = spawnEnemies(w, 7, { mode: 'sentry' });
+  check(enemies.length === 2 && enemies.every((e) => e.width === 3 && e.army.pieces.length === 6 && e.state === 'sentry' && e.mode === 'sentry' && e.army.side === 'b'), `two 3-wide enemies spawned as sentries (${enemies.map((e) => e.army.pieces.length).join(',')} pieces)`);
+  {
+    const w2 = worldOf(rows);
+    const roamers = spawnEnemies(w2, 7);
+    check(roamers.length === 2 && roamers.every((e) => e.state === 'roam' && e.mode === 'roam' && e.roam && e.roam.target === null && e.roam.n === 0), 'the default spawn is a WANDERER: state roam, a fresh beat');
+  }
   check(lower(w) === 12 && upper(w) === 8, `both armies stand on the floor: ${lower(w)} lowercase letters, ${upper(w)} uppercase — neither erased the other`);
   check(enemies[0].seed !== enemies[1].seed && enemies.every((e) => e.army.king.f === e.spawn.f && e.army.king.r === e.spawn.r), 'each enemy has its own seed and its king on its spawn');
   check(enemies.every((e) => e.army.facing === 2), `the sentries look the way you come — south, toward the start (${enemies.map((e) => e.army.facing).join(',')})`);
@@ -76,13 +81,13 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   // A saved enemy loads, walks, and clears its old cells on its first turn.
   const saved = serializeEnemy(enemies[1]);
   const loaded = loadEnemy(JSON.parse(JSON.stringify(saved)));
-  check(loaded.army instanceof Army && loaded.state === 'sentry' && loaded.army.pieces.length === 6 && loaded.id === 2, 'an enemy round-trips through its save');
+  check(loaded.army instanceof Army && loaded.state === 'sentry' && loaded.mode === 'sentry' && loaded.roam && loaded.roam.n === 0 && loaded.army.pieces.length === 6 && loaded.id === 2, 'an enemy round-trips through its save (mode, state, beat)');
   const p2 = planTurn(w, loaded.army, { kind: 'step', df: 0, dr: -1 });
   applyTurn(w, loaded.army, p2);
   check(p2.ok && lower(w) === before, `a loaded enemy's first turn clears its old cells (${lower(w)} letters)`);
   // The run save carries the enemies.
   const run = newRun({ seed: 7, worldId: w.id, world: w, army: player, enemies });
-  check(RUN_SCHEMA === 'dck-run/3' && run.floors[w.id].enemies.length === 2 && run.start.enemies.length === 2, `the run save (${RUN_SCHEMA}) carries the enemies`);
+  check(RUN_SCHEMA === 'dck-run/4' && run.floors[w.id].enemies.length === 2 && run.start.enemies.length === 2, `the run save (${RUN_SCHEMA}) carries the enemies`);
   enemies[0].state = 'hunt';
   enemies[0].lastSeen = { f: 3, r: 3 };
   updateRun(run, { world: w, army: player, enemies, turn: 1 });
@@ -227,12 +232,13 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   const w2 = openFloor(20, 30);
   const p2 = spawnArmy(w2, kit(), { f: 10, r: 3 }, 0, 'w');
   const a2 = spawnArmy(w2, makePattern({ width: 3, royal: 'K', pieces: ['N', 'B'] }, { seed: 1 }), { f: 10, r: 20 }, 2, 'b');
-  const e2 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 10, r: 20 }, army: a2, state: 'search', lastSeen: { f: 10, r: 18 }, seen: true };
+  const e2 = { id: 1, n: 1, width: 3, seed: 1, spawn: { f: 10, r: 20 }, army: a2, mode: 'sentry', state: 'search', lastSeen: { f: 10, r: 18 }, seen: true };
   // No sight: a wall line across the hall between the armies (any piece seeing any piece would be sight).
   for (let f = 1; f < 19; f++) w2.setTerrain(f, 8, '*');
   let arrived = false;
   for (let i = 0; i < 6 && !arrived; i++) { const r = enemyTurn(w2, p2, e2, { seed: 1 }); arrived = r.arrived; }
   check(arrived && e2.state === 'sentry' && e2.lastSeen === null && e2.army.king.r === 18, `arrived at the last-seen cell with nobody there: a sentry again (r ${e2.army.king.r})`);
+  check(restState({ mode: 'roam' }) === 'roam' && restState({ mode: 'sentry' }) === 'sentry' && restState({}) === 'roam', 'a wanderer goes back to its beat after a search, a sentry to its post');
 }
 
 // ---- 6. the hunter walks round a cell the deal refuses; no legal cell reachable → it walks at the king
@@ -413,6 +419,117 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
     fired6 = triggerFor(w6, p6, e6, { seed: 1, turn: 'b' });
   }
   check(fired6 && turns6 <= 3 && fired6.row === 9, `walking at a hunter twelve ranks off meets it at nine within ${turns6 + 1} turns (row ${fired6?.row}, initiative ${fired6?.turn})`);
+}
+
+// ---- 10. THE WANDERERS (designer 2026-09-11: "Can we get some wandering enemies?")
+{
+  // A hall with a wall line across it: the player below, the roamer's beat above, no sight between them.
+  const H = 40, W = 40;
+  const mk = () => {
+    const rows = [];
+    for (let i = 0; i < H; i++) rows.push(i === 0 || i === H - 1 || i === 30 ? '#'.repeat(W) : '#' + '.'.repeat(W - 2) + '#');
+    rows[12] = rows[12].slice(0, 20) + '1' + rows[12].slice(21); // the spawn at (20, 27)
+    rows[35] = rows[35].slice(0, 20) + '@' + rows[35].slice(21); // the start at (20, 4)
+    return rows;
+  };
+  const walk = (turns, { seed = 11, save = null } = {}) => {
+    const w = worldOf(mk());
+    const player = spawnArmy(w, kit(), { f: w.start.f, r: w.start.r }, 0, 'w');
+    let [e] = spawnEnemies(w, seed);
+    const trail = [];
+    let moves = 0, pauses = 0, arrivals = 0, offFloor = 0, maxOff = 0, blocked = 0;
+    const states = new Set();
+    for (let t = 0; t < turns; t++) {
+      if (save !== null && t === save) e = loadEnemy(JSON.parse(JSON.stringify(serializeEnemy(e)))); // the save mid-wander
+      const r = enemyTurn(w, player, e, { seed: 1 });
+      if (r.plan) moves++;
+      if (r.paused) pauses++;
+      if (r.arrived) arrivals++;
+      if (r.blocked) blocked++;
+      states.add(e.state);
+      for (const p of e.army.pieces) if (w.at(p.f, p.r) !== FLOOR) offFloor++;
+      maxOff = Math.max(maxOff, Math.max(Math.abs(e.army.king.f - e.spawn.f), Math.abs(e.army.king.r - e.spawn.r)));
+      trail.push(`${e.army.king.f},${e.army.king.r}`);
+    }
+    return { w, e, trail, moves, pauses, arrivals, blocked, offFloor, maxOff, states, letters: lower(w), lettersRight: e.army.pieces.every((p) => w.pieceAt(p.f, p.r) === e.army.letter(p.ch)) };
+  };
+  const a = walk(80);
+  const cells = new Set(a.trail);
+  check(a.e.state === 'roam' && a.e.mode === 'roam' && a.states.size === 1, `a wanderer stays a wanderer without sight (${[...a.states].join(',')})`);
+  check(a.moves >= 30 && cells.size >= 10, `it walks its beat: ${a.moves} moves over ${cells.size} distinct king cells in 80 turns`);
+  check(a.pauses >= 4 && a.arrivals >= 2, `it stands at each waypoint (${a.arrivals} arrivals, ${a.pauses} paused turns)`);
+  check(a.maxOff <= ROAM_LEASH, `its king never strays past the leash (${a.maxOff} of ${ROAM_LEASH} cells from the spawn)`);
+  check(a.offFloor === 0 && a.letters === 6 && a.lettersRight, 'every piece on floor at every turn, the letters where the pieces stand');
+  check(a.e.roam.n >= 3, `the draws are counted (${a.e.roam.n})`);
+  // Determinism: the same seed replays the same beat; a save mid-wander continues it exactly.
+  const b = walk(80);
+  check(b.trail.join(' ') === a.trail.join(' '), 'the beat replays from the seed');
+  const c = walk(80, { save: 40 });
+  check(c.trail.join(' ') === a.trail.join(' ') && c.e.roam.n === a.e.roam.n, 'a save at turn 40 and the loaded enemy walk on identically');
+  const d = walk(80, { seed: 12 });
+  check(d.trail.join(' ') !== a.trail.join(' '), 'another run seed, another beat');
+  // pickRoamTarget: within the leash, at least ROAM_MIN off, never under a piece.
+  {
+    const w = worldOf(mk());
+    spawnArmy(w, kit(), { f: w.start.f, r: w.start.r }, 0, 'w');
+    const [e] = spawnEnemies(w, 5);
+    let ok10 = true;
+    for (let i = 0; i < 10; i++) {
+      const t = pickRoamTarget(w, e);
+      if (!t || Math.max(Math.abs(t.f - e.spawn.f), Math.abs(t.r - e.spawn.r)) > ROAM_LEASH || Math.max(Math.abs(t.f - e.army.king.f), Math.abs(t.r - e.army.king.r)) < ROAM_MIN || w.pieceAt(t.f, t.r) || w.at(t.f, t.r) !== FLOOR) ok10 = false;
+    }
+    check(ok10 && e.roam.n === 10, 'ten waypoints in a row: within the leash, at least ROAM_MIN off, on bare floor, one draw each');
+    check(ROAM_PAUSE[0] >= 1 && ROAM_PAUSE[1] >= ROAM_PAUSE[0], 'the pause range is sane');
+  }
+  // The search ends on its beat: a wanderer that loses the player walks to the last-seen cell and roams on from there.
+  {
+    const w = worldOf(mk());
+    const player = spawnArmy(w, kit(), { f: w.start.f, r: w.start.r }, 0, 'w');
+    const [e] = spawnEnemies(w, 5);
+    e.state = 'search';
+    e.lastSeen = { f: 24, r: 24 };
+    let arrived = false;
+    for (let i = 0; i < 12 && !arrived; i++) arrived = enemyTurn(w, player, e, { seed: 1 }).arrived;
+    check(arrived && e.state === 'roam' && e.lastSeen === null && e.roam.target === null, `nobody at the last-seen cell: back to roaming (${e.state})`);
+    const r = enemyTurn(w, player, e, { seed: 1 });
+    check(e.state === 'roam' && !!r.target, 'and the next turn it has a fresh waypoint');
+  }
+  // Sight on the beat: open the wall line and the roamer that sees a piece of the kit hunts at once.
+  {
+    const w = worldOf(mk());
+    const player = spawnArmy(w, kit(), { f: w.start.f, r: w.start.r }, 0, 'w');
+    const [e] = spawnEnemies(w, 5);
+    for (let f = 1; f < W - 1; f++) w.setTerrain(f, 9, FLOOR);
+    const r = enemyTurn(w, player, e, { seed: 1 });
+    check(r.saw && e.state === 'hunt' && r.goalList.length > 0, `with the wall gone the wanderer sees the kit and hunts (${r.goalList.length} goals)`);
+  }
+  // STRANGERS: two enemy armies share the lowercase letters, and neither may walk through the other.
+  {
+    const rows = ['#'.repeat(34)];
+    for (let i = 0; i < 3; i++) rows.push('#' + '.'.repeat(32) + '#');
+    rows.push('#'.repeat(34));
+    rows.push('#' + '.'.repeat(32) + '#');
+    rows.push('#'.repeat(34));
+    // a 3-high corridor: enemy 1 at the west end, enemy 2 at the east end; the start in the pocket below the wall
+    rows[2] = rows[2].slice(0, 3) + '1' + rows[2].slice(4, 30) + '2' + rows[2].slice(31);
+    rows[5] = rows[5].slice(0, 16) + '@' + rows[5].slice(17);
+    const w = worldOf(rows);
+    const player = spawnArmy(w, kit(), { f: w.start.f, r: w.start.r }, 0, 'w', { lenient: true });
+    const es = spawnEnemies(w, 3);
+    check(es.length === 2 && lower(w) === 12, `two armies in one corridor (${lower(w)} letters)`);
+    const [e1, e2] = es;
+    const field = distanceField(w, e1.army, [e1.army.king]);
+    check(e2.army.pieces.every((p) => field[w.idx(p.f, p.r)] < 0) && e1.army.pieces.every((p) => field[w.idx(p.f, p.r)] >= 0), 'the BFS of one army stops at the other\'s pieces and passes its own');
+    let shared = 0, letters = true;
+    for (let t = 0; t < 60; t++) {
+      for (const e of es) enemyTurn(w, player, e, { seed: 1 });
+      const seen = new Set();
+      for (const e of es) for (const p of e.army.pieces) { const k = `${p.f},${p.r}`; if (seen.has(k)) shared++; seen.add(k); }
+      if (lower(w) !== 12) letters = false;
+    }
+    check(shared === 0 && letters, `sixty turns of two wanderers in one corridor: no cell shared, twelve letters throughout (${shared} shared)`);
+    check(es.every((e) => e.army.pieces.every((p) => w.pieceAt(p.f, p.r) === e.army.letter(p.ch))), 'every letter where its piece stands');
+  }
 }
 
 console.log(`test-enemy: ${ok}/${ok + bad} checks passed`);

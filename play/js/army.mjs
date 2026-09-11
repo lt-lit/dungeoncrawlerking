@@ -291,13 +291,18 @@ export class Army {
 const key = (world, f, r) => r * world.files + f;
 const cellOf = (p) => ({ f: p.f, r: p.r });
 
-/** An enemy letter on a cell? */
+/** A piece of ANOTHER army on a cell? The other side's letters, and — since
+ *  the wanderers (2026-09-11) — a same-side letter that is not one of THIS
+ *  army's pieces: two enemy armies share the lowercase letters, and a
+ *  stranger is an obstacle, never a comrade to walk through. */
 function enemyAt(world, army, f, r) {
   const ch = world.pieceAt(f, r);
-  return !!ch && !army.owns(ch);
+  if (!ch) return false;
+  if (!army.owns(ch)) return true;
+  return typeof army.pieceAt === 'function' ? !army.pieceAt(f, r) : false;
 }
 
-/** A cell the BFS may cross: floor, no enemy piece (friendly pieces pass). */
+/** A cell the BFS may cross: floor, no piece of another army (this army's own pass). */
 function crossable(world, army, f, r) {
   return world.at(f, r) === FLOOR && !enemyAt(world, army, f, r);
 }
@@ -500,7 +505,7 @@ export function pieceMoves(world, army, p, { manual = false, viaComrades = false
     if (t !== FLOOR) return 'blocked';
     const ch = world.pieceAt(f, r);
     if (!ch) return 'free';
-    return army.owns(ch) ? (viaComrades ? 'comrade' : 'blocked') : 'blocked';
+    return army.owns(ch) && army.pieceAt(f, r) ? (viaComrades ? 'comrade' : 'blocked') : 'blocked';
   };
   const land = (f, r, l) => {
     if (l === 'free') push(f, r);

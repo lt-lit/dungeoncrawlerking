@@ -31,19 +31,36 @@
 // holes and walls block — a closed door is a wall to it). With no legal
 // cell reachable it walks at the player's king and parks at the mouth of
 // wherever he hides. Sight lost sends it to the last-seen cell, where it
-// stands (a sentry again). A duel starts the moment a HUNTING king
-// stands in the far half of a box on a file with a legal deal; the side
-// whose move completed it moves first. (The far ROW alone triggered
-// until 2026-09-11: a hunter that first saw the player inside nine had
-// to back off to nine at speed parity, which a player walking at it
-// never let it do — the retreat dance the first phone logs showed.)
+// stands (a sentry again) — or, since THE WANDERERS (designer 2026-09-11:
+// "Can we get some wandering enemies?"), goes back to ROAMING: a
+// wanderer walks its BEAT, a random reachable floor cell within
+// ROAM_LEASH of its spawn and at least ROAM_MIN off (the level telegraph
+// stays where the generator put it — a far spawn's army never drifts to
+// the start), stands a few turns there (ROAM_PAUSE, drawn), then picks
+// the next; every draw comes from the enemy's own seed by its draw count
+// (`roam.n`), so a run replays. It moves at speed parity like a hunter —
+// one step per input — and sight is checked after every move, so a
+// wanderer that walks into view of the army is a hunter at once. Sentries
+// are `?enemies=sentry` (the labs, the smokes, the old rule). A duel
+// starts the moment a HUNTING king stands in the far half of a box on a
+// file with a legal deal; the side whose move completed it moves first.
+// (The far ROW alone triggered until 2026-09-11: a hunter that first saw
+// the player inside nine had to back off to nine at speed parity, which
+// a player walking at it never let it do — the retreat dance the first
+// phone logs showed.)
 import { Army, makePattern, spawnArmy, planTurn, applyTurn, manualMoves, distanceField, facingOfStep, bagOfPattern, pivotPlacement, anchorCell, boxOf, KING_STEPS } from './army.mjs';
 import { FLOOR, HOLE, worldToArena } from './world.mjs';
-import { childSeed } from './prng.mjs';
+import { childSeed, mulberry32 } from './prng.mjs';
 import { planBox, farRowTargets, boxAt, BOX, FAR_HALF } from './barrier.mjs';
 import { normFacing } from './camera.mjs';
 
-export const ENEMY_STATES = ['sentry', 'hunt', 'search'];
+export const ENEMY_STATES = ['sentry', 'roam', 'hunt', 'search'];
+/** THE WANDERERS (2026-09-11): a roamer's beat — a waypoint within this many cells (Chebyshev) of its spawn … */
+export const ROAM_LEASH = 12;
+/** … at least this far from where it stands (a walk, not a shuffle) … */
+export const ROAM_MIN = 4;
+/** … and a pause of this many turns at each, drawn in the range. */
+export const ROAM_PAUSE = [2, 6];
 /** Recurring positions before a hunter pivots its formation loose. */
 export const STALL_MAX = 3;
 /** A second tangle within this many turns of that pivot is a REST of this many turns. */
@@ -88,7 +105,7 @@ export function facingToward(world, from, toward) {
  * spawn the floor cannot hold is skipped. Returns [{ id, n, width, seed,
  * spawn, army, state, lastSeen, seen }].
  */
-export function spawnEnemies(world, runSeed, { archetype = 'heavies-deep' } = {}) {
+export function spawnEnemies(world, runSeed, { archetype = 'heavies-deep', mode = 'roam' } = {}) {
   const out = [];
   for (const s of world.spawns) {
     const width = Math.max(3, Math.min(8, s.n | 0));
@@ -101,17 +118,57 @@ export function spawnEnemies(world, runSeed, { archetype = 'heavies-deep' } = {}
     } catch {
       continue;
     }
-    out.push({ id: out.length + 1, n: s.n, width, seed, spawn: { f: s.f, r: s.r }, army, state: 'sentry', lastSeen: null, seen: false });
+    out.push({ id: out.length + 1, n: s.n, width, seed, spawn: { f: s.f, r: s.r }, army, mode: mode === 'sentry' ? 'sentry' : 'roam', state: mode === 'sentry' ? 'sentry' : 'roam', lastSeen: null, seen: false, roam: { target: null, pause: 0, n: 0 } });
   }
   return out;
 }
 
 export function serializeEnemy(e) {
-  return { id: e.id, n: e.n, width: e.width, seed: e.seed, spawn: { ...e.spawn }, army: e.army.serialize(), state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen, waypoint: e.waypoint ? { ...e.waypoint } : null, prev: e.prev ? { ...e.prev } : null };
+  return { id: e.id, n: e.n, width: e.width, seed: e.seed, spawn: { ...e.spawn }, army: e.army.serialize(), mode: e.mode ?? 'roam', state: e.state, lastSeen: e.lastSeen ? { ...e.lastSeen } : null, seen: !!e.seen, waypoint: e.waypoint ? { ...e.waypoint } : null, prev: e.prev ? { ...e.prev } : null, roam: { target: e.roam?.target ? { ...e.roam.target } : null, pause: e.roam?.pause ?? 0, n: e.roam?.n ?? 0 } };
 }
 
 export function loadEnemy(obj) {
-  return { id: obj.id, n: obj.n, width: obj.width, seed: obj.seed, spawn: { ...obj.spawn }, army: Army.load(obj.army), state: ENEMY_STATES.includes(obj.state) ? obj.state : 'sentry', lastSeen: obj.lastSeen ? { ...obj.lastSeen } : null, seen: !!obj.seen, waypoint: obj.waypoint ? { ...obj.waypoint } : null, prev: obj.prev ? { ...obj.prev } : null };
+  const mode = obj.mode === 'sentry' ? 'sentry' : 'roam';
+  return { id: obj.id, n: obj.n, width: obj.width, seed: obj.seed, spawn: { ...obj.spawn }, army: Army.load(obj.army), mode, state: ENEMY_STATES.includes(obj.state) ? obj.state : mode, lastSeen: obj.lastSeen ? { ...obj.lastSeen } : null, seen: !!obj.seen, waypoint: obj.waypoint ? { ...obj.waypoint } : null, prev: obj.prev ? { ...obj.prev } : null, roam: { target: obj.roam?.target ? { ...obj.roam.target } : null, pause: obj.roam?.pause ?? 0, n: obj.roam?.n ?? 0 } };
+}
+
+/** The state a hunter falls back to when its search ends: its mode's. */
+export function restState(enemy) {
+  return enemy.mode === 'sentry' ? 'sentry' : 'roam';
+}
+
+/** One uniform draw from the enemy's own seed, numbered — the roam replays with the run. */
+function roamDraw(enemy) {
+  const rm = enemy.roam ?? (enemy.roam = { target: null, pause: 0, n: 0 });
+  const n = rm.n++;
+  return mulberry32(childSeed(enemy.seed >>> 0, `roam:${n}`))();
+}
+
+/**
+ * THE NEXT WAYPOINT of a wanderer's beat: a floor cell its king can reach
+ * (the BFS over ground the army crosses — its own pieces pass, every
+ * other army, furniture and walls block), within ROAM_LEASH of its spawn,
+ * at least ROAM_MIN steps off and not under a piece; uniform by one draw.
+ * Null when nothing qualifies (a pocket): the roamer stands.
+ */
+export function pickRoamTarget(world, enemy) {
+  const army = enemy.army;
+  const k = army.king;
+  const field = distanceField(world, army, [{ f: k.f, r: k.r }]);
+  const cands = [];
+  const sp = enemy.spawn;
+  for (let i = 0; i < world.size; i++) {
+    const d = field[i];
+    if (d < ROAM_MIN) continue;
+    const f = i % world.files, r = (i - f) / world.files;
+    if (Math.max(Math.abs(f - sp.f), Math.abs(r - sp.r)) > ROAM_LEASH) continue;
+    if (world.pieces[i]) continue;
+    cands.push(i);
+  }
+  if (!cands.length) return null;
+  const i = cands[Math.min(cands.length - 1, Math.floor(roamDraw(enemy) * cands.length))];
+  const f = i % world.files;
+  return { f, r: (i - f) / world.files };
 }
 
 /**
@@ -293,7 +350,8 @@ export function updateSight(world, player, enemy) {
 /**
  * THE ENEMY'S TURN: one step of its army toward its goal — the nearest
  * legal far-row cell while hunting (or the player's king when none is
- * reachable), the last-seen cell while searching; a sentry stands. The
+ * reachable), the last-seen cell while searching, its waypoint while
+ * roaming (a pause at each; `paused`, `target`); a sentry stands. The
  * step is the king's neighbour nearest a goal by the BFS, cardinals
  * before diagonals on a tie, fed to planTurn as the army's own step; a
  * refused step tries the next neighbour; nothing walkable is a stand.
@@ -310,7 +368,7 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs
     enemy.seen = true;
     saw = true;
   } else saw = updateSight(world, player, enemy);
-  const out = { plan: null, saw, state: enemy.state, goal: null, arrived: false, blocked: false, goals: 0, goalList: [], pivot: false, stalled: false, resting: false };
+  const out = { plan: null, saw, state: enemy.state, goal: null, arrived: false, blocked: false, goals: 0, goalList: [], pivot: false, stalled: false, resting: false, paused: false, target: null };
   let goals = [];
   if (enemy.state === 'hunt') {
     goals = hunterGoals(world, player, enemy, { ffish, seed, alongs }).goals;
@@ -319,13 +377,41 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs
     const k = enemy.army.king;
     if (enemy.lastSeen && !(k.f === enemy.lastSeen.f && k.r === enemy.lastSeen.r)) goals = [enemy.lastSeen];
     else {
-      enemy.state = 'sentry';
+      // Nobody there: back to its beat (a wanderer picks a fresh waypoint next turn) or its post.
+      enemy.state = restState(enemy);
       enemy.lastSeen = null;
       enemy.waypoint = null;
+      if (enemy.roam) enemy.roam.target = null;
       out.state = enemy.state;
       out.arrived = true;
       return out;
     }
+  } else if (enemy.state === 'roam') {
+    // THE WANDERER: a pause where it stands, else its waypoint (a fresh one
+    // when it has none or stands on it).
+    const rm = enemy.roam ?? (enemy.roam = { target: null, pause: 0, n: 0 });
+    if (rm.pause > 0) {
+      rm.pause -= 1;
+      out.paused = true;
+      return out;
+    }
+    const k = enemy.army.king;
+    if (rm.target && k.f === rm.target.f && k.r === rm.target.r) {
+      // Arrived on the last step: stand a while (this turn is the first of the pause).
+      rm.target = null;
+      rm.pause = ROAM_PAUSE[0] + Math.floor(roamDraw(enemy) * (ROAM_PAUSE[1] - ROAM_PAUSE[0] + 1)) - 1;
+      out.arrived = true;
+      out.paused = true;
+      return out;
+    }
+    if (!rm.target) rm.target = pickRoamTarget(world, enemy);
+    if (!rm.target) {
+      rm.pause = ROAM_PAUSE[0];
+      out.paused = true;
+      return out;
+    }
+    goals = [rm.target];
+    out.target = { ...rm.target };
   } else return out;
   out.goals = goals.length;
   // A REST: a formation that tangled twice in a row on the same clutter
@@ -402,7 +488,7 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs
     }
     return s;
   };
-  let got = approach(goals, enemy.state === 'hunt' ? 'goal' : 'search');
+  let got = approach(goals, enemy.state === 'hunt' ? 'goal' : enemy.state);
   if (got.onGoal && enemy.state === 'hunt' && got.d0 !== 0) {
     // No legal cell reachable: walk at the player's king.
     const pk = player.king;
@@ -411,6 +497,13 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs
   }
   if (got.onGoal) {
     out.arrived = true;
+    if (enemy.state === 'roam') {
+      // At the waypoint (or as near as the floor lets it): stand a while, then the next.
+      const rm = enemy.roam;
+      rm.target = null;
+      rm.pause = ROAM_PAUSE[0] + Math.floor(roamDraw(enemy) * (ROAM_PAUSE[1] - ROAM_PAUSE[0] + 1));
+      out.paused = true;
+    }
     return out;
   }
   const { steps, level, field, d0 } = got;
@@ -489,6 +582,8 @@ export function enemyTurn(world, player, enemy, { ffish = null, seed = 1, alongs
   }
   if (!best) {
     out.blocked = true;
+    // A wanderer walled in by a comrade army or a crowd: another waypoint next turn.
+    if (enemy.state === 'roam' && enemy.roam) enemy.roam.target = null;
     return out;
   }
   applyTurn(world, army, best.plan);

@@ -924,7 +924,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // session, 2026-09-09): `?gen=` begins a run on a generated floor; the
 // inputs are WORLD-relative and the facing follows the step (a step in a
 // new direction pivots first), a `face` input turns in place for a move, a
-// wall refuses, the run saves after every turn (schema dck-run/3) and
+// wall refuses, the run saves after every turn (schema dck-run/4) and
 // exports as one object, a tapped piece marks its chess moves WITHOUT
 // moving the camera or the zoom (no box outline since 2026-09-10), the pad's tap turns
 // and the keys face, a DRAG looks around and the next move brings the
@@ -1053,7 +1053,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.turn.ok && wk.turn.pivot && wk.turn.state.facing === (wk.start.facing + 1) % 4 && wk.turn.facing === 0 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.king.r === wk.step.state.king.r && wk.turn.state.turn === 2, `a face input pivots the army a quarter right for a move; the king stays and the board stays north-up (army facing ${wk.turn.state.facing}, board ${wk.turn.facing})`);
   expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
   expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status) && wk.refused.pivots === 1 && wk.refused.facing === 1, `stepping east pivots the army east once and walks until a wall refuses and says so (${wk.refused.reason}, turn ${wk.refused.turn}, ${wk.refused.pivots} pivot)`);
-  expect(wk.save.schema === 'dck-run/3' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
+  expect(wk.save.schema === 'dck-run/4' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
   expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === wk.tap.z0 && wk.tap.z2 === wk.tap.z0 && wk.tap.focusSame && wk.tap.cleared && wk.tap.chessOnly, `a tapped piece marks ${wk.tap.targets} chess moves with the zoom (${wk.tap.z0}) and the focus unmoved; a tap elsewhere lets go`);
   expect(wk.tap.box && wk.tap.box.ok && wk.tap.box.rect.f1 - wk.tap.box.rect.f0 === 9 && wk.tap.box.rect.r1 - wk.tap.box.rect.r0 === 9, `the box the army must fit is a 10×10 on the king's rank, nobody behind him (${JSON.stringify(wk.tap.box?.rect)}, depth ${wk.tap.box?.minDy}…${wk.tap.box?.maxDy}, span ${wk.tap.box?.spread})`);
   expect(wk.tapKing.selected !== null && wk.tapKing.targets > 0 && wk.tapKing.allAdjacent, `the king can be tapped and offers his own chess moves (${wk.tapKing.targets}, all adjacent)`);
@@ -1236,7 +1236,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs6 = [];
   page6.on('pageerror', (e) => errs6.push(String(e).split('\n')[0]));
   const q6 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
-  await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&${q6}`);
+  await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&enemies=sentry&${q6}`);
   await page6.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const en = await page6.evaluate(async () => {
     const K = window.__DCK;
@@ -1280,7 +1280,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     return out;
   });
   const hd = en.hunt.duel.duel, ad = en.ambush.duel.duel;
-  expect(en.start.schema === 'dck-run/3' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
+  expect(en.start.schema === 'dck-run/4' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
   expect(!en.wait.moved && en.wait.states === 'sentry,sentry,sentry,sentry' && en.wait.threats === 0, `a wait moves no sentry, lights no threat (${en.wait.ms?.toFixed(1)} ms of enemy work)`);
   expect(en.hunt.placed && en.hunt.sight && /47,21/.test(en.hunt.goalsWest) && en.hunt.far > 0 && en.hunt.near > 0, `enemy 2 stood at (44, 21) sees the army; the west band offers (47, 21) on its far row (${en.hunt.far} far-row cells, ${en.hunt.near} nearer cells of the far half)`);
   expect(en.hunt.afterOne.state === 'hunt' && en.hunt.afterOne.threats > 0 && /sees you/.test(en.hunt.afterOne.status), `on the next input it hunts: the threat display lights ${en.hunt.afterOne.threats} cells, the strip says so (its king at ${en.hunt.afterOne.king.f}, ${en.hunt.afterOne.king.r}; ${en.hunt.afterOne.ms?.toFixed(1)} ms of enemy work)`);
@@ -1330,6 +1330,62 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(en2.last.duel.phase === 'playing' && ld && ld.enemyId === 1 && ld.axis === 3 && ld.pivoted && en2.last.ended === 'ended' && en2.last.after.enemies === 0 && en2.last.after.lower === 0 && en2.last.after.phase === 'walk' && en2.last.after.threats === 0 && en2.last.after.turns === 4, `the next input is caught by it through the pivot back west; the floor is clear after four duels (${en2.last.after.turns} duel entries)`);
   expect(errs6.length === 0, `no page errors with the enemies${errs6.length ? ` — ${errs6.join(' | ')}` : ''}`);
   await page6.close();
+}
+
+// --- THE WANDERERS (2026-09-11 — designer: "Can we get some wandering
+// enemies?"): on the fixture the four spawns ROAM by default — each walks
+// its beat within the leash of its spawn, pausing at every waypoint; after
+// thirty waits the kings have moved, every enemy piece is on its own cell,
+// the letters are all there, nobody is past the leash, and a second run of
+// the same seed and the same inputs walks the same beats (the draws come
+// from the run's seed by their count, so a run replays).
+{
+  const page7 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs7 = [];
+  page7.on('pageerror', (e) => errs7.push(String(e).split('\n')[0]));
+  const q7 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
+  const roamRun = async (waits) => {
+    await page7.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&${q7}`);
+    await page7.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
+    return page7.evaluate(async (waits) => {
+      const K = window.__DCK;
+      await K.renderer.ready();
+      const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); };
+      const snap = () => K.walk.enemies.map((e) => `${e.id}:${e.state}@${e.king.f},${e.king.r}`).join(' ');
+      const lower = () => K.walk.state.rows.join('').replace(/[^a-z]/g, '').length;
+      const o = { schema: K.walk.saved().schema, start: snap(), modes: K.walk.enemies.map((e) => e.mode).join(','), states: new Set(), trail: [], ms: [], shared: 0, letters: [], hunted: new Set() };
+      for (let t = 0; t < waits && K.app.phase === 'walk' && !K.walk.candidates; t++) {
+        await K.walk.input({ kind: 'wait' });
+        await settle();
+        o.trail.push(snap());
+        o.ms.push(K.walk.enemyMs);
+        for (const e of K.walk.enemies) { o.states.add(e.state); if (e.state !== 'roam') o.hunted.add(e.id); }
+        const cells = new Set();
+        for (const e of K.walk.enemies) for (const p of e.pieces) { const key = `${p.f},${p.r}`; if (cells.has(key)) o.shared++; cells.add(key); }
+        if (K.app.phase === 'walk') o.letters.push(lower());
+      }
+      o.states = [...o.states].join(',');
+      o.phase = K.app.phase;
+      // The leash binds a wanderer's WAYPOINTS; a hunter or a searcher goes where the player is, so only the ones that never left their beat are measured.
+      o.leash = K.walk.enemies.filter((e) => !o.hunted.has(e.id)).map((e) => Math.max(Math.abs(e.king.f - e.spawn.f), Math.abs(e.king.r - e.spawn.r)));
+      o.hunted = [...o.hunted].join(',');
+      o.moved = K.walk.enemies.filter((e) => e.king.f !== e.spawn.f || e.king.r !== e.spawn.r).length;
+      o.draws = K.walk.enemies.map((e) => e.roam?.n ?? 0);
+      o.saved = K.walk.saved().floors[K.walk.saved().floor].enemies.map((e) => `${e.mode}:${e.state}:${e.roam?.n}`).join(' ');
+      return o;
+    }, waits);
+  };
+  const ra = await roamRun(30);
+  const rb = await roamRun(30);
+  expect(ra.schema === 'dck-run/4' && ra.modes === 'roam,roam,roam,roam' && /roam/.test(ra.start), `four wanderers spawn on the fixture (${ra.start})`);
+  expect(ra.trail.length >= 10 && ra.moved >= 2 && ra.draws.some((n) => n > 0), `after ${ra.trail.length} waits ${ra.moved} of four kings have left their spawns (draws ${ra.draws.join(',')}; phase ${ra.phase}${ra.phase === 'playing' ? ' — a wanderer walked into sight of the standing army and caught it' : ''})`);
+  expect(ra.shared === 0 && ra.letters.every((n) => n === 24) && ra.leash.length > 0 && ra.leash.every((d) => d <= 12), `no two enemy pieces on one cell (${ra.shared} shared), 24 letters on every walk turn (min ${Math.min(...ra.letters)}), every wanderer that stayed on its beat within the leash (${ra.leash.join(',')} cells from the spawns; ${ra.hunted ? `enemy ${ra.hunted} hunted` : 'none hunted'})`);
+  expect(/^(roam|hunt|search)(,(roam|hunt|search))*$/.test(ra.states), `the wanderers' states stay roam / hunt / search (${ra.states})`);
+  expect(Math.max(...ra.ms) < 250, `the enemy work with four wanderers stays under a quarter second (max ${Math.max(...ra.ms).toFixed(1)} ms, median ${[...ra.ms].sort((a, b) => a - b)[ra.ms.length >> 1]?.toFixed(1)} ms)`);
+  expect(rb.trail.join('|') === ra.trail.join('|') && rb.phase === ra.phase, `a second run of the same seed and inputs walks the same beats (${rb.trail.length} turns compared)`);
+  expect(/roam:(roam|hunt|search):\d+/.test(ra.saved), `the save carries each wanderer's mode, state and draw count (${ra.saved})`);
+  expect(errs7.length === 0, `no page errors with the wanderers${errs7.length ? ` — ${errs7.join(' | ')}` : ''}`);
+  await page7.close();
 }
 await browser.close();
 
