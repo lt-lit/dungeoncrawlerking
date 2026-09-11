@@ -8,7 +8,13 @@
 // The drawings are unchanged: every sprite is crisp-edged <rect>s on the
 // 16×16 grid, painted here in order — the same pixels a browser rasterised.
 //
-// Palette + drawings are the gen-sprites.mjs originals, verbatim.
+// Palette + drawings are the gen-sprites.mjs originals, verbatim — plus,
+// since 2026-09-11, THE EDGE-ON DOOR (designer: "can we finally get a
+// proper vertical door asset? The placeholder looks like ass"): the leaf a
+// door shows when its wall line runs up the screen, drawn ONCE in
+// pixel-poem's own timber (the face-on leaf's exact colours, so the repack
+// tool's per-theme hue recolour lands on the castle's walnut and the
+// crypt's dark oak byte for byte), and the classic set's own edge-on door.
 const T = 16;
 
 // Palette (shared so the set reads as one hand).
@@ -18,7 +24,22 @@ const P = {
   ink: '#3a2213', woodHi: '#d09a5c', wood: '#b8713a', woodLo: '#8a4f28', woodDeep: '#5a3418', iron: '#9aa0ad', ironLo: '#5d626e', gold: '#e0c25a', red: '#c96a4a',
 };
 
-const R = (x, y, w, h, fill) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
+const R = (x, y, w, h, fill, alpha) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"${alpha === undefined ? '' : ` fill-opacity="${alpha}"`}/>`;
+/** A drawing as sixteen rows of sixteen palette letters ('.' = clear): one
+ *  1×1 <rect> per pixel, in row order, so it rasterizes like every other
+ *  sprite here. A palette entry is a fill, or { fill, alpha } for a
+ *  translucent pixel (the shadow a leaf throws on the floor). */
+const grid = (pal, rows) => {
+  if (rows.length !== T || rows.some((r) => r.length !== T)) throw new Error('inhouse: a grid drawing is sixteen rows of sixteen');
+  let body = '';
+  rows.forEach((r, y) => [...r].forEach((ch, x) => {
+    if (ch === '.') return;
+    const c = pal[ch];
+    if (!c) throw new Error(`inhouse: no colour for '${ch}'`);
+    body += typeof c === 'string' ? R(x, y, 1, 1, c) : R(x, y, 1, 1, c.fill, c.alpha);
+  }));
+  return svg(body);
+};
 const PATH = (d, stroke, w, extra = '') => `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${w}" stroke-linecap="square" stroke-linejoin="miter"${extra}/>`;
 const svg = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">${body}</svg>`;
 
@@ -110,6 +131,35 @@ const SPRITES = {
     R(4, 9, 8, 2, P.ironLo) + R(4, 9, 8, 1, P.iron) + R(5, 9, 1, 2, P.ink) + R(10, 9, 1, 2, P.ink) +
     R(10, 12, 2, 2, P.gold) + R(11, 13, 1, 1, P.ink)
   ),
+  // THE EDGE-ON DOOR of the classic set (2026-09-11): the wall block's own
+  // stone as a post above and below (the block's outline, highlight and
+  // shade rows — the classic wall is a full block, so the posts span the
+  // tile), the leaf between them seen from its side: a narrow slab of
+  // vertical planks in the door's wood, two iron straps, the ring handle,
+  // a shadow on the floor to the east. Floor shows either side of the
+  // leaf — the doorway is a gap in the wall, and the leaf hangs in it.
+  'door-edge': grid({
+    M: P.mortar, H: P.stoneHi, S: P.stone, L: P.stoneLo,
+    I: P.ink, h: P.woodHi, w: P.wood, D: P.woodDeep, l: P.woodLo, n: P.iron, N: P.ironLo, g: P.gold,
+    s: { fill: '#000000', alpha: 0.375 },
+  }, [
+    'MMMMMMMMMMMMMMMM',
+    'MHHHHHHHHHHHHHHM',
+    'MHSSSSSSSSSSSSLM',
+    'MMMMMMMMMMMMMMMM',
+    '....IhwDwwlIs...',
+    '....InnnnnnIs...',
+    '....INNNNNNIs...',
+    '....IhwDwggIs...',
+    '....IhwDwgIIs...',
+    '....InnnnnnIs...',
+    '....INNNNNNIs...',
+    '....IllllllIs...',
+    'MMMMMMMMMMMMMMMM',
+    'MHSSSSSSSSSSSSLM',
+    'MLLLLLLLLLLLLLLM',
+    'MMMMMMMMMMMMMMMM',
+  ]),
   // A barrel with two hoops.
   barrel: svg(
     R(3, 1, 10, 14, P.ink) + R(2, 3, 12, 10, P.ink) +
@@ -135,28 +185,73 @@ const SPRITES = {
   ),
 };
 
+// THE EDGE-ON LEAF every pack theme wears (2026-09-11) — the pixel-poem
+// face-on leaf's palette exactly: its outline, its lit lintel timber, its
+// plank timber (the DOMINANT wood, which the repack tool's recolourHue
+// scales the rest against — keep it the most common wood pixel here or the
+// castle's and the crypt's leaves drift from their face-on doors), its
+// base row, its plank seam (too dark to count as wood, so it stays as it
+// is on every theme, as it does on the face-on leaf), its two irons. The
+// posts are NOT here: the canvas board lays this over the theme's
+// north–south doorway posts (the frame the door leaves behind when it
+// breaks — repack-tiles doorwayTileNS), so a closed door and an opened one
+// share a frame and the door SET option swaps the leaf alone. Columns 4–11
+// of the wall's 12-px band (2–13): floor shows through the gap either side
+// of the slab, and the slab throws a one-pixel shadow to the east.
+const LEAF = {
+  O: '#25131a', L: '#bf704d', W: '#895a45', B: '#724736', E: '#523b40', I: '#adc1cf', G: '#90919e',
+  S: { fill: '#000000', alpha: 0.375 },
+};
+const EDGE_LEAF = grid(LEAF, [
+  '................',
+  '................',
+  '....OOOOOOOO....',
+  '....OLWEWWEOS...',
+  '....OIIIIIIOS...',
+  '....OGGGGGGOS...',
+  '....OLWEWWEOS...',
+  '....OLWEWIIOS...',
+  '....OLWEWIGOS...',
+  '....OLWEWWEOS...',
+  '....OIIIIIIOS...',
+  '....OGGGGGGOS...',
+  '....OBBBBBBOS...',
+  '....OOOOOOOO....',
+  '................',
+  '................',
+]);
+
 /** Paint an SVG of axis-aligned <rect>s (integer x / y / width / height,
- *  an opaque #rrggbb fill) into a 16×16 RGBA buffer, in document order. */
+ *  an opaque #rrggbb fill, an optional fill-opacity) into a 16×16 RGBA
+ *  buffer, in document order — a later rect overwrites, never blends. */
 export function rasterize(svgText) {
   const data = Buffer.alloc(T * T * 4);
-  const re = /<rect x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)" fill="#([0-9a-fA-F]{6})"\/>/g;
+  const re = /<rect x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)" fill="#([0-9a-fA-F]{6})"(?: fill-opacity="(0|1|0?\.\d+)")?\/>/g;
   let m;
   let n = 0;
   while ((m = re.exec(svgText))) {
     n++;
     const [x, y, w, h] = m.slice(1, 5).map(Number);
     const r = parseInt(m[5].slice(0, 2), 16), g = parseInt(m[5].slice(2, 4), 16), b = parseInt(m[5].slice(4, 6), 16);
+    const a = m[6] === undefined ? 255 : Math.round(parseFloat(m[6]) * 255);
     for (let j = Math.max(0, y); j < Math.min(T, y + h); j++) for (let i = Math.max(0, x); i < Math.min(T, x + w); i++) {
       const o = (j * T + i) * 4;
-      data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
+      data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = a;
     }
   }
   if (!n || svgText.replace(re, '').replace(/<svg[^>]*>|<\/svg>/g, '').trim()) throw new Error('inhouse: a sprite carries something other than rects');
   return { width: T, height: T, data };
 }
 
+/** The edge-on LEAF the pack themes wear (in pixel-poem's timber; the
+ *  repack tool recolours it per theme as it does the face-on leaf). */
+export function edgeLeafTile() {
+  return rasterize(EDGE_LEAF);
+}
+
 /** Every in-house tile by ATLAS ROLE: the classic row's wall / crate / door
- *  / barrel / chest / rubble and crack-1…4 (the same crack every theme wears). */
+ *  / door-edge / barrel / chest / rubble and crack-1…4 (the same crack every
+ *  theme wears). */
 export function inhouseTiles() {
   const out = {};
   for (const [name, s] of Object.entries(SPRITES)) {

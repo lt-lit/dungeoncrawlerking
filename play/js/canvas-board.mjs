@@ -99,11 +99,11 @@
 //               hashes and the checker key on the WORLD CELL (so a crop or
 //               a turn never reshuffles the floor; `hashCoords` overrides
 //               them — the facing-walk gate's inverse map); a DOOR whose
-//               wall line runs up the screen stands EDGE-ON (a generated
-//               placeholder: the wall's band with the leaf as a thin slab
-//               and a post above and below — brief §11 — until per-theme
-//               art exists) and a double door's halves are dealt on the
-//               screen. FIT: 'width' (the phone — k from the container's
+//               wall line runs up the screen stands EDGE-ON (the theme's
+//               north–south doorway posts under the door set's edge-on
+//               LEAF, drawn in-house — 2026-09-11, brief §11; a generated
+//               slab stood in from the camera milestone until then) and a
+//               double door's halves are dealt on the screen. FIT: 'width' (the phone — k from the container's
 //               width, the canvas as tall as the crop) or 'box' (the camera
 //               owns the screen: the container's device box is the canvas,
 //               k the largest step that fits the crop AND its headroom row
@@ -1413,66 +1413,49 @@ export class CanvasBoard {
     return !!k && this.#edgeOn(k);
   }
 
-  /** The pixels of an atlas tile (for the composites), or null. */
-  #pixelsOf(tile) {
-    return tile ? Atlas.pixelsOf(tile) : null;
-  }
-
-  /** The two colours a leaf / a post is made of: the brightest and the
-   *  darkest opaque pixel of a tile's middle. */
-  static #tones(px, x0 = 4, y0 = 4, w = 8, h = 8) {
-    if (!px) return null;
-    let lit = null, dark = null, hi = -1, lo = 1e9;
-    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
-      const o = (y * px.w + x) * 4;
-      if (px.data[o + 3] < 200) continue;
-      const l = px.data[o] * 3 + px.data[o + 1] * 6 + px.data[o + 2];
-      if (l > hi) { hi = l; lit = `rgb(${px.data[o]},${px.data[o + 1]},${px.data[o + 2]})`; }
-      if (l < lo) { lo = l; dark = `rgb(${px.data[o]},${px.data[o + 1]},${px.data[o + 2]})`; }
-    }
-    return lit && dark ? { lit, dark } : null;
+  /** The SCREEN standing-wall bits an edge-on door frames: the side its
+   *  double's partner stands on gets no post — a stacked pair is ONE
+   *  opening with two leaves, as the face-on double is, not two framed
+   *  doors with a six-row mullion between them. `door2` is the leaf's
+   *  world-space end (board-ui: 'l' west / 'r' east of a rank pair, 'n' /
+   *  's' of a file pair), so the partner lies east / west / south / north,
+   *  read as a facing and set against which way is up. */
+  #edgeMask(k, sm4) {
+    const partner = { l: 1, r: 3, n: 2, s: 0 }[k.door2];
+    if (partner === undefined) return sm4;
+    const up = normFacing(this.facing);
+    return partner === up ? sm4 & ~1 : partner === ((up + 2) & 3) ? sm4 & ~4 : sm4;
   }
 
   /**
-   * THE EDGE-ON DOOR (brief §11, a GENERATED placeholder until per-theme
-   * art exists): the wall case the door stands in (its band, as the wall
-   * line runs up the screen), a gap cut through its middle holding the
-   * leaf as a thin vertical slab in the leaf's own two tones (the door
-   * set's leaf, so the option follows), and a POST above and below in the
-   * doorway's post tones (the theme's doorway tile; the leaf's tones when
-   * a set has no doorway — the classic row). `mask` is the SCREEN mask.
-   * Cached per theme / door set / mask.
+   * THE EDGE-ON DOOR (brief §11 — drawn art since 2026-09-11; a generated
+   * slab in the wall's band stood in from the camera milestone): the
+   * theme's NORTH–SOUTH DOORWAY posts for the walls still standing
+   * (`mask` is the SCREEN's 4-bit standing-wall mask — the frame an opened
+   * door keeps, so the closed and the open state share it) under the door
+   * SET's edge-on LEAF (`door-edge`: the set's leaf, so the option
+   * follows), the floor the flat pass painted showing either side of the
+   * slab. The classic set's `door-edge` is the whole thing — its posts are
+   * the block's own stone, and it has no doorway tile. Cached per theme /
+   * door set / mask; null when neither exists.
    */
   #edgeDoorTile(mask) {
     const key = `edge|${this.theme ?? ''}|${this.doors ?? ''}|${mask}`;
     let c = this.composites.get(key);
-    if (c) return c;
-    const wall = this.#wallTile(mask);
-    if (!wall) return null;
+    if (c !== undefined) return c;
+    const frame = this.#doorwayTile(mask);
+    const leaf = this.#tile('door-edge');
+    if (!frame && !leaf) {
+      this.composites.set(key, null);
+      return null;
+    }
     const cv = document.createElement('canvas');
     cv.width = T;
     cv.height = T;
     const g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
-    g.drawImage(wall.src, wall.sx, wall.sy, T, T, 0, 0, T, T);
-    const leaf = CanvasBoard.#tones(this.#pixelsOf(this.#tile('door'))) ?? { lit: '#bf704d', dark: '#895a45' };
-    const post = CanvasBoard.#tones(this.#pixelsOf(this.#tile('doorway')), 0, 0, 2, 16) ?? leaf;
-    // The slab: four columns through the band, dark edges, lit planks.
-    g.fillStyle = leaf.dark;
-    g.fillRect(6, 1, 1, 14);
-    g.fillRect(9, 1, 1, 14);
-    g.fillStyle = leaf.lit;
-    g.fillRect(7, 1, 2, 14);
-    // A plank seam every fourth row, so it reads as a leaf, not a bar.
-    g.fillStyle = leaf.dark;
-    for (let y = 4; y < 15; y += 4) g.fillRect(7, y, 2, 1);
-    // The posts: a cap above and below, two rows each, lit over dark.
-    g.fillStyle = post.lit;
-    g.fillRect(5, 0, 6, 1);
-    g.fillRect(5, 14, 6, 1);
-    g.fillStyle = post.dark;
-    g.fillRect(5, 1, 6, 1);
-    g.fillRect(5, 15, 6, 1);
+    if (frame) g.drawImage(frame.src, frame.sx, frame.sy, T, T, 0, 0, T, T);
+    if (leaf) g.drawImage(leaf.src, leaf.sx, leaf.sy, T, T, 0, 0, T, T);
     c = { src: cv, sx: 0, sy: 0, w: T, h: T };
     this.composites.set(key, c);
     return c;
@@ -1481,11 +1464,11 @@ export class CanvasBoard {
   /**
    * The OPEN DOORWAY's posts for a SCREEN mask of standing walls (N=1 E=2
    * S=4 W=8): the theme's east / west post tiles as they are, and for a
-   * wall standing north or south the same tiles TURNED a quarter (the
-   * doorway tile is flat generated art — two full-height posts — so its
-   * quarter turn is the north–south post pair, brief §11). Mixed cases
-   * overlay both. Cached per theme / mask; null when the theme has no
-   * doorway (the classic row).
+   * wall standing north or south the NORTH–SOUTH post tiles (repack-tiles
+   * doorwayTileNS, 2026-09-11 — a cap on the end of the wall's 12-px band;
+   * until then the east–west tile turned a quarter, sixteen wide, stood
+   * in). Mixed cases overlay both. Cached per theme / mask; null when the
+   * theme has no doorway (the classic row).
    */
   #doorwayTile(mask) {
     if (!this.theme) return null;
@@ -1494,10 +1477,8 @@ export class CanvasBoard {
     if (c !== undefined) return c;
     const ew = mask & 10, ns = mask & 5;
     const ewTile = ew === 10 ? this.#tile('doorway') : ew === 8 ? this.#tile('doorway-8') : ew === 2 ? this.#tile('doorway-2') : null;
-    // A quarter turn (camera facing 1) sends the west post to the south
-    // edge and the east post to the north edge.
-    const nsSrc = ns === 5 ? this.#tile('doorway') : ns === 4 ? this.#tile('doorway-8') : ns === 1 ? this.#tile('doorway-2') : null;
-    if (!ewTile && !nsSrc) {
+    const nsTile = ns === 5 ? this.#tile('doorway-ns') : ns === 4 ? this.#tile('doorway-s') : ns === 1 ? this.#tile('doorway-n') : null;
+    if (!ewTile && !nsTile) {
       this.composites.set(key, null);
       return null;
     }
@@ -1507,17 +1488,7 @@ export class CanvasBoard {
     const g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
     if (ewTile) g.drawImage(ewTile.src, ewTile.sx, ewTile.sy, T, T, 0, 0, T, T);
-    if (nsSrc) {
-      const px = this.#pixelsOf(nsSrc);
-      if (px) {
-        const turned = rotTile(px.data, 1, T);
-        const tmp = document.createElement('canvas');
-        tmp.width = T;
-        tmp.height = T;
-        tmp.getContext('2d').putImageData(new ImageData(turned, T, T), 0, 0);
-        g.drawImage(tmp, 0, 0);
-      }
-    }
+    if (nsTile) g.drawImage(nsTile.src, nsTile.sx, nsTile.sy, T, T, 0, 0, T, T);
     c = { src: cv, sx: 0, sy: 0, w: T, h: T };
     this.composites.set(key, c);
     return c;
@@ -1710,7 +1681,12 @@ export class CanvasBoard {
     }
     if (fx?.kind === 'breaching') {
       // A crate bursts / a cracked wall breaks open: bare floor under a
-      // white flash; the sprite itself bursts in #paintTall.
+      // white flash; the sprite itself bursts in #paintTall. An edge-on
+      // door keeps its frame: the leaf bursts, the posts stand.
+      if (this.#edgeOn(k)) {
+        const frame = this.#doorwayTile(this.#edgeMask(k, sm4));
+        if (frame) this.#draw(frame, x, y);
+      }
       if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
       g.fillStyle = `rgba(255,255,255,${(0.63 * (1 - u)).toFixed(3)})`;
       g.fillRect(x, y, T, T);
@@ -1741,9 +1717,9 @@ export class CanvasBoard {
     } else if (k.furniture && (k.cracked || k.weak)) {
       this.#draw(this.#crackedTile(sm, ck), x, y);
     } else if (this.#edgeOn(k)) {
-      // A door whose wall line runs up the screen: the edge-on placeholder,
-      // flat terrain like the wall band it stands in.
-      this.#draw(this.#edgeDoorTile(sm), x, y);
+      // A door whose wall line runs up the screen: the posts and the leaf,
+      // flat terrain over the floor.
+      this.#draw(this.#edgeDoorTile(this.#edgeMask(k, sm4)), x, y);
     }
     if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
     // Decor: a prop on a standing wall's face (never on a cracked wall), or
@@ -1781,10 +1757,12 @@ export class CanvasBoard {
       }
       if (this.#edgeOn(k)) {
         // An edge-on door is flat terrain (#paintFlat); when it breaks, the
-        // slab bursts away like a crack does.
+        // LEAF bursts away like a crack does and the posts stay (the flat
+        // pass draws them under the flash; the classic set's tile is posts
+        // and leaf in one, and bursts whole).
         if (fx?.kind === 'breaching' && u < 1) {
-          const tile = this.#edgeDoorTile(rotMask8(k.mask, this.facing));
-          if (tile) this.#burst(tile, x, y, T, T, u);
+          const leaf = this.#tile('door-edge');
+          if (leaf) this.#burst(leaf, x, y, T, T, u);
         }
         return;
       }
@@ -1866,7 +1844,7 @@ export class CanvasBoard {
     const k = this.#kindOfSq(s.from);
     if (k?.furniture) {
       if (this.#edgeOn(k)) {
-        const tile = this.#edgeDoorTile(rotMask8(k.mask, this.facing));
+        const tile = this.#edgeDoorTile(this.#edgeMask(k, rotMask4(k.mask, this.facing)));
         if (tile) this.#draw(tile, x, y);
         return;
       }

@@ -68,9 +68,13 @@ wall stands). Floors are six Catacombs flagstones palette-swapped per
 theme (`f1…f6` by a stable hash); walls are generated bevelled tops in
 each pack's colours over the pack's own brick face. FURNITURE SKINS
 (`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
-door whose wall line runs UP the screen stands EDGE-ON on a generated
-placeholder — since the camera, 2026-09-08; until then a north–south
-door was a WEAK SPOT wearing the crack — and an authored double is
+door whose wall line runs UP the screen stands EDGE-ON — DRAWN ART since
+2026-09-11 (designer: "the placeholder looks like ass"): the in-house
+edge-on LEAF in pixel-poem's timber, recoloured per theme like the
+face-on leaf, over the theme's NORTH–SOUTH DOORWAY POSTS, a cap on the
+wall band's end that the opened doorway keeps; a generated slab stood in
+from the camera, 2026-09-08, and before that a north–south door was a
+WEAK SPOT wearing the crack — and an authored double is
 `door2-l`/`-r`, dealt on the screen, pairs along a file included), crate, chest (the LID is the line:
 domed = chest, flat = crate; no grey crates), barrel (urns), wreckage,
 masonry (= a weak spot); every role has VARIANTS (`sv1…sv10` by a stable
@@ -194,7 +198,7 @@ height-bound at k 5–6 with 35 tiles of dungeon beside the arena. The
 five decisions of the retirement session (designer: "sounds fine by
 me"): retire now; the classic glyph set dies; tiles.css all the way; THE
 CAMERA OWNS THE DESKTOP SCREEN; a generated edge-on door placeholder
-until per-theme art exists.
+until per-theme art exists (drawn 2026-09-11, below).
 **MILESTONE 3 ✅ 2026-09-08 — THE CAMERA** (`play/js/camera.mjs` the pure
 geometry; `play/README.md` § "The canvas board", milestone 3; the
 designer: "just do what you think is best" on the decisions below).
@@ -250,7 +254,7 @@ canvas-grid 4/4 Chromium + 18/18 Firefox (`./node_modules/.bin/playwright
 install firefox`). NOT DONE, on purpose: the buffer as a VIEWPORT over a
 world grid larger than one arena (the dimmed dungeon around a duel, the
 one-tile margin) — there is no world to paint yet, so it is the FIRST
-step of the next milestone; per-theme edge-on door ART. **THE DESKTOP
+step of the next milestone; per-theme edge-on door ART (✅ 2026-09-11). **THE DESKTOP
 LOOK IS THE DESIGNER'S TO JUDGE ON THIS BUILD** (a 1920×1080 shot: the
 board 800×860 device px at k 5 in the left column, the panels a narrow
 text column on the right — functional, not designed).
@@ -387,7 +391,7 @@ width fit on a phone, both axes under the wide layout — k 6 on the
 phone, k 3 in a narrow desktop window, k 5 on a 1080p wide layout).
 **NOT here, on purpose: enemies on the map, line of sight, the trigger
 (the conversation after this — do not build it to a number), per-theme
-edge-on door art, a phone height for the duel box (the dimmed dungeon
+edge-on door art (✅ 2026-09-11), a phone height for the duel box (the dimmed dungeon
 shows beside the crop on a phone, not above or below), the analyzer
 mounting the whole world (it paints the crop as an arena, so an edge
 wall's autotile can differ from the game's).** THE PHONE VERDICT IS THE
@@ -566,7 +570,7 @@ turn as a cut with no animation, the zoom as ± cuts and no pinch, the
 walk's default zoom fitting fifteen tiles, the d-pad's held repeat and
 the swipe, the tap-a-piece snap-zoom and its target pick, the duel box
 on a phone with the dimmed dungeon beside it only, the desktop layout
-"functional, not designed", per-theme edge-on door art); (2) THE PLAN
+"functional, not designed", per-theme edge-on door art — ✅ 2026-09-11); (2) THE PLAN
 LAYER for the generator (the lattice, the tags, the plan graph, exact
 seams), the arenas retagged, pieces authored for assembly in batches;
 (3) milestone 6.
@@ -878,7 +882,7 @@ its own last cells. SPAWNS: the digit read as the army's WIDTH (3…8,
 block for an authored composition — the generator's to place now. Held
 over, on purpose: flanking, patrol routes, a sight range, fog, aggro
 between hunters, an enemy that smashes crates on its path, per-theme
-edge-on door art, a phone height for the duel box, the analyzer mounting
+edge-on door art (✅ 2026-09-11), a phone height for the duel box, the analyzer mounting
 the whole world, the debris flight on the walk's smash.**
 
 **THE ENEMIES SESSION ✅ HELD 2026-09-10 (designer: "Alright, it's time to
@@ -956,7 +960,7 @@ selftest 46, ui-smoke 319 ok with THE ENEMIES block, replay-smoke 63. THE
 PHONE VERDICT IS THE GATE. Held over, on purpose: patrol routes, a sight
 range and fog, aggro between hunters, an enemy that smashes crates, a
 planner over formation states for the pocket tangles, per-theme edge-on
-door art, a phone height for the duel box, the analyzer mounting the
+door art (✅ 2026-09-11), a phone height for the duel box, the analyzer mounting the
 whole world.**
 
 **THE FIRST PHONE LOGS ✅ READ 2026-09-11 — ANY-PIECE SIGHT AND THE FAR
@@ -1049,6 +1053,41 @@ letters whole, the leash kept, a second run of the same seed walking the
 same beats; the enemies block on `?enemies=sentry`), the other gates
 unchanged. Held over: patrol ROUTES as a list of cells in the world
 file, a per-spawn mode, aggro between wanderers.**
+
+**THE EDGE-ON DOOR ✅ drawn 2026-09-11 (designer, after the wanderers:
+"can we finally get a proper vertical door asset? The placeholder looks
+like ass").** The generated slab is gone. `phase0/lib/inhouse.mjs` draws
+THE EDGE-ON LEAF once, in pixel-poem's own timber (the face-on leaf's
+exact palette, its plank timber the dominant wood, so the repack tool's
+`recolourHue` lands on the castle's walnut and the crypt's oak byte for
+byte — verified against the face-on tiles): an eight-column slab of
+vertical planks in the wall band's middle, two iron straps, a ring, a
+dark base row, a one-pixel shadow on the floor to the east, floor
+showing through the gap either side; and the classic set's own
+`door-edge` whole (stone posts, its wood, its gold ring). The repack tool
+emits `door-edge` per theme (the leaf in the theme's door tint) and THE
+NORTH–SOUTH DOORWAY posts `doorway-ns` / `-n` / `-s` (`doorwayTileNS`: a
+cap on the end of each standing wall, as wide as the wall's 12-px band,
+lit over dark in the post material, outlined — the east–west tile turned
+a quarter, sixteen wide, stood in until now), generated every run in both
+paths (never read back), appended after the crack so every pack tile
+keeps its column (382 old tiles byte-identical, 13 new, roles 132 → 136).
+`atlas.mjs tileOf` routes `door-edge` through the DOOR SET like the leaf
+and the double (the posts stay the theme's); canvas-board `#edgeDoorTile`
+is now the theme's doorway posts for the standing walls UNDER the door
+set's leaf (the frame an opened door keeps, so closed and open share
+it; a stacked DOUBLE gets no post on the side its partner stands on —
+`#edgeMask` — one frame, two leaves, as the face-on double reads),
+`#doorwayTile` reads the new post tiles, a breach bursts the LEAF
+alone with the posts standing under the flash (the classic tile, posts
+and leaf in one, bursts whole), the debris sampler still splinters the
+face-on leaf. Gates green: test-camera 80, test-debris 60,
+strip-ruin-chips, test-world 125, selftest 46/46, ui-smoke, facing-walk
+108/108, replay-smoke, and camera-guard `compare --allow door` on a dump
+of the pristine build (its live-versus-detached self-check drifts after
+ply 0 on the pristine build too — a pre-existing gap in the guard, on
+record). Zoomed crops per theme (a dpr-3 phone, k 6: d8 closed, the
+g5+h5 double edge-on east-up, d8 opened) were sent to the designer.
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +

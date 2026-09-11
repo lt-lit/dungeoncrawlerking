@@ -41,7 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
 import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS, CRACK_VARIANTS } from '../../play/js/board-ui.mjs';
-import { inhouseTiles } from '../lib/inhouse.mjs';
+import { inhouseTiles, edgeLeafTile } from '../lib/inhouse.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'phase0', 'assets-src');
@@ -166,9 +166,10 @@ for (const name of PIECE_SETS) if (!PIECE_SHEETS[name]) throw new Error(`piece s
 // GENERATED below in the pack's colours with the pack's brick face; the
 // rest are the furniture sprites (skin-<name>; crate is the '^' default).
 // floor-1..N are the floor's texture variants (N = board-ui FLOOR_VARIANTS;
-// f1 is the common one). A door skin in a north–south wall line is a WEAK
-// SPOT: the column's own wall case under the in-house crack overlay
-// (lib/inhouse.mjs crack-1…4, the same one a god-weakened wall wears).
+// f1 is the common one). A door skin in a north–south wall line stands
+// EDGE-ON on the screen (the camera, 2026-09-08 — until then it was a weak
+// spot wearing the crack): `door-edge` + the north–south doorway posts,
+// appended below with the crack.
 const ROLES = {
   wall: '--tile-wall',
   door: '--sprite-door',
@@ -667,6 +668,42 @@ function doorwayTile(spec, post, sides) {
   return tile;
 }
 
+// THE NORTH–SOUTH DOORWAY (2026-09-11, with the edge-on door): the same
+// posts for a door whose wall line runs up the screen — a CAP on the end
+// of each standing wall (`sides`: N=1 / S=4), as wide as the wall's band
+// (columns 2–13: a north–south wall is a 12-px band with two pixels of
+// floor either side), a lit row over a dark row in the post material, the
+// wall's outline down both sides and along the inner edge toward the
+// opening, floor between. Until today the east–west doorway tile turned a
+// quarter stood in — sixteen wide, so its posts stuck two pixels out of
+// the band. The closed edge-on door is these posts under the leaf
+// (canvas-board #edgeDoorTile), so opening a door keeps its frame.
+function doorwayTileNS(spec, post, sides) {
+  const edge = hex(spec.edge);
+  const lit = hex(post.lit), dark = hex(post.dark);
+  const tile = blank(T, T);
+  const put = (x, y, c) => { const o = (y * T + x) * 4; tile.data[o] = c[0]; tile.data[o + 1] = c[1]; tile.data[o + 2] = c[2]; tile.data[o + 3] = 255; };
+  const cap = (yLit, yDark, yEdge) => {
+    for (let x = 3; x <= 12; x++) { put(x, yLit, lit); put(x, yDark, dark); }
+    for (const y of [yLit, yDark]) { put(2, y, edge); put(13, y, edge); }
+    for (let x = 2; x <= 13; x++) put(x, yEdge, edge);
+  };
+  if (sides & 1) cap(0, 1, 2);
+  if (sides & 4) cap(14, 15, 13);
+  return tile;
+}
+/** The north–south doorway roles and the standing-wall bits each paints. */
+const NS_DOORWAYS = [['doorway-ns', 5], ['doorway-n', 1], ['doorway-s', 4]];
+/** A theme's edge-on door tiles: the leaf in the theme's door tint and the
+ *  three north–south doorway post tiles. Generated every run (never read
+ *  back — the drawing and the theme table are the source). */
+function emitEdgeDoor(theme, emit) {
+  const tint = THEMES[theme].tint?.door;
+  const leaf = edgeLeafTile();
+  emit('door-edge', tint ? recolourHue(leaf, hex(tint)) : leaf, { composed: `the edge-on leaf drawn in-house (lib/inhouse.mjs)${tint ? `, wood to ${tint}` : ''}` });
+  for (const [role, sides] of NS_DOORWAYS) emit(role, doorwayTileNS(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 5 ? 'north–south doorway: a post in the door material capping both walls' : `north–south doorway: the ${sides === 1 ? 'north' : 'south'} post alone` });
+}
+
 const THEMES = {
   hall: {
     title: 'The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors',
@@ -814,6 +851,11 @@ for (const [role, k] of Object.entries(variantCount)) {
 // square), in the `classic` row — appended after the variants so every
 // pack tile keeps its column.
 for (let n = 1; n <= CRACK_VARIANTS; n++) ROLES[`crack-${n}`] = `--tile-crack-${n}`;
+// THE EDGE-ON DOOR (2026-09-11): the leaf a door shows when its wall line
+// runs up the screen, and the NORTH–SOUTH DOORWAY's posts — appended after
+// the crack so every pack tile keeps its column.
+ROLES['door-edge'] = '--sprite-door-edge';
+for (const [role] of NS_DOORWAYS) ROLES[role] = `--decor-${role}`;
 
 // ---- crop + atlas
 const roleNames = Object.keys(ROLES);
@@ -839,12 +881,14 @@ themeNames.forEach((theme, row) => {
     if (!was) throw new Error(`${theme}: not in the committed atlas — the packs are needed to build a new theme`);
     for (const [role, cell] of Object.entries(was.tiles)) {
       const { col, ...prov } = cell;
+      if (role === 'door-edge' || NS_DOORWAYS.some(([r]) => r === role)) continue; // generated below, never read back
       if (role === 'wall') {
         const fs = THEMES[theme].wall.face;
         provenance.push({ theme, role: 'wall face (brick rows under every south edge)', pack: SHEETS[fs.sheet][0], sheet: SHEETS[fs.sheet][1], x: fs.x, y: fs.y });
       }
       emit(role, crop(old.png, col * T, was.row * 2 * T, T, 2 * T), prov);
     }
+    emitEdgeDoor(theme, emit);
     return;
   }
   for (const [role, spec] of Object.entries(THEMES[theme].tiles)) {
@@ -872,6 +916,7 @@ themeNames.forEach((theme, row) => {
   const door2 = THEMES[theme].door2.map(([sheet, x, y]) => { const t = crop(sheets[sheet], x * T, y * T, T, T); return tint2 ? recolourHue(t, hex(tint2)) : t; });
   door2.forEach((half, i) => emit(i ? 'door2-r' : 'door2-l', half, { pack: SHEETS[THEMES[theme].door2[i][0]][0], sheet: SHEETS[THEMES[theme].door2[i][0]][1], x: THEMES[theme].door2[i][1], y: THEMES[theme].door2[i][2], recoloured: tint2 ? `wood to ${tint2}` : undefined }));
   for (const [role, sides] of [['doorway', 10], ['doorway-8', 8], ['doorway-2', 2]]) emit(role, doorwayTile(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 10 ? 'posts in the door material at both edges, floor between' : `one post in the door material at the ${sides === 8 ? 'west' : 'east'} edge, floor between`, mask: sides });
+  emitEdgeDoor(theme, emit);
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
     const tint = THEMES[theme].floor.tint;
@@ -950,7 +995,7 @@ for (const [key, p] of Object.entries(PACKS)) {
   md.push(`  ${p.terms}`);
 }
 md.push('');
-md.push('The remaining sprites (the crack, and the `classic` row — the drawn set a stage without a theme wears) are drawn in-house by `phase0/lib/inhouse.mjs`. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas), the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) and the HOLE autotile (16 cases, `hole-<mask>` — the pit the gods leave, rimmed where floor meets it) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber for the hall, the same leaf\'s slate and oak stains for the castle and the crypt) at each edge where a wall still stands, the floor between.');
+md.push('The remaining sprites (the crack, the edge-on door leaf every theme wears in its own door tint, and the `classic` row — the drawn set a stage without a theme wears) are drawn in-house by `phase0/lib/inhouse.mjs`; the north–south doorway posts (`doorway-ns` / `-n` / `-s`) are generated in each theme\'s post tones like the east–west ones. The wall autotile (47 cases per theme, `wall-<mask>` in the atlas), the RUIN autotile (16 cases, `ruin-<mask>` — the stub a broken wall leaves) and the HOLE autotile (16 cases, `hole-<mask>` — the pit the gods leave, rimmed where floor meets it) are GENERATED by the repack tool in each pack\'s colours; the only pack pixels in them are the brick FACE rows cropped from the pack\'s wall tile listed below. The open doorways are generated too — a post in the door\'s material (pixel-poem\'s door timber for the hall, the same leaf\'s slate and oak stains for the castle and the crypt) at each edge where a wall still stands, the floor between.');
 md.push('');
 md.push('## Which tile came from where');
 md.push('');

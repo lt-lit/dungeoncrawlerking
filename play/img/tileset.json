@@ -133,7 +133,11 @@
   "crack-1",
   "crack-2",
   "crack-3",
-  "crack-4"
+  "crack-4",
+  "door-edge",
+  "doorway-ns",
+  "doorway-n",
+  "doorway-s"
  ],
  "themes": {
   "hall": {
@@ -859,6 +863,22 @@
      "col": 103,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
+    },
+    "door-edge": {
+     "col": 132,
+     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs)"
+    },
+    "doorway-ns": {
+     "col": 133,
+     "composed": "north–south doorway: a post in the door material capping both walls"
+    },
+    "doorway-n": {
+     "col": 134,
+     "composed": "north–south doorway: the north post alone"
+    },
+    "doorway-s": {
+     "col": 135,
+     "composed": "north–south doorway: the south post alone"
     }
    }
   },
@@ -1576,6 +1596,22 @@
      "col": 103,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
+    },
+    "door-edge": {
+     "col": 132,
+     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), wood to #7d6455"
+    },
+    "doorway-ns": {
+     "col": 133,
+     "composed": "north–south doorway: a post in the door material capping both walls"
+    },
+    "doorway-n": {
+     "col": 134,
+     "composed": "north–south doorway: the north post alone"
+    },
+    "doorway-s": {
+     "col": 135,
+     "composed": "north–south doorway: the south post alone"
     }
    }
   },
@@ -2319,6 +2355,22 @@
      "col": 103,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
+    },
+    "door-edge": {
+     "col": 132,
+     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), wood to #5c4a3c"
+    },
+    "doorway-ns": {
+     "col": 133,
+     "composed": "north–south doorway: a post in the door material capping both walls"
+    },
+    "doorway-n": {
+     "col": 134,
+     "composed": "north–south doorway: the north post alone"
+    },
+    "doorway-s": {
+     "col": 135,
+     "composed": "north–south doorway: the south post alone"
     }
    }
   },
@@ -2353,6 +2405,10 @@
     },
     "door": {
      "col": 1,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "door-edge": {
+     "col": 132,
      "composed": "drawn in-house (lib/inhouse.mjs)"
     },
     "barrel": {

@@ -22,8 +22,10 @@
 // Role resolution (`tileOf`) is the CSS cascade's, on data: a skin VARIANT
 // the theme lacks wraps around (barrel-7 on a theme with five barrels is
 // its second, as tiles.css aliases it), a double door's half falls back to
-// the leaf, a chosen DOOR SET takes its door and double from that theme's
-// row, a decor role a theme lacks is nothing, and the classic set answers
+// the leaf, a chosen DOOR SET takes its door, double and edge-on leaf
+// (`door-edge`, 2026-09-11) from that theme's row — never the doorway posts,
+// which are the wall's — a decor role a theme lacks is nothing, and the
+// classic set answers
 // with its SVG sprites. Props (crate / chest / barrel / wreckage and their
 // variants) are 32 tall: the lower half is the square, the upper half the
 // square north.
@@ -35,7 +37,7 @@ const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage']);
 const CLASSIC = 'classic';
 /** The classic set's one tile per family: any wall case is its block, a
  *  ruin its heap, the wreckage and a double door's half its crate and door. */
-const CLASSIC_ROLE = { wall: 'wall', crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble', ruin: 'rubble' };
+const CLASSIC_ROLE = { wall: 'wall', crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', 'door-edge': 'door-edge', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble', ruin: 'rubble' };
 
 const baseRole = (role) => role.replace(/-\d+$/, '');
 const variantOf = (role) => { const m = role.match(/-(\d+)$/); return m ? parseInt(m[1], 10) : 1; };
@@ -120,7 +122,7 @@ export class Atlas {
     let name = role;
     let srcTheme = theme;
     const b = baseRole(role);
-    if ((b === 'door' || b === 'door2-l' || b === 'door2-r') && doors && this.index.themes[doors]) srcTheme = doors;
+    if ((b === 'door' || b === 'door2-l' || b === 'door2-r' || b === 'door-edge') && doors && this.index.themes[doors]) srcTheme = doors;
     const row = this.index.themes[srcTheme];
     if (!row.tiles[name]) {
       // A skin variant the theme lacks wraps around its own variants.
@@ -147,7 +149,8 @@ export class Atlas {
 
   /** The classic (in-house) set's sprite for a role, or null: one block for
    *  every wall case, the heap for every ruin, the crate for the wreckage,
-   *  the leaf for a double door's half; no floor, hole, decor or doorway
+   *  the leaf for a double door's half, its own edge-on door (posts and
+   *  leaf in one tile); no floor, hole, decor or doorway
    *  (the flat colours and the gradient pit are the canvas board's own). */
   classicTile(role) {
     const b = baseRole(role);
