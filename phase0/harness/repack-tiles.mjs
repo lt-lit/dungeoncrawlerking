@@ -560,7 +560,7 @@ const sat = (r, g, b) => Math.max(r, g, b) - Math.min(r, g, b);
  *  brightness (target × luma / luma of the dominant wood), while greys
  *  (iron bands, pale supports) and the dark outline are left alone, so a
  *  slate-stained door keeps its iron. */
-function recolourHue(tile, target, force = false) {
+function recolourHue(tile, target, force = false, dominant = null) {
   const wood = (o) => tile.data[o + 3] && luma(tile.data[o], tile.data[o + 1], tile.data[o + 2]) >= 70 && sat(tile.data[o], tile.data[o + 1], tile.data[o + 2]) >= 40;
   const hist = new Map();
   if (!force) for (let i = 0; i < tile.width * tile.height; i++) {
@@ -587,7 +587,9 @@ function recolourHue(tile, target, force = false) {
   // colour is dark (a broken crate) does not blow its highlights out.
   let maxL = 0;
   if (whole) for (let i = 0; i < tile.width * tile.height; i++) { const o = i * 4; if (lit(o)) maxL = Math.max(maxL, luma(tile.data[o], tile.data[o + 1], tile.data[o + 2])); }
-  const baseL = whole ? maxL / 1.25 : luma(k >> 16, (k >> 8) & 255, k & 255);
+  // `dominant` names the wood to scale against when the drawing's commonest
+  // wood is not the one its face-on sibling is scaled by (the edge-on leaf).
+  const baseL = whole ? maxL / 1.25 : dominant ? luma(...dominant) : luma(k >> 16, (k >> 8) & 255, k & 255);
   const takes = whole ? lit : wood;
   const out = blank(tile.width, tile.height);
   for (let i = 0; i < tile.width * tile.height; i++) {
@@ -700,7 +702,9 @@ const NS_DOORWAYS = [['doorway-ns', 5], ['doorway-n', 1], ['doorway-s', 4]];
 function emitEdgeDoor(theme, emit) {
   const tint = THEMES[theme].tint?.door;
   const leaf = edgeLeafTile();
-  emit('door-edge', tint ? recolourHue(leaf, hex(tint)) : leaf, { composed: `the edge-on leaf drawn in-house (lib/inhouse.mjs)${tint ? `, wood to ${tint}` : ''}` });
+  // A 16×32 prop box (the leaf rises into the square north); the plank
+  // timber is the base the face-on leaf was scaled by, so the two match.
+  emit('door-edge', tint ? recolourHue(leaf, hex(tint), false, hex('#895a45')) : leaf, { composed: `the edge-on leaf drawn in-house (lib/inhouse.mjs), a 16×32 prop${tint ? `, wood to ${tint}` : ''}` });
   for (const [role, sides] of NS_DOORWAYS) emit(role, doorwayTileNS(THEMES[theme].wall, THEMES[theme].doorPost, sides), { composed: sides === 5 ? 'north–south doorway: a post in the door material capping both walls' : `north–south doorway: the ${sides === 1 ? 'north' : 'south'} post alone` });
 }
 

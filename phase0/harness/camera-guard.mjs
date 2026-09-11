@@ -191,7 +191,11 @@ for (const c of CASES) {
         const diff = Object.keys(want.squares).filter((sq) => want.squares[sq] !== got.squares[sq]);
         const skins = p.input.skins ?? {};
         const opened = new Set(p.input.opened ?? []);
-        const isDoorish = (sq) => skins[sq] === 'door' || opened.has(sq);
+        // A door square, the doorway it leaves, or the square UP THE SCREEN
+        // from a door (the edge-on leaf is a 16×32 prop since 2026-09-11 and
+        // rises into it: world north at facing 0, world south at facing 2).
+        const below = (sq) => { const m = sq.match(/^([a-l])(\d+)$/); return m ? `${m[1]}${+m[2] + (facing === 2 ? 1 : -1)}` : null; };
+        const isDoorish = (sq) => skins[sq] === 'door' || opened.has(sq) || skins[below(sq)] === 'door';
         // `turned`: at a facing other than north the paint of a square
         // whose art has a DIRECTION legitimately differs from the old
         // flipped path, which mirrored positions and nothing else — a

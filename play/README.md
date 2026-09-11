@@ -690,8 +690,9 @@ class is `door-edge`), a double edge-on is two of them, and an opened
 north–south doorway is the doorway tile TURNED a quarter (posts above
 and below; mixed cases overlay both) `[2026-09-11: the placeholder and
 the quarter turn are GONE — the drawn edge-on door, § "Art themes",
-round 20: the theme's north–south doorway post tiles under the door
-set's in-house leaf; the class is still `door-edge`]`. THE CAMERA OWNS THE SCREEN on a
+round 20: the door set's in-house leaf, a 16×32 prop standing in the wall
+band, drawn to the designer's reference; the north–south doorway has its
+own post tiles; the class is still `door-edge`]`. THE CAMERA OWNS THE SCREEN on a
 wide screen: main.mjs stamps `body.layout-wide` at ONE breakpoint
 (`WIDE_LAYOUT`, 900 px; `?layout=wide|stack` pins it) and style.css
 turns the duel screen into two columns — the board an explicit box
@@ -2061,41 +2062,47 @@ placeholder looks like ass." Since the camera (milestone 3) a door whose
 wall line ran up the screen had painted a GENERATED slab — the wall's
 band with a four-column bar through it — and an opened north–south
 doorway the east–west doorway tile turned a quarter, sixteen wide against
-a twelve-wide band. Now: (1) THE LEAF is drawn in-house
-(`phase0/lib/inhouse.mjs` `EDGE_LEAF`, a sixteen-row grid drawing) ONCE,
-in pixel-poem's face-on leaf's exact palette — its outline, lintel
-timber, plank timber (the dominant wood, which `recolourHue` scales the
-rest against), base row, plank seam (too dark to count as wood, so it
-stays, as on the face-on leaf) and two irons — so the repack tool's
-per-theme door tint lands on the castle's walnut and the crypt's dark oak
-byte for byte (checked against the face-on tiles' palettes): an
-eight-column slab in the band's middle (columns 4–11 of the band's
-2–13), vertical planks with a lit west edge and a dark east edge, two
-iron straps, a ring, a dark base row, a one-pixel 37%-black shadow on the
-floor to the east (`rasterize` learned `fill-opacity`), and FLOOR showing
-through the gap either side — the doorway is a gap in the wall and the
-leaf hangs in it. (2) THE POSTS are the theme's, not the door set's:
-`doorway-ns` / `doorway-n` / `doorway-s` (`repack-tiles doorwayTileNS`)
-cap the end of each standing wall — twelve wide like the band, a lit row
-over a dark row in the theme's post material (the hall's timber, the
-castle's pale stone, the crypt's iron-brown), the wall's outline down
-both sides and along the inner edge — and the opened north–south doorway
-paints them too, so a closed door and the doorway it leaves share one
-frame; the door SET option swaps the leaf alone (`atlas.mjs tileOf`
-routes `door-edge` like `door` and the double). A DOUBLE seen from its
-side — a pair stacked up the screen — is ONE opening with two leaves, as
-the face-on double is: the side a leaf's partner stands on gets no post
-(`#edgeMask` reads board-ui's world-space pair end against which way is
-up), so the leaves sit in one frame with the floor's gap between them
-where the first cut put a six-row mullion. (3) THE CLASSIC SET draws
-its own `door-edge` whole: the block's stone as a post above and below
-(the block is a full tile, so the posts span it), its wood, its gold
-ring; it has no doorway tile, so it bursts whole. (4) A BREACH bursts the
-leaf alone and the flat pass draws the posts under the flash, so the
-frame never flies off and comes back. The atlas grew four roles (132 →
-136), appended after the crack; every old tile is byte-identical.
-`camera-guard.mjs compare --allow door` on a dump of the build before
-admits exactly the door squares and the doorways they leave.
+a twelve-wide band. THE FIRST CUT (a framed eight-column leaf lying flat
+in the band between two post caps, floor either side) and a sheet of four
+alternatives (the face-on leaf squeezed to the band, the same inset
+between the band's bevels, a thicker slab, an arch) were both turned
+down — the designer sent A REFERENCE instead ("use this or something
+like it"): a tall, thin leaf seen from the side, the lit body crossed by
+board lines, three iron hinges down one edge, a plate and a latch on the
+other, outlined. BUILT TO IT: (1) THE LEAF is a 16×32 PROP
+(`phase0/lib/inhouse.mjs` `TALL_ROWS`, a thirty-two-row grid drawing —
+`grid` and `rasterize` learned the prop box), standing on its square's
+bottom edge and rising six rows into the square north as the tall urns
+do: six columns of body in the band's middle, ten with the ironwork,
+twenty-two rows tall; drawn ONCE in pixel-poem's face-on leaf's palette
+(the lit lintel timber as the body, the plank timber as the boards and
+rails, its two irons, its outline) and recoloured per theme by the repack
+tool's door tint SCALED AGAINST THE PLANK TIMBER (`recolourHue` gained a
+`dominant` base — the lit body dominates this drawing, and the histogram
+would otherwise have scaled the castle's and the crypt's leaves darker
+than their face-on doors; checked against the face-on tiles' palettes).
+The classic set draws the same rows in its own wood and iron. (2) IT
+STANDS IN THE WALL: the flat pass paints the wall band's own case under
+it (`#paintFlat`), and the leaf is FURNITURE in the tall pass
+(`#furnitureSprite` returns it as a prop for an edge-on door), so a piece
+to its south stands in front of it and one to its north behind, a breach
+bursts it like any prop, and a slide carries it. The atlas lists
+`door-edge` among the prop roles (atlas.mjs `PROP_ROLES`; the classic cell
+reports the prop height too); the door SET option swaps the leaf
+(`tileOf` routes it like `door` and the double). (3) THE DOORWAY it leaves
+is the north–south post tiles `doorway-ns` / `doorway-n` / `doorway-s`
+(`repack-tiles doorwayTileNS`): a cap on the end of each standing wall,
+twelve wide like the band, a lit row over a dark row in the theme's post
+material, the wall's outline down both sides and along the inner edge;
+`#doorwayTile` reads them in place of the quarter turn, the breach's flash
+shows them under the bursting leaf, and a stacked double's shared side
+gets no post (`#edgeMask`: the pair is one opening). The atlas grew four
+roles (132 → 136), appended after the crack; every old tile is
+byte-identical. `camera-guard.mjs compare --allow door` admits the door
+squares, the doorways they leave and the square up the screen from a
+door, where the tall leaf rises. Zoomed crops per theme (a dpr-3 phone,
+k 6: d8 closed, the g5+h5 double edge-on east-up, d8 opened) went to the
+designer with each cut.
 
 ## The debris layer (2026-09-07)
 

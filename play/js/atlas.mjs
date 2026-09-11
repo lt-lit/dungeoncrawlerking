@@ -31,8 +31,10 @@
 // square north.
 export const TILE = 16;
 export const PIECE_ORDER = 'pnrbqk';
-/** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles placeProp). */
-const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage']);
+/** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles
+ *  placeProp; the edge-on door leaf since 2026-09-11 — it rises into the
+ *  square north like a tall urn). */
+const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage', 'door-edge']);
 /** The atlas row of the in-house drawings (the classic set + the cracks). */
 const CLASSIC = 'classic';
 /** The classic set's one tile per family: any wall case is its block, a
@@ -144,13 +146,13 @@ export class Atlas {
     const row = this.index.themes[CLASSIC];
     const cell = row?.tiles[name];
     if (!cell) return null;
-    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: TILE, role: name, theme: null };
+    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: PROP_ROLES.has(name) ? 2 * TILE : TILE, role: name, theme: null };
   }
 
   /** The classic (in-house) set's sprite for a role, or null: one block for
    *  every wall case, the heap for every ruin, the crate for the wreckage,
-   *  the leaf for a double door's half, its own edge-on door (posts and
-   *  leaf in one tile); no floor, hole, decor or doorway
+   *  the leaf for a double door's half, its own edge-on leaf (a 16×32
+   *  prop, like the themes'); no floor, hole, decor or doorway
    *  (the flat colours and the gradient pit are the canvas board's own). */
   classicTile(role) {
     const b = baseRole(role);

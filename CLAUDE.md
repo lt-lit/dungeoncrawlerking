@@ -69,12 +69,14 @@ theme (`f1…f6` by a stable hash); walls are generated bevelled tops in
 each pack's colours over the pack's own brick face. FURNITURE SKINS
 (`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
 door whose wall line runs UP the screen stands EDGE-ON — DRAWN ART since
-2026-09-11 (designer: "the placeholder looks like ass"): the in-house
-edge-on LEAF in pixel-poem's timber, recoloured per theme like the
-face-on leaf, over the theme's NORTH–SOUTH DOORWAY POSTS, a cap on the
-wall band's end that the opened doorway keeps; a generated slab stood in
-from the camera, 2026-09-08, and before that a north–south door was a
-WEAK SPOT wearing the crack — and an authored double is
+2026-09-11, to the designer's reference ("the placeholder looks like
+ass"; "use this or something like it"): a TALL THIN LEAF from the side, a
+16×32 prop in pixel-poem's timber recoloured per theme like the face-on
+leaf, standing in the wall band and rising into the square north, drawn
+in the tall pass; the doorway it leaves is a cap on the wall band's end
+(the NORTH–SOUTH DOORWAY POSTS); a generated slab stood in from the
+camera, 2026-09-08, and before that a north–south door was a WEAK SPOT
+wearing the crack — and an authored double is
 `door2-l`/`-r`, dealt on the screen, pairs along a file included), crate, chest (the LID is the line:
 domed = chest, flat = crate; no grey crates), barrel (urns), wreckage,
 masonry (= a weak spot); every role has VARIANTS (`sv1…sv10` by a stable
@@ -1056,38 +1058,45 @@ file, a per-spawn mode, aggro between wanderers.**
 
 **THE EDGE-ON DOOR ✅ drawn 2026-09-11 (designer, after the wanderers:
 "can we finally get a proper vertical door asset? The placeholder looks
-like ass").** The generated slab is gone. `phase0/lib/inhouse.mjs` draws
-THE EDGE-ON LEAF once, in pixel-poem's own timber (the face-on leaf's
-exact palette, its plank timber the dominant wood, so the repack tool's
-`recolourHue` lands on the castle's walnut and the crypt's oak byte for
-byte — verified against the face-on tiles): an eight-column slab of
-vertical planks in the wall band's middle, two iron straps, a ring, a
-dark base row, a one-pixel shadow on the floor to the east, floor
-showing through the gap either side; and the classic set's own
-`door-edge` whole (stone posts, its wood, its gold ring). The repack tool
-emits `door-edge` per theme (the leaf in the theme's door tint) and THE
-NORTH–SOUTH DOORWAY posts `doorway-ns` / `-n` / `-s` (`doorwayTileNS`: a
-cap on the end of each standing wall, as wide as the wall's 12-px band,
-lit over dark in the post material, outlined — the east–west tile turned
-a quarter, sixteen wide, stood in until now), generated every run in both
-paths (never read back), appended after the crack so every pack tile
-keeps its column (382 old tiles byte-identical, 13 new, roles 132 → 136).
-`atlas.mjs tileOf` routes `door-edge` through the DOOR SET like the leaf
-and the double (the posts stay the theme's); canvas-board `#edgeDoorTile`
-is now the theme's doorway posts for the standing walls UNDER the door
-set's leaf (the frame an opened door keeps, so closed and open share
-it; a stacked DOUBLE gets no post on the side its partner stands on —
-`#edgeMask` — one frame, two leaves, as the face-on double reads),
-`#doorwayTile` reads the new post tiles, a breach bursts the LEAF
-alone with the posts standing under the flash (the classic tile, posts
-and leaf in one, bursts whole), the debris sampler still splinters the
-face-on leaf. Gates green: test-camera 80, test-debris 60,
-strip-ruin-chips, test-world 125, selftest 46/46, ui-smoke, facing-walk
-108/108, replay-smoke, and camera-guard `compare --allow door` on a dump
-of the pristine build (its live-versus-detached self-check drifts after
-ply 0 on the pristine build too — a pre-existing gap in the guard, on
-record). Zoomed crops per theme (a dpr-3 phone, k 6: d8 closed, the
-g5+h5 double edge-on east-up, d8 opened) were sent to the designer.
+like ass"; on the first cut and a sheet of four alternatives, "these
+aren't great" — then A REFERENCE: "use this or something like it", a tall
+thin leaf seen from the side).** The generated slab is gone. THE LEAF
+(`phase0/lib/inhouse.mjs` `TALL_ROWS`) is a 16×32 PROP drawn to the
+reference — the lit body crossed by board lines with a rail top and
+bottom, three iron hinges down the left, a plate and a latch on the
+right, outlined; twenty-two rows tall, standing on its square's bottom
+edge and rising six rows into the square north as the tall urns do — in
+pixel-poem's face-on leaf's exact palette, recoloured per theme by the
+repack tool's door tint scaled against the PLANK timber (`recolourHue`
+gained a `dominant` base: the lit body dominates the drawing) so the
+castle's walnut and the crypt's oak match their face-on doors byte for
+byte; the classic set draws the same rows in its own wood and iron. IT
+STANDS IN THE WALL: canvas-board's flat pass paints the wall band's case
+under it and `#furnitureSprite` returns it as a prop for an edge-on door,
+so it is drawn in the tall pass (a piece south of it in front, north
+behind), bursts on a breach like any prop, and slides. The repack tool
+emits `door-edge` per theme and THE NORTH–SOUTH DOORWAY posts
+`doorway-ns` / `-n` / `-s` (`doorwayTileNS`: a cap on the end of each
+standing wall, twelve wide like the band, lit over dark in the post
+material, outlined — the east–west tile turned a quarter, sixteen wide,
+stood in until now), generated every run in both paths (never read
+back), appended after the crack so every pack tile keeps its column (382
+old tiles byte-identical, 13 new, roles 132 → 136). `atlas.mjs` lists
+`door-edge` among the PROP roles and routes it through the DOOR SET like
+the leaf and the double (the posts stay the theme's); `#doorwayTile`
+reads the new post tiles, the breach's flash shows the doorway under the
+bursting leaf, and a stacked double's shared side gets no post
+(`#edgeMask` — one opening, two leaves). `camera-guard.mjs --allow door`
+admits the door squares, their doorways and the square up the screen
+from a door, where the leaf rises. Gates green: test-camera 80,
+test-debris 60, strip-ruin-chips, test-world 125, selftest 46/46,
+ui-smoke, facing-walk 108/108, replay-smoke 63, and camera-guard compare
+on a dump of the pristine build (its live-versus-detached self-check
+drifts after ply 0 on the pristine build too — a pre-existing gap in the
+guard, on record; every facing-0 failure was checked square by square to
+lie inside that drift). Zoomed crops per theme (a dpr-3 phone, k 6) went
+to the designer with each cut; the reference build is the one on the
+branch.
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +

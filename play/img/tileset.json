@@ -866,7 +866,7 @@
     },
     "door-edge": {
      "col": 132,
-     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs)"
+     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), a 16×32 prop"
     },
     "doorway-ns": {
      "col": 133,
@@ -1599,7 +1599,7 @@
     },
     "door-edge": {
      "col": 132,
-     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), wood to #7d6455"
+     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), a 16×32 prop, wood to #7d6455"
     },
     "doorway-ns": {
      "col": 133,
@@ -2358,7 +2358,7 @@
     },
     "door-edge": {
      "col": 132,
-     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), wood to #5c4a3c"
+     "composed": "the edge-on leaf drawn in-house (lib/inhouse.mjs), a 16×32 prop, wood to #5c4a3c"
     },
     "doorway-ns": {
      "col": 133,
