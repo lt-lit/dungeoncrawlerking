@@ -2370,6 +2370,44 @@ a breached square the gods have since crumbled into a pit (debris
 paints on floor only; one run's single breach, f9, collapsed two
 quakes later). Gates green: test-debris 71, strip-ruin-chips, selftest 46/46, ui-smoke 251 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
 
+THE PICKER, the same day (designer, on the phone: "What the fuck are
+these color options? I get one usable shade of brown and everything
+else is unusably garish. Who tf wants bright yellow or fucking traffic
+cone orange for the floor colors??? … This supposed to be a color
+selector for a DUNGEON not a fucking CIRCUS TENT"). The first cut's
+pickers were two `<input type="color">`, and on FIREFOX FOR ANDROID the
+native colour dialog is a FIXED LIST OF NINE SWATCHES — red, orange,
+yellow, green, blue, navy, purple, light grey, white, plus the current
+colour — with no way to enter a colour at all. So the picker is IN THE
+PAGE now, one implementation on every browser (main.mjs § THE TONE
+PICKER, `#tone-picker` in index.html, the `.tone-*` rules in style.css):
+the Tones row is two CHIPS, each showing its slot's colour and hex (the
+number to report); a tap opens the picker on that slot, a second tap
+closes it, `aria-pressed` marks the open one. The picker: a grid of 24
+DUNGEON STONES (`TONE_SWATCHES` — a row of neutral-to-cool greys, a row
+of warm greys into browns, a row of tans, umbers and olive stone: the
+designer's "browns and tans and dark greys" ruling as swatches, the
+one under the tone ringed), HUE / SATURATION / LIGHTNESS sliders
+(`input type=range`, restyled; each track painted by `paintToneTracks`
+in the colours it leads to — the hue ring at a saturation the eye can
+read, since a dungeon stone's own would show as grey, saturation from
+grey to full at the tone's lightness, lightness from black through the
+tone to white) and a HEX field that takes a number with or without the
+#. Every change goes through `setTone` and applies live — one apply per
+task, on the last value, so a drag's dozens of inputs a second cost one
+re-tint and one repaint each frame — and the picker keeps its own
+H/S/L (`tonePicker.hsl`) while a slider is dragged: hex → H/S/L rounds,
+and re-reading the tone would have moved the thumb under the finger.
+`hexToHsl` / `hslToHex` are the conversions. `__DCK.tones` grew
+`open(slot)`, `picker()` (slot, hsl, hidden), `swatches` and `hsl`.
+ui-smoke's TONES block now drives the picker: the floor chip opens it
+on #804020 (20° 60% 31%, 24 stones, painted tracks), a swatch sets the
+tone with the chip, the ring and the hex following, a lightness input
+moves the tone and repaints the floor with the slider keeping its own
+number, a hex typed without the # lands with the sliders following,
+reset returns the chips and the open picker to the base, the second tap
+closes it. Gates green: ui-smoke 351 ok (one run before it died on an engine transport glue — `bestmove c4b5 ponder e7d8readyok` arrived as ONE line, so `isready` never saw its `readyok`; the re-run green; engine.mjs untouched, on record), the picker exercised by hand in Chromium at phone width (a swatch, a slider, reset); a page-only change, the Node gates and the replay page untouched.
+
 ## The debris layer (2026-09-07)
 
 The floor remembers. Designer brief: "a universal debris system, so traces

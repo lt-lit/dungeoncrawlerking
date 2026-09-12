@@ -289,11 +289,24 @@
          saved per set — the designer's own palette dial ("an in-game color
          selector, 2 tones, for the floor and walls"). -->
     <div class="opt tones" id="opt-tones">Tones
-      <label class="tone">floor <input type="color" id="optFloorTone"><span class="opt-val" id="optFloorToneV"></span></label>
-      <label class="tone">walls <input type="color" id="optWallTone"><span class="opt-val" id="optWallToneV"></span></label>
+      <button class="tone-chip" id="toneFloor" type="button" data-slot="floor" aria-pressed="false" title="pick the floor stone"><span class="tone-swatch"></span>floor <span class="opt-val" id="toneFloorV"></span></button>
+      <button class="tone-chip" id="toneWall" type="button" data-slot="wall" aria-pressed="false" title="pick the wall stone"><span class="tone-swatch"></span>walls <span class="opt-val" id="toneWallV"></span></button>
       <button id="btnTonesReset" type="button" title="this art set's own colours">reset</button>
     </div>
-    <p class="opt-hint">The floor stone and the wall stone of this art set, recoloured live and saved per set; everything keeps its shading. The hex beside each is the number to report.</p>
+    <!-- THE TONE PICKER (2026-09-12): IN THE PAGE, never the browser's own
+         colour dialog — Firefox for Android's <input type=color> is a fixed
+         list of nine swatches, red to white, with no way to enter a colour
+         (the designer: "a DUNGEON not a CIRCUS TENT"). A grid of dungeon
+         stones, hue / saturation / lightness on tracks painted in the colours
+         they lead to, and the hex, for the slot whose chip is pressed. -->
+    <div class="tone-picker" id="tone-picker" hidden>
+      <div class="tone-swatches" id="toneSwatches" role="group" aria-label="dungeon stones"></div>
+      <label class="tone-slider">hue <input type="range" id="toneHue" min="0" max="359" step="1"><span class="opt-val" id="toneHueV"></span></label>
+      <label class="tone-slider">saturation <input type="range" id="toneSat" min="0" max="100" step="1"><span class="opt-val" id="toneSatV"></span></label>
+      <label class="tone-slider">lightness <input type="range" id="toneLum" min="0" max="100" step="1"><span class="opt-val" id="toneLumV"></span></label>
+      <label class="tone-hex">hex <input type="text" id="toneHex" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" maxlength="7" placeholder="#rrggbb"></label>
+    </div>
+    <p class="opt-hint">The floor stone and the wall stone of this art set, recoloured live and saved per set; everything keeps its shading. Tap a chip to open the picker; the hex on the chip is the number to report.</p>
     <!-- THE CAMERA (Phase 2, 2026-09-08): the view turns by quarters — in a
          DUEL screen-up is the army's facing (brief §5.1); the walk is
          north-up always since 2026-09-09 (the controls session, ruling 1)

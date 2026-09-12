@@ -76,7 +76,10 @@ north, the face three pixels off its seam — worn by every set as an
 exact palette swap, each roof in its face's own stone since the palette
 round; and OPTIONS → TONES (the same round) retunes a set's floor and
 wall base colours live, saved per set — the designer's own dial, so a
-palette is now a pair of hex values they report. FURNITURE SKINS
+palette is now a pair of hex values they report; THE PICKER IS IN THE
+PAGE (dungeon-stone swatches, H / S / L sliders, a hex field — never
+the browser's own colour dialog, which on Firefox for Android is nine
+fixed swatches, red to white). FURNITURE SKINS
 (`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
 door whose wall line runs UP the screen stands EDGE-ON — THE DESIGNER'S
 OWN SPRITE since 2026-09-11 ("the placeholder looks like ass"; "Use this
@@ -1298,7 +1301,29 @@ the set's own; the hex beside each picker is the number to report),
 `DCK_PALETTE=<json>` override (the candidate sheets' instrument) stays.
 Known gap: debris chunks sampled before a tone change keep the sprite
 colours they were cut from until they are repainted. Gates green:
-test-debris 71, strip-ruin-chips, selftest 46/46, ui-smoke 251 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.**
+test-debris 71, strip-ruin-chips, selftest 46/46, ui-smoke 251 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
+THE PICKER, the same day (designer, on the phone: "What the fuck are
+these color options? I get one usable shade of brown and everything
+else is unusably garish… a color selector for a DUNGEON not a fucking
+CIRCUS TENT") — the first cut was two `<input type=color>`, and FIREFOX
+FOR ANDROID'S NATIVE COLOUR DIALOG IS A FIXED LIST OF NINE SWATCHES
+(red, orange, yellow, green, blue, navy, purple, light grey, white, plus
+the current colour) with no way to enter a colour. NEVER THE BROWSER'S
+OWN COLOUR DIALOG AGAIN: the picker is IN THE PAGE (main.mjs § THE TONE
+PICKER; `#tone-picker`) — the Tones row is two CHIPS (each slot's colour
+and its hex; a tap opens the picker on that slot, a second tap closes
+it), and the picker is a grid of 24 DUNGEON STONES (`TONE_SWATCHES`:
+neutral and cool greys, warm greys into browns, tans, umbers, olive
+stone — the designer's "browns and tans and dark greys" ruling as
+swatches), HUE / SATURATION / LIGHTNESS sliders whose tracks are painted
+in the colours they lead to (the hue ring at a readable saturation, since
+a dungeon stone's own is near grey), and a HEX field (with or without
+the #). Every change applies live (one apply per task under a drag); the
+picker keeps its own H/S/L while a slider is dragged, so the thumb is
+never re-rounded under the finger. `__DCK.tones` grew `open(slot)`,
+`picker()`, `swatches`, `hsl`. Gates: ui-smoke's TONES block drives the
+picker (the chip opens it on the tone's H/S/L, a swatch, a slider, a
+typed hex, reset, the second tap closing it); ui-smoke 351 ok (one run before it died on an engine transport glue — `bestmove c4b5 ponder e7d8readyok` arrived as ONE line, so `isready` never saw its `readyok`; the re-run green; engine.mjs untouched, on record), the picker exercised by hand in Chromium at phone width (a swatch, a slider, reset); a page-only change, the Node gates and the replay page untouched.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +

@@ -228,14 +228,42 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones);
   const key = await page.evaluate(() => window.__DCK.tones.key());
   expect(saved?.[key]?.floor === '#804020' && saved?.[key]?.wall === '#206080', `the tones are saved for the set "${key}"`);
-  const ui = await page.evaluate(() => ({ floor: document.getElementById('optFloorTone').value, wall: document.getElementById('optWallTone').value, label: document.getElementById('optFloorToneV').textContent, reset: document.getElementById('btnTonesReset').disabled }));
-  expect(ui.floor === '#804020' && ui.wall === '#206080' && ui.label === '#804020' && ui.reset === false, `the pickers show the live tones with the hex beside them (${ui.floor} / ${ui.wall})`);
+  const ui = await page.evaluate(() => ({ floor: document.getElementById('toneFloor').dataset.hex, wall: document.getElementById('toneWall').dataset.hex, label: document.getElementById('toneFloorV').textContent, swatch: document.querySelector('#toneFloor .tone-swatch').style.background, reset: document.getElementById('btnTonesReset').disabled, hidden: document.getElementById('tone-picker').hidden }));
+  expect(ui.floor === '#804020' && ui.wall === '#206080' && ui.label === '#804020' && /128, 64, 32/.test(ui.swatch) && ui.reset === false && ui.hidden, `the chips show the live tones with the hex beside them (${ui.floor} / ${ui.wall}), the picker closed`);
+  // THE TONE PICKER (the phone's native colour dialog was nine swatches, red
+  // to white): the floor chip opens it in the page — the sliders read the
+  // tone's H/S/L, a swatch sets the tone, a slider drag moves it and keeps
+  // its own number, the hex field takes a number with or without the #.
+  // Real taps, so the Options panel is opened for the block and closed after.
+  await page.evaluate(() => document.getElementById('btnOptions').click());
+  await page.click('#toneFloor');
+  const pk = await page.evaluate(() => ({ ...window.__DCK.tones.picker(), pressed: document.getElementById('toneFloor').getAttribute('aria-pressed'), hue: +document.getElementById('toneHue').value, sat: +document.getElementById('toneSat').value, lum: +document.getElementById('toneLum').value, hex: document.getElementById('toneHex').value, swatches: document.querySelectorAll('#toneSwatches button').length, track: document.getElementById('toneHue').style.getPropertyValue('--track').includes('linear-gradient') }));
+  expect(pk.slot === 'floor' && !pk.hidden && pk.pressed === 'true' && pk.hue === 20 && pk.sat === 60 && pk.lum === 31 && pk.hex === '#804020' && pk.swatches >= 16 && pk.track, `the floor chip opens the in-page picker on #804020: hue ${pk.hue}° sat ${pk.sat}% lum ${pk.lum}%, ${pk.swatches} dungeon stones, painted tracks`);
+  const sw = await page.evaluate(() => document.querySelector('#toneSwatches button:nth-child(13)').dataset.hex);
+  await page.click('#toneSwatches button:nth-child(13)');
+  await page.waitForTimeout(200);
+  const afterSw = await page.evaluate(() => ({ live: window.__DCK.tones.get()?.floor, chip: document.getElementById('toneFloorV').textContent, ring: document.querySelector('#toneSwatches button[aria-pressed="true"]')?.dataset.hex, hex: document.getElementById('toneHex').value }));
+  expect(afterSw.live === sw && afterSw.chip === sw && afterSw.ring === sw && afterSw.hex === sw, `a swatch sets the floor tone (${sw}); the chip, the ring and the hex follow`);
+  const swSig = (await themeState()).sig.floor;
+  await page.evaluate(() => { const r = document.getElementById('toneLum'); r.value = String(Math.min(100, +r.value + 20)); r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(200);
+  const afterSl = await page.evaluate(() => ({ live: window.__DCK.tones.get()?.floor, lum: +document.getElementById('toneLum').value, hsl: window.__DCK.tones.picker().hsl, hex: document.getElementById('toneHex').value }));
+  const slSig = (await themeState()).sig.floor;
+  expect(afterSl.live !== sw && afterSl.hsl?.[2] === afterSl.lum && afterSl.hex === afterSl.live && slSig !== swSig, `the lightness slider moves the tone (${sw} → ${afterSl.live} at ${afterSl.lum}%), the floor repaints, the slider keeps its own number`);
+  await page.fill('#toneHex', '5a4634');
+  await page.waitForTimeout(200);
+  const afterHex = await page.evaluate(() => ({ live: window.__DCK.tones.get()?.floor, chip: document.getElementById('toneFloorV').textContent, hue: +document.getElementById('toneHue').value, sat: +document.getElementById('toneSat').value, lum: +document.getElementById('toneLum').value }));
+  expect(afterHex.live === '#5a4634' && afterHex.chip === '#5a4634' && afterHex.hue === 28 && afterHex.sat === 27 && afterHex.lum === 28, `the hex field takes a number without the # (${afterHex.live}); the sliders follow (${afterHex.hue}° ${afterHex.sat}% ${afterHex.lum}%)`);
   await page.evaluate(() => window.__DCK.tones.reset());
   await page.waitForTimeout(200);
   const back = await themeState();
   expect(back.sig.floor === before.sig.floor && back.sig.wall === before.sig.wall, `reset restores the set's own colours (floor ${before.sig.floor} → ${back.sig.floor}, wall ${before.sig.wall} → ${back.sig.wall})`);
-  const ui2 = await page.evaluate(() => ({ floor: document.getElementById('optFloorTone').value, reset: document.getElementById('btnTonesReset').disabled }));
-  expect(ui2.floor === base.floor && ui2.reset === true, `the pickers return to the base colours (${ui2.floor}) and reset goes quiet`);
+  const ui2 = await page.evaluate(() => ({ floor: document.getElementById('toneFloor').dataset.hex, hex: document.getElementById('toneHex').value, reset: document.getElementById('btnTonesReset').disabled }));
+  expect(ui2.floor === base.floor && ui2.hex === base.floor && ui2.reset === true, `the chips and the open picker return to the base colours (${ui2.floor}) and reset goes quiet`);
+  await page.click('#toneFloor');
+  const closed = await page.evaluate(() => ({ hidden: document.getElementById('tone-picker').hidden, pressed: document.getElementById('toneFloor').getAttribute('aria-pressed') }));
+  expect(closed.hidden && closed.pressed === 'false', 'a second tap on the chip closes the picker');
+  await page.evaluate(() => document.getElementById('btnOptionsClose').click());
   await page.evaluate(() => { window.__DCK.options.hints = true; window.__DCK.applyOptions(); });
 }
 // Piece sprites: the default set paints the king; an unknown set (the

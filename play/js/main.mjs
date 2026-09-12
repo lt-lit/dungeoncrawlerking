@@ -652,27 +652,142 @@ function setTone(which, value) {
   const key = toneKey(currentTheme());
   options.tones = { ...(options.tones ?? {}), [key]: { ...(options.tones?.[key] ?? {}), [which]: value.toLowerCase() } };
   saveOptions();
-  applyTones();
+  // A slider drag fires many inputs a second: one apply per task, on the
+  // last value (the re-tint, the repaint and the legend ride it).
+  if (tonePicker.timer) return;
+  tonePicker.timer = setTimeout(() => { tonePicker.timer = 0; applyTones(); }, 0);
 }
 function resetTones() {
   const key = toneKey(currentTheme());
   if (options.tones?.[key]) { delete options.tones[key]; saveOptions(); }
+  tonePicker.hsl = null;
   applyTones();
 }
-/** The pickers show the set's live tones, else its own base colours; reset is live when a tone is saved. */
+
+// THE TONE PICKER (2026-09-12, the designer, on the phone's native colour
+// dialog: "What the fuck are these color options? I get one usable shade
+// of brown and everything else is unusably garish… a color selector for a
+// DUNGEON not a fucking CIRCUS TENT"). Firefox for Android's
+// <input type=color> is a FIXED LIST of nine swatches, red to white, with
+// no way to enter a colour — so the picker lives in the page: the two
+// CHIPS (each slot's colour and its hex) open it on a slot; a grid of
+// DUNGEON STONES (browns, tans, dark greys, warm and cool stone — the
+// designer's ruling), HUE / SATURATION / LIGHTNESS sliders whose tracks
+// are painted in the colours they lead to, and a HEX field. Every change
+// applies live through setTone; the picker keeps its own H/S/L while a
+// slider is dragged so the thumb is never re-rounded under the finger.
+const TONE_SWATCHES = [
+  // greys, neutral to cool
+  '#18181a', '#232326', '#2c2c2f', '#37373b', '#43434a', '#2a2d33', '#333844', '#3d4352',
+  // warm greys into browns
+  '#221e1c', '#2b2622', '#352d27', '#40342c', '#4a3629', '#563f2f', '#654a36', '#74573f',
+  // tans, umbers, olive stone
+  '#7e6446', '#8a7050', '#3b2f22', '#4d3d2a', '#5c4a30', '#2f2e25', '#3c3a2c', '#4a473a',
+];
+const tonePicker = { slot: null, hsl: null, timer: 0 };
+/** '#rrggbb' from a typed value (with or without the #), or null. */
+function normHex(v) {
+  const t = String(v ?? '').trim();
+  const h = t.startsWith('#') ? t : `#${t}`;
+  return HEX6.test(h) ? h.toLowerCase() : null;
+}
+/** [h 0–359, s 0–100, l 0–100] of '#rrggbb'. */
+function hexToHsl(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  let h = 0, sat = 0;
+  if (d > 0) {
+    sat = d / (1 - Math.abs(2 * l - 1));
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [Math.round(h) % 360, Math.round(sat * 100), Math.round(l * 100)];
+}
+/** '#rrggbb' from h 0–359, s 0–100, l 0–100. */
+function hslToHex(h, s, l) {
+  const S = s / 100, L = l / 100;
+  const c = (1 - Math.abs(2 * L - 1)) * S, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = L - c / 2;
+  const [r1, g1, b1] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const to = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+  return `#${to(r1)}${to(g1)}${to(b1)}`;
+}
+/** A chip's tap: open the picker on its slot; a second tap closes it. */
+function openTonePicker(slot) {
+  tonePicker.slot = tonePicker.slot === slot ? null : slot;
+  tonePicker.hsl = null;
+  void syncTonesUI();
+}
+/** The sliders' tracks in the colours they lead to: the hue ring at a
+ *  saturation the eye can read (a dungeon stone's own would be near grey),
+ *  saturation from grey to full at this lightness, lightness dark to light. */
+function paintToneTracks(h, s, l) {
+  const sH = Math.max(s, 45), lH = Math.min(60, Math.max(28, l)), lS = Math.max(l, 20);
+  $('toneHue').style.setProperty('--track', `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((x) => `hsl(${x} ${sH}% ${lH}%)`).join(', ')})`);
+  $('toneSat').style.setProperty('--track', `linear-gradient(to right, hsl(${h} 0% ${lS}%), hsl(${h} 100% ${lS}%))`);
+  $('toneLum').style.setProperty('--track', `linear-gradient(to right, hsl(${h} ${s}% 0%), hsl(${h} ${s}% 50%), hsl(${h} ${s}% 100%))`);
+}
+/** The picker follows the open slot's colour: sliders, labels, tracks, the
+ *  hex field (left alone while it is being typed in and still says this
+ *  colour) and the swatch ring — but a colour the picker's own sliders
+ *  produced keeps their numbers (hex → H/S/L rounds). */
+function syncTonePicker(hex) {
+  const panel = $('tone-picker');
+  if (!panel) return;
+  panel.hidden = !tonePicker.slot;
+  if (!tonePicker.slot || !hex) return;
+  const own = !!tonePicker.hsl && hslToHex(...tonePicker.hsl) === hex;
+  const [h, s, l] = own ? tonePicker.hsl : hexToHsl(hex);
+  if (!own) tonePicker.hsl = [h, s, l];
+  $('toneHue').value = String(h);
+  $('toneSat').value = String(s);
+  $('toneLum').value = String(l);
+  $('toneHueV').textContent = `${h}°`;
+  $('toneSatV').textContent = `${s}%`;
+  $('toneLumV').textContent = `${l}%`;
+  paintToneTracks(h, s, l);
+  const field = $('toneHex');
+  if (document.activeElement !== field || normHex(field.value) !== hex) field.value = hex;
+  for (const b of $('toneSwatches').children) b.setAttribute('aria-pressed', String(b.dataset.hex === hex));
+}
+/** The chips show the set's live tones, else its own base colours; reset is
+ *  live when a tone is saved; the picker follows the open slot. */
 async function syncTonesUI(theme = currentTheme()) {
-  const inputs = { floor: $('optFloorTone'), wall: $('optWallTone') };
-  if (!inputs.floor || !inputs.wall) return;
+  const chips = { floor: $('toneFloor'), wall: $('toneWall') };
+  if (!chips.floor || !chips.wall) return;
   const key = toneKey(theme);
   const atlas = await loadAtlas();
   const base = atlas.baseTones(key) ?? {};
   const live = tonesFor(theme) ?? {};
+  const shown = {};
   for (const k of ['floor', 'wall']) {
     const v = live[k] ?? base[k] ?? '#000000';
-    inputs[k].value = v;
-    $(k === 'floor' ? 'optFloorToneV' : 'optWallToneV').textContent = v;
+    shown[k] = v;
+    chips[k].dataset.hex = v;
+    chips[k].querySelector('.tone-swatch').style.background = v;
+    chips[k].setAttribute('aria-pressed', String(tonePicker.slot === k));
+    $(k === 'floor' ? 'toneFloorV' : 'toneWallV').textContent = v;
   }
   $('btnTonesReset').disabled = !options.tones?.[key];
+  syncTonePicker(tonePicker.slot ? shown[tonePicker.slot] : null);
+}
+/** The swatch grid, built once. */
+function buildToneSwatches() {
+  const grid = $('toneSwatches');
+  if (!grid || grid.children.length) return;
+  for (const hex of TONE_SWATCHES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.hex = hex;
+    b.title = hex;
+    b.style.background = hex;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => { if (!tonePicker.slot) return; tonePicker.hsl = null; setTone(tonePicker.slot, hex); });
+    grid.appendChild(b);
+  }
 }
 
 /** Stamp the current theme on the board and repaint the options legend
@@ -3260,10 +3375,30 @@ $('optDoors').addEventListener('change', (e) => {
   options.doors = e.target.value;
   applyOptions();
 });
-// THE TONES: applied as the picker drags (input), saved per art set.
-$('optFloorTone').addEventListener('input', (e) => setTone('floor', e.target.value));
-$('optWallTone').addEventListener('input', (e) => setTone('wall', e.target.value));
+// THE TONES: the chips open the in-page picker on their slot; a swatch, a
+// slider (as it drags) or a typed hex sets the tone live, saved per art set.
+$('toneFloor').addEventListener('click', () => openTonePicker('floor'));
+$('toneWall').addEventListener('click', () => openTonePicker('wall'));
 $('btnTonesReset').addEventListener('click', () => resetTones());
+for (const id of ['toneHue', 'toneSat', 'toneLum']) {
+  $(id).addEventListener('input', () => {
+    if (!tonePicker.slot) return;
+    tonePicker.hsl = [+$('toneHue').value, +$('toneSat').value, +$('toneLum').value];
+    setTone(tonePicker.slot, hslToHex(...tonePicker.hsl));
+  });
+}
+$('toneHex').addEventListener('input', (e) => {
+  const v = normHex(e.target.value);
+  if (!v || !tonePicker.slot) return;
+  tonePicker.hsl = null;
+  setTone(tonePicker.slot, v);
+});
+$('toneHex').addEventListener('change', (e) => {
+  const v = normHex(e.target.value);
+  if (v) e.target.value = v;
+  else void syncTonesUI();
+});
+buildToneSwatches();
 // The piece placement, in whole tile pixels — applied live as the dials
 // drag (input), so the designer can settle the feel on the phone and read
 // the numbers off the labels.
@@ -4662,13 +4797,17 @@ window.__DCK = {
   get app() {
     return app;
   },
-  // THE TONES (2026-09-12): the current art set's floor / wall tones.
+  // THE TONES (2026-09-12): the current art set's floor / wall tones, and the picker.
   tones: {
     get: () => tonesFor(currentTheme()),
-    set: (t) => { const key = toneKey(currentTheme()); options.tones = { ...(options.tones ?? {}), [key]: { ...(t ?? {}) } }; saveOptions(); applyTones(); },
+    set: (t) => { const key = toneKey(currentTheme()); options.tones = { ...(options.tones ?? {}), [key]: { ...(t ?? {}) } }; saveOptions(); tonePicker.hsl = null; applyTones(); },
     reset: () => resetTones(),
     key: () => toneKey(currentTheme()),
     base: async () => (await loadAtlas()).baseTones(toneKey(currentTheme())),
+    open: (slot) => openTonePicker(slot),
+    picker: () => ({ slot: tonePicker.slot, hsl: tonePicker.hsl ? [...tonePicker.hsl] : null, hidden: $('tone-picker')?.hidden ?? true }),
+    swatches: TONE_SWATCHES,
+    hsl: { toHex: hslToHex, fromHex: hexToHsl },
   },
   get record() {
     return app.duel?.record ?? null;
