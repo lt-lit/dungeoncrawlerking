@@ -632,6 +632,7 @@ async function paintLegend(theme) {
   const doors = doorsFor();
   const tile = (role) => atlas.tileOf(theme, role, { doors });
   const T = 16;
+  const wallH = () => tile('wall')?.h ?? T;
   for (const c of cells) {
     const g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
@@ -642,21 +643,24 @@ async function paintLegend(theme) {
     g.fillRect(0, 0, T, T);
     draw(theme ? tile('floor-1') : null);
     const kind = c.dataset.legend;
-    if (kind === 'wall') draw(tile('wall'));
+    // A wall is a TALL 16×24 sprite (2026-09-12): the swatch shows its
+    // face under the last rows of its roof.
+    const WALL_Y = T - wallH();
+    if (kind === 'wall') draw(tile('wall'), WALL_Y);
     else if (kind === 'cracked') {
-      // the wall block with the crack masked to its pixels, as the board composes it
+      // the wall with the crack masked onto its face, as the board composes it
       const wall = tile('wall'), crack = atlas.crack(1);
       const scratch = document.createElement('canvas');
       scratch.width = T;
-      scratch.height = T;
+      scratch.height = wallH();
       const sg = scratch.getContext('2d');
       sg.imageSmoothingEnabled = false;
-      if (wall) sg.drawImage(wall.src, wall.sx, wall.sy, wall.w, wall.h, 0, 0, T, T);
+      if (wall) sg.drawImage(wall.src, wall.sx, wall.sy, wall.w, wall.h, 0, 0, wall.w, wall.h);
       if (crack) {
         sg.globalCompositeOperation = 'source-atop';
-        sg.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, 0, T, T);
+        sg.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, wallH() - T, T, T);
       }
-      g.drawImage(scratch, 0, 0);
+      g.drawImage(scratch, 0, WALL_Y);
     } else if (kind === 'hole') {
       const pit = theme ? tile('hole-0') : null;
       if (pit) draw(pit);

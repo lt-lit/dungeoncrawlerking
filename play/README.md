@@ -494,8 +494,10 @@ ranks×16 tall plus HEADROOM for the top rank's tall pieces (fit − 16 +
 lift, so a head never leaves the buffer) — repainted from scratch on
 every change in painter's order: floor (+ the dark square's shade), flat
 terrain by `classifyTerrain` (the one terrain rule, shared with the DOM
-board and the replay analyzer: wall cases, holes, ruins, cracked walls
-with the crack masked to the wall's pixels by `source-atop`), the
+board and the replay analyzer: the pits — since the TALL WALLS of
+2026-09-12, round 21 below, a wall case, a cracked wall with the crack
+masked onto its face by `source-atop`, a weak spot and a ruin's stub are
+16×24 sprites of the TALL pass, standing at the square's y − 11), the
 square's DEBRIS (the painter's 16×16 buffer put straight in), decor and
 the open doorway above it (the DOM's decor span is above its debris
 image, so the posts stand on the rubble), the marks under the pieces
@@ -2123,6 +2125,107 @@ crates a square north, and only the guard's mirror rows saw it (its
 facing-0 rows drift after ply 0 on the pristine build — a pre-existing
 gap, on record); test-debris now asserts every prop height, so a 16-tall
 tile can never report the box again.
+
+**Round 21 (2026-09-12) — TALL WALLS.** The designer, on the edge-on door:
+"now the door doesn't look like it actually intersects with the wall to
+the north at all… I want tall walls, walls that overlap the northern
+tiles, just like the tall chess pieces do." TEN MOCK-UP ROUNDS off the
+atlas and the packs (nothing in the repo until the build): (1) the first
+cut's overlap — eight rows into the square north — "is the maximum", but
+a roof that deep was "too much of the wall… roof, not the actual south
+face"; (2) an 8-row roof strip over a 16-row face "is good, proportions
+wise", the generated running-bond bricks "look too much like drawers",
+"the vertical doors need to connect higher on the wall face", "the
+ceiling above horizontal doors needs to go", "the horizontal doors should
+move north a few pixels"; (3) "have a look at the original assets again,
+these look so much better" — the packs' own faces, and their own roof art
+where they had any: pixel-poem has none but a four-row ledge and a coping
+stone, Dungeon Gathering a sixteen-wide slab, the Catacombs a seven-pixel
+bevelled frame; (4) "3B is the only one that looks decent… the other
+attempts look like a lost cause. Let's just focus on fixing 3B and make
+palette swaps of it when we're done" — the crypt, with the face three
+pixels off its seam and the floor showing under it (the designer's own
+question the round before: "should wall faces be moved north a few
+pixels, revealing some of the floor tile it's standing on?"); (5) the
+vertical roofs, sampled off the pack's own vertical band with its two lit
+lines and a groove colliding on our ten-pixel band, were "awful for no
+reason. Like, just turn the horizontal ones sideways" — done: the strip's
+outline and lit line down the band's west side, the outline down its
+east; (6) the band's middle was then "flat and textureless" — the pack's
+four cracked fill rows, whose marks run front to back across the strip,
+STRETCHED over the band's seven fill columns so every mark crosses the
+band as a rung; (7) a per-cell offset into the pack's band made those
+marks "stop halfway, or have this other weird variation with one pixel
+missing" — the strip is the pack's tile verbatim on every cell, and the
+rungs align across cells; (8) "why do the roofs look incomplete? It looks
+like you've trimmed out so much" — the raised face had cut the strip to
+five rows; the pack's north band is worn WHOLE, outline, lit line, four
+fill rows, inner outline, a row of fill, which with the three-pixel raise
+puts the wall's top ELEVEN rows into the square north (past the "maximum"
+of round 1 — the designer's pick over the seam-tight version); (9) "take
+3 and get rid of the roof segments that show above horizontal doors";
+(10) stray dashes on a vertical band's north end were the horizontal
+band's own crack marks — a band's ends wear only the outline and lit
+line, and its rungs run on through a T; "shift the doors down a couple
+pixels and build it".
+
+THE BUILD. `js/board-ui.mjs` carries the geometry: `WALL_BAND` (columns
+3–12), `WALL_LIFT` 8 (the roof plane, one tile deep, shifted north),
+`WALL_RAISE` 3 (the face off its seam), `WALL_SPRITE_H` 24, `DOOR_LIFT`
+5 (a face-on leaf two pixels above the face's foot), `EDGE_LEAF_H` 27,
+`wallBody(mask)` (the shipped blob footprint of round 5: an east–west run
+the width, a north–south run the band, corners, T's and crosses their
+union, a thick block's inner corner only with its diagonal) and
+`wallFaceCols(mask)` (the columns where the roof's body ends at the
+square's south edge). The repack tool composes EVERY CASE FROM TWO
+CATACOMBS TILES — the frame's north band (5,3) and the brick face (5,9)
+— into a 16×24 sprite: rows 0–7 the roof's far half, rows 8–23 the face
+in the face columns and the roof's near half where it runs on. The roof
+is drawn by DEPTH from its open edges: a horizontal top wears the band's
+rows on its far edge (outline, lit line, the four cracked fill rows, the
+inner outline), the outline and lit line turned on its west end, the
+outline on its east; a vertical band the same two down its west side,
+the stretched rungs, the outline down its east, and its rungs run on
+through a horizontal wall where it meets one; corners and ends by the
+nearest edge. The RUIN is the same drawing with each joining wall's
+ragged tongue (a flush pixel and up to two of fringe, hashed per pair of
+rows), the face under a west or east tongue's south edge, six rows of it
+as a low stump under a north tongue, nothing under a south tongue (the
+wall's own roof is right below it); chips none, as before. The hall, the
+castle and the classic set are EXACT PALETTE SWAPS of the crypt's tiles
+(`WALL_SWAPS` names every colour of the crypt's drawing — the tool
+refuses one it does not name); the classic row keeps its drawn props and
+cracks and takes its walls and ruins from the crypt row, so they
+regenerate without the pack. The doorway post tiles (`doorway`,
+`doorway-8`, `doorway-2`) are gone: an opened doorway is a gap and the
+walls beside it end with their own cases (`#gapUp` is any doorway).
+`door-edge` is a 16×32 box: the designer's 5×16 leaf stretched to 27
+rows by repeating its board period (`inhouse.mjs edgeLeafRows` — its head
+and foot as drawn), standing on the box's bottom edge.
+
+THE CANVAS BOARD paints walls, cracked walls, weak spots and ruins in
+THE TALL PASS, at the square's y − 11 — the roof over the feet of
+whatever stands north, as a nearer head covers the piece behind it —
+with the crack masked onto the face where there is one and onto the roof
+where a band runs on (the crack is the tell that a wall is weakened; a
+band mid-run has no face), the cracking flash over the whole sprite, the
+whole sprite bursting on a breach, a ruin's stub with the square's
+debris put back over its foot, a wall prop (torch / banner / chain) on
+the face, and the residue and heat frames over the sprite; a face-on
+leaf at y − 5, the edge-on leaf at y − 24 (its head at the far face's
+top, its foot behind the near roof); the options legend shows the face
+under the roof's last rows. Gates green on the build: `test-debris` 71
+(the boxes, the classic row's own cases, the leaf's stretched shape and
+the hall's row for row, no doorway role), `strip-ruin-chips --check`
+(reads the whole sprite, row 15 attached — a south tongue runs into the
+neighbour's roof), selftest 46/46, ui-smoke 270 (a cracked band mid-run
+wears its ink on the roof), facing-walk 108/108, replay-smoke 63,
+test-camera 80, test-world 125, test-barrier 160, test-logreport 47,
+canvas-grid `none` / `margin` 4/4 in Chromium; the camera guard's dump
+self-check drifts from ply 2 exactly as on the build before (on record)
+and a fresh baseline was dumped. THE PHONE VERDICT IS THE GATE; the
+hall's, the castle's and the classic set's palettes are first picks for
+the designer to retune.
 
 ## The debris layer (2026-09-07)
 

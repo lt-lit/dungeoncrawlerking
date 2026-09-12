@@ -20,9 +20,13 @@ import { decodePng, encodePng } from '../lib/png.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const T = 16;
+const RUIN_H = 24; // board-ui WALL_SPRITE_H
 
-/** Connected components (4-way) of opaque pixels; those touching no edge. */
-export function isolatedComponents(img) {
+/** Connected components (4-way) of opaque pixels; those touching no edge
+ *  — nor any row in `attach` (a tall ruin sprite's row 15 is the bottom
+ *  of the roof plane: a south tongue ending there runs on into the
+ *  neighbour's roof, which is not in the tile). */
+export function isolatedComponents(img, attach = new Set()) {
   const { width: w, height: h, data } = img;
   const seen = new Uint8Array(w * h);
   const out = [];
@@ -36,7 +40,7 @@ export function isolatedComponents(img) {
       const j = stack.pop();
       comp.push(j);
       const jx = j % w, jy = (j - jx) / w;
-      if (jx === 0 || jy === 0 || jx === w - 1 || jy === h - 1) edge = true;
+      if (jx === 0 || jy === 0 || jx === w - 1 || jy === h - 1 || attach.has(jy)) edge = true;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = jx + dx, ny = jy + dy;
         if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
@@ -52,10 +56,10 @@ export function isolatedComponents(img) {
 }
 
 /** The tile without its isolated flecks (a new image). */
-export function stripIsolated(img) {
+export function stripIsolated(img, attach = new Set()) {
   const out = { width: img.width, height: img.height, data: Buffer.from(img.data) };
   let n = 0;
-  for (const comp of isolatedComponents(img)) {
+  for (const comp of isolatedComponents(img, attach)) {
     if (comp.length > 2) throw new Error(`strip-ruin-chips: an isolated component of ${comp.length} px is not a chip — refusing to touch this tile`);
     for (const i of comp) { out.data.fill(0, i * 4, i * 4 + 4); n++; }
   }
@@ -69,18 +73,22 @@ export function run({ check = false } = {}) {
   const rowH = index.row ?? 2 * T;
   let tiles = 0, removed = 0, dirty = 0;
   for (const [theme, t] of Object.entries(index.themes)) {
-    if (t.inhouse) continue;
     for (const [role, cell] of Object.entries(t.tiles)) {
       if (!/^ruin-\d+$/.test(role)) continue;
+      // A ruin case is a TALL 16×24 sprite since 2026-09-12 (board-ui
+      // WALL_SPRITE_H): the whole box is read, so a fleck under a stub's
+      // foot counts too; row 15 (the roof plane's bottom) attaches, as a
+      // south tongue runs on into the neighbour's roof from there.
+      const H = RUIN_H;
       const x0 = cell.col * T, y0 = t.row * rowH;
-      const img = { width: T, height: T, data: Buffer.alloc(T * T * 4) };
-      for (let r = 0; r < T; r++) atlas.data.copy(img.data, r * T * 4, ((y0 + r) * atlas.width + x0) * 4, ((y0 + r) * atlas.width + x0 + T) * 4);
-      const { img: clean, removed: n } = stripIsolated(img);
+      const img = { width: T, height: H, data: Buffer.alloc(T * H * 4) };
+      for (let r = 0; r < H; r++) atlas.data.copy(img.data, r * T * 4, ((y0 + r) * atlas.width + x0) * 4, ((y0 + r) * atlas.width + x0 + T) * 4);
+      const { img: clean, removed: n } = stripIsolated(img, new Set([T - 1]));
       tiles++;
       if (!n) continue;
       dirty++;
       removed += n;
-      if (!check) for (let r = 0; r < T; r++) clean.data.copy(atlas.data, ((y0 + r) * atlas.width + x0) * 4, r * T * 4, (r + 1) * T * 4);
+      if (!check) for (let r = 0; r < H; r++) clean.data.copy(atlas.data, ((y0 + r) * atlas.width + x0) * 4, r * T * 4, (r + 1) * T * 4);
       void theme;
     }
   }

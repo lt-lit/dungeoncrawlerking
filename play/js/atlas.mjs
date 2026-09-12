@@ -23,21 +23,34 @@
 // the theme lacks wraps around (barrel-7 on a theme with five barrels is
 // its second, as tiles.css aliases it), a double door's half falls back to
 // the leaf, a chosen DOOR SET takes its door, double and edge-on leaf
-// (`door-edge`, 2026-09-11) from that theme's row — never the doorway posts,
-// which are the wall's — a decor role a theme lacks is nothing, and the
+// (`door-edge`, 2026-09-11) from that theme's row — a decor role a theme
+// lacks is nothing, and the
 // classic set answers
-// with its SVG sprites. Props (crate / chest / barrel / wreckage and their
+// with its own drawings. Props (crate / chest / barrel / wreckage and their
 // variants) are 32 tall: the lower half is the square, the upper half the
-// square north.
+// square north; a wall or ruin case is 24 tall (TALL WALLS, 2026-09-12:
+// the roof's far half over the face) and the edge-on leaf 32.
 export const TILE = 16;
 export const PIECE_ORDER = 'pnrbqk';
 /** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles placeProp). */
 const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage']);
+/** TALL WALLS (2026-09-12): a wall case and a ruin case are 16×24 sprites
+ *  (board-ui WALL_SPRITE_H — the roof's far half over the face), the
+ *  edge-on leaf a 16×32 one (the stretched profile door standing on its
+ *  bottom edge). Everything else is a 16×16 tile. */
+const TALL_H = 24;
+/** A role's box height by its base name (`wall-10` → wall, `ruin-5` → ruin). */
+function roleHeight(base) {
+  if (PROP_ROLES.has(base) || base === 'door-edge') return 2 * TILE;
+  if (base === 'wall' || base === 'ruin') return TALL_H;
+  return TILE;
+}
 /** The atlas row of the in-house drawings (the classic set + the cracks). */
 const CLASSIC = 'classic';
-/** The classic set's one tile per family: any wall case is its block, a
- *  ruin its heap, the wreckage and a double door's half its crate and door. */
-const CLASSIC_ROLE = { wall: 'wall', crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', 'door-edge': 'door-edge', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble', ruin: 'rubble' };
+/** The classic set's tile per family: its own wall and ruin cases (the
+ *  crypt's tall walls in the classic palette since 2026-09-12), the
+ *  wreckage and a double door's half its crate and door. */
+const CLASSIC_ROLE = { crate: 'crate', door: 'door', 'door2-l': 'door', 'door2-r': 'door', 'door-edge': 'door-edge', barrel: 'barrel', chest: 'chest', wreckage: 'crate', rubble: 'rubble' };
 
 const baseRole = (role) => role.replace(/-\d+$/, '');
 const variantOf = (role) => { const m = role.match(/-(\d+)$/); return m ? parseInt(m[1], 10) : 1; };
@@ -135,27 +148,30 @@ export class Atlas {
     }
     const cell = row.tiles[name];
     if (!cell) return null;
-    const h = PROP_ROLES.has(b) ? 2 * TILE : TILE;
-    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h, role: name, theme: srcTheme };
+    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: roleHeight(b), role: name, theme: srcTheme };
   }
 
-  /** A cell of the classic row as a 16×16 drawImage rectangle, or null. */
+  /** A cell of the classic row as a drawImage rectangle, or null: its
+   *  drawn props are 16×16 tiles (never prop boxes), its walls and ruins
+   *  tall sprites, its edge-on leaf a 16×32 box. */
   #classicCell(name) {
     const row = this.index.themes[CLASSIC];
     const cell = row?.tiles[name];
     if (!cell) return null;
-    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h: TILE, role: name, theme: null };
+    const b = baseRole(name);
+    const h = b === 'wall' || b === 'ruin' ? TALL_H : b === 'door-edge' ? 2 * TILE : TILE;
+    return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h, role: name, theme: null };
   }
 
-  /** The classic (in-house) set's sprite for a role, or null: one block for
-   *  every wall case, the heap for every ruin, the crate for the wreckage,
-   *  the leaf for a double door's half, the designer's profile door in
-   *  its own colours (door-edge); no floor, hole, decor or doorway
-   *  (the flat colours and the gradient pit are the canvas board's own). */
+  /** The classic (in-house) set's sprite for a role, or null: its own wall
+   *  and ruin cases, the crate for the wreckage, the leaf for a double
+   *  door's half, the designer's profile door in its own colours
+   *  (door-edge); no floor, hole or decor (the flat colours and the
+   *  gradient pit are the canvas board's own). */
   classicTile(role) {
     const b = baseRole(role);
-    const key = b.startsWith('wall') ? 'wall' : b.startsWith('ruin') ? 'ruin' : b;
-    const name = CLASSIC_ROLE[key];
+    if (b === 'wall' || b === 'ruin') return this.#classicCell(role);
+    const name = CLASSIC_ROLE[b];
     return name ? this.#classicCell(name) : null;
   }
 

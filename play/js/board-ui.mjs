@@ -116,6 +116,54 @@ export function canonicalMask(m) {
 }
 export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) => canonicalMask(m)))].sort((a, b) => a - b);
 
+/**
+ * TALL WALLS (2026-09-12, designer-led over ten mock-up rounds — "I want
+ * tall walls, walls that overlap the northern tiles, just like the tall
+ * chess pieces do"). A wall is a 16×24 SPRITE painted in the tall pass at
+ * the square's y − WALL_LIFT − WALL_RAISE: its ROOF is the top surface of
+ * a plane one tile deep shifted WALL_LIFT rows north (rows 0–7 of the
+ * sprite show above the face, in the square north), its FACE the pack's
+ * sixteen brick rows standing WALL_RAISE pixels off the square's seam
+ * (the floor shows under it), for every column where the roof's body ends
+ * at the square's south edge (`wallFaceCols`); where it continues south
+ * (a band running on, a thick block) the roof's lower rows show instead.
+ * The roof's FOOTPRINT is the shipped blob rule (repack-tiles' wallBlob
+ * since round 5): an east–west run fills the width, a north–south run
+ * the WALL_BAND columns (three pixels of floor either side), corners, T's
+ * and crosses their union, a thick block's inner corner filling only when
+ * the diagonal is solid too; the neighbours hold the same bands. A
+ * face-on door leaf stands DOOR_LIFT pixels off the seam, two above the
+ * face's foot; the edge-on leaf is EDGE_LEAF_H rows, the far face's top
+ * to behind the near roof.
+ */
+export const WALL_BAND = { x0: 3, x1: 12 };
+export const WALL_LIFT = 8;
+export const WALL_RAISE = 3;
+export const WALL_SPRITE_H = 24;
+export const DOOR_LIFT = 5;
+export const EDGE_LEAF_H = 27;
+/** The roof's footprint for a wall case: (x, y) → is it top surface —
+ *  inside the cell, or (just outside it) in the neighbour, which by
+ *  construction holds the same bands. */
+export function wallBody(mask) {
+  const n = mask & 1, e = mask & 2, s = mask & 4, w = mask & 8, ne = mask & 16, se = mask & 32, sw = mask & 64, nw = mask & 128;
+  const { x0, x1 } = WALL_BAND;
+  const inBand = (x) => x >= x0 && x <= x1;
+  return (x, y) => {
+    if (y < 0) return inBand(x) ? !!n : x > x1 ? !!(n && e && ne) : !!(n && w && nw);
+    if (y >= 16) return inBand(x) ? !!s : x > x1 ? !!(s && e && se) : !!(s && w && sw);
+    if (x < 0) return !!w;
+    if (x >= 16) return !!e;
+    return inBand(x) || (x > x1 ? !!e : !!w);
+  };
+}
+/** Which of a wall case's sixteen columns carry the FACE: the roof's body
+ *  ends at the square's south edge there (floor beyond). */
+export function wallFaceCols(mask) {
+  const body = wallBody(mask);
+  return Array.from({ length: 16 }, (_, x) => body(x, 15) && !body(x, 16));
+}
+
 /** Piece-sprite sets the board can wear (play/img/pieces.png, a row per
  *  set; repack-tiles.mjs builds them). The third is the board's default. */
 export const PIECE_SETS = ['pixel-chess', 'pixel-chess-wood', 'nulltale', 'nulltale-dread', 'deja-view'];

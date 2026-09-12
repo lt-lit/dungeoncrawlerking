@@ -158,27 +158,52 @@ const SPRITES = {
 // sprite, so the tool is told the base — else the castle's and the
 // crypt's leaves would drift from their face-on doors).
 const EDGE_LEAF_X = 5;
+/** The leaf's height in rows (board-ui EDGE_LEAF_H — imported by value here so lib/ stays free of play/). */
+const EDGE_LEAF_ROWS = 27;
+export { EDGE_LEAF_X, EDGE_LEAF_ROWS };
 const EDGE_LEAF_FILE = new URL('./inhouse/door-profile.png', import.meta.url);
 /** The classic set's colours for the sprite's pixel-poem ones. */
 const CLASSIC_LEAF = { '#25131a': P.ink, '#895a45': P.woodLo, '#bf704d': P.wood, '#adc1cf': P.iron, '#90919e': P.ironLo };
 
-/** The designer's profile door placed in a 16×16 tile; `map` (a colour →
- *  colour table, #rrggbb) recolours it for the classic set. */
-function profileDoor(map = null) {
+/** The designer's profile door STRETCHED to `rows` (TALL WALLS,
+ *  2026-09-12: the leaf runs from the far wall's face top to behind the
+ *  near wall's roof, board-ui EDGE_LEAF_H): its head (rows 0–10) and foot
+ *  (rows 11–15) as drawn, the board period (rows 3–10) repeated between. */
+function stretchedRows(rows) {
+  const order = [];
+  for (let y = 0; y <= 10; y++) order.push(y);
+  while (order.length < rows - 5) for (let y = 3; y <= 10 && order.length < rows - 5; y++) order.push(y);
+  for (let y = 11; y <= 15; y++) order.push(y);
+  return order;
+}
+export { stretchedRows as edgeLeafRows };
+
+/** The designer's profile door placed in a 16×32 tile, standing on its
+ *  bottom edge (the canvas board draws it at the square's y − 24, so its
+ *  head is at the far face's top and its foot behind the near roof);
+ *  `map` (a colour → colour table, #rrggbb) recolours it for the classic
+ *  set; `rows` stretches it (16 = the file as drawn). */
+function profileDoor(map = null, rows = EDGE_LEAF_ROWS) {
   const src = decodePng(readFileSync(EDGE_LEAF_FILE));
   if (src.width + EDGE_LEAF_X > T || src.height !== T) throw new Error(`inhouse: door-profile.png is ${src.width}×${src.height}; expected ≤ ${T - EDGE_LEAF_X}×${T}`);
-  const tile = blank(T, T);
-  for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) {
-    const i = (y * src.width + x) * 4, o = (y * T + x + EDGE_LEAF_X) * 4;
-    if (!src.data[i + 3]) continue;
-    let rgb = [src.data[i], src.data[i + 1], src.data[i + 2]];
-    if (map) {
-      const key = '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
-      const to = map[key];
-      if (to) rgb = [parseInt(to.slice(1, 3), 16), parseInt(to.slice(3, 5), 16), parseInt(to.slice(5, 7), 16)];
+  const order = stretchedRows(rows);
+  const H = 2 * T;
+  if (order.length > H) throw new Error(`inhouse: a ${order.length}-row leaf does not fit a ${H}-row tile`);
+  const tile = blank(T, H);
+  const top = H - order.length;
+  order.forEach((sy, yy) => {
+    for (let x = 0; x < src.width; x++) {
+      const i = (sy * src.width + x) * 4, o = ((top + yy) * T + x + EDGE_LEAF_X) * 4;
+      if (!src.data[i + 3]) continue;
+      let rgb = [src.data[i], src.data[i + 1], src.data[i + 2]];
+      if (map) {
+        const key = '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+        const to = map[key];
+        if (to) rgb = [parseInt(to.slice(1, 3), 16), parseInt(to.slice(3, 5), 16), parseInt(to.slice(5, 7), 16)];
+      }
+      tile.data[o] = rgb[0]; tile.data[o + 1] = rgb[1]; tile.data[o + 2] = rgb[2]; tile.data[o + 3] = src.data[i + 3];
     }
-    tile.data[o] = rgb[0]; tile.data[o + 1] = rgb[1]; tile.data[o + 2] = rgb[2]; tile.data[o + 3] = src.data[i + 3];
-  }
+  });
   return tile;
 }
 
@@ -203,8 +228,9 @@ export function rasterize(svgText) {
 }
 
 /** The edge-on LEAF the pack themes wear: the designer's profile door in
- *  pixel-poem's timber, placed in the band; the repack tool recolours it
- *  per theme as it does the face-on leaf, against the plank timber. */
+ *  pixel-poem's timber, stretched to the wall's height and placed in the
+ *  band, a 16×32 tile; the repack tool recolours it per theme as it does
+ *  the face-on leaf, against the plank timber. */
 export function edgeLeafTile() {
   return profileDoor();
 }
