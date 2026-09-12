@@ -288,12 +288,12 @@ const CAT_FACE = ['cat', 5, 9];
 const RUIN = { tongue: 1, fringe: 2, face: 6, chips: 0 }; // chips: none — the flecks on the floor are the debris layer's (test-debris reads this)
 const STRETCH = [2, 2, 3, 3, 4, 4, 5]; // the band's seven fill columns ← the strip's four fill rows
 /** The crypt's own colours, named — the keys of every swap. */
-const CRYPT = { outline: '#1b1916', lit: '#454135', fill: '#2e2a25', dark: '#23201d', mid: '#3c3129', black: '#070707', mortarDark: '#140e0e', mortar: '#1a1512', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' };
+const CRYPT = { outline: '#1b1916', lit: '#454135', fill: '#2e2a25', dark: '#23201d', mid: '#3c3129', dusk: '#121110', black: '#070707', mortarDark: '#140e0e', mortar: '#1a1512', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' };
 /** Every other theme's wall: the crypt's drawing, colour for colour. */
 const WALL_SWAPS = {
-  hall: { outline: '#25131a', lit: '#916a62', fill: '#6e4a48', dark: '#4c2f49', mid: '#5d3d48', black: '#25131a', mortarDark: '#25131a', mortar: '#3d253b', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
-  castle: { outline: '#181425', lit: '#c7cfdd', fill: '#92a1b9', dark: '#5a6787', mid: '#7a8aa3', black: '#181425', mortarDark: '#181425', mortar: '#2a2f4e', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
-  classic: { outline: '#262433', lit: '#8583a3', fill: '#605e7a', dark: '#403e55', mid: '#52506a', black: '#16141f', mortarDark: '#16141f', mortar: '#262433', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
+  hall: { outline: '#25131a', lit: '#916a62', fill: '#6e4a48', dark: '#4c2f49', mid: '#5d3d48', dusk: '#1f1017', black: '#150b10', mortarDark: '#25131a', mortar: '#3d253b', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
+  castle: { outline: '#181425', lit: '#c7cfdd', fill: '#92a1b9', dark: '#5a6787', mid: '#7a8aa3', dusk: '#14121f', black: '#0c0b15', mortarDark: '#181425', mortar: '#2a2f4e', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
+  classic: { outline: '#262433', lit: '#8583a3', fill: '#605e7a', dark: '#403e55', mid: '#52506a', dusk: '#16141f', black: '#0c0b12', mortarDark: '#16141f', mortar: '#262433', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
 };
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
@@ -306,24 +306,48 @@ const inBand = (x) => x >= WALL_BAND.x0 && x <= WALL_BAND.x1;
 function catWallArt(sheets) {
   const [bk, bx, by] = CAT_BAND, [fk, fx, fy] = CAT_FACE;
   const band = Array.from({ length: 7 }, (_, r) => Array.from({ length: T }, (_, x) => pxOf(sheets[bk], bx * T + x, by * T + r)));
-  return { band, face: crop(sheets[fk], fx * T, fy * T, T, T), fill: hex(CRYPT.fill) };
+  return { band, face: crop(sheets[fk], fx * T, fy * T, T, T), fill: hex(CRYPT.fill), dusk: hex(CRYPT.dusk), black: hex(CRYPT.black) };
 }
 /**
  * A roof (16×16, the top surface) for a footprint `body(x, y)` (true in
- * the neighbours too): every body pixel wears the band's row at its depth
- * from the nearest open edge — the far edge the band whole (a vertical
- * band's ends only its outline and lit line), the west end the same two
- * turned, the east end and the near edge the outline — else the fill:
- * the turned, stretched rungs on a band or where a band runs through, the
- * plain fill elsewhere. `vertical`: no east–west run through the cell.
+ * the neighbours too). A BAND — a run no thicker than one cell through
+ * the pixel, across or along — wears the shipped drawing: the band's row
+ * at its depth from the nearest open edge (the far edge the band whole, a
+ * vertical band's ends only its outline and lit line, the west end the
+ * same two turned, the east end and the near edge the outline), else the
+ * fill — the turned, stretched RUNGS on a vertical band or where a band
+ * runs through a T, the plain fill on an east–west wall. A MASS (`mass`:
+ * the cell sits in a 2×2 block of walls, and the pixel is thick both
+ * ways) is the pack's own thick wall — a RIM around a VOID (designer
+ * 2026-09-12, on the first build's clusters, which tiled the band over
+ * every cell: "roofs on clusters of walls look kinda odd. Either we
+ * should make it fade to black, or smooth it out"): the far edge and the
+ * near edge over the face wear exactly a thin wall's roof (the band and
+ * its row of fill — the far rim the band alone, the shade right under
+ * it as the pack draws it), the west and east edges exactly a thin
+ * vertical band (outline, lit line down the west side, the rungs,
+ * outline), so a thin wall joining a mass runs into its rim without a
+ * seam, and the side rims are cast on the roof minus the rows the face
+ * hides, so at an inner corner a side rim runs up to the face stub's
+ * top; inside, the pack's two rows of shade under the far rim and then
+ * its BLACK. A lone band entering from the north runs its rungs
+ * over the far rim to the void; one leaving south starts from the void
+ * and runs on through the near rim. `vertical`: no east–west run through
+ * the cell; `throughN` / `throughS`: a lone band joins on that side (no
+ * diagonal beside it).
  */
-function roofOf(body, art, { vertical, through }) {
-  const { band, fill } = art;
+function roofOf(body, art, { vertical, mass = false, throughN = false, throughS = false }) {
+  const { band, fill, dusk, black } = art;
+  const x0 = WALL_BAND.x0 + 2;
+  const rung = (x, y) => band[STRETCH[Math.max(0, Math.min(6, x - x0))]][y];
+  const rungAt = (i, y) => band[STRETCH[i]][y];
   const prof = vertical
     ? { N: band.slice(0, 2), S: [band[0]], W: band.slice(0, 2), E: [band[0]] }
     : { N: band, S: [band[0]], W: band.slice(0, 2), E: [band[0]] };
-  const x0 = WALL_BAND.x0 + 2;
-  const rung = (x, y) => band[STRETCH[Math.max(0, Math.min(6, x - x0))]][y];
+  const FAR = band.length; // the far rim: the band alone, then the shade (the near rim keeps its row of fill over the face, as a thin wall's roof does)
+  const SHADE = 2; // the pack's rows of shade under the far rim
+  const SIDE = WALL_BAND.x1 - WALL_BAND.x0 + 1; // the west and east rims: a band's width
+  const roof = (x, y) => body(x, y) && !(y >= T - 8 && y < T && body(x, T - 1) && !body(x, T));
   const out = blank(T, T);
   for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
     if (!body(x, y)) continue;
@@ -331,9 +355,28 @@ function roofOf(body, art, { vertical, through }) {
     let dS = 0; while (dS < 17 && body(x, y + dS + 1)) dS++;
     let dW = 0; while (dW < 17 && body(x - dW - 1, y)) dW++;
     let dE = 0; while (dE < 17 && body(x + dE + 1, y)) dE++;
-    const cands = [['N', dN], ['S', dS], ['W', dW], ['E', dE]].sort((a, b) => a[1] - b[1]);
-    let c = vertical || (inBand(x) && through) ? rung(x, y) : fill;
-    for (const [side, d] of cands) { const p = prof[side]; if (d < p.length) { c = side === 'N' || side === 'S' ? p[d][x] : p[d][y]; break; } if (d >= 8) break; }
+    let c;
+    if (!mass || dW + dE + 1 <= T || dN + dS + 1 <= T) {
+      // a band through this pixel: the shipped drawing
+      const cands = [['N', dN], ['S', dS], ['W', dW], ['E', dE]].sort((a, b) => a[1] - b[1]);
+      c = vertical || (inBand(x) && (throughN || throughS)) ? rung(x, y) : fill;
+      for (const [side, d] of cands) { const p = prof[side]; if (d < p.length) { c = side === 'N' || side === 'S' ? p[d][x] : p[d][y]; break; } if (d >= 8) break; }
+    } else {
+      // a mass: the nearest rim, else a band running through, else the void
+      // the west and east rims stop where the face begins — the face
+      // hides the roof's last eight rows, so a rim beside a face stub
+      // runs up to the stub's top (an inner corner of the void)
+      let rW = 0; while (rW < 17 && roof(x - rW - 1, y)) rW++;
+      let rE = 0; while (rE < 17 && roof(x + rE + 1, y)) rE++;
+      const rims = [];
+      if (dN < FAR) rims.push([dN, dN < band.length ? band[dN][x] : fill]);
+      if (dS < T) { const d = T - 1 - dS; rims.push([d, d < band.length ? band[d][x] : fill]); }
+      if (rW < SIDE) rims.push([rW, rW === 0 || rW === SIDE - 1 ? band[0][y] : rW === 1 ? band[1][y] : rungAt(rW - 2, y)]);
+      if (rE < SIDE) rims.push([rE, rE === 0 || rE === SIDE - 1 ? band[0][y] : rE === SIDE - 2 ? band[1][y] : rungAt(SIDE - 3 - rE, y)]);
+      if (rims.length) c = rims.sort((a, b) => a[0] - b[0])[0][1];
+      else if (inBand(x) && ((throughN && y < FAR) || throughS)) c = rung(x, y);
+      else c = dN < FAR + SHADE ? dusk : black;
+    }
     const o = (y * T + x) * 4;
     out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = 255;
   }
@@ -359,9 +402,9 @@ function tallWallSet(sheets) {
   const art = catWallArt(sheets);
   const walls = {}, ruins = {};
   for (const code of WALL_MASK_CODES) {
-    const n = code & 1, e = code & 2, s = code & 4, w = code & 8;
+    const n = code & 1, e = code & 2, s = code & 4, w = code & 8, ne = code & 16, se = code & 32, sw = code & 64, nw = code & 128;
     const body = wallBody(code);
-    const roof = roofOf(body, art, { vertical: !e && !w, through: !!(n || s) });
+    const roof = roofOf(body, art, { vertical: !e && !w, mass: !!(ne || se || sw || nw), throughN: !!(n && !ne && !nw), throughS: !!(s && !se && !sw) });
     walls[`wall-${code}`] = tallSprite(roof, art, wallFaceCols(code));
   }
   for (let m = 0; m < 16; m++) {
@@ -378,7 +421,7 @@ function tallWallSet(sheets) {
       if (s && inBand(x) && y >= T - reach(x, 19)) return true;
       return false;
     };
-    const roof = roofOf(body, art, { vertical: !e && !w, through: !!(n || s) });
+    const roof = roofOf(body, art, { vertical: !e && !w, throughN: !!n, throughS: !!s });
     const faceCols = Array.from({ length: T }, (_, x) => body(x, T - 1) && !body(x, T));
     const stumps = {};
     if (n) for (let x = WALL_BAND.x0; x <= WALL_BAND.x1; x++) stumps[x] = reach(x, 17);

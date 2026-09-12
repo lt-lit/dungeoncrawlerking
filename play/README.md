@@ -2172,7 +2172,7 @@ pixels and build it".
 THE BUILD. `js/board-ui.mjs` carries the geometry: `WALL_BAND` (columns
 3–12), `WALL_LIFT` 8 (the roof plane, one tile deep, shifted north),
 `WALL_RAISE` 3 (the face off its seam), `WALL_SPRITE_H` 24, `DOOR_LIFT`
-5 (a face-on leaf two pixels above the face's foot), `EDGE_LEAF_H` 27,
+5 (a leaf, face-on or edge-on, two pixels above the face's foot),
 `wallBody(mask)` (the shipped blob footprint of round 5: an east–west run
 the width, a north–south run the band, corners, T's and crosses their
 union, a thick block's inner corner only with its diagonal) and
@@ -2199,9 +2199,9 @@ cracks and takes its walls and ruins from the crypt row, so they
 regenerate without the pack. The doorway post tiles (`doorway`,
 `doorway-8`, `doorway-2`) are gone: an opened doorway is a gap and the
 walls beside it end with their own cases (`#gapUp` is any doorway).
-`door-edge` is a 16×32 box: the designer's 5×16 leaf stretched to 27
-rows by repeating its board period (`inhouse.mjs edgeLeafRows` — its head
-and foot as drawn), standing on the box's bottom edge.
+`door-edge` is the designer's 5×16 leaf as drawn, one tile tall, in the
+band's middle (`inhouse.mjs profileDoor`; the first build stretched it
+to 27 rows — the second round, below, put it back).
 
 THE CANVAS BOARD paints walls, cracked walls, weak spots and ruins in
 THE TALL PASS, at the square's y − 11 — the roof over the feet of
@@ -2211,21 +2211,80 @@ where a band runs on (the crack is the tell that a wall is weakened; a
 band mid-run has no face), the cracking flash over the whole sprite, the
 whole sprite bursting on a breach, a ruin's stub with the square's
 debris put back over its foot, a wall prop (torch / banner / chain) on
-the face, and the residue and heat frames over the sprite; a face-on
-leaf at y − 5, the edge-on leaf at y − 24 (its head at the far face's
-top, its foot behind the near roof); the options legend shows the face
-under the roof's last rows. Gates green on the build: `test-debris` 71
-(the boxes, the classic row's own cases, the leaf's stretched shape and
-the hall's row for row, no doorway role), `strip-ruin-chips --check`
+the face, and the residue and heat frames over the sprite; either leaf
+at y − 5 — a door stands at its own square's depth, face-on or edge-on
+(the edge-on leaf's head meets the far face's bottom, the near wall's
+roof covers of its foot what it covers of anything); the options legend
+shows the face under the roof's last rows. Gates green on the build:
+`test-debris` 70 (the boxes, the classic row's own cases, the leaf's
+exact shape and the hall's byte for byte, no doorway role), `strip-ruin-chips --check`
 (reads the whole sprite, row 15 attached — a south tongue runs into the
 neighbour's roof), selftest 46/46, ui-smoke 270 (a cracked band mid-run
 wears its ink on the roof), facing-walk 108/108, replay-smoke 63,
 test-camera 80, test-world 125, test-barrier 160, test-logreport 47,
 canvas-grid `none` / `margin` 4/4 in Chromium; the camera guard's dump
 self-check drifts from ply 2 exactly as on the build before (on record)
-and a fresh baseline was dumped. THE PHONE VERDICT IS THE GATE; the
-hall's, the castle's and the classic set's palettes are first picks for
-the designer to retune.
+and a fresh baseline was dumped. The hall's, the castle's and the
+classic set's palettes are first picks for the designer to retune.
+
+THE SECOND ROUND, the same day. The designer, on two screenshots of the
+build's walk screen: "Roofs on clusters of walls look kinda odd. Either
+we should make it fade to black, or smooth it out. Also, vertical doors
+look weird in several ways. They look like they connect all the way at
+the top of the wall, unlike the forward facing doors. And it looks super
+weird when you break the lower door of a double door set, there's no
+visible side edge of the door like you'd expect." Two fixes, built the
+same day. (1) A MASS FADES TO BLACK. The first build's `roofOf` drew
+every cell by the same profiles, so a thick wall tiled the band and the
+rungs over every interior cell — a lattice of ledges. The pack itself
+never draws a thick wall's top: its frame is a bevelled RIM around a
+BLACK VOID (the band, two rows of shade, then black), and that is what
+a mass is now. `roofOf` takes `mass` (the cell has a diagonal set, so
+it sits in a 2×2 block of walls) and, for a pixel that is thick both
+ways (a run longer than a cell across AND along — a T of thin walls in
+a mass cell keeps its band), lays the nearest RIM by depth from the
+open edge: the far edge the band's seven rows; the near edge, over the
+face, the band and its row of fill — exactly a thin wall's roof, so a
+thin east–west wall joining a mass runs into its near or far rim
+without a seam; the west and east edges exactly a thin vertical band,
+ten columns (outline, lit line, the seven stretched rungs, outline —
+lit on the west side as the thin band is, so a thin vertical wall
+joining a mass continues into its side rim without a seam); the side
+rims are cast on the roof MINUS the eight rows the face hides, so at
+an inner corner of the void a side rim runs up to the face stub's top
+instead of stopping a square short; a lone band entering from the
+north runs its rungs over the far rim to the void, one leaving south
+starts from the void and runs on; everything else is the pack's shade
+for two rows under the far rim and then its black (`CRYPT.dusk` /
+`.black`, named per theme in `WALL_SWAPS` — the band's three black
+flecks, which the first build's swaps folded into the outline colour,
+now swap to the void's black on every theme, the one change to a thin
+tile outside the crypt; every thin case is byte-identical to the first
+build in the crypt's own colours). Ruins pass `mass` false and are
+untouched. (2) THE EDGE-ON LEAF IS ONE TILE AGAIN. The 27-row stretch
+reached from the far face's top to behind the near roof, which read as
+a door hung from the roof — "they look like they connect all the way at
+the top of the wall" — and when the lower leaf of a stacked double
+broke, the upper leaf's foot was the stretch's middle, no edge at all.
+`door-edge` is the designer's 5×16 file as drawn (`inhouse.mjs
+profileDoor`, `EDGE_LEAF_X` 5), a 16×16 tile like the face-on leaf,
+drawn by the canvas board at `DOOR_LIFT` like the face-on leaf: its head
+meets the far face's bottom (the face stands three pixels off its seam,
+the leaf rises five, so they overlap by two — the leaf enters the wall),
+its foot stands clear when the leaf below it is gone, and the near
+wall's roof covers of it what it covers of anything standing there.
+`edgeLeafRows`, `EDGE_LEAF_ROWS` and `EDGE_LEAF_H` are gone; test-debris
+asserts the tile's height, the file's exact shape on every theme and the
+hall's leaf byte for byte. The masses were judged on a scratch composer
+laying wall grids off the atlas the way the board paints them (a 4×3
+block, a 2-wide ring, an L of 2-wide walls, thin walls joining a 3×3
+block on all four sides, per theme) beside the same grids off the first
+build's atlas, and the doors on `s59`'s d8 and the g5–h5 double turned
+east-up with its lower leaf opened, at a dpr-3 phone's k 6. Gates
+green on the second round: `test-debris` 70, `strip-ruin-chips
+--check`, selftest 46/46, ui-smoke 280, facing-walk 108/108,
+replay-smoke 63, test-camera 80, test-world 125, test-logreport 47,
+canvas-grid `none` / `margin` 4/4 in Chromium.
 
 ## The debris layer (2026-09-07)
 

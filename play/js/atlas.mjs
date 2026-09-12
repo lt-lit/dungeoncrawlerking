@@ -29,19 +29,18 @@
 // with its own drawings. Props (crate / chest / barrel / wreckage and their
 // variants) are 32 tall: the lower half is the square, the upper half the
 // square north; a wall or ruin case is 24 tall (TALL WALLS, 2026-09-12:
-// the roof's far half over the face) and the edge-on leaf 32.
+// the roof's far half over the face).
 export const TILE = 16;
 export const PIECE_ORDER = 'pnrbqk';
 /** Furniture roles that are 16×32 prop boxes in the atlas (repack-tiles placeProp). */
 const PROP_ROLES = new Set(['crate', 'chest', 'barrel', 'wreckage']);
 /** TALL WALLS (2026-09-12): a wall case and a ruin case are 16×24 sprites
- *  (board-ui WALL_SPRITE_H — the roof's far half over the face), the
- *  edge-on leaf a 16×32 one (the stretched profile door standing on its
- *  bottom edge). Everything else is a 16×16 tile. */
+ *  (board-ui WALL_SPRITE_H — the roof's far half over the face).
+ *  Everything else, the door leaves included, is a 16×16 tile. */
 const TALL_H = 24;
 /** A role's box height by its base name (`wall-10` → wall, `ruin-5` → ruin). */
 function roleHeight(base) {
-  if (PROP_ROLES.has(base) || base === 'door-edge') return 2 * TILE;
+  if (PROP_ROLES.has(base)) return 2 * TILE;
   if (base === 'wall' || base === 'ruin') return TALL_H;
   return TILE;
 }
@@ -153,13 +152,13 @@ export class Atlas {
 
   /** A cell of the classic row as a drawImage rectangle, or null: its
    *  drawn props are 16×16 tiles (never prop boxes), its walls and ruins
-   *  tall sprites, its edge-on leaf a 16×32 box. */
+   *  tall sprites. */
   #classicCell(name) {
     const row = this.index.themes[CLASSIC];
     const cell = row?.tiles[name];
     if (!cell) return null;
     const b = baseRole(name);
-    const h = b === 'wall' || b === 'ruin' ? TALL_H : b === 'door-edge' ? 2 * TILE : TILE;
+    const h = b === 'wall' || b === 'ruin' ? TALL_H : TILE;
     return { src: this.tiles, sx: cell.col * TILE, sy: row.row * this.rowH, w: TILE, h, role: name, theme: null };
   }
 

@@ -47,9 +47,8 @@
 //               y − 11, the roof's far half over the square north, the
 //               face on the square with three pixels of floor under it —
 //               board-ui WALL_LIFT / WALL_RAISE), furniture props (16×32),
-//               the door leaves (a face-on leaf lifted DOOR_LIFT, the
-//               edge-on leaf 27 rows from the far face's top to behind
-//               the near roof) and pieces (their sprite at its native
+//               the door leaves (face-on or edge-on, lifted DOOR_LIFT at
+//               their own square's depth) and pieces (their sprite at its native
 //               size, lifted and shifted by whole tile pixels) — so a
 //               nearer head paints over the piece behind it and a wall's
 //               roof over the feet of the piece north of it, the dim over
@@ -1416,14 +1415,14 @@ export class CanvasBoard {
    *  an unskinned '^'. { tile, prop } — a prop is 16×32. */
   /** A furniture square's sprite and where it stands: `dy` its buffer
    *  offset from the square's top, `h` its height — a prop box (16×32)
-   *  rises into the square north; a face-on LEAF stands DOOR_LIFT off the
-   *  seam (TALL WALLS: two pixels above the face's foot, no roof over it);
-   *  the EDGE-ON leaf (16×32, its 27 rows on the box's bottom) is drawn
-   *  at −24 so its head is at the far wall's face top and its foot behind
-   *  the near wall's roof. */
+   *  rises into the square north; a door LEAF, face-on or edge-on, stands
+   *  DOOR_LIFT off its own square's seam (TALL WALLS: two pixels above the
+   *  face's foot, no roof over a face-on one; the edge-on leaf at its own
+   *  square's depth too — the far band's end face shows above its head,
+   *  the near band's roof covers its foot). */
   #furnitureSprite(k, [hf, hr]) {
     if (k.skin === 'door') {
-      if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), dy: -(2 * T - WALL_LIFT), h: 2 * T };
+      if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), dy: -DOOR_LIFT, h: T };
       const half = doorHalf(k.door2, this.facing);
       return { tile: this.#tile(half ? `door2-${half}` : 'door'), dy: -DOOR_LIFT, h: T };
     }

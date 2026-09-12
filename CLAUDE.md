@@ -1149,7 +1149,7 @@ stray dashes on a vertical band's end cap were the horizontal band's own
 crack marks — a band's ends wear only the outline and lit line, and its
 rungs run on through a T. THE BUILD: `board-ui.mjs` carries the geometry
 (`WALL_BAND` 3–12, `WALL_LIFT` 8, `WALL_RAISE` 3, `WALL_SPRITE_H` 24,
-`DOOR_LIFT` 5, `EDGE_LEAF_H` 27, `wallBody` — the shipped blob footprint
+`DOOR_LIFT` 5, `wallBody` — the shipped blob footprint
 — and `wallFaceCols`); the repack tool composes every case from TWO
 Catacombs tiles, the frame's north band (5,3) and the brick face (5,9) —
 a 16×24 sprite: rows 0–7 the roof's far half, rows 8–23 the face where
@@ -1163,20 +1163,21 @@ and up to two of fringe), the face under a west/east tongue, six rows of
 it as a low stump under a north tongue; the hall, the castle and the
 classic set are EXACT PALETTE SWAPS (`WALL_SWAPS`: every colour of the
 crypt's drawing named — the tool refuses an unnamed one); the doorway
-post tiles are gone; `door-edge` is a 16×32 box, the designer's leaf
-stretched to 27 rows by repeating its board period (inhouse.mjs
-`edgeLeafRows`). The canvas board paints walls, cracked walls, weak spots
+post tiles are gone; `door-edge` is the designer's leaf as drawn, one
+tile tall (inhouse.mjs `profileDoor`; a 27-row stretch went before it —
+the second round, below). The canvas board paints walls, cracked walls, weak spots
 and ruins IN THE TALL PASS at the square's y − 11 (the roof over the
 feet of whatever stands north, as a nearer head covers the piece behind
 it; the crack masked onto the face where there is one and onto the roof
 where a band runs on, since the crack is the tell; a ruin's stub with
 the square's debris put back over its foot; a wall prop on the face; the
-residue and heat frames over the sprite), a face-on leaf at y − 5, the
-edge-on leaf at y − 24, and an opened doorway as floor and nothing else
+residue and heat frames over the sprite), either leaf at y − 5 (a door
+stands at its own square's depth, face-on or edge-on), and an opened
+doorway as floor and nothing else
 (`#gapUp` is any doorway now — the walls beside it end with their own
 cases); the options legend shows the face under the roof's last rows.
-Gates green on the build: test-debris 71 (the boxes, the classic row's
-own cases, the leaf's stretched shape and the hall's row for row, no
+Gates green on the build: test-debris 70 (the boxes, the classic row's
+own cases, the leaf's exact shape and the hall's byte for byte, no
 doorway role), strip-ruin-chips (reads the 16×24 sprite, row 15 attached
 — a south tongue runs into the neighbour's roof), selftest 46/46,
 ui-smoke 270, facing-walk 108/108, replay-smoke 63, test-camera 80,
@@ -1187,8 +1188,40 @@ the build before — the pre-existing gap on record — and a fresh baseline
 was dumped for the next change. The uploaded packs sit under
 `phase0/assets-src/` (gitignored); the tool reproduced the previous atlas
 byte for byte from them before this change, so they are the versions the
-atlas was built from. THE PHONE VERDICT IS THE GATE; the other themes'
-palettes are the designer's to retune.**
+atlas was built from; the other themes' palettes are the designer's to
+retune. THE SECOND ROUND, the same day (designer, two screenshots of the
+build's walk screen: "Roofs on clusters of walls look kinda odd. Either
+we should make it fade to black, or smooth it out. Also, vertical doors
+look weird in several ways. They look like they connect all the way at
+the top of the wall, unlike the forward facing doors. And it looks super
+weird when you break the lower door of a double door set, there's no
+visible side edge of the door like you'd expect"), BUILT the same day:
+(1) A MASS FADES TO BLACK — the first build tiled the band over every
+cell of a thick wall (a lattice of ledges); a cell in a 2×2 block of
+walls is now the pack's own thick wall, A RIM AROUND A VOID (`roofOf`,
+`mass`: a pixel thick both ways in a cell with a diagonal set): the far
+edge the band, the near edge over the face the band and its row of fill
+(a thin wall's roof exactly), the west and east edges a thin vertical
+band exactly (outline, lit line, the rungs, outline — so a thin wall
+joining a mass runs into its rim without a seam, and a side rim runs up
+to a face stub's top at an inner corner), inside the pack's two rows of
+shade under the far rim and then its BLACK (`dusk` / `black` per theme
+in `WALL_SWAPS`; the band's three black flecks, folded into the outline
+on the first build, swap to the void's black now); a lone band entering
+from the north runs its rungs over the far rim to the void, one leaving
+south starts from the void; every thin-wall case is byte-identical to
+the first build in the crypt's own colours. (2) THE EDGE-ON LEAF IS ONE
+TILE AGAIN — the designer's 5×16 file as drawn, at `DOOR_LIFT` like a
+face-on leaf (the 27-row stretch hung the door from the far wall's roof,
+and a broken lower half of a stacked double left the upper leaf without
+a foot): its head meets the far face's bottom, its foot stands clear
+when the leaf below it is gone, the near wall's roof covers of it what
+it covers of anything. Judged on a scratch composer laying wall grids
+off the atlas beside the same grids off the first build's, and on
+`s59`'s door crops with the double's lower leaf opened. Gates green:
+test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 280,
+facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125,
+test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
