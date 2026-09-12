@@ -2255,13 +2255,13 @@ an inner corner of the void a side rim runs up to the face stub's top
 instead of stopping a square short; a lone band entering from the
 north runs its rungs over the far rim to the void, one leaving south
 starts from the void and runs on; everything else is the pack's shade
-for two rows under the far rim and then its black (`CRYPT.dusk` /
-`.black`, named per theme in `WALL_SWAPS` — the band's three black
-flecks, which the first build's swaps folded into the outline colour,
-now swap to the void's black on every theme, the one change to a thin
-tile outside the crypt; every thin case is byte-identical to the first
-build in the crypt's own colours). Ruins pass `mass` false and are
-untouched. (2) THE EDGE-ON LEAF IS ONE TILE AGAIN. The 27-row stretch
+for two rows under the far rim and then its black (`CRYPT.black`,
+named per theme in `WALL_SWAPS` — the band's three black flecks, which
+the first build's swaps folded into the outline colour, now swap to the
+void's black on every theme, the one change to a thin tile outside the
+crypt; every thin case is byte-identical to the first build in the
+crypt's own colours; the shade became the ramp in the third round,
+below). Ruins pass `mass` false and are untouched. (2) THE EDGE-ON LEAF IS ONE TILE AGAIN. The 27-row stretch
 reached from the far face's top to behind the near roof, which read as
 a door hung from the roof — "they look like they connect all the way at
 the top of the wall" — and when the lower leaf of a stacked double
@@ -2285,6 +2285,34 @@ green on the second round: `test-debris` 70, `strip-ruin-chips
 --check`, selftest 46/46, ui-smoke 280, facing-walk 108/108,
 replay-smoke 63, test-camera 80, test-world 125, test-logreport 47,
 canvas-grid `none` / `margin` 4/4 in Chromium.
+
+THE THIRD ROUND, the same day. The designer, on the second: "That's WAY
+too low on the wall for the vertical door. And the roof darkness needs
+to be on a gradient." (1) THE EDGE-ON LEAF CLIMBS THE WALL. At the
+face-on lift its head sat a row under the far wall's face foot; the
+27-row stretch had reached the face's top. `EDGE_DOOR_LIFT` 10
+(`board-ui`, `WALL_LIFT + WALL_RAISE − 1`) puts the leaf's head seven
+rows up the far wall's face and its foot on the very row the near
+wall's roof begins (y + 5, where the near sprite starts at y − 11 of
+its own square), so a door seen edge-on runs from mid-face to behind
+the wall in front of it, with the foot's outline tucked under that
+roof; a stacked double is one continuous strip (the lower leaf's head
+meets the upper's foot), and a broken lower half leaves the upper
+leaf's foot on the doorway's floor, ten rows above the square's front
+edge. (2) THE VOID IS A RAMP. The pack's two rows of shade and flat
+black read as a hole; the void now darkens by depth from the nearest
+rim: `SHADES` 6 steps from a theme's outline to its black, one per
+pixel (`shade1…6`, computed in the tool from each palette's own
+outline and black so the swaps stay exact — the last step is the black
+itself, the crypt's ramp #181614 → #070707); `roofOf` casts its rays to
+`REACH` 33 (past every rim and the ramp — the old cap of 17 would have
+clipped the near rim's depth to one step), measures the depth past
+each rim (the far rim's seven rows, the near rim's sixteen from the
+face, the side rims' ten) and takes the nearest; a band entering from
+the north ends where the far rim would, and the ramp starts there as
+it does beside it. A 2-wide wall's six-pixel void never reaches black;
+a block's centre does within six pixels of every rim. Gates green on
+the third round: test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 313, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
 
 ## The debris layer (2026-09-07)
 

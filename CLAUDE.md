@@ -79,8 +79,10 @@ pixel-poem's timber, recoloured per theme like the face-on leaf, standing
 in the GAP it is — the walls above and below END with their own autotile
 end cases, the brick face on a south end (canvas-board `#wallMask`: an
 edge-on door, or any opened doorway, is not solid for the wall masks
-around it, in screen space) — drawn in the tall pass as furniture, 27
-rows tall since the tall walls; a generated slab stood in from the camera, 2026-09-08,
+around it, in screen space) — drawn in the tall pass as furniture, one
+tile tall, standing `EDGE_DOOR_LIFT` 10 off its seam since the tall
+walls' third round (mid-face of the far wall to behind the near roof);
+a generated slab stood in from the camera, 2026-09-08,
 and before that a north–south door was a WEAK SPOT wearing the crack —
 and an authored double is
 `door2-l`/`-r`, dealt on the screen, pairs along a file included), crate, chest (the LID is the line:
@@ -1205,9 +1207,10 @@ edge the band, the near edge over the face the band and its row of fill
 band exactly (outline, lit line, the rungs, outline — so a thin wall
 joining a mass runs into its rim without a seam, and a side rim runs up
 to a face stub's top at an inner corner), inside the pack's two rows of
-shade under the far rim and then its BLACK (`dusk` / `black` per theme
-in `WALL_SWAPS`; the band's three black flecks, folded into the outline
-on the first build, swap to the void's black now); a lone band entering
+shade under the far rim and then its BLACK (`black` per theme in
+`WALL_SWAPS`; the band's three black flecks, folded into the outline on
+the first build, swap to the void's black now; the shade became THE
+RAMP in the third round, below); a lone band entering
 from the north runs its rungs over the far rim to the void, one leaving
 south starts from the void; every thin-wall case is byte-identical to
 the first build in the crypt's own colours. (2) THE EDGE-ON LEAF IS ONE
@@ -1221,7 +1224,25 @@ off the atlas beside the same grids off the first build's, and on
 `s59`'s door crops with the double's lower leaf opened. Gates green:
 test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 280,
 facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125,
-test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.**
+test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium. THE
+THIRD ROUND, the same day (designer, on the second: "That's WAY too low
+on the wall for the vertical door. And the roof darkness needs to be on
+a gradient"): (1) THE EDGE-ON LEAF STANDS `EDGE_DOOR_LIFT` 10 OFF ITS
+SEAM (board-ui, `WALL_LIFT + WALL_RAISE − 1`; canvas-board
+`#furnitureSprite`) — its head seven rows up the far wall's face, its
+foot on the row the near wall's roof begins, so a door seen edge-on
+runs from mid-face to behind the wall in front of it (the face-on lift
+put its head at the far face's foot; the 27-row stretch reached the
+face's top; a stacked double is one strip, and a broken lower half
+leaves the upper leaf's foot on the doorway's floor). (2) THE VOID IS A
+RAMP — `SHADES` 6 steps from a theme's outline to its black, one per
+pixel of depth from the nearest rim (`shade1…6` computed in the tool
+from each palette's own outline and black, so the swaps stay exact and
+the last step is the black; the rays cast to 33 so the ramp is measured
+past every rim; a band entering from the north ends where the far rim
+would and the ramp starts there) in place of the pack's two rows of
+shade and flat black — a 2-wide wall's six-pixel void never reaches
+black, a block's centre does. Gates green: test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 313, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +

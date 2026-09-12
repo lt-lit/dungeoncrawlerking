@@ -288,15 +288,27 @@ const CAT_FACE = ['cat', 5, 9];
 const RUIN = { tongue: 1, fringe: 2, face: 6, chips: 0 }; // chips: none — the flecks on the floor are the debris layer's (test-debris reads this)
 const STRETCH = [2, 2, 3, 3, 4, 4, 5]; // the band's seven fill columns ← the strip's four fill rows
 /** The crypt's own colours, named — the keys of every swap. */
-const CRYPT = { outline: '#1b1916', lit: '#454135', fill: '#2e2a25', dark: '#23201d', mid: '#3c3129', dusk: '#121110', black: '#070707', mortarDark: '#140e0e', mortar: '#1a1512', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' };
+const CRYPT = { outline: '#1b1916', lit: '#454135', fill: '#2e2a25', dark: '#23201d', mid: '#3c3129', black: '#070707', mortarDark: '#140e0e', mortar: '#1a1512', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' };
 /** Every other theme's wall: the crypt's drawing, colour for colour. */
 const WALL_SWAPS = {
-  hall: { outline: '#25131a', lit: '#916a62', fill: '#6e4a48', dark: '#4c2f49', mid: '#5d3d48', dusk: '#1f1017', black: '#150b10', mortarDark: '#25131a', mortar: '#3d253b', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
-  castle: { outline: '#181425', lit: '#c7cfdd', fill: '#92a1b9', dark: '#5a6787', mid: '#7a8aa3', dusk: '#14121f', black: '#0c0b15', mortarDark: '#181425', mortar: '#2a2f4e', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
-  classic: { outline: '#262433', lit: '#8583a3', fill: '#605e7a', dark: '#403e55', mid: '#52506a', dusk: '#16141f', black: '#0c0b12', mortarDark: '#16141f', mortar: '#262433', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
+  hall: { outline: '#25131a', lit: '#916a62', fill: '#6e4a48', dark: '#4c2f49', mid: '#5d3d48', black: '#150b10', mortarDark: '#25131a', mortar: '#3d253b', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
+  castle: { outline: '#181425', lit: '#c7cfdd', fill: '#92a1b9', dark: '#5a6787', mid: '#7a8aa3', black: '#0c0b15', mortarDark: '#181425', mortar: '#2a2f4e', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
+  classic: { outline: '#262433', lit: '#8583a3', fill: '#605e7a', dark: '#403e55', mid: '#52506a', black: '#0c0b12', mortarDark: '#16141f', mortar: '#262433', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
 };
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const toHex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+/** THE VOID'S RAMP (designer 2026-09-12, on a void that went black two
+ *  rows under the rim: "the roof darkness needs to be on a gradient"):
+ *  SHADES steps from a theme's outline to its black, one per pixel of
+ *  depth into the void from the nearest rim, named `shade1…` in every
+ *  palette so the swaps stay exact (the last step is the black itself). */
+const SHADES = 6;
+for (const pal of [CRYPT, ...Object.values(WALL_SWAPS)]) for (let i = 1; i <= SHADES; i++) pal[`shade${i}`] = toHex(mix(hex(pal.outline), hex(pal.black), i / SHADES));
+{
+  const seen = new Map();
+  for (const [name, c] of Object.entries(CRYPT)) { if (seen.has(c) && seen.get(c) !== 'black' && name !== 'shade6') throw new Error(`crypt palette: ${name} repeats ${seen.get(c)} (${c})`); seen.set(c, name); }
+}
 const hash = (x, y, k) => (((x + 1) * 73856093) ^ ((y + 1) * 19349663) ^ ((k + 1) * 83492791)) >>> 0;
 const pxOf = (img, x, y) => { const o = (y * img.width + x) * 4; return [img.data[o], img.data[o + 1], img.data[o + 2]]; };
 const TH = WALL_SPRITE_H;
@@ -306,7 +318,7 @@ const inBand = (x) => x >= WALL_BAND.x0 && x <= WALL_BAND.x1;
 function catWallArt(sheets) {
   const [bk, bx, by] = CAT_BAND, [fk, fx, fy] = CAT_FACE;
   const band = Array.from({ length: 7 }, (_, r) => Array.from({ length: T }, (_, x) => pxOf(sheets[bk], bx * T + x, by * T + r)));
-  return { band, face: crop(sheets[fk], fx * T, fy * T, T, T), fill: hex(CRYPT.fill), dusk: hex(CRYPT.dusk), black: hex(CRYPT.black) };
+  return { band, face: crop(sheets[fk], fx * T, fy * T, T, T), fill: hex(CRYPT.fill), shades: Array.from({ length: SHADES }, (_, i) => hex(CRYPT[`shade${i + 1}`])) };
 }
 /**
  * A roof (16×16, the top surface) for a footprint `body(x, y)` (true in
@@ -329,32 +341,33 @@ function catWallArt(sheets) {
  * outline), so a thin wall joining a mass runs into its rim without a
  * seam, and the side rims are cast on the roof minus the rows the face
  * hides, so at an inner corner a side rim runs up to the face stub's
- * top; inside, the pack's two rows of shade under the far rim and then
- * its BLACK. A lone band entering from the north runs its rungs
+ * top; inside, THE VOID'S RAMP — SHADES steps from the outline to the
+ * black by depth from the nearest rim ("the roof darkness needs to be
+ * on a gradient"). A lone band entering from the north runs its rungs
  * over the far rim to the void; one leaving south starts from the void
  * and runs on through the near rim. `vertical`: no east–west run through
  * the cell; `throughN` / `throughS`: a lone band joins on that side (no
  * diagonal beside it).
  */
 function roofOf(body, art, { vertical, mass = false, throughN = false, throughS = false }) {
-  const { band, fill, dusk, black } = art;
+  const { band, fill, shades } = art;
   const x0 = WALL_BAND.x0 + 2;
   const rung = (x, y) => band[STRETCH[Math.max(0, Math.min(6, x - x0))]][y];
   const rungAt = (i, y) => band[STRETCH[i]][y];
   const prof = vertical
     ? { N: band.slice(0, 2), S: [band[0]], W: band.slice(0, 2), E: [band[0]] }
     : { N: band, S: [band[0]], W: band.slice(0, 2), E: [band[0]] };
-  const FAR = band.length; // the far rim: the band alone, then the shade (the near rim keeps its row of fill over the face, as a thin wall's roof does)
-  const SHADE = 2; // the pack's rows of shade under the far rim
+  const FAR = band.length; // the far rim: the band alone, then the ramp (the near rim keeps its row of fill over the face, as a thin wall's roof does)
   const SIDE = WALL_BAND.x1 - WALL_BAND.x0 + 1; // the west and east rims: a band's width
+  const REACH = 2 * T + 1; // the rays' cap: past every rim and the ramp
   const roof = (x, y) => body(x, y) && !(y >= T - 8 && y < T && body(x, T - 1) && !body(x, T));
   const out = blank(T, T);
   for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
     if (!body(x, y)) continue;
-    let dN = 0; while (dN < 17 && body(x, y - dN - 1)) dN++;
-    let dS = 0; while (dS < 17 && body(x, y + dS + 1)) dS++;
-    let dW = 0; while (dW < 17 && body(x - dW - 1, y)) dW++;
-    let dE = 0; while (dE < 17 && body(x + dE + 1, y)) dE++;
+    let dN = 0; while (dN < REACH && body(x, y - dN - 1)) dN++;
+    let dS = 0; while (dS < REACH && body(x, y + dS + 1)) dS++;
+    let dW = 0; while (dW < REACH && body(x - dW - 1, y)) dW++;
+    let dE = 0; while (dE < REACH && body(x + dE + 1, y)) dE++;
     let c;
     if (!mass || dW + dE + 1 <= T || dN + dS + 1 <= T) {
       // a band through this pixel: the shipped drawing
@@ -366,8 +379,8 @@ function roofOf(body, art, { vertical, mass = false, throughN = false, throughS 
       // the west and east rims stop where the face begins — the face
       // hides the roof's last eight rows, so a rim beside a face stub
       // runs up to the stub's top (an inner corner of the void)
-      let rW = 0; while (rW < 17 && roof(x - rW - 1, y)) rW++;
-      let rE = 0; while (rE < 17 && roof(x + rE + 1, y)) rE++;
+      let rW = 0; while (rW < REACH && roof(x - rW - 1, y)) rW++;
+      let rE = 0; while (rE < REACH && roof(x + rE + 1, y)) rE++;
       const rims = [];
       if (dN < FAR) rims.push([dN, dN < band.length ? band[dN][x] : fill]);
       if (dS < T) { const d = T - 1 - dS; rims.push([d, d < band.length ? band[d][x] : fill]); }
@@ -375,7 +388,13 @@ function roofOf(body, art, { vertical, mass = false, throughN = false, throughS 
       if (rE < SIDE) rims.push([rE, rE === 0 || rE === SIDE - 1 ? band[0][y] : rE === SIDE - 2 ? band[1][y] : rungAt(SIDE - 3 - rE, y)]);
       if (rims.length) c = rims.sort((a, b) => a[0] - b[0])[0][1];
       else if (inBand(x) && ((throughN && y < FAR) || throughS)) c = rung(x, y);
-      else c = dN < FAR + SHADE ? dusk : black;
+      else {
+        // the void: the ramp by depth from the nearest rim (a band
+        // entering from the north ends where the far rim would)
+        const gN = throughN && inBand(x) ? y - FAR : dN - FAR;
+        const g = Math.min(gN, dS - T, rW - SIDE, rE - SIDE);
+        c = shades[Math.min(shades.length, g + 1) - 1];
+      }
     }
     const o = (y * T + x) * 4;
     out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = 255;

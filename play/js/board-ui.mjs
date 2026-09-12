@@ -132,15 +132,21 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
  * the WALL_BAND columns (three pixels of floor either side), corners, T's
  * and crosses their union, a thick block's inner corner filling only when
  * the diagonal is solid too; the neighbours hold the same bands. A
- * door leaf, face-on or edge-on, stands DOOR_LIFT pixels off its own
- * square's seam, two above the face's foot — a door is the same door
- * from either side, at its own square's depth.
+ * face-on door leaf stands DOOR_LIFT pixels off its own square's seam,
+ * two above the face's foot; an EDGE-ON leaf stands EDGE_DOOR_LIFT off it
+ * (designer 2026-09-12, on a leaf at the face-on lift: "that's WAY too
+ * low on the wall for the vertical door"; on one reaching the far face's
+ * top: "they look like they connect all the way at the top of the
+ * wall") — its head seven rows up the far wall's face, its foot tucked
+ * under the near wall's roof (the row the roof begins on), so a door
+ * seen edge-on runs from mid-face to behind the wall in front of it.
  */
 export const WALL_BAND = { x0: 3, x1: 12 };
 export const WALL_LIFT = 8;
 export const WALL_RAISE = 3;
 export const WALL_SPRITE_H = 24;
 export const DOOR_LIFT = 5;
+export const EDGE_DOOR_LIFT = WALL_LIFT + WALL_RAISE - 1;
 /** The roof's footprint for a wall case: (x, y) → is it top surface —
  *  inside the cell, or (just outside it) in the neighbour, which by
  *  construction holds the same bands. */
