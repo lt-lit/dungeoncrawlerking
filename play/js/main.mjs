@@ -289,7 +289,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -327,6 +327,12 @@ function loadOptions() {
     if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
     if (!PIECE_SETS.includes(options.pieces)) options.pieces = 'nulltale'; // (a saved 'classic' — the glyph set, retired with the DOM board — lands here)
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
+    // THE TONES (2026-09-12): per art set, a floor and a wall base colour, #rrggbb or nothing.
+    {
+      const clean = {};
+      if (options.tones && typeof options.tones === 'object') for (const [k, t] of Object.entries(options.tones)) { const e = {}; if (HEX6.test(t?.floor ?? '')) e.floor = t.floor.toLowerCase(); if (HEX6.test(t?.wall ?? '')) e.wall = t.wall.toLowerCase(); if (Object.keys(e).length) clean[k] = e; }
+      options.tones = clean;
+    }
     // (A saved renderer / piece-pixel mode / % dial from the DOM era is not read.)
     options.tileLift = Math.round(clampNum(options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
     options.tileShift = Math.round(clampNum(options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
@@ -605,13 +611,79 @@ function themeFor(stage) {
   return stage?.theme ?? null;
 }
 
+/** The theme the board wears right now, for whatever screen is up. */
+function currentTheme() {
+  return themeFor(app.phase === 'walk' && app.walk ? app.walk.world : app.session?.deal?.stage ?? currentStage());
+}
+
+// THE TONES (2026-09-12, the designer: "Can I get an in-game color
+// selector? 2 tones, for the floor and walls."): Options → Tones holds two
+// colour pickers, the floor's stone and the walls' stone of the art set the
+// board wears, recoloured live off the atlas (atlas.mjs setTones — every
+// floor, wall and ruin tile of the row by the ratio rule) and SAVED PER SET
+// (options.tones[key], key = the theme or 'classic'); the pickers open on
+// the set's own base colours (atlas baseTones), the hex beside each is the
+// number to report, reset returns the set's own. `?floor=` / `?wall=`
+// (with or without the #) override the current set for a shot, unsaved.
+const HEX6 = /^#[0-9a-f]{6}$/i;
+const toneKey = (theme) => theme ?? 'classic';
+function toneParam(name) {
+  const v = params.get(name);
+  if (!v) return null;
+  const h = v.startsWith('#') ? v : `#${v}`;
+  return HEX6.test(h) ? h.toLowerCase() : null;
+}
+/** The tones the current art set wears: the URL's, else the saved ones; null for the set's own. */
+function tonesFor(theme) {
+  const saved = options.tones?.[toneKey(theme)] ?? {};
+  const t = {};
+  const floor = toneParam('floor') ?? saved.floor, wall = toneParam('wall') ?? saved.wall;
+  if (floor) t.floor = floor;
+  if (wall) t.wall = wall;
+  return Object.keys(t).length ? t : null;
+}
+function applyTones(theme = currentTheme()) {
+  app.boardUI?.setTones?.(toneKey(theme), tonesFor(theme));
+  void paintLegend(theme);
+  void syncTonesUI(theme);
+}
+function setTone(which, value) {
+  if (!HEX6.test(value ?? '')) return;
+  const key = toneKey(currentTheme());
+  options.tones = { ...(options.tones ?? {}), [key]: { ...(options.tones?.[key] ?? {}), [which]: value.toLowerCase() } };
+  saveOptions();
+  applyTones();
+}
+function resetTones() {
+  const key = toneKey(currentTheme());
+  if (options.tones?.[key]) { delete options.tones[key]; saveOptions(); }
+  applyTones();
+}
+/** The pickers show the set's live tones, else its own base colours; reset is live when a tone is saved. */
+async function syncTonesUI(theme = currentTheme()) {
+  const inputs = { floor: $('optFloorTone'), wall: $('optWallTone') };
+  if (!inputs.floor || !inputs.wall) return;
+  const key = toneKey(theme);
+  const atlas = await loadAtlas();
+  const base = atlas.baseTones(key) ?? {};
+  const live = tonesFor(theme) ?? {};
+  for (const k of ['floor', 'wall']) {
+    const v = live[k] ?? base[k] ?? '#000000';
+    inputs[k].value = v;
+    $(k === 'floor' ? 'optFloorToneV' : 'optWallToneV').textContent = v;
+  }
+  $('btnTonesReset').disabled = !options.tones?.[key];
+}
+
 /** Stamp the current theme on the board and repaint the options legend
  *  (drawn off the same atlas, so it follows the art). */
 function applyTheme() {
-  const theme = themeFor(app.phase === 'walk' && app.walk ? app.walk.world : app.session?.deal?.stage ?? currentStage());
+  const theme = currentTheme();
   app.boardUI?.setTheme(theme);
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
+  app.boardUI?.setTones?.(toneKey(theme), tonesFor(theme));
+  void syncTonesUI(theme);
   app.boardUI?.setPieceFit(pieceFitFor());
   app.boardUI?.setArrowStyle?.(arrowStyleFor());
   void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
@@ -638,10 +710,10 @@ async function paintLegend(theme) {
     g.imageSmoothingEnabled = false;
     g.clearRect(0, 0, T, T);
     const draw = (t, y = 0) => { if (t) g.drawImage(t.src, t.sx, t.sy, t.w, t.h, 0, y, t.w, t.h); };
-    // the floor under everything: the theme's common flagstone, or the classic flat colour
+    // the floor under everything: the row's first flagstone (the classic row has its own since the palette round), the flat colour beneath
     g.fillStyle = '#4a4a42';
     g.fillRect(0, 0, T, T);
-    draw(theme ? tile('floor-1') : null);
+    draw(tile('floor-1'));
     const kind = c.dataset.legend;
     // A wall is a TALL 16×24 sprite (2026-09-12): the swatch shows its
     // face under the last rows of its roof.
@@ -3188,6 +3260,10 @@ $('optDoors').addEventListener('change', (e) => {
   options.doors = e.target.value;
   applyOptions();
 });
+// THE TONES: applied as the picker drags (input), saved per art set.
+$('optFloorTone').addEventListener('input', (e) => setTone('floor', e.target.value));
+$('optWallTone').addEventListener('input', (e) => setTone('wall', e.target.value));
+$('btnTonesReset').addEventListener('click', () => resetTones());
 // The piece placement, in whole tile pixels — applied live as the dials
 // drag (input), so the designer can settle the feel on the phone and read
 // the numbers off the labels.
@@ -4585,6 +4661,14 @@ $('btnWalkOut').addEventListener('click', () => void walkOut());
 window.__DCK = {
   get app() {
     return app;
+  },
+  // THE TONES (2026-09-12): the current art set's floor / wall tones.
+  tones: {
+    get: () => tonesFor(currentTheme()),
+    set: (t) => { const key = toneKey(currentTheme()); options.tones = { ...(options.tones ?? {}), [key]: { ...(t ?? {}) } }; saveOptions(); applyTones(); },
+    reset: () => resetTones(),
+    key: () => toneKey(currentTheme()),
+    base: async () => (await loadAtlas()).baseTones(toneKey(currentTheme())),
   },
   get record() {
     return app.duel?.record ?? null;

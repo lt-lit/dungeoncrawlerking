@@ -2314,6 +2314,62 @@ it does beside it. A 2-wide wall's six-pixel void never reaches black;
 a block's centre does within six pixels of every rim. Gates green on
 the third round: test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 313, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
 
+THE PALETTE ROUND, the same day. The designer, on the third build: "We
+need to re think the color palettes overall. 1. I think the roof and
+walls should be a lot closer color wise. 2. Also, not a fan of the
+purple floor or the grey castle floor. Both are too similar to the
+piece set I like. 3. Also the wall faces have some overly dark lines in
+the brick pattern. Makes it hard to see the cracks for weak walls." The
+NullTale set is light blue-grey against wine red, and the hall's plum
+and the castle's blue-grey floors sat right beside them. Candidate
+sheets (a scratch composer laying a cracked wall, a block, both doors
+and the NullTale kings and pawns per theme, off atlases the repack tool
+built under `DCK_PALETTE` overrides) drew the rulings: "browns and tans
+and dark greys for the floors. No moroons or greens or lite greys (like
+my pieces). Also be sure that the walls don't blend too heavily with
+the floors"; "what happened to the checkerboard pattern?" — nothing, it
+is the 22% shade the board lays over every dark square at draw time,
+which a raw-tile composite never shows, so the picks were re-rendered
+on the live board; and then "Can I get an in-game color selector? 2
+tones, for the floor and walls." BUILT: THE WALLS — `WALL_SWAPS` names
+every set, the crypt included (the pack's own drawing is swapped like
+the rest now): a roof's fill is its face's brick, its lit line the
+brick lightened by a sixth toward white, its outline the mortar; the
+mortar lines are lifted halfway to the brick so the black crack reads
+on a weak wall's face. THE FLOORS — `FLOOR_BASES`, one base colour per
+set, the six flagstones recoloured from the pack's stones by the ratio
+rule (the pack-floor tints are gone): crypt #2c2c2f, hall #4a3629,
+castle #2e2f33, classic #2a2a2e — the classic row carries the
+flagstones now (its flat olive checker was a green; the flat colours
+remain the fallback under a row without floors; `flagstones()` reads
+the pack or, without it, the last atlas's classic or crypt row, and
+the classic row's walls are read back too when the pack is off disk).
+THE TONES — Options → Tones: two colour pickers, the floor's stone and
+the walls' stone of the art set the board wears. `atlas.mjs setTones
+(key, { floor, wall })` builds a tinted copy of the tileset with the
+row's floor, wall and ruin tiles recoloured by the ratio rule from the
+row's own base (`baseTones`: the first flagstone's dominant colour,
+the east–west wall face's dominant brick), and every tile is served
+from the copy, so the bevels, the mortar, the crack flecks, the void's
+ramp and the debris sampler all follow; doors, props, cracks and pieces
+are untouched. The board's `setTones` clears the cracked-wall
+composites and repaints; the legend repaints. Saved per set
+(`options.tones[key]`, key the theme or 'classic'), applied as the
+picker drags, the hex beside each picker the number to report, reset
+the set's own; `?floor=` / `?wall=` override for a shot, unsaved;
+`__DCK.tones` get / set / reset / key / base. Known gap: debris chunks
+cut before a tone change keep their sprite's old colours until they
+are repainted. THE GATES: ui-smoke grew THE TONES block (the floor's
+and the wall's signatures before / toned / after reset, measured with
+the hint arrows OFF — the streaming probe kicked by the option change
+above lands its arrows over the floor square at every depth, and the
+block's first run read "before" and "after reset" under two depths'
+arrows — the legend following, the save per set, the pickers' values,
+reset restoring the set's own), and its breach-debris check now skips
+a breached square the gods have since crumbled into a pit (debris
+paints on floor only; one run's single breach, f9, collapsed two
+quakes later). Gates green: test-debris 71, strip-ruin-chips, selftest 46/46, ui-smoke 251 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
+
 ## The debris layer (2026-09-07)
 
 The floor remembers. Designer brief: "a universal debris system, so traces

@@ -289,12 +289,29 @@ const RUIN = { tongue: 1, fringe: 2, face: 6, chips: 0 }; // chips: none — the
 const STRETCH = [2, 2, 3, 3, 4, 4, 5]; // the band's seven fill columns ← the strip's four fill rows
 /** The crypt's own colours, named — the keys of every swap. */
 const CRYPT = { outline: '#1b1916', lit: '#454135', fill: '#2e2a25', dark: '#23201d', mid: '#3c3129', black: '#070707', mortarDark: '#140e0e', mortar: '#1a1512', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' };
-/** Every other theme's wall: the crypt's drawing, colour for colour. */
+/** Every theme's wall: the crypt's drawing, colour for colour — THE
+ *  PALETTE ROUND (2026-09-12, the designer: "the roof and walls should be
+ *  a lot closer color wise… the wall faces have some overly dark lines in
+ *  the brick pattern, makes it hard to see the cracks"): every roof is
+ *  drawn in its face's own stone (the fill the brick, the lit line the
+ *  brick lightened, the outline the mortar), the mortar lines lifted
+ *  halfway to the brick so a weak wall's black crack reads, the crypt's
+ *  own drawing swapped like the rest. The pack's colours are CRYPT. */
 const WALL_SWAPS = {
-  hall: { outline: '#25131a', lit: '#916a62', fill: '#6e4a48', dark: '#4c2f49', mid: '#5d3d48', black: '#150b10', mortarDark: '#25131a', mortar: '#3d253b', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
-  castle: { outline: '#181425', lit: '#c7cfdd', fill: '#92a1b9', dark: '#5a6787', mid: '#7a8aa3', black: '#0c0b15', mortarDark: '#181425', mortar: '#2a2f4e', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
-  classic: { outline: '#262433', lit: '#8583a3', fill: '#605e7a', dark: '#403e55', mid: '#52506a', black: '#0c0b12', mortarDark: '#16141f', mortar: '#262433', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
+  crypt: { outline: '#211716', lit: '#524544', fill: '#312220', dark: '#231f19', mid: '#413432', black: '#070707', mortarDark: '#211716', mortar: '#241b18', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' },
+  hall: { outline: '#3a232b', lit: '#6f575f', fill: '#543740', dark: '#422c3b', mid: '#62474f', black: '#150b10', mortarDark: '#3a232b', mortar: '#472d3d', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
+  castle: { outline: '#3b3f56', lit: '#7e89a3', fill: '#657392', dark: '#424c6e', mid: '#717e9b', black: '#0c0b15', mortarDark: '#3b3f56', mortar: '#454e6d', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
+  classic: { outline: '#312f41', lit: '#6e6c82', fill: '#52506a', dark: '#403e55', mid: '#605e76', black: '#0c0b12', mortarDark: '#312f41', mortar: '#3a384c', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
 };
+/** THE FLOORS' BASE COLOURS (the same round; the designer: "browns and
+ *  tans and dark greys for the floors. No maroons or greens or lite greys
+ *  (like my pieces). Also be sure that the walls don't blend too heavily
+ *  with the floors"): the six Catacombs flagstones recoloured to a base
+ *  per theme — the crypt a neutral dark grey off its brown walls, the hall
+ *  a brown off its plum, the castle a dark grey off its blue-grey, the
+ *  classic set the flagstones too (its flat olive checker was a green).
+ *  Options → Tones retunes the floor and the walls live (atlas.mjs). */
+const FLOOR_BASES = { crypt: '#2c2c2f', hall: '#4a3629', castle: '#2e2f33', classic: '#2a2a2e' };
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 const toHex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -313,8 +330,8 @@ const SHADES = 6;
  *  (the crypt's floor is the pack's otherwise). Needs the packs on disk. */
 const OVERRIDE = process.env.DCK_PALETTE ? JSON.parse(readFileSync(process.env.DCK_PALETTE, 'utf8')) : null;
 if (OVERRIDE) {
-  for (const th of ['hall', 'castle', 'classic']) if (OVERRIDE[th]) Object.assign(WALL_SWAPS[th], OVERRIDE[th]);
-  if (OVERRIDE.crypt) WALL_SWAPS.crypt = { ...CRYPT, ...OVERRIDE.crypt };
+  for (const th of Object.keys(WALL_SWAPS)) if (OVERRIDE[th]) Object.assign(WALL_SWAPS[th], OVERRIDE[th]);
+  for (const th of Object.keys(FLOOR_BASES)) if (OVERRIDE.floors?.[th]) FLOOR_BASES[th] = OVERRIDE.floors[th];
 }
 for (const pal of [CRYPT, ...Object.values(WALL_SWAPS)]) for (let i = 1; i <= SHADES; i++) pal[`shade${i}`] = toHex(mix(hex(pal.outline), hex(pal.black), i / SHADES));
 {
@@ -548,13 +565,22 @@ function holeBlob(spec) {
 
 // ---- floors (round 7, 2026-09-03: "the crypt floor tiles put both the
 // other themes to shame — palette-swap them for the other themes"). Every
-// theme's floor is the six bevelled flagstones of the Catacombs brown set;
-// hall and castle wear them RECOLOURED into their own pack's floor tone:
+// theme's floor is the six bevelled flagstones of the Catacombs brown set,
+// RECOLOURED to the theme's base colour (FLOOR_BASES — a pack floor's tone
+// until the palette round of 2026-09-12, the designer's pick since):
 // each pixel keeps its shading relative to the flagstones' base colour
 // (the set's most common pixel) and takes the target's hue — channel-wise
 // out = target × (pixel / base), clamped — so bevels, cracks and grain
 // survive and only the stone changes colour.
 const FLAGSTONES = [['cat', 47, 14], ['cat', 46, 13], ['cat', 47, 15], ['cat', 46, 14], ['cat', 47, 13], ['cat', 46, 15]];
+/** The six stones as drawn — off the pack, or (without it) off the last
+ *  atlas's classic row, else its crypt row (already recoloured; the ratio
+ *  re-bases them all the same). */
+function flagstones() {
+  if (sheets.cat) return FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
+  const row = old.index.themes.classic?.tiles['floor-1'] ? old.index.themes.classic : old.index.themes.crypt;
+  return FLAGSTONES.map((_, i) => { const c = row.tiles[`floor-${i + 1}`]; if (!c) throw new Error(`floor-${i + 1}: not in the last atlas and the Catacombs sheet is not on disk`); return crop(old.png, c.col * T, row.row * 2 * T, T, T); });
+}
 function mostCommon(tile) {
   const hist = new Map();
   for (let i = 0; i < tile.width * tile.height; i++) {
@@ -715,8 +741,6 @@ const THEMES = {
     tint: { crate: '#bf704d', barrel: { to: '#bf704d', whole: true }, wreckage: { to: '#bf704d', whole: true } }, // the Catacombs crates take the hall's timber (pixel-poem's own is that colour already)
     doorSet: 'hall',
     wall: { fill: '#6e4a48', hi: '#916a62', lo: '#4c2f49', edge: '#25131a', speckle: 0 }, // the hole blob's palette (the walls are WALL_SWAPS)
-    // The Catacombs flagstones in pixel-poem's floor purple.
-    floor: { tint: ['pp', 8, 1] },
   },
   castle: {
     title: 'The castle — Dungeon Gathering’s cold blue-grey stone',
@@ -747,8 +771,6 @@ const THEMES = {
     tint: { door: '#7d6455', door2: '#7d6455', crate: '#7d6455', wreckage: { to: '#7d6455', whole: true } },
     doorSet: 'castle',
     wall: { fill: '#92a1b9', hi: '#c7cfdd', lo: '#5a6787', edge: '#181425', speckle: 0 },
-    // The Catacombs flagstones in Dungeon Gathering's floor blue-grey.
-    floor: { tint: ['dg', 10, 3] },
   },
   crypt: {
     title: 'The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls',
@@ -772,7 +794,6 @@ const THEMES = {
     tint: { door: '#5c4a3c', door2: '#5c4a3c', chest: '#5c4a3c', crate: '#5c4a3c' }, // dark oak, a step above the Catacombs crate (its own crates come through near-unchanged)
     doorSet: 'crypt',
     wall: { fill: '#3c3129', hi: '#5a5347', lo: '#231f19', edge: '#0e0a08', speckle: 14 },
-    floor: {},
   },
 };
 
@@ -854,10 +875,10 @@ function wallProvenance(theme) {
 }
 function emitWalls(theme, emit) {
   if (!cryptWalls) throw new Error(`${theme}: the Catacombs sheet is needed to draw the walls`);
-  const swap = theme === 'crypt' ? WALL_SWAPS.crypt ?? null : WALL_SWAPS[theme];
-  if (theme !== 'crypt' && !swap) throw new Error(`${theme}: no wall palette swap`);
-  const tint = (tile) => (swap ? swapPalette(tile, swap) : tile);
-  const how = swap ? `the crypt's tall wall (the Catacombs north band + face) in the ${theme} palette` : "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth";
+  const swap = WALL_SWAPS[theme];
+  if (!swap) throw new Error(`${theme}: no wall palette swap`);
+  const tint = (tile) => swapPalette(tile, swap);
+  const how = `the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the ${theme} palette (the roof in the face's own stone)`;
   wallProvenance(theme);
   emit('wall', tint(cryptWalls.walls['wall-10']), { composed: `${how} — case 10, the east–west run`, mask: 10 });
   for (const [role, tile] of Object.entries(cryptWalls.walls)) emit(role, tint(tile), { composed: how, mask: +role.slice(5) });
@@ -906,15 +927,12 @@ themeNames.forEach((theme, row) => {
   door2.forEach((half, i) => emit(i ? 'door2-r' : 'door2-l', half, { pack: SHEETS[THEMES[theme].door2[i][0]][0], sheet: SHEETS[THEMES[theme].door2[i][0]][1], x: THEMES[theme].door2[i][1], y: THEMES[theme].door2[i][2], recoloured: tint2 ? `wood to ${tint2}` : undefined }));
   emitEdgeDoor(theme, emit);
   {
-    const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
-    const tint = THEMES[theme].floor.tint;
-    const over = OVERRIDE?.floors?.[theme];
-    const base = tint || over ? mostCommon(stones[0]) : null;
-    const target = over ? hex(over) : tint ? mostCommon(crop(sheets[tint[0]], tint[1] * T, tint[2] * T, T, T)) : null;
+    const stones = flagstones();
+    const from = mostCommon(stones[0]);
+    const base = FLOOR_BASES[theme];
     stones.forEach((stone, i) => {
       const [sheet, x, y] = FLAGSTONES[i];
-      const tile = target ? recolour(stone, base, target) : stone;
-      emit(`floor-${i + 1}`, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: over ? `to ${over}` : tint ? `to ${SHEETS[tint[0]][0]} floor (${tint[1]},${tint[2]})` : undefined });
+      emit(`floor-${i + 1}`, base ? recolour(stone, from, hex(base)) : stone, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: base ? `to ${base}` : undefined });
     });
   }
   const ws = THEMES[theme].wall;
@@ -937,8 +955,23 @@ themeNames.forEach((theme, row) => {
   for (const role of ['wall', ...WALL_MASK_CODES.map((c) => `wall-${c}`), ...Array.from({ length: 16 }, (_, m) => `ruin-${m}`)]) {
     const cell = cryptRow.tiles[role];
     if (!cell) throw new Error(`classic: the crypt row has no ${role}`);
-    const drawn = cryptWalls ? (role === 'wall' ? cryptWalls.walls['wall-10'] : role.startsWith('ruin') ? cryptWalls.ruins[role] : cryptWalls.walls[role]) : crop(atlas, cell.col * T, cryptRow.row * 2 * T, T, TH);
-    emit(role, swapPalette(drawn, WALL_SWAPS.classic), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
+    if (cryptWalls) {
+      const drawn = role === 'wall' ? cryptWalls.walls['wall-10'] : role.startsWith('ruin') ? cryptWalls.ruins[role] : cryptWalls.walls[role];
+      emit(role, swapPalette(drawn, WALL_SWAPS.classic), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
+    } else {
+      // Without the pack the crypt row is already in the crypt palette, so
+      // the classic case is read back from the last atlas as the themes are.
+      const was = old.index.themes.classic?.tiles[role];
+      if (!was) throw new Error(`classic: ${role} is not in the last atlas and the Catacombs sheet is not on disk`);
+      emit(role, crop(old.png, was.col * T, old.index.themes.classic.row * 2 * T, T, TH), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
+    }
+  }
+  // Its floors (the palette round, 2026-09-12): the flagstones in the
+  // classic base — the drawn set's flat olive checker was a green.
+  {
+    const stones = flagstones();
+    const from = mostCommon(stones[0]);
+    stones.forEach((stone, i) => emit(`floor-${i + 1}`, recolour(stone, from, hex(FLOOR_BASES.classic)), { composed: `the Catacombs flagstones recoloured to ${FLOOR_BASES.classic}` }));
   }
 }
 // ---- pieces: one row per set (32-px atlas cells), white p n r b q k then black.

@@ -65,12 +65,18 @@ a break; an opened DOORWAY is a GAP the walls beside it end at, since the
 tall walls), a RUIN by its standing-wall neighbours (16 stub cases,
 chip-free — the debris layer owns every fleck) and a HOLE by its hole
 neighbours (16 pit cases). Floors are six Catacombs flagstones
-palette-swapped per theme (`f1…f6` by a stable hash); WALLS ARE TALL
+recoloured to A BASE COLOUR PER ART SET (`f1…f6` by a stable hash; THE
+PALETTE ROUND, 2026-09-12, below: browns, tans and dark greys only —
+the crypt a neutral dark grey, the hall a brown, the castle a dark grey,
+the classic set the flagstones too); WALLS ARE TALL
 (2026-09-12, "TALL WALLS" below): ONE drawing on every theme — the
 Catacombs frame's north band as the roof over the Catacombs brick face,
 a 16×24 sprite in the tall pass standing eight rows into the square
-north, the face three pixels off its seam — worn by the hall, the castle
-and the classic set as exact palette swaps. FURNITURE SKINS
+north, the face three pixels off its seam — worn by every set as an
+exact palette swap, each roof in its face's own stone since the palette
+round; and OPTIONS → TONES (the same round) retunes a set's floor and
+wall base colours live, saved per set — the designer's own dial, so a
+palette is now a pair of hex values they report. FURNITURE SKINS
 (`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
 door whose wall line runs UP the screen stands EDGE-ON — THE DESIGNER'S
 OWN SPRITE since 2026-09-11 ("the placeholder looks like ass"; "Use this
@@ -1243,6 +1249,56 @@ past every rim; a band entering from the north ends where the far rim
 would and the ramp starts there) in place of the pack's two rows of
 shade and flat black — a 2-wide wall's six-pixel void never reaches
 black, a block's centre does. Gates green: test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 313, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.**
+
+**THE PALETTE ROUND ✅ 2026-09-12 (designer, on the third tall-walls
+build: "We need to re think the color palettes overall. 1. I think the
+roof and walls should be a lot closer color wise. 2. Also, not a fan of
+the purple floor or the grey castle floor. Both are too similar to the
+piece set I like. 3. Also the wall faces have some overly dark lines in
+the brick pattern. Makes it hard to see the cracks for weak walls";
+then, on the candidate sheets, THE RULINGS: "we need to stick to browns
+and tans and dark greys for the floors. No moroons or greens or lite
+greys (like my pieces). Also be sure that the walls don't blend too
+heavily with the floors"; "what happened to the checkerboard pattern?"
+— nothing: the sheets came off a scratch composer laying raw tiles, and
+the checker is the 22% shade the board paints over every dark square at
+draw time; and, on the picks, "Can I get an in-game color selector? 2
+tones, for the floor and walls.").** MEASURED FIRST: the NullTale set
+the designer plays is light blue-grey against wine red (#a6bac4 /
+#5b5f91 vs #70334c / #bd5950), which the hall's plum floor (#3d253b)
+and the castle's blue-grey floor (#657392) sat right beside. BUILT: (1)
+THE ROOF IN THE FACE'S OWN STONE — `WALL_SWAPS` now names the crypt
+too (the pack's own drawing swapped like the rest): every roof's fill
+is its face's brick, the lit line that brick lightened, the outline
+the mortar; the mortar lines are lifted halfway to the brick, so a weak
+wall's black crack reads on the face (crypt #211716 / #241b18 for
+#140e0e / #1a1512, and so on per set). (2) THE FLOORS' BASES
+(`FLOOR_BASES`, the six flagstones recoloured by the ratio rule from
+the pack's stones — the pack-floor tints are gone): crypt #2c2c2f (a
+neutral dark grey off its brown walls), hall #4a3629 (brown off plum),
+castle #2e2f33 (dark grey off blue-grey — the tan option put the walls
+and the floor at one value), classic #2a2a2e — THE CLASSIC SET WEARS
+THE FLAGSTONES NOW (its flat olive checker was a green; the flat
+colours stay the fallback under a row without floors; `flagstones()`
+reads the pack, else the last atlas's classic or crypt row, and the
+classic row's walls are read back too when the pack is off disk, since
+the crypt row is no longer the pack's colours). (3) THE TONES —
+Options → Tones: two colour pickers, the floor's stone and the walls'
+stone of the art set the board wears, applied as the picker drags
+(`atlas.mjs setTones`: a tinted copy of the tileset with the row's
+floor, wall and ruin tiles recoloured by the ratio rule from the row's
+own BASE — the first flagstone's dominant colour, the east–west wall
+face's dominant brick, `baseTones` — every tile is served from the
+copy; doors, props, cracks and pieces untouched; the board clears its
+cracked-wall composites and repaints, the legend follows), SAVED PER
+SET (`options.tones[key]`, key the theme or 'classic'; reset returns
+the set's own; the hex beside each picker is the number to report),
+`?floor=` / `?wall=` for a shot (with or without the #, unsaved),
+`__DCK.tones` (get / set / reset / key / base). The tool's
+`DCK_PALETTE=<json>` override (the candidate sheets' instrument) stays.
+Known gap: debris chunks sampled before a tone change keep the sprite
+colours they were cut from until they are repainted. Gates green:
+test-debris 71, strip-ruin-chips, selftest 46/46, ui-smoke 251 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +

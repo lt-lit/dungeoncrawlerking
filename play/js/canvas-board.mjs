@@ -994,6 +994,17 @@ export class CanvasBoard {
   get doors() {
     return this.container.dataset.doors ?? null;
   }
+  /** THE TONES (2026-09-12): a row's floor and wall base colours
+   *  ({ floor?, wall? } #rrggbb, or null for the row's own), recoloured
+   *  live in the atlas (atlas.mjs setTones); the cracked-wall composites
+   *  are rebuilt on the next paint. Waits for the atlas. */
+  setTones(key, tones) {
+    void this.ready.then((atlas) => {
+      atlas.setTones(key, tones);
+      this.composites.clear();
+      this.invalidate();
+    });
+  }
   /** The tile grid is the only mode here: `tileLift` / `tileShift` apply
    *  (whole tile pixels, clamped); the % dials and modes are ignored. */
   setPieceFit({ tileLift, tileShift } = {}) {
@@ -1634,9 +1645,10 @@ export class CanvasBoard {
     const fx = sq ? this.fx.get(sq) : null;
     const u = fx ? (fx.done ? 1 : Math.min(1, (t - fx.t0) / fx.ms)) : 0;
     const facing = this.facing;
-    // Floor: the theme's flagstone variant over the flat colour, the dark
-    // square's shade over it; the classic set is the flat colours alone.
-    const floor = theme ? this.#tile(`floor-${floorVariantIndex(hf, hr)}`) : null;
+    // Floor: the row's flagstone variant over the flat colour, the dark
+    // square's shade over it (the classic row has flagstones too since the
+    // palette round; the flat colours remain the fallback).
+    const floor = this.#tile(`floor-${floorVariantIndex(hf, hr)}`);
     g.fillStyle = dark ? CLASSIC.dark : CLASSIC.light;
     g.fillRect(x, y, T, T);
     if (floor) {

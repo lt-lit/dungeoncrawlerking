@@ -210,6 +210,7 @@ const T = D.T;
   expect(['crate', 'chest', 'barrel', 'door-edge'].every((r) => atlas.classicTile(r).h === T), 'the classic row\'s drawn props and its edge-on leaf are 16 tall');
   expect(atlas.tileOf('hall', 'door-edge', { doors: 'crypt' }).theme === 'crypt' && atlas.tileOf('hall', 'wall-10', { doors: 'crypt' }).theme === 'hall', 'the door set swaps the edge-on leaf and leaves the walls to the theme');
   expect(!Object.values(index.themes).some((t) => Object.keys(t.tiles).some((r) => r.startsWith('doorway'))), 'no doorway role remains in the atlas');
+  expect(Object.keys(index.themes).every((th) => Array.from({ length: 6 }, (_, i) => index.themes[th].tiles[`floor-${i + 1}`]).every(Boolean)) && Array.from({ length: 6 }, (_, i) => atlas.classicTile(`floor-${i + 1}`)?.h === T).every(Boolean), 'every row has the six flagstones, the classic row included (the palette round)');
   const png = decodePng(fs.readFileSync(path.join(ROOT, 'play/img/tileset.png')));
   const file = decodePng(fs.readFileSync(path.join(ROOT, 'phase0/lib/inhouse/door-profile.png')));
   const X0 = EDGE_LEAF_X;

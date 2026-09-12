@@ -207,6 +207,37 @@ await page.evaluate(() => { window.__DCK.options.doors = 'castle'; window.__DCK.
 expect((await page.evaluate(() => window.__DCK.doors)) === 'castle', 'Doors option stamps the door set');
 await page.evaluate(() => { window.__DCK.options.doors = 'auto'; window.__DCK.applyOptions(); });
 expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" is the theme\'s own');
+// THE TONES (2026-09-12): the floor and wall base colours per art set —
+// live, the legend following, saved per set, reset restoring the set's own.
+// The hint arrows are OFF for these three signatures: the option change just
+// above kicked a STREAMING probe whose arrows land over the floor square at
+// every depth for its movetime, and a moving arrow is not a tone (the first
+// run of this block measured "before" and "after reset" under two different
+// depths' arrows). Hints return after the block, so the probe checks below
+// get a fresh stream.
+{
+  await page.evaluate(() => { window.__DCK.options.hints = false; window.__DCK.applyOptions(); });
+  const before = await themeState();
+  const base = await page.evaluate(() => window.__DCK.tones.base());
+  expect(!!base?.floor && !!base?.wall && /^#[0-9a-f]{6}$/.test(base.floor) && /^#[0-9a-f]{6}$/.test(base.wall), `the art set's own base colours read off the atlas (floor ${base?.floor}, wall ${base?.wall})`);
+  await page.evaluate(() => window.__DCK.tones.set({ floor: '#804020', wall: '#206080' }));
+  await page.waitForTimeout(200);
+  const toned = await themeState();
+  expect(toned.sig.floor !== before.sig.floor && toned.sig.wall !== before.sig.wall, `Tones recolour the floor and the walls live (floor ${before.sig.floor} → ${toned.sig.floor}, wall ${before.sig.wall} → ${toned.sig.wall})`);
+  expect(toned.legend.join() !== before.legend.join(), 'the options legend follows the tones');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones);
+  const key = await page.evaluate(() => window.__DCK.tones.key());
+  expect(saved?.[key]?.floor === '#804020' && saved?.[key]?.wall === '#206080', `the tones are saved for the set "${key}"`);
+  const ui = await page.evaluate(() => ({ floor: document.getElementById('optFloorTone').value, wall: document.getElementById('optWallTone').value, label: document.getElementById('optFloorToneV').textContent, reset: document.getElementById('btnTonesReset').disabled }));
+  expect(ui.floor === '#804020' && ui.wall === '#206080' && ui.label === '#804020' && ui.reset === false, `the pickers show the live tones with the hex beside them (${ui.floor} / ${ui.wall})`);
+  await page.evaluate(() => window.__DCK.tones.reset());
+  await page.waitForTimeout(200);
+  const back = await themeState();
+  expect(back.sig.floor === before.sig.floor && back.sig.wall === before.sig.wall, `reset restores the set's own colours (floor ${before.sig.floor} → ${back.sig.floor}, wall ${before.sig.wall} → ${back.sig.wall})`);
+  const ui2 = await page.evaluate(() => ({ floor: document.getElementById('optFloorTone').value, reset: document.getElementById('btnTonesReset').disabled }));
+  expect(ui2.floor === base.floor && ui2.reset === true, `the pickers return to the base colours (${ui2.floor}) and reset goes quiet`);
+  await page.evaluate(() => { window.__DCK.options.hints = true; window.__DCK.applyOptions(); });
+}
 // Piece sprites: the default set paints the king; an unknown set (the
 // retired 'classic' glyphs, say) falls back to it.
 {
@@ -781,7 +812,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     // every painted square wears a 16×16 debris buffer in the canvas with painted pixels
     const urlsOk = painted.every((sq) => K.debris.cell(sq).pixels > 0);
     const paintedOnFloor = painted.every((sq) => { const cl = K.marks.cell(sq); return !cl.includes('wall') && !cl.includes('hole') && !cl.includes('furniture'); });
-    const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square));
+    // A breached square wears the wall's own stone — unless the gods crumbled
+    // the bare floor the breach left into a PIT since (debris paints on
+    // floor only; seen on a run whose one breach, f9, collapsed two quakes
+    // later), so a square that is a hole now is not counted.
+    const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square)).filter((sq) => !K.marks.cell(sq)?.includes('hole'));
     const breachPainted = breachSquares.filter((sq) => !!K.debris.cell(sq)?.painted);
     // One canvas is the board: no piece elements, no overlay layers.
     const layerOrder = { canvases: document.querySelectorAll('#board canvas').length, piece: document.querySelectorAll('#board .piece').length, overlays: document.querySelectorAll('#board svg, #board .fx-layer').length };

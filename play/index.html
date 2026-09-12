@@ -284,6 +284,16 @@
         <option value="crypt">Crypt oak</option>
       </select>
     </label>
+    <!-- THE TONES (2026-09-12): the floor's and the walls' base colour for
+         the art set the board wears, recoloured live off the atlas and
+         saved per set — the designer's own palette dial ("an in-game color
+         selector, 2 tones, for the floor and walls"). -->
+    <div class="opt tones" id="opt-tones">Tones
+      <label class="tone">floor <input type="color" id="optFloorTone"><span class="opt-val" id="optFloorToneV"></span></label>
+      <label class="tone">walls <input type="color" id="optWallTone"><span class="opt-val" id="optWallToneV"></span></label>
+      <button id="btnTonesReset" type="button" title="this art set's own colours">reset</button>
+    </div>
+    <p class="opt-hint">The floor stone and the wall stone of this art set, recoloured live and saved per set; everything keeps its shading. The hex beside each is the number to report.</p>
     <!-- THE CAMERA (Phase 2, 2026-09-08): the view turns by quarters — in a
          DUEL screen-up is the army's facing (brief §5.1); the walk is
          north-up always since 2026-09-09 (the controls session, ruling 1)
