@@ -304,6 +304,18 @@ const toHex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).joi
  *  depth into the void from the nearest rim, named `shade1…` in every
  *  palette so the swaps stay exact (the last step is the black itself). */
 const SHADES = 6;
+/** A PALETTE OVERRIDE for the eye (2026-09-12, the designer: "we need to
+ *  re think the color palettes overall"): `DCK_PALETTE=<file.json>` —
+ *  `{ crypt | hall | castle | classic: { <CRYPT name>: '#rrggbb', … },
+ *  floors: { <theme>: '#rrggbb' } }`. A theme's entries replace its wall
+ *  swap's colours (a crypt entry recolours the crypt's own drawing, which
+ *  is the pack's otherwise); a floor entry is the flagstones' base colour
+ *  (the crypt's floor is the pack's otherwise). Needs the packs on disk. */
+const OVERRIDE = process.env.DCK_PALETTE ? JSON.parse(readFileSync(process.env.DCK_PALETTE, 'utf8')) : null;
+if (OVERRIDE) {
+  for (const th of ['hall', 'castle', 'classic']) if (OVERRIDE[th]) Object.assign(WALL_SWAPS[th], OVERRIDE[th]);
+  if (OVERRIDE.crypt) WALL_SWAPS.crypt = { ...CRYPT, ...OVERRIDE.crypt };
+}
 for (const pal of [CRYPT, ...Object.values(WALL_SWAPS)]) for (let i = 1; i <= SHADES; i++) pal[`shade${i}`] = toHex(mix(hex(pal.outline), hex(pal.black), i / SHADES));
 {
   const seen = new Map();
@@ -834,6 +846,7 @@ const emitter = (theme, row) => (role, tile, prov) => {
 // disk) — every theme's are palette swaps of these (WALL_SWAPS; the crypt
 // wears them as they are). Without the pack every theme's are read back.
 const cryptWalls = sheets.cat ? tallWallSet(sheets) : null;
+if (OVERRIDE && readBack) throw new Error('DCK_PALETTE needs every pack on disk (assets-src/)');
 function wallProvenance(theme) {
   const swapped = theme === 'crypt' ? '' : `, palette-swapped to the ${theme}`;
   provenance.push({ theme, role: `wall roof (the frame's north band${swapped})`, pack: SHEETS[CAT_BAND[0]][0], sheet: SHEETS[CAT_BAND[0]][1], x: CAT_BAND[1], y: CAT_BAND[2] });
@@ -841,7 +854,7 @@ function wallProvenance(theme) {
 }
 function emitWalls(theme, emit) {
   if (!cryptWalls) throw new Error(`${theme}: the Catacombs sheet is needed to draw the walls`);
-  const swap = theme === 'crypt' ? null : WALL_SWAPS[theme];
+  const swap = theme === 'crypt' ? WALL_SWAPS.crypt ?? null : WALL_SWAPS[theme];
   if (theme !== 'crypt' && !swap) throw new Error(`${theme}: no wall palette swap`);
   const tint = (tile) => (swap ? swapPalette(tile, swap) : tile);
   const how = swap ? `the crypt's tall wall (the Catacombs north band + face) in the ${theme} palette` : "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth";
@@ -895,12 +908,13 @@ themeNames.forEach((theme, row) => {
   {
     const stones = FLAGSTONES.map(([sheet, x, y]) => crop(sheets[sheet], x * T, y * T, T, T));
     const tint = THEMES[theme].floor.tint;
-    const base = tint ? mostCommon(stones[0]) : null;
-    const target = tint ? mostCommon(crop(sheets[tint[0]], tint[1] * T, tint[2] * T, T, T)) : null;
+    const over = OVERRIDE?.floors?.[theme];
+    const base = tint || over ? mostCommon(stones[0]) : null;
+    const target = over ? hex(over) : tint ? mostCommon(crop(sheets[tint[0]], tint[1] * T, tint[2] * T, T, T)) : null;
     stones.forEach((stone, i) => {
       const [sheet, x, y] = FLAGSTONES[i];
-      const tile = tint ? recolour(stone, base, target) : stone;
-      emit(`floor-${i + 1}`, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: tint ? `to ${SHEETS[tint[0]][0]} floor (${tint[1]},${tint[2]})` : undefined });
+      const tile = target ? recolour(stone, base, target) : stone;
+      emit(`floor-${i + 1}`, tile, { pack: SHEETS[sheet][0], sheet: SHEETS[sheet][1], x, y, recoloured: over ? `to ${over}` : tint ? `to ${SHEETS[tint[0]][0]} floor (${tint[1]},${tint[2]})` : undefined });
     });
   }
   const ws = THEMES[theme].wall;
@@ -923,7 +937,8 @@ themeNames.forEach((theme, row) => {
   for (const role of ['wall', ...WALL_MASK_CODES.map((c) => `wall-${c}`), ...Array.from({ length: 16 }, (_, m) => `ruin-${m}`)]) {
     const cell = cryptRow.tiles[role];
     if (!cell) throw new Error(`classic: the crypt row has no ${role}`);
-    emit(role, swapPalette(crop(atlas, cell.col * T, cryptRow.row * 2 * T, T, TH), WALL_SWAPS.classic), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
+    const drawn = cryptWalls ? (role === 'wall' ? cryptWalls.walls['wall-10'] : role.startsWith('ruin') ? cryptWalls.ruins[role] : cryptWalls.walls[role]) : crop(atlas, cell.col * T, cryptRow.row * 2 * T, T, TH);
+    emit(role, swapPalette(drawn, WALL_SWAPS.classic), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
   }
 }
 // ---- pieces: one row per set (32-px atlas cells), white p n r b q k then black.
