@@ -17,10 +17,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng } from '../lib/png.mjs';
+import { WALL_SPRITE_H } from '../../play/js/board-ui.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const T = 16;
-const RUIN_H = 24; // board-ui WALL_SPRITE_H
+const RUIN_H = WALL_SPRITE_H; // the tall sprite (20 rows since the shorter face of 2026-09-15)
 
 /** Connected components (4-way) of opaque pixels; those touching no edge
  *  — nor any row in `attach` (a tall ruin sprite's row 15 is the bottom
@@ -75,7 +76,7 @@ export function run({ check = false } = {}) {
   for (const [theme, t] of Object.entries(index.themes)) {
     for (const [role, cell] of Object.entries(t.tiles)) {
       if (!/^ruin-\d+$/.test(role)) continue;
-      // A ruin case is a TALL 16×24 sprite since 2026-09-12 (board-ui
+      // A ruin case is a TALL 16×WALL_SPRITE_H sprite since 2026-09-12 (board-ui
       // WALL_SPRITE_H): the whole box is read, so a fleck under a stub's
       // foot counts too; row 15 (the roof plane's bottom) attaches, as a
       // south tongue runs on into the neighbour's roof from there.

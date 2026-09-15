@@ -40,7 +40,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decodePng, encodePng, blank, crop, blit, samePixels } from '../lib/png.mjs';
-import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS, CRACK_VARIANTS, WALL_BAND, WALL_SPRITE_H, wallBody, wallFaceCols } from '../../play/js/board-ui.mjs';
+import { canonicalMask, WALL_MASK_CODES, PIECE_SETS, DOOR_SETS, FLOOR_VARIANTS, SKIN_VARIANTS, CRACK_VARIANTS, WALL_BAND, WALL_SPRITE_H, WALL_FACE_H, WALL_FACE_CROP, wallBody, wallFaceCols } from '../../play/js/board-ui.mjs';
 import { inhouseTiles, edgeLeafTile } from '../lib/inhouse.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -262,11 +262,12 @@ for (let m = 0; m < 16; m++) ROLES[`hole-${m}`] = `--tile-hole-${m}`;
 // tile (5,9); the hall, the castle and the classic set wear the same
 // pixels in their own palettes (WALL_SWAPS: an exact colour map, every
 // colour of the crypt's drawing named, so nothing slips through untinted).
-// A wall case is a 16×24 SPRITE the canvas board paints in the tall pass
-// at the square's y − WALL_LIFT − WALL_RAISE (board-ui): rows 0–7 the
-// ROOF's far half (in the square north), rows 8–23 the FACE where the
-// roof's body ends at the square's south edge (wallFaceCols) and the
-// roof's near half where it runs on. The roof is drawn by DEPTH from its
+// A wall case is a 16×WALL_SPRITE_H SPRITE (16×20 since the shorter face
+// of 2026-09-15; 16×24 before) the canvas board paints in the tall pass
+// at the square's y − WALL_DY (board-ui): rows 0–7 the ROOF's far half
+// (in the square north), the rows below the FACE where the roof's body
+// ends at the square's south edge (wallFaceCols) — the pack's brick rows
+// less their top course — and the roof's near half where it runs on. The roof is drawn by DEPTH from its
 // open edges: a horizontal top wears the band's rows on its far edge
 // (outline, lit, the fill rows, inner outline), the outline and lit line
 // turned on its west end and the outline on its east; a vertical BAND
@@ -430,18 +431,24 @@ function roofOf(body, art, { vertical, mass = false, throughN = false, throughS 
   }
   return out;
 }
-/** The 16×24 sprite: the roof's far half, then the face where the body
- *  ends south (`faceCols`), the roof's near half where it runs on;
- *  `stumps` adds RUIN.face rows of face under a north tongue's ragged end
- *  (x → the row the face starts on, or undefined). */
+/** The 16×WALL_SPRITE_H sprite: the roof's far half, then the face where
+ *  the body ends south (`faceCols`) — the pack's brick rows less their top
+ *  course, WALL_FACE_CROP rows, since THE SHORTER FACE (2026-09-15, the
+ *  designer: "shortened by about 4 pixels or about one 'brick'… just crop
+ *  the face of the wall, do not fuck up the roof"; the face's top course
+ *  is a mortar line over three rows of brick, so the crop keeps a mortar
+ *  line under the roof's last row and the foot as it was) — the roof's
+ *  near half where it runs on; `stumps` adds RUIN.face rows of face under
+ *  a north tongue's ragged end (x → the row the face starts on, or
+ *  undefined), cropped the same way. */
 function tallSprite(roof, art, faceCols, stumps = null) {
   const out = blank(T, TH);
   blit(out, crop(roof, 0, 0, T, 8), 0, 0);
   for (let x = 0; x < T; x++) {
-    if (faceCols[x]) blit(out, crop(art.face, x, 0, 1, T), x, 8);
+    if (faceCols[x]) blit(out, crop(art.face, x, WALL_FACE_CROP, 1, WALL_FACE_H), x, 8);
     else blit(out, crop(roof, x, 8, 1, 8), x, 8);
     const y0 = stumps?.[x];
-    if (y0 !== undefined) blit(out, crop(art.face, x, 0, 1, Math.min(RUIN.face, TH - y0)), x, y0);
+    if (y0 !== undefined) blit(out, crop(art.face, x, WALL_FACE_CROP, 1, Math.min(RUIN.face, TH - y0)), x, y0);
   }
   return out;
 }
@@ -884,8 +891,15 @@ function emitWalls(theme, emit) {
   for (const [role, tile] of Object.entries(cryptWalls.walls)) emit(role, tint(tile), { composed: how, mask: +role.slice(5) });
   for (const [role, tile] of Object.entries(cryptWalls.ruins)) emit(role, tint(tile), { composed: `ruin: ${how}, the joining walls' ragged tongues`, mask: +role.slice(5) });
 }
+/** THE ROW'S PALETTE, recorded for the atlas (THE MOSS, 2026-09-15 — the
+ *  designer: "a color selector for the green 'moss' highlights in the
+ *  brick work of the walls"): the floor's base, the wall's brick and the
+ *  MOSS — the brick face's highlight flecks (`brickLight`, one flat colour,
+ *  twenty-five pixels a tile) — so atlas.mjs's live tones start from the
+ *  set's own colours exactly and find the flecks by their colour. */
+const paletteOf = (theme) => ({ floor: FLOOR_BASES[theme] ?? null, wall: WALL_SWAPS[theme].brick, moss: WALL_SWAPS[theme].brickLight });
 themeNames.forEach((theme, row) => {
-  index.themes[theme] = { row, title: THEMES[theme].title, tiles: {} };
+  index.themes[theme] = { row, title: THEMES[theme].title, palette: paletteOf(theme), tiles: {} };
   const emit = emitter(theme, row);
   if (readBack) {
     // Every tile of this theme, in the order the last run wrote it, with the
@@ -946,7 +960,7 @@ themeNames.forEach((theme, row) => {
 // read back; provenance `composed`, so the credits table skips them.
 {
   const row = themeNames.length;
-  index.themes.classic = { row, title: 'The classic set — drawn in-house (a stage without a theme; the crack every theme wears)', inhouse: true, tiles: {} };
+  index.themes.classic = { row, title: 'The classic set — drawn in-house (a stage without a theme; the crack every theme wears)', inhouse: true, palette: paletteOf('classic'), tiles: {} };
   const emit = emitter('classic', row);
   for (const [role, tile] of Object.entries(inhouseTiles())) if (role !== 'wall') emit(role, tile, { composed: 'drawn in-house (lib/inhouse.mjs)' });
   // Its walls and ruins: the crypt row's (whichever way that row was

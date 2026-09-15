@@ -137,6 +137,11 @@
   "hall": {
    "row": 0,
    "title": "The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors",
+   "palette": {
+    "floor": "#4a3629",
+    "wall": "#543740",
+    "moss": "#5e4148"
+   },
    "tiles": {
     "door": {
      "col": 1,
@@ -852,6 +857,11 @@
   "castle": {
    "row": 1,
    "title": "The castle — Dungeon Gathering’s cold blue-grey stone",
+   "palette": {
+    "floor": "#2e2f33",
+    "wall": "#657392",
+    "moss": "#92a1b9"
+   },
    "tiles": {
     "door": {
      "col": 1,
@@ -1558,6 +1568,11 @@
   "crypt": {
    "row": 2,
    "title": "The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls",
+   "palette": {
+    "floor": "#2c2c2f",
+    "wall": "#312220",
+    "moss": "#3f3628"
+   },
    "tiles": {
     "door": {
      "col": 1,
@@ -2297,6 +2312,11 @@
    "row": 3,
    "title": "The classic set — drawn in-house (a stage without a theme; the crack every theme wears)",
    "inhouse": true,
+   "palette": {
+    "floor": "#2a2a2e",
+    "wall": "#52506a",
+    "moss": "#605e7a"
+   },
    "tiles": {
     "crack-1": {
      "col": 125,

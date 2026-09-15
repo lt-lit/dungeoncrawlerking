@@ -185,8 +185,9 @@ const T = D.T;
 }
 
 // ---- THE ATLAS'S BOXES (2026-09-11; TALL WALLS 2026-09-12): a prop role is
-// a 16×32 box on every theme, a wall or ruin case a 16×24 sprite (the
-// roof's far half over the face) on every theme INCLUDING the classic row
+// a 16×32 box on every theme, a wall or ruin case a 16×WALL_SPRITE_H sprite
+// (the roof's far half over the face — 20 rows since THE SHORTER FACE of
+// 2026-09-15 took the face's top course) on every theme INCLUDING the classic row
 // (its own palette of the crypt's wall), and BOTH leaves 16×16 tiles — the
 // edge-on one the designer's 5×16 profile door as drawn, one tile tall, in
 // the band's middle (a 27-row stretch went before it and read as a door
@@ -212,6 +213,20 @@ const T = D.T;
   expect(!Object.values(index.themes).some((t) => Object.keys(t.tiles).some((r) => r.startsWith('doorway'))), 'no doorway role remains in the atlas');
   expect(Object.keys(index.themes).every((th) => Array.from({ length: 6 }, (_, i) => index.themes[th].tiles[`floor-${i + 1}`]).every(Boolean)) && Array.from({ length: 6 }, (_, i) => atlas.classicTile(`floor-${i + 1}`)?.h === T).every(Boolean), 'every row has the six flagstones, the classic row included (the palette round)');
   const png = decodePng(fs.readFileSync(path.join(ROOT, 'play/img/tileset.png')));
+  // THE SHORTER FACE (2026-09-15) + THE MOSS: every row records its palette
+  // (floor / wall / moss), the east–west wall's face — sprite rows 8 to
+  // WALL_SPRITE_H − 1 — is opaque, brick in the palette's wall colour with
+  // the moss flecks in its moss colour, nothing is drawn under the sprite's
+  // foot, and a north–south band runs the roof plane's sixteen rows only.
+  {
+    const hexAt = (theme, role, x, y) => { const t = index.themes[theme], c = t.tiles[role]; const o = ((t.row * index.row + y) * png.width + c.col * T + x) * 4; return png.data[o + 3] ? '#' + [0, 1, 2].map((i) => png.data[o + i].toString(16).padStart(2, '0')).join('') : null; };
+    const rows = Object.keys(index.themes);
+    expect(rows.every((th) => { const p = index.themes[th].palette; return !!p && [p.floor, p.wall, p.moss].every((h) => /^#[0-9a-f]{6}$/.test(h ?? '')) && p.moss !== p.wall; }), `every row records its palette — floor, wall and moss as hex, the moss its own colour (${rows.map((th) => `${th} ${index.themes[th].palette?.moss}`).join(', ')})`);
+    const faces = rows.map((th) => { let opaque = true, moss = 0, brick = 0, below = 0; for (let y = 8; y < WALL_SPRITE_H; y++) for (let x = 0; x < T; x++) { const h = hexAt(th, 'wall-10', x, y); if (!h) opaque = false; else if (h === index.themes[th].palette.moss) moss++; else if (h === index.themes[th].palette.wall) brick++; } for (let y = WALL_SPRITE_H; y < 2 * T; y++) for (let x = 0; x < T; x++) if (hexAt(th, 'wall-10', x, y)) below++; return { th, opaque, moss, brick, below }; });
+    expect(faces.every((f) => f.opaque && f.moss > 0 && f.brick > f.moss && f.below === 0), `every row's east–west wall: an opaque face of ${WALL_SPRITE_H - 8} rows under the roof, brick in the palette's wall colour with the moss flecks in its moss colour, nothing under the sprite's foot (${faces.map((f) => `${f.th} ${f.moss} moss / ${f.brick} brick / ${f.below} below`).join(', ')})`);
+    expect(rows.every((th) => hexAt(th, 'wall-10', 0, 8) !== index.themes[th].palette.wall && hexAt(th, 'wall-10', 0, WALL_SPRITE_H - 1) === index.themes[th].palette.wall), "the face starts with a mortar line under the roof and ends on brick (the crop took a whole course)");
+    expect(rows.every((th) => { let on = 0, off = 0; for (let y = 0; y < 2 * T; y++) { const h = hexAt(th, 'wall-5', 8, y); if (y < T) { if (h) on++; } else if (h) off++; } return on === T && off === 0; }), "a north–south band runs the roof plane's sixteen rows and nothing below (the next square's roof covers the rest)");
+  }
   const file = decodePng(fs.readFileSync(path.join(ROOT, 'phase0/lib/inhouse/door-profile.png')));
   const X0 = EDGE_LEAF_X;
   expect(file.width === 5 && file.height === 16, `the designer's profile door is 5×16 (${file.width}×${file.height})`);

@@ -43,7 +43,7 @@
 //               analyzer: the pits), the marks under the pieces, then row
 //               by row from the far row to the near one the TALL things —
 //               THE WALLS (2026-09-12: a wall, a cracked wall, a weak spot
-//               or a ruin's stub is a 16×24 sprite standing at its square's
+//               or a ruin's stub is a 16×20 sprite (16×24 until 2026-09-15) standing at its square's
 //               y − 11, the roof's far half over the square north, the
 //               face on the square with three pixels of floor under it —
 //               board-ui WALL_LIFT / WALL_RAISE), furniture props (16×32),
@@ -132,7 +132,7 @@
 // mode here: the art's own scale, lift and shift in whole tile pixels).
 // The atlas is play/js/atlas.mjs.
 import { WALL } from './fen.mjs';
-import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_LIFT, WALL_RAISE, WALL_SPRITE_H, DOOR_LIFT, EDGE_DOOR_LIFT, wallFaceCols } from './board-ui.mjs';
+import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_RAISE, WALL_SPRITE_H, WALL_DY, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, wallFaceCols } from './board-ui.mjs';
 import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
@@ -1005,6 +1005,19 @@ export class CanvasBoard {
       this.invalidate();
     });
   }
+  /** THE DOOR LIFTS (2026-09-15, with the shorter face): the face-on
+   *  leaf's and the edge-on leaf's lift off their square's seam, in whole
+   *  pixels (board-ui DEFAULT_DOOR_FIT; Options → Look dials them). */
+  setDoorFit({ doorLift, edgeLift } = {}) {
+    this.doorLiftSet = {
+      doorLift: Number.isFinite(Number(doorLift)) ? clampInt(doorLift, DOOR_LIFT_RANGE) : DEFAULT_DOOR_FIT.doorLift,
+      edgeLift: Number.isFinite(Number(edgeLift)) ? clampInt(edgeLift, EDGE_DOOR_LIFT_RANGE) : DEFAULT_DOOR_FIT.edgeLift,
+    };
+    this.invalidate();
+  }
+  get doorFit() {
+    return this.doorLiftSet ?? DEFAULT_DOOR_FIT;
+  }
   /** The tile grid is the only mode here: `tileLift` / `tileShift` apply
    *  (whole tile pixels, clamped); the % dials and modes are ignored. */
   setPieceFit({ tileLift, tileShift } = {}) {
@@ -1357,7 +1370,7 @@ export class CanvasBoard {
     return this.atlas?.tileOf(this.theme, role, { doors: this.doors }) ?? null;
   }
 
-  /** The wall case a square's stone wears: the TALL 16×24 sprite (the
+  /** The wall case a square's stone wears: the TALL 16×WALL_SPRITE_H sprite (the
    *  classic set has every case in its own palette since 2026-09-12). */
   #wallTile(mask) {
     return this.#tile(`wall-${mask}`);
@@ -1435,9 +1448,9 @@ export class CanvasBoard {
    *  front (board-ui, the designer's two verdicts). */
   #furnitureSprite(k, [hf, hr]) {
     if (k.skin === 'door') {
-      if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), dy: -EDGE_DOOR_LIFT, h: T };
+      if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), dy: -this.doorFit.edgeLift, h: T };
       const half = doorHalf(k.door2, this.facing);
-      return { tile: this.#tile(half ? `door2-${half}` : 'door'), dy: -DOOR_LIFT, h: T };
+      return { tile: this.#tile(half ? `door2-${half}` : 'door'), dy: -this.doorFit.doorLift, h: T };
     }
     const role = k.skin && k.skin !== 'masonry' ? k.skin : 'crate';
     const v = skinVariantIndex(hf, hr);
@@ -1734,11 +1747,12 @@ export class CanvasBoard {
     const fx = sq ? this.fx.get(sq) : null;
     const u = fx ? (fx.done ? 1 : Math.min(1, (t - fx.t0) / fx.ms)) : 0;
     const v = k.v;
-    // TALL WALLS (2026-09-12): a wall is a 16×24 sprite standing at the
-    // square's y − WALL_LIFT − WALL_RAISE — its roof's far half in the
-    // square north (over the feet of whatever stands there, as a nearer
-    // piece's head covers the piece behind it), its face on the square,
-    // WALL_RAISE pixels of floor showing under it. A cracked wall or a weak
+    // TALL WALLS (2026-09-12): a wall is a 16×WALL_SPRITE_H sprite (20
+    // rows since the shorter face of 2026-09-15) standing at the square's
+    // y − WALL_DY — its roof's far half in the square north (over the feet
+    // of whatever stands there, as a nearer piece's head covers the piece
+    // behind it), its face on the square, WALL_RAISE pixels of floor
+    // showing under it. A cracked wall or a weak
     // spot is the same sprite wearing the crack on its face; the crack
     // appears under a flash of light, and the whole sprite bursts on a
     // breach. A wall prop (torch / banner / chain) hangs on the face.
@@ -1746,7 +1760,7 @@ export class CanvasBoard {
       const [hf, hr] = h;
       const ck = crackVariantIndex(hf, hr);
       const sm = this.#wallMask(cell, k);
-      const wy = y - WALL_LIFT - WALL_RAISE;
+      const wy = y - WALL_DY;
       if (fx?.kind === 'breaching') {
         if (u < 1) this.#burst(this.#crackedTile(sm, ck), x, wy, T, WALL_SPRITE_H, u);
         return;
@@ -1767,7 +1781,7 @@ export class CanvasBoard {
       // The broken wall's stub, then the square's debris again over its
       // foot — the rubble lies on the floor in front of the stump, as the
       // DOM's debris image lay over the flat stub.
-      this.#draw(this.#tile(`ruin-${rotMask4(k.mask, this.facing)}`), x, y - WALL_LIFT - WALL_RAISE);
+      this.#draw(this.#tile(`ruin-${rotMask4(k.mask, this.facing)}`), x, y - WALL_DY);
       const dz = this.debrisCanvas.get(idx);
       if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
       this.#paintUnderMarks(sq, x, y);

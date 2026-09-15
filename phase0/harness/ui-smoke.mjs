@@ -219,7 +219,7 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   await page.evaluate(() => { window.__DCK.options.hints = false; window.__DCK.applyOptions(); });
   const before = await themeState();
   const base = await page.evaluate(() => window.__DCK.tones.base());
-  expect(!!base?.floor && !!base?.wall && /^#[0-9a-f]{6}$/.test(base.floor) && /^#[0-9a-f]{6}$/.test(base.wall), `the art set's own base colours read off the atlas (floor ${base?.floor}, wall ${base?.wall})`);
+  expect(!!base?.floor && !!base?.wall && !!base?.moss && /^#[0-9a-f]{6}$/.test(base.floor) && /^#[0-9a-f]{6}$/.test(base.wall) && /^#[0-9a-f]{6}$/.test(base.moss), `the art set's own base colours read off the atlas's recorded palette (floor ${base?.floor}, wall ${base?.wall}, moss ${base?.moss})`);
   await page.evaluate(() => window.__DCK.tones.set({ floor: '#804020', wall: '#206080' }));
   await page.waitForTimeout(200);
   const toned = await themeState();
@@ -263,6 +263,25 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   await page.click('#toneFloor');
   const closed = await page.evaluate(() => ({ hidden: document.getElementById('tone-picker').hidden, pressed: document.getElementById('toneFloor').getAttribute('aria-pressed') }));
   expect(closed.hidden && closed.pressed === 'false', 'a second tap on the chip closes the picker');
+  // THE MOSS (2026-09-15, the designer: "a color selector for the green
+  // 'moss' highlights in the brick work of the walls"): the third slot —
+  // the highlight flecks in the brickwork take the moss colour exactly,
+  // the floor is untouched by it, the chip and the save carry it, reset
+  // clears it. (The flecks turned green under the first cut's per-channel
+  // ratio rule whenever the wall tone's hue differed from the base's; the
+  // rule is hue-true now, so with no moss tone they follow the wall.)
+  await page.evaluate(() => window.__DCK.tones.set({ moss: '#4a6a3a' }));
+  await page.waitForTimeout(200);
+  const mossCount = () => page.evaluate(() => { const K = window.__DCK; const cells = window.__smoke.cells(); K.renderer.paintNow(); let n = 0; for (const sq of Object.keys(cells)) { if (!cells[sq].includes('wall')) continue; const px = K.renderer.square(sq); if (!px) continue; for (let i = 0; i < px.length; i += 4) if (px[i] === 0x4a && px[i + 1] === 0x6a && px[i + 2] === 0x3a && px[i + 3] === 255) n++; } return n; });
+  const mossy = await themeState();
+  const mossN = await mossCount();
+  const mossUi = await page.evaluate(() => ({ chip: document.getElementById('toneMossV').textContent, saved: JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones?.[window.__DCK.tones.key()]?.moss, live: window.__DCK.tones.get() }));
+  expect(mossN > 0 && mossy.sig.floor === before.sig.floor && mossy.sig.wall !== before.sig.wall, `the moss tone paints the brickwork's flecks in its colour (${mossN} moss pixels on the walls), the walls repaint, the floor is untouched`);
+  expect(mossUi.chip === '#4a6a3a' && mossUi.saved === '#4a6a3a' && !mossUi.live?.wall && !mossUi.live?.floor, `the moss chip shows the tone, the save carries it alone (${JSON.stringify(mossUi.live)})`);
+  await page.evaluate(() => window.__DCK.tones.reset());
+  await page.waitForTimeout(200);
+  const unmossed = await themeState();
+  expect((await mossCount()) === 0 && unmossed.sig.wall === before.sig.wall, 'reset clears the moss and the walls return to the set\'s own');
   await page.evaluate(() => document.getElementById('btnOptionsClose').click());
   await page.evaluate(() => { window.__DCK.options.hints = true; window.__DCK.applyOptions(); });
 }
@@ -305,6 +324,11 @@ if (STAGE === 's59-hall-corner') {
   expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('door-edge') && !door.d8?.includes('weak') && door.d8?.some((c) => c.startsWith('wm-')), `d8, the door in the north–south line, stands edge-on with its wall case, not a weak spot (${door.d8})`);
   const edge = await page.evaluate(() => { const S = window.__smoke; return { d8: S.sig('d8'), g5: S.sig('g5'), wallInk: (() => { const px = window.__DCK.renderer.square('d8'); let n = 0; for (let i = 3; i < px.length; i += 4) if (px[i]) n++; return n; })() }; });
   expect(edge.d8 !== edge.g5 && edge.wallInk === 256, `the edge-on door paints its own tile, fully opaque (sig ${edge.d8} vs the leaf's ${edge.g5}, ${edge.wallInk}/256 px)`);
+  // THE DOOR LIFTS (2026-09-15, with the shorter wall face): the edge-on
+  // leaf's lift is a live dial — three pixels higher repaints d8, the
+  // board wears the number, back at the default the paint returns.
+  const lifts = await page.evaluate(() => { const K = window.__DCK; const S = window.__smoke; const sig = () => { K.renderer.paintNow(); return S.sig('d8'); }; const d0 = K.doorFit(); const s0 = sig(); K.options.edgeLift = d0.edgeLift + 3; K.applyOptions(); const s1 = sig(); const fit = { ...K.app.boardUI.doorFit }; K.options.edgeLift = d0.edgeLift; K.applyOptions(); const s2 = sig(); return { d0, s0, s1, s2, fit }; });
+  expect(lifts.s1 !== lifts.s0 && lifts.s2 === lifts.s0 && lifts.fit.edgeLift === lifts.d0.edgeLift + 3, `the edge door lift dial moves the leaf (d8 sig ${lifts.s0} → ${lifts.s1} at ${lifts.d0.edgeLift + 3}, back at the default ${lifts.d0.edgeLift}; the board wears ${JSON.stringify(lifts.fit)})`);
 }
 
 // --- masonry (2026-09-04): an authored 'R' is a WEAK SPOT — the wall block

@@ -119,14 +119,24 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
 /**
  * TALL WALLS (2026-09-12, designer-led over ten mock-up rounds — "I want
  * tall walls, walls that overlap the northern tiles, just like the tall
- * chess pieces do"). A wall is a 16×24 SPRITE painted in the tall pass at
- * the square's y − WALL_LIFT − WALL_RAISE: its ROOF is the top surface of
- * a plane one tile deep shifted WALL_LIFT rows north (rows 0–7 of the
- * sprite show above the face, in the square north), its FACE the pack's
- * sixteen brick rows standing WALL_RAISE pixels off the square's seam
- * (the floor shows under it), for every column where the roof's body ends
- * at the square's south edge (`wallFaceCols`); where it continues south
- * (a band running on, a thick block) the roof's lower rows show instead.
+ * chess pieces do"). A wall is a 16×WALL_SPRITE_H SPRITE painted in the tall pass at
+ * the square's y − WALL_DY: its ROOF is the top surface of a plane one
+ * tile deep (rows 0–7 of the sprite, the pack's north band whole, show
+ * above the face — all but the last in the square north), its FACE the
+ * pack's brick rows standing WALL_RAISE pixels off the square's seam (the
+ * floor shows under it), for every column where the roof's body ends at
+ * the square's south edge (`wallFaceCols`); where it continues south (a
+ * band running on, a thick block) the roof's lower rows show instead.
+ * THE SHORTER FACE (2026-09-15, the designer: "I need the walls shortened
+ * by about 4 pixels or about one 'brick'. They're overlapping the square
+ * to the north a little too much. Just crop the face of the wall, do not
+ * fuck up the roof"): the face is the pack's sixteen rows less its TOP
+ * COURSE (WALL_FACE_CROP rows — a mortar line and three of brick), so the
+ * foot stays where it was and the roof is the band as drawn; the sprite
+ * is 20 rows and its top stands WALL_DY 7 into the square north where it
+ * stood 11. The face-on leaf and the edge-on leaf keep their own lifts
+ * (DEFAULT_DOOR_FIT; Options → Look dials them in whole pixels, since a
+ * sixteen-row leaf in a twenty-row wall is the designer's to place).
  * The roof's FOOTPRINT is the shipped blob rule (repack-tiles' wallBlob
  * since round 5): an east–west run fills the width, a north–south run
  * the WALL_BAND columns (three pixels of floor either side), corners, T's
@@ -142,11 +152,27 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
  * seen edge-on runs from mid-face to behind the wall in front of it.
  */
 export const WALL_BAND = { x0: 3, x1: 12 };
-export const WALL_LIFT = 8;
-export const WALL_RAISE = 3;
-export const WALL_SPRITE_H = 24;
-export const DOOR_LIFT = 5;
-export const EDGE_DOOR_LIFT = WALL_LIFT + WALL_RAISE - 1;
+export const WALL_LIFT = 8; // the roof's far half: the sprite's rows 0–7
+export const WALL_RAISE = 3; // the face's foot this many pixels off the square's seam
+export const WALL_FACE_CROP = 4; // the course cropped off the top of the pack's sixteen-row face (2026-09-15)
+export const WALL_FACE_H = 16 - WALL_FACE_CROP; // 12: the face rows the sprite carries
+export const WALL_SPRITE_H = WALL_LIFT + WALL_FACE_H; // 20
+export const WALL_DY = WALL_SPRITE_H - 16 + WALL_RAISE; // 7: the sprite's top above its square's top (its foot WALL_RAISE off the seam)
+/** The door leaves' lifts off their square's seam, in whole pixels
+ *  (Options → Look, `?doorlift=` / `?edgelift=`), settled on crops of s59
+ *  with the shorter face: the FACE-ON leaf at 3 — four rows of the
+ *  neighbours' roof band stand above its head and its foot sits on the
+ *  wall's foot line (5 put its head two rows under the roof's top edge,
+ *  a door as tall as the wall; 1 sank its foot under the faces'); the
+ *  EDGE-ON leaf at 8 — its head five rows up the far wall's twelve-row
+ *  face, its foot two rows short of the near wall's roof (10 left four
+ *  rows of floor between foot and roof; 6 put the head three rows up the
+ *  face, near the lift the designer called "WAY too low"). */
+export const DEFAULT_DOOR_FIT = { doorLift: 3, edgeLift: 8 };
+export const DOOR_LIFT_RANGE = [-4, 12];
+export const EDGE_DOOR_LIFT_RANGE = [0, 14];
+export const DOOR_LIFT = DEFAULT_DOOR_FIT.doorLift;
+export const EDGE_DOOR_LIFT = DEFAULT_DOOR_FIT.edgeLift;
 /** The roof's footprint for a wall case: (x, y) → is it top surface —
  *  inside the cell, or (just outside it) in the neighbour, which by
  *  construction holds the same bands. */

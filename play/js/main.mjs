@@ -40,7 +40,7 @@ import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
+import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
 // THE 16×16 RENDERER (Phase 2, 2026-09-07): one native buffer scaled once to
 // the screen — the one board since the DOM board's retirement the same day
 // (CLAUDE.md § Phase 2). The atlas is its art and the debris sampler's.
@@ -289,7 +289,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -330,12 +330,14 @@ function loadOptions() {
     // THE TONES (2026-09-12): per art set, a floor and a wall base colour, #rrggbb or nothing.
     {
       const clean = {};
-      if (options.tones && typeof options.tones === 'object') for (const [k, t] of Object.entries(options.tones)) { const e = {}; if (HEX6.test(t?.floor ?? '')) e.floor = t.floor.toLowerCase(); if (HEX6.test(t?.wall ?? '')) e.wall = t.wall.toLowerCase(); if (Object.keys(e).length) clean[k] = e; }
+      if (options.tones && typeof options.tones === 'object') for (const [k, t] of Object.entries(options.tones)) { const e = {}; if (HEX6.test(t?.floor ?? '')) e.floor = t.floor.toLowerCase(); if (HEX6.test(t?.wall ?? '')) e.wall = t.wall.toLowerCase(); if (HEX6.test(t?.moss ?? '')) e.moss = t.moss.toLowerCase(); if (Object.keys(e).length) clean[k] = e; }
       options.tones = clean;
     }
     // (A saved renderer / piece-pixel mode / % dial from the DOM era is not read.)
     options.tileLift = Math.round(clampNum(options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
     options.tileShift = Math.round(clampNum(options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
+    options.doorLift = Math.round(clampNum(options.doorLift, DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.doorLift));
+    options.edgeLift = Math.round(clampNum(options.edgeLift, EDGE_DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.edgeLift));
     // The debris toggles (2026-09-07): five booleans and a clamped amount.
     // v2 (same day): the slider's 100% became the old 200% (debris.mjs
     // BASELINE), so a setting saved on the old scale is halved ONCE — the
@@ -404,6 +406,11 @@ function syncOptionsUI() {
   $('optTileLiftV').textContent = pxv(fit.tileLift);
   $('optTileShift').value = String(fit.tileShift);
   $('optTileShiftV').textContent = pxv(fit.tileShift);
+  const df = doorFitFor();
+  $('optDoorLift').value = String(df.doorLift);
+  $('optDoorLiftV').textContent = pxv(df.doorLift);
+  $('optEdgeLift').value = String(df.edgeLift);
+  $('optEdgeLiftV').textContent = pxv(df.edgeLift);
   const ar = arrowStyleFor();
   $('optArrowWidth').value = String(ar.width);
   $('optArrowWidthV').textContent = `${ar.width} px`;
@@ -426,6 +433,18 @@ function pieceFitFor() {
   return {
     tileLift: Math.round(clampNum(params.get('tilelift') ?? options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift)),
     tileShift: Math.round(clampNum(params.get('tileshift') ?? options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift)),
+  };
+}
+
+/** THE DOOR LIFTS (2026-09-15, with the shorter wall face — a sixteen-row
+ *  leaf in a twenty-row wall is the designer's to place): the face-on
+ *  leaf's and the edge-on leaf's lift off their square's seam, whole
+ *  pixels (canvas-board setDoorFit): `?doorlift=` / `?edgelift=` (unsaved)
+ *  > the Options. */
+function doorFitFor() {
+  return {
+    doorLift: Math.round(clampNum(params.get('doorlift') ?? options.doorLift, DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.doorLift)),
+    edgeLift: Math.round(clampNum(params.get('edgelift') ?? options.edgeLift, EDGE_DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.edgeLift)),
   };
 }
 
@@ -637,9 +656,10 @@ function toneParam(name) {
 function tonesFor(theme) {
   const saved = options.tones?.[toneKey(theme)] ?? {};
   const t = {};
-  const floor = toneParam('floor') ?? saved.floor, wall = toneParam('wall') ?? saved.wall;
+  const floor = toneParam('floor') ?? saved.floor, wall = toneParam('wall') ?? saved.wall, moss = toneParam('moss') ?? saved.moss;
   if (floor) t.floor = floor;
   if (wall) t.wall = wall;
+  if (moss) t.moss = moss;
   return Object.keys(t).length ? t : null;
 }
 function applyTones(theme = currentTheme()) {
@@ -669,8 +689,9 @@ function resetTones() {
 // of brown and everything else is unusably garish… a color selector for a
 // DUNGEON not a fucking CIRCUS TENT"). Firefox for Android's
 // <input type=color> is a FIXED LIST of nine swatches, red to white, with
-// no way to enter a colour — so the picker lives in the page: the two
-// CHIPS (each slot's colour and its hex) open it on a slot; a grid of
+// no way to enter a colour — so the picker lives in the page: the CHIPS
+// (each slot's colour and its hex — floor, walls and, since 2026-09-15,
+// THE MOSS, the highlight flecks in the brickwork) open it on a slot; a grid of
 // DUNGEON STONES (browns, tans, dark greys, warm and cool stone — the
 // designer's ruling), HUE / SATURATION / LIGHTNESS sliders whose tracks
 // are painted in the colours they lead to, and a HEX field. Every change
@@ -756,20 +777,20 @@ function syncTonePicker(hex) {
 /** The chips show the set's live tones, else its own base colours; reset is
  *  live when a tone is saved; the picker follows the open slot. */
 async function syncTonesUI(theme = currentTheme()) {
-  const chips = { floor: $('toneFloor'), wall: $('toneWall') };
-  if (!chips.floor || !chips.wall) return;
+  const chips = { floor: $('toneFloor'), wall: $('toneWall'), moss: $('toneMoss') };
+  if (!chips.floor || !chips.wall || !chips.moss) return;
   const key = toneKey(theme);
   const atlas = await loadAtlas();
   const base = atlas.baseTones(key) ?? {};
   const live = tonesFor(theme) ?? {};
   const shown = {};
-  for (const k of ['floor', 'wall']) {
+  for (const k of ['floor', 'wall', 'moss']) {
     const v = live[k] ?? base[k] ?? '#000000';
     shown[k] = v;
     chips[k].dataset.hex = v;
     chips[k].querySelector('.tone-swatch').style.background = v;
     chips[k].setAttribute('aria-pressed', String(tonePicker.slot === k));
-    $(k === 'floor' ? 'toneFloorV' : 'toneWallV').textContent = v;
+    $({ floor: 'toneFloorV', wall: 'toneWallV', moss: 'toneMossV' }[k]).textContent = v;
   }
   $('btnTonesReset').disabled = !options.tones?.[key];
   syncTonePicker(tonePicker.slot ? shown[tonePicker.slot] : null);
@@ -800,6 +821,7 @@ function applyTheme() {
   app.boardUI?.setTones?.(toneKey(theme), tonesFor(theme));
   void syncTonesUI(theme);
   app.boardUI?.setPieceFit(pieceFitFor());
+  app.boardUI?.setDoorFit?.(doorFitFor());
   app.boardUI?.setArrowStyle?.(arrowStyleFor());
   void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
   void paintLegend(theme);
@@ -830,7 +852,7 @@ async function paintLegend(theme) {
     g.fillRect(0, 0, T, T);
     draw(tile('floor-1'));
     const kind = c.dataset.legend;
-    // A wall is a TALL 16×24 sprite (2026-09-12): the swatch shows its
+    // A wall is a TALL 16×20 sprite (2026-09-12; one course shorter since 2026-09-15): the swatch shows its
     // face under the last rows of its roof.
     const WALL_Y = T - wallH();
     if (kind === 'wall') draw(tile('wall'), WALL_Y);
@@ -3379,6 +3401,7 @@ $('optDoors').addEventListener('change', (e) => {
 // slider (as it drags) or a typed hex sets the tone live, saved per art set.
 $('toneFloor').addEventListener('click', () => openTonePicker('floor'));
 $('toneWall').addEventListener('click', () => openTonePicker('wall'));
+$('toneMoss').addEventListener('click', () => openTonePicker('moss'));
 $('btnTonesReset').addEventListener('click', () => resetTones());
 for (const id of ['toneHue', 'toneSat', 'toneLum']) {
   $(id).addEventListener('input', () => {
@@ -3408,6 +3431,16 @@ $('optTileLift').addEventListener('input', (e) => {
 });
 $('optTileShift').addEventListener('input', (e) => {
   options.tileShift = Math.round(clampNum(e.target.value, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
+  applyOptions();
+});
+// THE DOOR LIFTS (2026-09-15): the face-on and the edge-on leaf, whole
+// pixels off their square's seam, live.
+$('optDoorLift').addEventListener('input', (e) => {
+  options.doorLift = Math.round(clampNum(e.target.value, DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.doorLift));
+  applyOptions();
+});
+$('optEdgeLift').addEventListener('input', (e) => {
+  options.edgeLift = Math.round(clampNum(e.target.value, EDGE_DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.edgeLift));
   applyOptions();
 });
 // The arrow dials (2026-09-07): the shaft in floor pixels and the opacity,
@@ -4809,6 +4842,8 @@ window.__DCK = {
     swatches: TONE_SWATCHES,
     hsl: { toHex: hslToHex, fromHex: hexToHsl },
   },
+  // THE DOOR LIFTS (2026-09-15): the leaves' lifts as the board wears them.
+  doorFit: () => doorFitFor(),
   get record() {
     return app.duel?.record ?? null;
   },

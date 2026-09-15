@@ -71,15 +71,20 @@ the crypt a neutral dark grey, the hall a brown, the castle a dark grey,
 the classic set the flagstones too); WALLS ARE TALL
 (2026-09-12, "TALL WALLS" below): ONE drawing on every theme — the
 Catacombs frame's north band as the roof over the Catacombs brick face,
-a 16×24 sprite in the tall pass standing eight rows into the square
-north, the face three pixels off its seam — worn by every set as an
-exact palette swap, each roof in its face's own stone since the palette
-round; and OPTIONS → TONES (the same round) retunes a set's floor and
-wall base colours live, saved per set — the designer's own dial, so a
-palette is now a pair of hex values they report; THE PICKER IS IN THE
-PAGE (dungeon-stone swatches, H / S / L sliders, a hex field — never
-the browser's own colour dialog, which on Firefox for Android is nine
-fixed swatches, red to white). FURNITURE SKINS
+a 16×20 sprite in the tall pass standing seven rows into the square
+north (16×24 and eleven rows until THE SHORTER FACE, 2026-09-15: the
+face lost its top brick course, the roof and the foot untouched), the
+face three pixels off its seam — worn by every set as an exact palette
+swap, each roof in its face's own stone since the palette round; and
+OPTIONS → TONES (the same round) retunes a set's floor and wall base
+colours live, saved per set — and since 2026-09-15 THE MOSS, the
+highlight flecks in the brickwork, a third slot — the designer's own
+dial, so a palette is now three hex values they report; THE PICKER IS
+IN THE PAGE (dungeon-stone swatches, H / S / L sliders, a hex field —
+never the browser's own colour dialog, which on Firefox for Android is
+nine fixed swatches, red to white); the door leaves' lifts are dials
+too (Options → Look), since a sixteen-row leaf in a twenty-row wall is
+the designer's to place. FURNITURE SKINS
 (`^`, stage skin grids): door (pixel-poem's leaf stained per theme; a
 door whose wall line runs UP the screen stands EDGE-ON — THE DESIGNER'S
 OWN SPRITE since 2026-09-11 ("the placeholder looks like ass"; "Use this
@@ -1324,6 +1329,61 @@ never re-rounded under the finger. `__DCK.tones` grew `open(slot)`,
 `picker()`, `swatches`, `hsl`. Gates: ui-smoke's TONES block drives the
 picker (the chip opens it on the tone's H/S/L, a swatch, a slider, a
 typed hex, reset, the second tap closing it); ui-smoke 351 ok (one run before it died on an engine transport glue — `bestmove c4b5 ponder e7d8readyok` arrived as ONE line, so `isready` never saw its `readyok`; the re-run green; engine.mjs untouched, on record), the picker exercised by hand in Chromium at phone width (a swatch, a slider, reset); a page-only change, the Node gates and the replay page untouched.**
+
+**THE SHORTER FACE AND THE MOSS ✅ 2026-09-15 (designer: "I need the
+walls shortened by about 4 pixels or about one 'brick'. They're
+overlapping the square to the north a little too much. Just crop the
+face of the wall, do not fuck up the roof. Also, I need a color selector
+for the green 'moss' highlights in the brick work of the walls. I can
+change the wall palette but there's these permanent green highlights
+that I can't change currently.").** (1) THE FACE LOSES ITS TOP COURSE:
+the pack's brick face is four courses of four rows (a mortar line over
+three of brick) and the sprite keeps the lower three — `board-ui
+WALL_FACE_CROP` 4, `WALL_FACE_H` 12, `WALL_SPRITE_H` 20, drawn at
+`WALL_DY` 7 above its square (its foot still `WALL_RAISE` 3 off the
+seam) — so the roof is the band as drawn, a mortar line still runs under
+its last row, the foot is where it was, and the wall's top stands seven
+rows into the square north where it stood eleven; the ruin's stump is
+cropped the same way; the crack drawings stay whole (sixteen rows from
+the roof's near edge down the face — `#crackedTile`'s clip already ran
+from the sprite's height less sixteen); a north–south band still runs
+the roof plane's sixteen rows and nothing below. The tool composes from
+the same two Catacombs tiles (`tallSprite`), `atlas.mjs TALL_H` 20,
+strip-ruin-chips reads `WALL_SPRITE_H`. THE DOOR LEAVES are sixteen rows
+in a twenty-row wall now, so their lifts are DIALS — Options → Look
+"Door lift" / "Edge door lift", whole pixels, saved, `?doorlift=` /
+`?edgelift=`, canvas-board `setDoorFit`, `DEFAULT_DOOR_FIT` doorLift 3 /
+edgeLift 8, settled on crops of s59: the face-on leaf with four rows of
+the neighbours' roof band above its head and its foot on the wall's
+foot line (5 made a door as tall as the wall, 1 sank its foot under the
+faces'); the edge-on leaf's head five rows up the far wall's twelve-row
+face, its foot two rows short of the near roof (10 left four rows of
+floor between them, 6 put the head three rows up the face, near the
+lift the designer called "WAY too low"). (2) THE MOSS: the "green
+highlights" were the pack's olive highlight flecks on the bricks
+(`brickLight`, one flat colour, twenty-five pixels a tile) under the
+live tones' PER-CHANNEL RATIO RULE, which scales every pixel by the
+tone's channels over the base's and so turns a pixel of another hue
+green or cyan whenever the tone's hue differs from the base's (measured
+on the four sets — a grey tone and a tan tone both did it; the baked
+palettes never did, the flecks are olive there by the pack's hand). The
+rule is HUE-TRUE now (`atlas.mjs retone`: every pixel takes the tone's
+hue, its saturation scaled by the tone's over the base's — the tone's
+own where the base is near grey — and its lightness scaled by the
+tone's over the base's), so a grey wall is grey to the last fleck; and
+THE MOSS IS A THIRD SLOT: the repack tool records each row's palette on
+the atlas index (`palette: { floor, wall, moss }` — the floor's base,
+the brick, `brickLight`), `baseTones` reads it, `setTones` takes `moss`,
+the flecks are found by their exact colour and take the moss tone
+verbatim (with no moss tone they follow the wall); a third chip in
+Options → Tones (`?moss=`; saved per set; reset clears it), so a
+palette is three hex values now. Gates: test-debris 75 (the palette on
+every row, the face's twelve opaque rows with brick in the wall colour
+and the flecks in the moss colour, nothing under the foot, the mortar
+line under the roof and brick at the foot, the band's sixteen rows),
+strip-ruin-chips, ui-smoke (THE MOSS: the flecks in its colour on the
+walls, the floor untouched, the chip and the save, reset; the edge door
+lift dial moving d8 and returning), selftest 46/46, ui-smoke 318 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium; the gallery re-rendered.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +

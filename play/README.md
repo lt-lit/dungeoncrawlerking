@@ -2408,6 +2408,71 @@ number, a hex typed without the # lands with the sliders following,
 reset returns the chips and the open picker to the base, the second tap
 closes it. Gates green: ui-smoke 351 ok (one run before it died on an engine transport glue — `bestmove c4b5 ponder e7d8readyok` arrived as ONE line, so `isready` never saw its `readyok`; the re-run green; engine.mjs untouched, on record), the picker exercised by hand in Chromium at phone width (a swatch, a slider, reset); a page-only change, the Node gates and the replay page untouched.
 
+THE SHORTER FACE AND THE MOSS (2026-09-15; designer: "I need the walls
+shortened by about 4 pixels or about one 'brick'. They're overlapping
+the square to the north a little too much. Just crop the face of the
+wall, do not fuck up the roof. Also, I need a color selector for the
+green 'moss' highlights in the brick work of the walls. I can change
+the wall palette but there's these permanent green highlights that I
+can't change currently."). THE FACE: the Catacombs brick face is four
+courses of four rows — a mortar line over three rows of brick — and the
+sprite now keeps the lower three (board-ui `WALL_FACE_CROP` 4,
+`WALL_FACE_H` 12, `WALL_SPRITE_H` 20; `tallSprite` crops the face and
+the ruin's stump alike), drawn at `WALL_DY` 7 above its square with the
+foot still `WALL_RAISE` 3 off the seam: the roof is the band as drawn, a
+mortar line still runs under its last row, the foot is where it was, the
+wall's top stands seven rows into the square north where it stood
+eleven; the crack drawings (three of the four run all sixteen rows) stay
+whole, masked from the roof's near edge down the face as `#crackedTile`
+already clipped them; a north–south band runs the roof plane's sixteen
+rows and nothing below, the next square's roof covering the rest as
+before. `atlas.mjs TALL_H` 20; strip-ruin-chips reads `WALL_SPRITE_H`.
+THE DOOR LEAVES are sixteen rows in a twenty-row wall now, so their
+lifts are DIALS: Options → Look "Door lift" and "Edge door lift", whole
+pixels off the leaf's square's seam, saved, `?doorlift=` / `?edgelift=`
+for a shot, canvas-board `setDoorFit` / `doorFit`, `__DCK.doorFit()`;
+`DEFAULT_DOOR_FIT` doorLift 3 / edgeLift 8, settled on crops of s59 at
+k 6 — the face-on double g5+h5 at 5 / 3 / 1 (5: its head two rows under
+the roof's top edge, a door as tall as the wall; 3: four rows of the
+neighbours' roof band above its head, its foot on the wall's foot line;
+1: its foot two rows under the faces'), the edge-on d8 at 10 / 8 / 6
+(10: four rows of floor between its foot and the near roof; 8: its head
+five rows up the far wall's twelve-row face, its foot two rows short of
+the near roof; 6: the head three rows up the face, near the lift the
+designer called "WAY too low"). THE MOSS: the "green highlights" were
+the pack's olive highlight flecks on the bricks — `brickLight`, one
+flat colour, twenty-five pixels a tile (`brickDark`, the same hue, is
+the flecks' shadow) — under the live tones' first rule, a per-channel
+ratio (the repack tool's floor rule): every pixel scaled by the tone's
+channels over the base's, so a pixel whose hue differs from the base's
+lands green or cyan whenever the tone's hue does — a grey tone and a
+tan tone both did it on all four sets (`phase0`'s scratch probe laid the
+rules side by side); the baked palettes never did (their flecks are
+olive by the pack's hand, or plum, or steel blue). `atlas.mjs retone` is
+HUE-TRUE now: every pixel takes the tone's hue, its saturation scaled by
+the tone's over the base's (the tone's own where the base is near grey,
+as the floors' bases are), its lightness scaled by the tone's over the
+base's — a grey wall is grey to the last fleck, a tan wall's flecks a
+lighter tan. And THE MOSS IS A THIRD SLOT: the repack tool records each
+row's palette on the atlas index (`themes[t].palette = { floor, wall,
+moss }` — the floor's base colour, the wall's brick, `brickLight`, the
+classic row included), `baseTones` reads it (the dominant-colour read
+stays the fallback for an index without one), `setTones` takes `moss`,
+the retint finds the flecks by their exact colour and paints them the
+moss tone verbatim (with no moss tone they follow the wall), and
+Options → Tones has a third chip, moss, opening the same picker
+(`?moss=`; saved per set under `options.tones[key].moss`; reset clears
+it with the rest). Gates: test-debris 75 (every row's palette as hex
+with the moss its own colour; the east–west wall's face twelve opaque
+rows under the roof, brick in the wall colour with the flecks in the
+moss colour, nothing under the foot; the mortar line under the roof
+and brick at the foot; the band's sixteen rows and nothing below),
+strip-ruin-chips, ui-smoke's TONES block grew THE MOSS (the flecks
+counted in the moss colour on the walls, the floor's signature
+untouched, the chip and the save carrying it alone, reset clearing it)
+and the door block the lift dial (d8 repainted three pixels higher, the
+board wearing the number, back at the default), selftest 46/46, ui-smoke 318 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium; the gallery re-rendered.
+
 ## The debris layer (2026-09-07)
 
 The floor remembers. Designer brief: "a universal debris system, so traces

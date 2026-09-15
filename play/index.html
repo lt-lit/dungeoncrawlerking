@@ -291,6 +291,7 @@
     <div class="opt tones" id="opt-tones">Tones
       <button class="tone-chip" id="toneFloor" type="button" data-slot="floor" aria-pressed="false" title="pick the floor stone"><span class="tone-swatch"></span>floor <span class="opt-val" id="toneFloorV"></span></button>
       <button class="tone-chip" id="toneWall" type="button" data-slot="wall" aria-pressed="false" title="pick the wall stone"><span class="tone-swatch"></span>walls <span class="opt-val" id="toneWallV"></span></button>
+      <button class="tone-chip" id="toneMoss" type="button" data-slot="moss" aria-pressed="false" title="pick the moss: the highlight flecks in the brickwork"><span class="tone-swatch"></span>moss <span class="opt-val" id="toneMossV"></span></button>
       <button id="btnTonesReset" type="button" title="this art set's own colours">reset</button>
     </div>
     <!-- THE TONE PICKER (2026-09-12): IN THE PAGE, never the browser's own
@@ -306,7 +307,7 @@
       <label class="tone-slider">lightness <input type="range" id="toneLum" min="0" max="100" step="1"><span class="opt-val" id="toneLumV"></span></label>
       <label class="tone-hex">hex <input type="text" id="toneHex" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" maxlength="7" placeholder="#rrggbb"></label>
     </div>
-    <p class="opt-hint">The floor stone and the wall stone of this art set, recoloured live and saved per set; everything keeps its shading. Tap a chip to open the picker; the hex on the chip is the number to report.</p>
+    <p class="opt-hint">The floor stone, the wall stone and the moss (the highlight flecks in the brickwork) of this art set, recoloured live and saved per set; everything keeps its shading. Tap a chip to open the picker; the hex on the chip is the number to report.</p>
     <!-- THE CAMERA (Phase 2, 2026-09-08): the view turns by quarters — in a
          DUEL screen-up is the army's facing (brief §5.1); the walk is
          north-up always since 2026-09-09 (the controls session, ruling 1)
@@ -328,6 +329,17 @@
     <label class="opt">Piece shift
       <input type="range" id="optTileShift" min="-7" max="7" step="1">
       <span class="opt-val" id="optTileShiftV"></span>
+    </label>
+    <!-- THE DOOR LIFTS (2026-09-15, with the shorter wall face): the face-on
+         leaf and the edge-on leaf, whole floor pixels off their square's
+         seam (board-ui DEFAULT_DOOR_FIT; ?doorlift= / ?edgelift=). -->
+    <label class="opt">Door lift
+      <input type="range" id="optDoorLift" min="-4" max="12" step="1">
+      <span class="opt-val" id="optDoorLiftV"></span>
+    </label>
+    <label class="opt">Edge door lift
+      <input type="range" id="optEdgeLift" min="0" max="14" step="1">
+      <span class="opt-val" id="optEdgeLiftV"></span>
     </label>
     <!-- The arrows (2026-09-07): the hints' evals are listed in the hint
          line under the board, never on the arrows; the shaft's width is in
