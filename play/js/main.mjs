@@ -330,7 +330,7 @@ function loadOptions() {
     // THE TONES (2026-09-12): per art set, a floor and a wall base colour, #rrggbb or nothing.
     {
       const clean = {};
-      if (options.tones && typeof options.tones === 'object') for (const [k, t] of Object.entries(options.tones)) { const e = {}; if (HEX6.test(t?.floor ?? '')) e.floor = t.floor.toLowerCase(); if (HEX6.test(t?.wall ?? '')) e.wall = t.wall.toLowerCase(); if (HEX6.test(t?.moss ?? '')) e.moss = t.moss.toLowerCase(); if (Object.keys(e).length) clean[k] = e; }
+      if (options.tones && typeof options.tones === 'object') for (const [k, t] of Object.entries(options.tones)) { const e = {}; if (HEX6.test(t?.floor ?? '')) e.floor = t.floor.toLowerCase(); if (HEX6.test(t?.wall ?? '')) e.wall = t.wall.toLowerCase(); if (HEX6.test(t?.highlight ?? '')) e.highlight = t.highlight.toLowerCase(); if (Object.keys(e).length) clean[k] = e; }
       options.tones = clean;
     }
     // (A saved renderer / piece-pixel mode / % dial from the DOM era is not read.)
@@ -656,10 +656,10 @@ function toneParam(name) {
 function tonesFor(theme) {
   const saved = options.tones?.[toneKey(theme)] ?? {};
   const t = {};
-  const floor = toneParam('floor') ?? saved.floor, wall = toneParam('wall') ?? saved.wall, moss = toneParam('moss') ?? saved.moss;
+  const floor = toneParam('floor') ?? saved.floor, wall = toneParam('wall') ?? saved.wall, highlight = toneParam('highlight') ?? saved.highlight;
   if (floor) t.floor = floor;
   if (wall) t.wall = wall;
-  if (moss) t.moss = moss;
+  if (highlight) t.highlight = highlight;
   return Object.keys(t).length ? t : null;
 }
 function applyTones(theme = currentTheme()) {
@@ -691,7 +691,8 @@ function resetTones() {
 // <input type=color> is a FIXED LIST of nine swatches, red to white, with
 // no way to enter a colour — so the picker lives in the page: the CHIPS
 // (each slot's colour and its hex — floor, walls and, since 2026-09-15,
-// THE MOSS, the highlight flecks in the brickwork) open it on a slot; a grid of
+// THE HIGHLIGHT: the roof's lit line and the flecks in the brickwork,
+// "moss" until 2026-09-16) open it on a slot; a grid of
 // DUNGEON STONES (browns, tans, dark greys, warm and cool stone — the
 // designer's ruling), HUE / SATURATION / LIGHTNESS sliders whose tracks
 // are painted in the colours they lead to, and a HEX field. Every change
@@ -777,20 +778,20 @@ function syncTonePicker(hex) {
 /** The chips show the set's live tones, else its own base colours; reset is
  *  live when a tone is saved; the picker follows the open slot. */
 async function syncTonesUI(theme = currentTheme()) {
-  const chips = { floor: $('toneFloor'), wall: $('toneWall'), moss: $('toneMoss') };
-  if (!chips.floor || !chips.wall || !chips.moss) return;
+  const chips = { floor: $('toneFloor'), wall: $('toneWall'), highlight: $('toneHighlight') };
+  if (!chips.floor || !chips.wall || !chips.highlight) return;
   const key = toneKey(theme);
   const atlas = await loadAtlas();
   const base = atlas.baseTones(key) ?? {};
   const live = tonesFor(theme) ?? {};
   const shown = {};
-  for (const k of ['floor', 'wall', 'moss']) {
+  for (const k of ['floor', 'wall', 'highlight']) {
     const v = live[k] ?? base[k] ?? '#000000';
     shown[k] = v;
     chips[k].dataset.hex = v;
     chips[k].querySelector('.tone-swatch').style.background = v;
     chips[k].setAttribute('aria-pressed', String(tonePicker.slot === k));
-    $({ floor: 'toneFloorV', wall: 'toneWallV', moss: 'toneMossV' }[k]).textContent = v;
+    $({ floor: 'toneFloorV', wall: 'toneWallV', highlight: 'toneHighlightV' }[k]).textContent = v;
   }
   $('btnTonesReset').disabled = !options.tones?.[key];
   syncTonePicker(tonePicker.slot ? shown[tonePicker.slot] : null);
@@ -3401,7 +3402,7 @@ $('optDoors').addEventListener('change', (e) => {
 // slider (as it drags) or a typed hex sets the tone live, saved per art set.
 $('toneFloor').addEventListener('click', () => openTonePicker('floor'));
 $('toneWall').addEventListener('click', () => openTonePicker('wall'));
-$('toneMoss').addEventListener('click', () => openTonePicker('moss'));
+$('toneHighlight').addEventListener('click', () => openTonePicker('highlight'));
 $('btnTonesReset').addEventListener('click', () => resetTones());
 for (const id of ['toneHue', 'toneSat', 'toneLum']) {
   $(id).addEventListener('input', () => {

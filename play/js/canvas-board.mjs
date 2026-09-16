@@ -44,12 +44,13 @@
 //               by row from the far row to the near one the TALL things —
 //               THE WALLS (2026-09-12: a wall, a cracked wall, a weak spot
 //               or a ruin's stub is a 16×20 sprite (16×24 until 2026-09-15) standing at its square's
-//               y − 11, the roof's far half over the square north, the
+//               y − WALL_DY (7; 11 until the shorter face), the roof's far half over the square north, the
 //               face on the square with three pixels of floor under it —
 //               board-ui WALL_LIFT / WALL_RAISE), furniture props (16×32),
 //               the door leaves (a face-on leaf lifted DOOR_LIFT, the
-//               edge-on leaf EDGE_DOOR_LIFT — mid-face of the far wall to
-//               behind the near roof) and pieces (their sprite at its native
+//               edge-on leaf EDGE_DOOR_LIFT — on the rows its square's own
+//               wall band would fill, the far face to the near roof; both
+//               dials since 2026-09-15) and pieces (their sprite at its native
 //               size, lifted and shifted by whole tile pixels) — so a
 //               nearer head paints over the piece behind it and a wall's
 //               roof over the feet of the piece north of it, the dim over
@@ -1440,12 +1441,14 @@ export class CanvasBoard {
    *  an unskinned '^'. { tile, prop } — a prop is 16×32. */
   /** A furniture square's sprite and where it stands: `dy` its buffer
    *  offset from the square's top, `h` its height — a prop box (16×32)
-   *  rises into the square north; a face-on door LEAF stands DOOR_LIFT off
-   *  its own square's seam (TALL WALLS: two pixels above the face's foot,
-   *  no roof over it); the EDGE-ON leaf stands EDGE_DOOR_LIFT off it — its
-   *  head seven rows up the far wall's face, its foot on the row the near
-   *  wall's roof begins, so it runs from mid-face to behind the wall in
-   *  front (board-ui, the designer's two verdicts). */
+   *  rises into the square north; a face-on door LEAF stands
+   *  `doorFit.doorLift` off its own square's seam (DOOR_LIFT by default:
+   *  its foot on the wall's foot line, no roof over it); the EDGE-ON leaf
+   *  stands `doorFit.edgeLift` off it — by default on the rows its square's
+   *  own wall band would fill (board-ui WALL_DY: its head four rows up the
+   *  far wall's face, its foot on the row the near wall's roof begins, no
+   *  floor between — DEFAULT_DOOR_FIT's note); both lifts are dials since
+   *  2026-09-15 (`setDoorFit`). */
   #furnitureSprite(k, [hf, hr]) {
     if (k.skin === 'door') {
       if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), dy: -this.doorFit.edgeLift, h: T };

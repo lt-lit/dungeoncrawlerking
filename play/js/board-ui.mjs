@@ -143,13 +143,12 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
  * and crosses their union, a thick block's inner corner filling only when
  * the diagonal is solid too; the neighbours hold the same bands. A
  * face-on door leaf stands DOOR_LIFT pixels off its own square's seam,
- * two above the face's foot; an EDGE-ON leaf stands EDGE_DOOR_LIFT off it
- * (designer 2026-09-12, on a leaf at the face-on lift: "that's WAY too
- * low on the wall for the vertical door"; on one reaching the far face's
- * top: "they look like they connect all the way at the top of the
- * wall") — its head seven rows up the far wall's face, its foot tucked
- * under the near wall's roof (the row the roof begins on), so a door
- * seen edge-on runs from mid-face to behind the wall in front of it.
+ * its foot on the wall's foot line; an EDGE-ON leaf stands EDGE_DOOR_LIFT
+ * off it, on the rows its square's own band would fill (DEFAULT_DOOR_FIT
+ * below — the rule since 2026-09-16; the designer's verdicts on the way,
+ * 2026-09-12: a leaf at the face-on lift was "WAY too low on the wall for
+ * the vertical door", one reaching the far face's top "look[ed] like they
+ * connect all the way at the top of the wall").
  */
 export const WALL_BAND = { x0: 3, x1: 12 };
 export const WALL_LIFT = 8; // the roof's far half: the sprite's rows 0–7
@@ -159,16 +158,20 @@ export const WALL_FACE_H = 16 - WALL_FACE_CROP; // 12: the face rows the sprite 
 export const WALL_SPRITE_H = WALL_LIFT + WALL_FACE_H; // 20
 export const WALL_DY = WALL_SPRITE_H - 16 + WALL_RAISE; // 7: the sprite's top above its square's top (its foot WALL_RAISE off the seam)
 /** The door leaves' lifts off their square's seam, in whole pixels
- *  (Options → Look, `?doorlift=` / `?edgelift=`), settled on crops of s59
- *  with the shorter face: the FACE-ON leaf at 3 — four rows of the
- *  neighbours' roof band stand above its head and its foot sits on the
- *  wall's foot line (5 put its head two rows under the roof's top edge,
- *  a door as tall as the wall; 1 sank its foot under the faces'); the
- *  EDGE-ON leaf at 8 — its head five rows up the far wall's twelve-row
- *  face, its foot two rows short of the near wall's roof (10 left four
- *  rows of floor between foot and roof; 6 put the head three rows up the
- *  face, near the lift the designer called "WAY too low"). */
-export const DEFAULT_DOOR_FIT = { doorLift: 3, edgeLift: 8 };
+ *  (Options → Look, `?doorlift=` / `?edgelift=`). THE RULE (2026-09-16,
+ *  the designer on the first shorter-face build: "Vertical doors are
+ *  misaligned again"): a leaf stands where the wall it replaces would —
+ *  the FACE-ON leaf's foot on the wall's foot line (lift 3: rows −3…12
+ *  of its square, four rows of the neighbours' roof band above its head;
+ *  5 made a door as tall as the wall, 1 sank its foot under the faces'),
+ *  and the EDGE-ON leaf on exactly the rows its square's own band would
+ *  fill (lift WALL_DY: rows −7…8, the roof plane's sixteen rows), so its
+ *  foot meets the row the near wall's roof begins on with no floor
+ *  between, and its head stands four rows up the far wall's twelve-row
+ *  face (8 left a row of floor under the foot — the misalignment; 6 put
+ *  the head three rows up the face, near the lift the designer called
+ *  "WAY too low"; 10 four rows of floor). */
+export const DEFAULT_DOOR_FIT = { doorLift: 3, edgeLift: WALL_DY };
 export const DOOR_LIFT_RANGE = [-4, 12];
 export const EDGE_DOOR_LIFT_RANGE = [0, 14];
 export const DOOR_LIFT = DEFAULT_DOOR_FIT.doorLift;

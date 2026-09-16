@@ -219,7 +219,7 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   await page.evaluate(() => { window.__DCK.options.hints = false; window.__DCK.applyOptions(); });
   const before = await themeState();
   const base = await page.evaluate(() => window.__DCK.tones.base());
-  expect(!!base?.floor && !!base?.wall && !!base?.moss && /^#[0-9a-f]{6}$/.test(base.floor) && /^#[0-9a-f]{6}$/.test(base.wall) && /^#[0-9a-f]{6}$/.test(base.moss), `the art set's own base colours read off the atlas's recorded palette (floor ${base?.floor}, wall ${base?.wall}, moss ${base?.moss})`);
+  expect(!!base?.floor && !!base?.wall && !!base?.highlight && /^#[0-9a-f]{6}$/.test(base.floor) && /^#[0-9a-f]{6}$/.test(base.wall) && /^#[0-9a-f]{6}$/.test(base.highlight), `the art set's own base colours read off the atlas's recorded palette (floor ${base?.floor}, wall ${base?.wall}, highlight ${base?.highlight})`);
   await page.evaluate(() => window.__DCK.tones.set({ floor: '#804020', wall: '#206080' }));
   await page.waitForTimeout(200);
   const toned = await themeState();
@@ -263,25 +263,27 @@ expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" i
   await page.click('#toneFloor');
   const closed = await page.evaluate(() => ({ hidden: document.getElementById('tone-picker').hidden, pressed: document.getElementById('toneFloor').getAttribute('aria-pressed') }));
   expect(closed.hidden && closed.pressed === 'false', 'a second tap on the chip closes the picker');
-  // THE MOSS (2026-09-15, the designer: "a color selector for the green
-  // 'moss' highlights in the brick work of the walls"): the third slot —
-  // the highlight flecks in the brickwork take the moss colour exactly,
-  // the floor is untouched by it, the chip and the save carry it, reset
-  // clears it. (The flecks turned green under the first cut's per-channel
-  // ratio rule whenever the wall tone's hue differed from the base's; the
-  // rule is hue-true now, so with no moss tone they follow the wall.)
-  await page.evaluate(() => window.__DCK.tones.set({ moss: '#4a6a3a' }));
+  // THE WALL HIGHLIGHT (2026-09-15, the designer: "a color selector for the
+  // green 'moss' highlights in the brick work of the walls"; 2026-09-16:
+  // "rename 'moss' to 'wall highlight'… make it effect the highlights on
+  // the roof bricks as well"): the third slot — the roof's lit line and the
+  // flecks in the brickwork take the highlight colour exactly, the floor is
+  // untouched by it, the chip and the save carry it, reset clears it. (The
+  // flecks turned green under the first cut's per-channel ratio rule
+  // whenever the wall tone's hue differed from the base's; the rule is
+  // hue-true now, so with no highlight tone they follow the wall.)
+  await page.evaluate(() => window.__DCK.tones.set({ highlight: '#4a6a3a' }));
   await page.waitForTimeout(200);
-  const mossCount = () => page.evaluate(() => { const K = window.__DCK; const cells = window.__smoke.cells(); K.renderer.paintNow(); let n = 0; for (const sq of Object.keys(cells)) { if (!cells[sq].includes('wall')) continue; const px = K.renderer.square(sq); if (!px) continue; for (let i = 0; i < px.length; i += 4) if (px[i] === 0x4a && px[i + 1] === 0x6a && px[i + 2] === 0x3a && px[i + 3] === 255) n++; } return n; });
-  const mossy = await themeState();
-  const mossN = await mossCount();
-  const mossUi = await page.evaluate(() => ({ chip: document.getElementById('toneMossV').textContent, saved: JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones?.[window.__DCK.tones.key()]?.moss, live: window.__DCK.tones.get() }));
-  expect(mossN > 0 && mossy.sig.floor === before.sig.floor && mossy.sig.wall !== before.sig.wall, `the moss tone paints the brickwork's flecks in its colour (${mossN} moss pixels on the walls), the walls repaint, the floor is untouched`);
-  expect(mossUi.chip === '#4a6a3a' && mossUi.saved === '#4a6a3a' && !mossUi.live?.wall && !mossUi.live?.floor, `the moss chip shows the tone, the save carries it alone (${JSON.stringify(mossUi.live)})`);
+  const hlCount = () => page.evaluate(() => { const K = window.__DCK; const cells = window.__smoke.cells(); K.renderer.paintNow(); let n = 0, roof = 0; for (const sq of Object.keys(cells)) { if (!cells[sq].includes('wall')) continue; const px = K.renderer.square(sq); if (!px) continue; for (let i = 0; i < px.length; i += 4) if (px[i] === 0x4a && px[i + 1] === 0x6a && px[i + 2] === 0x3a && px[i + 3] === 255) { n++; if (i / 4 < 16 * 4) roof++; } } return { n, roof }; });
+  const lit = await themeState();
+  const hl = await hlCount();
+  const hlUi = await page.evaluate(() => ({ chip: document.getElementById('toneHighlightV').textContent, saved: JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones?.[window.__DCK.tones.key()]?.highlight, live: window.__DCK.tones.get() }));
+  expect(hl.n > 0 && hl.roof > 0 && lit.sig.floor === before.sig.floor && lit.sig.wall !== before.sig.wall, `the highlight tone paints the brickwork's flecks and the roof's lit line in its colour (${hl.n} pixels on the walls, ${hl.roof} of them in a square's top four rows), the walls repaint, the floor is untouched`);
+  expect(hlUi.chip === '#4a6a3a' && hlUi.saved === '#4a6a3a' && !hlUi.live?.wall && !hlUi.live?.floor, `the highlight chip shows the tone, the save carries it alone (${JSON.stringify(hlUi.live)})`);
   await page.evaluate(() => window.__DCK.tones.reset());
   await page.waitForTimeout(200);
-  const unmossed = await themeState();
-  expect((await mossCount()) === 0 && unmossed.sig.wall === before.sig.wall, 'reset clears the moss and the walls return to the set\'s own');
+  const unlit = await themeState();
+  expect((await hlCount()).n === 0 && unlit.sig.wall === before.sig.wall, 'reset clears the highlight and the walls return to the set\'s own');
   await page.evaluate(() => document.getElementById('btnOptionsClose').click());
   await page.evaluate(() => { window.__DCK.options.hints = true; window.__DCK.applyOptions(); });
 }

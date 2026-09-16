@@ -2473,6 +2473,60 @@ untouched, the chip and the save carrying it alone, reset clearing it)
 and the door block the lift dial (d8 repainted three pixels higher, the
 board wearing the number, back at the default), selftest 46/46, ui-smoke 318 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium; the gallery re-rendered.
 
+THE WALL HIGHLIGHT, THE DESIGNER'S SLATE AND THE EDGE DOOR ON ITS BAND
+(2026-09-16; designer, on the shorter-face build, the Tones row reading
+floor #5b5b62 · walls #333844 · moss #3f4555: "Vertical doors are
+misaligned again. Let's rename 'moss' to 'wall highlight' or something.
+And make it effect the highlights on the roof bricks as well. Also,
+these are the values I like the most right now. Let's make these the
+default."). THE EDGE-ON LEAF: at edge lift 8 its foot sat one row above
+the near wall's roof with a row of floor between (a stacked pair's
+leaves measured contiguous and on the same columns on the build, so that
+row was the step the designer saw); the rule is that a leaf stands where
+the wall it replaces would — the face-on leaf's foot on the wall's foot
+line (lift 3, unchanged), the edge-on leaf on exactly the rows its
+square's own band would fill: `DEFAULT_DOOR_FIT.edgeLift = WALL_DY` 7,
+rows −7…8 of its square, its head four rows up the far wall's
+twelve-row face, its foot on the row the near wall's roof begins, no
+floor between, a stacked double one strip from the far face into the
+near roof; the dial stays, 0…14. THE HIGHLIGHT: the roof's lit line
+(`lit`) and the face's flecks (`brickLight`) were two colours in every
+set's swap, so the slot moved the flecks and left the roof's line in
+the wall's stone; now they are ONE colour per set (`lit === brickLight`
+in every `WALL_SWAPS` entry — the tool refuses otherwise), the slot is
+`highlight` everywhere (the index's `palette: { floor, wall, highlight
+}`, `baseTones` / `setTones`, `options.tones[key].highlight`,
+`?highlight=`, the chip "highlight", atlas.mjs `retone` matching the one
+colour on the roof's line and the face's flecks alike; a saved `moss`
+is not read). THE CRYPT'S DEFAULTS: every generated floor is the crypt
+(the vaults style's theme), so the designer's three values are its
+baked palette — `FLOOR_BASES.crypt` #5b5b62, `WALL_SWAPS.crypt` brick
+#333844, `lit` / `brickLight` #3f4555 — the rest of the crypt's swap
+(outline, mortar, dark, mid, fill, the six shades) derived from the old
+swap by the live tone rule (hue-true, brick #312220 → #333844), so the
+baked row is what they tuned on screen and reset returns to it; the
+hall, the castle and the classic set keep theirs. THE READ-BACK
+RE-PALETTE: the art packs under gitignored `phase0/assets-src/` did not
+survive a container restart, so the repack tool's read-back path (the
+committed atlas as the source when a pack is off disk) now REMAPS every
+wall and ruin tile name-for-name from the row's recorded `swap` (the
+whole swap incl. the shades, written on the index by this build;
+`LAST_SWAPS` — the 2026-09-15 values — stands in for an index without
+one) to the current `WALL_SWAPS` (`repalette`, an exact colour → colour
+map), and recolours every floor from its recorded base to the current
+`FLOOR_BASES` by the ratio rule — a palette change ships without the
+packs, and the atlas was verified by census (every row's wall tiles
+carry only named colours, the highlight ×35 with the lit row, the
+floors' tops the bases, the `swap` recorded on all four rows). Gates:
+test-debris 76 (every row's palette with the highlight its own colour,
+the east–west face's flecks AND the roof's lit row in it, the crypt's
+defaults the slate), strip-ruin-chips, ui-smoke 314 ok (the HIGHLIGHT
+block counts the colour on the roof's rows too, the floor untouched,
+the chip and the save, reset; the edge door lift dial moving d8 and
+returning), selftest 46/46, facing-walk 108/108, replay-smoke 63,
+test-camera 80, test-world 125, test-logreport 47, canvas-grid `none`
+/ `margin` 4/4 in Chromium; the gallery re-rendered.
+
 ## The debris layer (2026-09-07)
 
 The floor remembers. Designer brief: "a universal debris system, so traces

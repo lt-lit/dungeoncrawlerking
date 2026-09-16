@@ -299,11 +299,24 @@ const CRYPT = { outline: '#1b1916', lit: '#454135', fill: '#2e2a25', dark: '#232
  *  halfway to the brick so a weak wall's black crack reads, the crypt's
  *  own drawing swapped like the rest. The pack's colours are CRYPT. */
 const WALL_SWAPS = {
-  crypt: { outline: '#211716', lit: '#524544', fill: '#312220', dark: '#231f19', mid: '#413432', black: '#070707', mortarDark: '#211716', mortar: '#241b18', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' },
-  hall: { outline: '#3a232b', lit: '#6f575f', fill: '#543740', dark: '#422c3b', mid: '#62474f', black: '#150b10', mortarDark: '#3a232b', mortar: '#472d3d', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
-  castle: { outline: '#3b3f56', lit: '#7e89a3', fill: '#657392', dark: '#424c6e', mid: '#717e9b', black: '#0c0b15', mortarDark: '#3b3f56', mortar: '#454e6d', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
-  classic: { outline: '#312f41', lit: '#6e6c82', fill: '#52506a', dark: '#403e55', mid: '#605e76', black: '#0c0b12', mortarDark: '#312f41', mortar: '#3a384c', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
+  // THE CRYPT IS THE DESIGNER'S SLATE (2026-09-16, off the walk — every
+  // generated floor wears the crypt: "these are the values I like the most
+  // right now. Let's make these the default"): walls #333844, the highlight
+  // #3f4555, the floor #5b5b62. The other colours are the old crypt swap put
+  // through the live tone rule from its brick to #333844 (atlas.mjs retone
+  // — so the baked row is exactly the board they tuned it on).
+  crypt: { outline: '#23262e', lit: '#3f4555', fill: '#333844', dark: '#272a31', mid: '#4d515c', black: '#0a0a0a', mortarDark: '#23262e', mortar: '#262a32', brickDark: '#272a31', brick: '#333844', brickLight: '#3f4555' },
+  hall: { outline: '#3a232b', lit: '#6f575f', fill: '#543740', dark: '#422c3b', mid: '#62474f', black: '#150b10', mortarDark: '#3a232b', mortar: '#472d3d', brickDark: '#422c3b', brick: '#543740', brickLight: '#6f575f' },
+  castle: { outline: '#3b3f56', lit: '#7e89a3', fill: '#657392', dark: '#424c6e', mid: '#717e9b', black: '#0c0b15', mortarDark: '#3b3f56', mortar: '#454e6d', brickDark: '#424c6e', brick: '#657392', brickLight: '#7e89a3' },
+  classic: { outline: '#312f41', lit: '#6e6c82', fill: '#52506a', dark: '#403e55', mid: '#605e76', black: '#0c0b12', mortarDark: '#312f41', mortar: '#3a384c', brickDark: '#403e55', brick: '#52506a', brickLight: '#6e6c82' },
 };
+// THE WALL HIGHLIGHT (2026-09-16, the designer: rename the moss "to 'wall
+// highlight' or something. And make it effect the highlights on the roof
+// bricks as well"): the roof's lit line (`lit` — the band's second row and
+// a vertical band's lit column) and the brick face's flecks (`brickLight`)
+// are ONE colour per set now, so the tones' highlight slot and the chip's
+// base tell the whole truth; every set's flecks took its roof's lit colour.
+for (const [th, sw] of Object.entries(WALL_SWAPS)) if (sw.lit !== sw.brickLight) throw new Error(`${th}: lit and brickLight are the one highlight — ${sw.lit} vs ${sw.brickLight}`);
 /** THE FLOORS' BASE COLOURS (the same round; the designer: "browns and
  *  tans and dark greys for the floors. No maroons or greens or lite greys
  *  (like my pieces). Also be sure that the walls don't blend too heavily
@@ -312,7 +325,7 @@ const WALL_SWAPS = {
  *  a brown off its plum, the castle a dark grey off its blue-grey, the
  *  classic set the flagstones too (its flat olive checker was a green).
  *  Options → Tones retunes the floor and the walls live (atlas.mjs). */
-const FLOOR_BASES = { crypt: '#2c2c2f', hall: '#4a3629', castle: '#2e2f33', classic: '#2a2a2e' };
+const FLOOR_BASES = { crypt: '#5b5b62', hall: '#4a3629', castle: '#2e2f33', classic: '#2a2a2e' }; // the crypt's the designer's mid grey (2026-09-16)
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 const toHex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -334,7 +347,18 @@ if (OVERRIDE) {
   for (const th of Object.keys(WALL_SWAPS)) if (OVERRIDE[th]) Object.assign(WALL_SWAPS[th], OVERRIDE[th]);
   for (const th of Object.keys(FLOOR_BASES)) if (OVERRIDE.floors?.[th]) FLOOR_BASES[th] = OVERRIDE.floors[th];
 }
-for (const pal of [CRYPT, ...Object.values(WALL_SWAPS)]) for (let i = 1; i <= SHADES; i++) pal[`shade${i}`] = toHex(mix(hex(pal.outline), hex(pal.black), i / SHADES));
+/** THE SWAPS THE COMMITTED ATLAS WORE before the rows recorded their own
+ *  (2026-09-15's build) — a read-back without the packs REMAPS the wall
+ *  and ruin tiles from these to WALL_SWAPS by name (see `repalette`); a
+ *  row that records its `swap` uses that instead, so this table is only
+ *  for atlases older than 2026-09-16. */
+const LAST_SWAPS = {
+  crypt: { outline: '#211716', lit: '#524544', fill: '#312220', dark: '#231f19', mid: '#413432', black: '#070707', mortarDark: '#211716', mortar: '#241b18', brickDark: '#231f19', brick: '#312220', brickLight: '#3f3628' },
+  hall: { outline: '#3a232b', lit: '#6f575f', fill: '#543740', dark: '#422c3b', mid: '#62474f', black: '#150b10', mortarDark: '#3a232b', mortar: '#472d3d', brickDark: '#422c3b', brick: '#543740', brickLight: '#5e4148' },
+  castle: { outline: '#3b3f56', lit: '#7e89a3', fill: '#657392', dark: '#424c6e', mid: '#717e9b', black: '#0c0b15', mortarDark: '#3b3f56', mortar: '#454e6d', brickDark: '#424c6e', brick: '#657392', brickLight: '#92a1b9' },
+  classic: { outline: '#312f41', lit: '#6e6c82', fill: '#52506a', dark: '#403e55', mid: '#605e76', black: '#0c0b12', mortarDark: '#312f41', mortar: '#3a384c', brickDark: '#403e55', brick: '#52506a', brickLight: '#605e7a' },
+};
+for (const pal of [CRYPT, ...Object.values(WALL_SWAPS), ...Object.values(LAST_SWAPS)]) for (let i = 1; i <= SHADES; i++) pal[`shade${i}`] = toHex(mix(hex(pal.outline), hex(pal.black), i / SHADES));
 {
   const seen = new Map();
   for (const [name, c] of Object.entries(CRYPT)) { if (seen.has(c) && seen.get(c) !== 'black' && name !== 'shade6') throw new Error(`crypt palette: ${name} repeats ${seen.get(c)} (${c})`); seen.set(c, name); }
@@ -502,6 +526,37 @@ function swapPalette(tile, swap) {
   if (unmapped.size) throw new Error(`swapPalette: the crypt's wall carries colours the map does not name: ${[...unmapped].join(' ')}`);
   return out;
 }
+
+/** A tile drawn in `from`'s colours (a swap: name → #rrggbb, shades
+ *  included) put into `to`'s, name for name — THE READ-BACK RE-PALETTE
+ *  (2026-09-16: the packs were lost with a container restart the day the
+ *  designer's defaults changed, and every pixel of a wall or ruin tile is
+ *  a named colour, so the committed atlas remaps exactly). Two names that
+ *  share a colour in `from` must share one in `to`, or the map is
+ *  ambiguous; a colour the map does not name is an error. */
+function repalette(tile, from, to) {
+  const map = new Map();
+  for (const name of Object.keys(from)) {
+    if (!to[name]) throw new Error(`repalette: the current swap lacks ${name}`);
+    const src = from[name].toLowerCase(), dst = to[name].toLowerCase();
+    if (map.has(src) && map.get(src) !== dst) throw new Error(`repalette: ${src} is two names in the last swap (${name} among them) that the current swap tells apart`);
+    map.set(src, dst);
+  }
+  const out = blank(tile.width, tile.height);
+  const unmapped = new Set();
+  for (let i = 0; i < tile.width * tile.height; i++) {
+    const o = i * 4;
+    if (!tile.data[o + 3]) continue;
+    const key = '#' + [tile.data[o], tile.data[o + 1], tile.data[o + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+    const dst = map.get(key);
+    if (!dst) { unmapped.add(key); continue; }
+    const rgb = hex(dst);
+    out.data[o] = rgb[0]; out.data[o + 1] = rgb[1]; out.data[o + 2] = rgb[2]; out.data[o + 3] = tile.data[o + 3];
+  }
+  if (unmapped.size) throw new Error(`repalette: the tile carries colours the last swap does not name: ${[...unmapped].join(' ')}`);
+  return out;
+}
+const isWallRole = (role) => role === 'wall' || /^wall-\d+$/.test(role) || /^ruin-\d+$/.test(role);
 
 // ---- the hole blob (round 13, 2026-09-03: "ragged edges on hole tiles?
 // Needs complete autotiling"). A god-made pit AUTOTILES by its HOLE
@@ -891,25 +946,45 @@ function emitWalls(theme, emit) {
   for (const [role, tile] of Object.entries(cryptWalls.walls)) emit(role, tint(tile), { composed: how, mask: +role.slice(5) });
   for (const [role, tile] of Object.entries(cryptWalls.ruins)) emit(role, tint(tile), { composed: `ruin: ${how}, the joining walls' ragged tongues`, mask: +role.slice(5) });
 }
-/** THE ROW'S PALETTE, recorded for the atlas (THE MOSS, 2026-09-15 — the
- *  designer: "a color selector for the green 'moss' highlights in the
- *  brick work of the walls"): the floor's base, the wall's brick and the
- *  MOSS — the brick face's highlight flecks (`brickLight`, one flat colour,
- *  twenty-five pixels a tile) — so atlas.mjs's live tones start from the
- *  set's own colours exactly and find the flecks by their colour. */
-const paletteOf = (theme) => ({ floor: FLOOR_BASES[theme] ?? null, wall: WALL_SWAPS[theme].brick, moss: WALL_SWAPS[theme].brickLight });
+/** THE ROW'S PALETTE, recorded for the atlas (2026-09-15, the designer: "a
+ *  color selector for the green 'moss' highlights in the brick work of the
+ *  walls"; renamed 2026-09-16): the floor's base, the wall's brick and THE
+ *  HIGHLIGHT — the roof's lit line and the brick face's flecks, one flat
+ *  colour — so atlas.mjs's live tones start from the set's own colours
+ *  exactly and find the highlight pixels by their colour. */
+const paletteOf = (theme) => ({ floor: FLOOR_BASES[theme] ?? null, wall: WALL_SWAPS[theme].brick, highlight: WALL_SWAPS[theme].lit });
+/** The swap a row was built with, recorded on it (`swap`, shades included)
+ *  so the next read-back remaps by name; the swaps of the committed atlas
+ *  from before the record for an older index. */
+const swapRecord = (theme) => ({ ...WALL_SWAPS[theme] });
+const lastSwapOf = (theme, was) => { const sw = was.swap ?? LAST_SWAPS[theme]; if (!sw) throw new Error(`${theme}: the last atlas records no swap and none is on file — the packs are needed`); return sw; };
+/** A read-back tile in its current colours: a wall or ruin case remapped
+ *  from the last swap to the current one, a flagstone recoloured from the
+ *  last base to the current one (both no-ops when nothing changed). */
+function readBackTile(theme, role, tile, was, prov) {
+  if (isWallRole(role)) return [repalette(tile, lastSwapOf(theme, was), WALL_SWAPS[theme]), prov];
+  const m = role.match(/^floor-(\d+)$/);
+  if (m) {
+    const from = was.palette?.floor ?? null, to = FLOOR_BASES[theme] ?? null;
+    if (from && to && from.toLowerCase() !== to.toLowerCase()) return [recolour(tile, hex(from), hex(to)), { ...prov, recoloured: `to ${to}` }];
+  }
+  return [tile, prov];
+}
 themeNames.forEach((theme, row) => {
-  index.themes[theme] = { row, title: THEMES[theme].title, palette: paletteOf(theme), tiles: {} };
+  index.themes[theme] = { row, title: THEMES[theme].title, palette: paletteOf(theme), swap: swapRecord(theme), tiles: {} };
   const emit = emitter(theme, row);
   if (readBack) {
     // Every tile of this theme, in the order the last run wrote it, with the
-    // provenance it recorded (a composed case carries `composed` + `mask`).
+    // provenance it recorded (a composed case carries `composed` + `mask`) —
+    // the walls and ruins remapped into the current palette, the floors
+    // recoloured to the current base (2026-09-16).
     const was = old.index.themes[theme];
     if (!was) throw new Error(`${theme}: not in the committed atlas — the packs are needed to build a new theme`);
     for (const [role, cell] of Object.entries(was.tiles)) {
       const { col, ...prov } = cell;
       if (role === 'door-edge' || !(role in ROLES)) continue; // the leaf is generated below, never read back; a retired role (the doorway posts) is dropped
-      emit(role, crop(old.png, col * T, was.row * 2 * T, T, 2 * T), prov);
+      const [tile, prov2] = readBackTile(theme, role, crop(old.png, col * T, was.row * 2 * T, T, 2 * T), was, prov);
+      emit(role, tile, prov2);
     }
     wallProvenance(theme);
     emitEdgeDoor(theme, emit);
@@ -960,7 +1035,7 @@ themeNames.forEach((theme, row) => {
 // read back; provenance `composed`, so the credits table skips them.
 {
   const row = themeNames.length;
-  index.themes.classic = { row, title: 'The classic set — drawn in-house (a stage without a theme; the crack every theme wears)', inhouse: true, palette: paletteOf('classic'), tiles: {} };
+  index.themes.classic = { row, title: 'The classic set — drawn in-house (a stage without a theme; the crack every theme wears)', inhouse: true, palette: paletteOf('classic'), swap: swapRecord('classic'), tiles: {} };
   const emit = emitter('classic', row);
   for (const [role, tile] of Object.entries(inhouseTiles())) if (role !== 'wall') emit(role, tile, { composed: 'drawn in-house (lib/inhouse.mjs)' });
   // Its walls and ruins: the crypt row's (whichever way that row was
@@ -973,11 +1048,12 @@ themeNames.forEach((theme, row) => {
       const drawn = role === 'wall' ? cryptWalls.walls['wall-10'] : role.startsWith('ruin') ? cryptWalls.ruins[role] : cryptWalls.walls[role];
       emit(role, swapPalette(drawn, WALL_SWAPS.classic), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
     } else {
-      // Without the pack the crypt row is already in the crypt palette, so
-      // the classic case is read back from the last atlas as the themes are.
-      const was = old.index.themes.classic?.tiles[role];
+      // Without the pack the classic case is read back from the last atlas
+      // as the themes are, remapped into the current classic palette.
+      const wasRow = old.index.themes.classic;
+      const was = wasRow?.tiles[role];
       if (!was) throw new Error(`classic: ${role} is not in the last atlas and the Catacombs sheet is not on disk`);
-      emit(role, crop(old.png, was.col * T, old.index.themes.classic.row * 2 * T, T, TH), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
+      emit(role, repalette(crop(old.png, was.col * T, wasRow.row * 2 * T, T, TH), lastSwapOf('classic', wasRow), WALL_SWAPS.classic), { composed: "the crypt's tall wall in the classic palette", mask: cell.mask });
     }
   }
   // Its floors (the palette round, 2026-09-12): the flagstones in the

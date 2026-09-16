@@ -77,9 +77,14 @@ face lost its top brick course, the roof and the foot untouched), the
 face three pixels off its seam — worn by every set as an exact palette
 swap, each roof in its face's own stone since the palette round; and
 OPTIONS → TONES (the same round) retunes a set's floor and wall base
-colours live, saved per set — and since 2026-09-15 THE MOSS, the
-highlight flecks in the brickwork, a third slot — the designer's own
-dial, so a palette is now three hex values they report; THE PICKER IS
+colours live, saved per set — and since 2026-09-15 a third slot, THE
+WALL HIGHLIGHT ("moss" until 2026-09-16: the roof's lit line and the
+brick flecks, ONE colour per set since the rename), so a palette is
+three hex values the designer reports — and THE CRYPT'S BAKED PALETTE
+IS THE DESIGNER'S OWN SLATE since 2026-09-16 (floor #5b5b62 · walls
+#333844 · highlight #3f4555, the set every generated floor wears; the
+rest of the swap derived by the live tone rule, so the baked row is
+what they tuned on screen); THE PICKER IS
 IN THE PAGE (dungeon-stone swatches, H / S / L sliders, a hex field —
 never the browser's own colour dialog, which on Firefox for Android is
 nine fixed swatches, red to white); the door leaves' lifts are dials
@@ -94,8 +99,12 @@ in the GAP it is — the walls above and below END with their own autotile
 end cases, the brick face on a south end (canvas-board `#wallMask`: an
 edge-on door, or any opened doorway, is not solid for the wall masks
 around it, in screen space) — drawn in the tall pass as furniture, one
-tile tall, standing `EDGE_DOOR_LIFT` 10 off its seam since the tall
-walls' third round (mid-face of the far wall to behind the near roof);
+tile tall, standing on the rows its square's own wall band would fill
+since 2026-09-16 (the Edge door lift dial's default, `WALL_DY` 7 off
+its seam: its head four rows up the far wall's face, its foot on the
+near wall's roof — 10 under the 24-row wall, 8 on the first
+shorter-face build, which left a row of floor under the foot:
+"misaligned again");
 a generated slab stood in from the camera, 2026-09-08,
 and before that a north–south door was a WEAK SPOT wearing the crack —
 and an authored double is
@@ -1353,7 +1362,7 @@ strip-ruin-chips reads `WALL_SPRITE_H`. THE DOOR LEAVES are sixteen rows
 in a twenty-row wall now, so their lifts are DIALS — Options → Look
 "Door lift" / "Edge door lift", whole pixels, saved, `?doorlift=` /
 `?edgelift=`, canvas-board `setDoorFit`, `DEFAULT_DOOR_FIT` doorLift 3 /
-edgeLift 8, settled on crops of s59: the face-on leaf with four rows of
+edgeLift 8 (7 since 2026-09-16, the next paragraph), settled on crops of s59: the face-on leaf with four rows of
 the neighbours' roof band above its head and its foot on the wall's
 foot line (5 made a door as tall as the wall, 1 sank its foot under the
 faces'); the edge-on leaf's head five rows up the far wall's twelve-row
@@ -1372,7 +1381,8 @@ hue, its saturation scaled by the tone's over the base's — the tone's
 own where the base is near grey — and its lightness scaled by the
 tone's over the base's), so a grey wall is grey to the last fleck; and
 THE MOSS IS A THIRD SLOT: the repack tool records each row's palette on
-the atlas index (`palette: { floor, wall, moss }` — the floor's base,
+the atlas index (`palette: { floor, wall, moss }` — `highlight` since
+2026-09-16 — the floor's base,
 the brick, `brickLight`), `baseTones` reads it, `setTones` takes `moss`,
 the flecks are found by their exact colour and take the moss tone
 verbatim (with no moss tone they follow the wall); a third chip in
@@ -1384,6 +1394,59 @@ line under the roof and brick at the foot, the band's sixteen rows),
 strip-ruin-chips, ui-smoke (THE MOSS: the flecks in its colour on the
 walls, the floor untouched, the chip and the save, reset; the edge door
 lift dial moving d8 and returning), selftest 46/46, ui-smoke 318 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium; the gallery re-rendered.**
+
+**THE WALL HIGHLIGHT, THE DESIGNER'S SLATE AND THE EDGE DOOR ON ITS
+BAND ✅ 2026-09-16 (designer, on the shorter-face build, with the Tones
+row reading floor #5b5b62 · walls #333844 · moss #3f4555: "Vertical
+doors are misaligned again. Let's rename 'moss' to 'wall highlight' or
+something. And make it effect the highlights on the roof bricks as
+well. Also, these are the values I like the most right now. Let's make
+these the default.").** (1) THE EDGE-ON LEAF STANDS ON ITS BAND: at
+edge lift 8 the leaf's foot sat one row above the near wall's roof with
+a row of floor between them (measured on the build — a stacked pair's
+leaves were contiguous and on the same columns, so that row was the
+step), and THE RULE is now that a leaf stands where the wall it
+replaces would: the face-on leaf's foot on the wall's foot line (lift
+3, as before) and the edge-on leaf on exactly the rows its square's own
+band would fill — `DEFAULT_DOOR_FIT.edgeLift = WALL_DY` 7 (rows −7…8:
+its head four rows up the far wall's twelve-row face, its foot on the
+row the near wall's roof begins, no floor between; a stacked double is
+one strip from the far face into the near roof; the dial stays). (2)
+THE HIGHLIGHT IS ONE COLOUR, ROOF AND FACE: the roof's lit line (`lit`)
+and the brick flecks (`brickLight`) were two colours in every set's
+swap, so the third slot moved the flecks and left the roof's line in
+the wall's stone; now `lit === brickLight` in every `WALL_SWAPS` entry
+(the tool refuses otherwise) and the slot is `highlight` everywhere —
+`palette: { floor, wall, highlight }` on the atlas index, `baseTones` /
+`setTones`, `options.tones[key].highlight`, `?highlight=`, the chip
+"highlight" in Options → Tones, atlas.mjs `retone` matching the one
+colour on the roof's line and the face's flecks alike; a saved `moss`
+is not read (no backward compatibility, as ever). (3) THE CRYPT'S
+DEFAULTS ARE THE DESIGNER'S SLATE: every generated floor is the crypt
+(the vaults style's theme), so their three values are its baked palette
+— `FLOOR_BASES.crypt` #5b5b62, `WALL_SWAPS.crypt` brick #333844, `lit`
+/ `brickLight` #3f4555 — with the rest of the crypt's swap (outline,
+mortar, dark, mid, fill, the six shades) derived from the old swap by
+the live tone rule (hue-true, brick #312220 → #333844), so the baked
+row is what they tuned on screen and reset returns to it; the hall, the
+castle and the classic set keep their palettes. THE PACKS WERE GONE:
+the art packs under gitignored `phase0/assets-src/` did not survive the
+container's restart, so the repack tool's READ-BACK grew an exact
+RE-PALETTE — every row records its whole `swap` on the index
+(`LAST_SWAPS`, the 2026-09-15 values, stands in for an index without
+one) and a read-back wall or ruin tile is remapped name-for-name from
+the recorded swap to the current `WALL_SWAPS` (`repalette`), a floor
+from its recorded base to the current `FLOOR_BASES` — a palette change
+ships without the packs (verified by census: every row's wall tiles
+carry only named colours, the highlight ×35 with the lit row, the
+floors' tops the bases; the `swap` recorded on all four rows). Gates:
+test-debris 76 (every row's palette with the highlight its own colour,
+the roof's lit row and the flecks in it, the crypt's defaults the
+slate), strip-ruin-chips, ui-smoke 314 ok (the HIGHLIGHT block counts
+the colour on the roof's rows too; the edge door lift dial), selftest
+46/46, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world
+125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium;
+the gallery re-rendered (the walk on the slate).**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
@@ -2399,7 +2462,7 @@ node harness/test-debris.mjs         # THE DEBRIS LAYER's Node gate: transform, 
 node harness/strip-ruin-chips.mjs --check  # the committed atlas's ruin tiles carry no baked chips (the debris layer owns the flecks)
 node harness/replay-smoke.mjs --shots  # the replay analyzer (replay/index.html) driven headlessly on the sample: scrub, marks, overlays, branches, probes, export (+ screenshots)
 node harness/flicker-scan.mjs record --browser firefox --out /tmp/cast && node harness/flicker-scan.mjs scan /tmp/cast  # the flicker recorder + blink scanner; --idle 25000 for an idle turn; compare <dirs…>
-node harness/repack-tiles.mjs       # rebuild play/img/tileset.png + tileset.json + CREDITS.md (+ pieces.png) from the packs in assets-src/ (gitignored) — or, without them, read back from the committed atlas (the classic row is always regenerated)
+node harness/repack-tiles.mjs       # rebuild play/img/tileset.png + tileset.json + CREDITS.md (+ pieces.png) from the packs in assets-src/ (gitignored) — or, without them, read back from the committed atlas (the classic row is always regenerated; since 2026-09-16 the read-back RE-PALETTES every wall and ruin tile name-for-name from the row's recorded `swap` to the current WALL_SWAPS and every floor from its recorded base to the current FLOOR_BASES, so a palette change ships without the packs)
 DCK_PALETTE=cand.json node harness/repack-tiles.mjs  # THE PALETTE OVERRIDE for the eye (2026-09-12): { crypt|hall|castle|classic: { <CRYPT name>: '#rrggbb' }, floors: { <theme>: '#rrggbb' } } replaces a theme's wall-swap colours (a crypt entry recolours the pack's own drawing) and a floor's base colour; needs the packs; a no-op without it
 node harness/canvas-grid.mjs --browser all  # the canvas board's one blit lands 1:1 on the device-pixel grid at nine ratio × width cases, integer + fill, per snap strategy (./node_modules/.bin/playwright install firefox once)
 node harness/test-camera.mjs         # THE CAMERA's geometry (play/js/camera.mjs) against brute force — squares, pixels, masks, tiles, doors, at every facing; Node only

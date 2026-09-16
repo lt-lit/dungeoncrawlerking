@@ -140,7 +140,26 @@
    "palette": {
     "floor": "#4a3629",
     "wall": "#543740",
-    "moss": "#5e4148"
+    "highlight": "#6f575f"
+   },
+   "swap": {
+    "outline": "#3a232b",
+    "lit": "#6f575f",
+    "fill": "#543740",
+    "dark": "#422c3b",
+    "mid": "#62474f",
+    "black": "#150b10",
+    "mortarDark": "#3a232b",
+    "mortar": "#472d3d",
+    "brickDark": "#422c3b",
+    "brick": "#543740",
+    "brickLight": "#6f575f",
+    "shade1": "#341f27",
+    "shade2": "#2e1b22",
+    "shade3": "#28171e",
+    "shade4": "#211319",
+    "shade5": "#1b0f15",
+    "shade6": "#150b10"
    },
    "tiles": {
     "door": {
@@ -860,7 +879,26 @@
    "palette": {
     "floor": "#2e2f33",
     "wall": "#657392",
-    "moss": "#92a1b9"
+    "highlight": "#7e89a3"
+   },
+   "swap": {
+    "outline": "#3b3f56",
+    "lit": "#7e89a3",
+    "fill": "#657392",
+    "dark": "#424c6e",
+    "mid": "#717e9b",
+    "black": "#0c0b15",
+    "mortarDark": "#3b3f56",
+    "mortar": "#454e6d",
+    "brickDark": "#424c6e",
+    "brick": "#657392",
+    "brickLight": "#7e89a3",
+    "shade1": "#33364b",
+    "shade2": "#2b2e40",
+    "shade3": "#242536",
+    "shade4": "#1c1c2b",
+    "shade5": "#141420",
+    "shade6": "#0c0b15"
    },
    "tiles": {
     "door": {
@@ -1569,9 +1607,28 @@
    "row": 2,
    "title": "The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls",
    "palette": {
-    "floor": "#2c2c2f",
-    "wall": "#312220",
-    "moss": "#3f3628"
+    "floor": "#5b5b62",
+    "wall": "#333844",
+    "highlight": "#3f4555"
+   },
+   "swap": {
+    "outline": "#23262e",
+    "lit": "#3f4555",
+    "fill": "#333844",
+    "dark": "#272a31",
+    "mid": "#4d515c",
+    "black": "#0a0a0a",
+    "mortarDark": "#23262e",
+    "mortar": "#262a32",
+    "brickDark": "#272a31",
+    "brick": "#333844",
+    "brickLight": "#3f4555",
+    "shade1": "#1f2128",
+    "shade2": "#1b1d22",
+    "shade3": "#17181c",
+    "shade4": "#121316",
+    "shade5": "#0e0f10",
+    "shade6": "#0a0a0a"
    },
    "tiles": {
     "door": {
@@ -1864,7 +1921,7 @@
      "sheet": "mainlevbuild.png",
      "x": 47,
      "y": 14,
-     "recoloured": "to #2c2c2f"
+     "recoloured": "to #5b5b62"
     },
     "floor-2": {
      "col": 17,
@@ -1872,7 +1929,7 @@
      "sheet": "mainlevbuild.png",
      "x": 46,
      "y": 13,
-     "recoloured": "to #2c2c2f"
+     "recoloured": "to #5b5b62"
     },
     "floor-3": {
      "col": 18,
@@ -1880,7 +1937,7 @@
      "sheet": "mainlevbuild.png",
      "x": 47,
      "y": 15,
-     "recoloured": "to #2c2c2f"
+     "recoloured": "to #5b5b62"
     },
     "floor-4": {
      "col": 19,
@@ -1888,7 +1945,7 @@
      "sheet": "mainlevbuild.png",
      "x": 46,
      "y": 14,
-     "recoloured": "to #2c2c2f"
+     "recoloured": "to #5b5b62"
     },
     "floor-5": {
      "col": 20,
@@ -1896,7 +1953,7 @@
      "sheet": "mainlevbuild.png",
      "x": 47,
      "y": 13,
-     "recoloured": "to #2c2c2f"
+     "recoloured": "to #5b5b62"
     },
     "floor-6": {
      "col": 21,
@@ -1904,7 +1961,7 @@
      "sheet": "mainlevbuild.png",
      "x": 46,
      "y": 15,
-     "recoloured": "to #2c2c2f"
+     "recoloured": "to #5b5b62"
     },
     "wall": {
      "col": 0,
@@ -2315,7 +2372,26 @@
    "palette": {
     "floor": "#2a2a2e",
     "wall": "#52506a",
-    "moss": "#605e7a"
+    "highlight": "#6e6c82"
+   },
+   "swap": {
+    "outline": "#312f41",
+    "lit": "#6e6c82",
+    "fill": "#52506a",
+    "dark": "#403e55",
+    "mid": "#605e76",
+    "black": "#0c0b12",
+    "mortarDark": "#312f41",
+    "mortar": "#3a384c",
+    "brickDark": "#403e55",
+    "brick": "#52506a",
+    "brickLight": "#6e6c82",
+    "shade1": "#2b2939",
+    "shade2": "#252331",
+    "shade3": "#1f1d2a",
+    "shade4": "#181722",
+    "shade5": "#12111a",
+    "shade6": "#0c0b12"
    },
    "tiles": {
     "crack-1": {

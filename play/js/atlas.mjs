@@ -79,18 +79,19 @@ function hslRgb(h, s, l) {
  *  the repack tool's floor rule — which turned the pack's olive
  *  highlight flecks GREEN under any tone whose hue differed from the
  *  base's: the designer's "permanent green highlights that I can't
- *  change", 2026-09-15.) `moss`: the flecks' own colour in the baked
- *  tile — with `mossTo` they take that colour exactly (THE MOSS slot);
+ *  change", 2026-09-15.) `highlight`: the highlight's own colour in the baked
+ *  tile (the roof's lit line and the brick flecks, one colour) — with
+ *  `highlightTo` those pixels take that colour exactly (THE HIGHLIGHT slot);
  *  without it they follow the wall like any pixel. `from` / `to` null:
- *  only the moss is touched. */
-function retone(g, sx, sy, w, h, from, to, { moss = null, mossTo = null } = {}) {
+ *  only the highlight is touched. */
+function retone(g, sx, sy, w, h, from, to, { highlight = null, highlightTo = null } = {}) {
   const img = g.getImageData(sx, sy, w, h);
   const d = img.data;
   const base = from && to ? { from: rgbHsl(from), to: rgbHsl(to) } : null;
   for (let i = 0; i < d.length; i += 4) {
     if (!d[i + 3]) continue;
-    if (moss && mossTo && d[i] === moss[0] && d[i + 1] === moss[1] && d[i + 2] === moss[2]) {
-      d[i] = mossTo[0]; d[i + 1] = mossTo[1]; d[i + 2] = mossTo[2];
+    if (highlight && highlightTo && d[i] === highlight[0] && d[i + 1] === highlight[1] && d[i + 2] === highlight[2]) {
+      d[i] = highlightTo[0]; d[i + 1] = highlightTo[1]; d[i + 2] = highlightTo[2];
       continue;
     }
     if (!base) continue;
@@ -209,17 +210,19 @@ export class Atlas {
 
   // ------------------------------------------------------------ THE TONES
   // (2026-09-12, the designer: "Can I get an in-game color selector? 2
-  // tones, for the floor and walls."; 2026-09-15, THE MOSS: "a color
-  // selector for the green 'moss' highlights in the brick work of the
-  // walls"). A tone key is a theme name or 'classic' (the drawn set). A
-  // row's BASES are the palette the repack tool recorded on it — the
-  // floor's base colour, the wall's brick, the MOSS (the brick face's
-  // highlight flecks, one flat colour); a floor or wall tone recolours
-  // every floor, or every wall and ruin, tile of the row to the tone
-  // (`retone`: the tone's hue, the pixel's saturation and lightness scaled
-  // from the base's to the tone's, so the bevels, the mortar and the
-  // void's ramp keep their shading), and the moss tone replaces the
-  // flecks' colour exactly — into a tinted copy of the tileset that every
+  // tones, for the floor and walls."; 2026-09-15: "a color selector for
+  // the green 'moss' highlights in the brick work of the walls"; 2026-09-16:
+  // "rename 'moss' to 'wall highlight' or something. And make it effect
+  // the highlights on the roof bricks as well"). A tone key is a theme
+  // name or 'classic' (the drawn set). A row's BASES are the palette the
+  // repack tool recorded on it — the floor's base colour, the wall's
+  // brick, THE HIGHLIGHT (the roof's lit line and the brick face's flecks,
+  // one flat colour per set); a floor or wall tone recolours every floor,
+  // or every wall and ruin, tile of the row to the tone (`retone`: the
+  // tone's hue, the pixel's saturation and lightness scaled from the
+  // base's to the tone's, so the bevels, the mortar and the void's ramp
+  // keep their shading), and the highlight tone replaces the highlight
+  // pixels' colour exactly — into a tinted copy of the tileset that every
   // tile is served from. Doors, props, cracks and pieces are untouched.
   /** The tileset every tile is drawn from: the tinted copy when a tone is set. */
   #src() {
@@ -228,17 +231,17 @@ export class Atlas {
   #toneRow(key) {
     return this.index.themes[key && key !== 'classic' ? key : CLASSIC] ?? null;
   }
-  /** A row's own base colours { floor, wall, moss } (#rrggbb, or null
-   *  where the row lacks one) — the palette the repack tool recorded on
-   *  the row (the floor's base, the wall's brick, the moss flecks'
+  /** A row's own base colours { floor, wall, highlight } (#rrggbb, or
+   *  null where the row lacks one) — the palette the repack tool recorded
+   *  on the row (the floor's base, the wall's brick, the highlight's
    *  colour), else read off the tiles (the first flagstone's and the wall
-   *  face's dominant colours; no moss) — or null. */
+   *  face's dominant colours; no highlight) — or null. */
   baseTones(key) {
     const k = key ?? 'classic';
     if (this.bases.has(k)) return this.bases.get(k);
     const row = this.#toneRow(k);
     let out = null;
-    if (row?.palette) out = { floor: row.palette.floor ?? null, wall: row.palette.wall ?? null, moss: row.palette.moss ?? null };
+    if (row?.palette) out = { floor: row.palette.floor ?? null, wall: row.palette.wall ?? null, highlight: row.palette.highlight ?? null };
     else if (row && this.tiles && typeof document !== 'undefined') {
       const g = this.tiles.getContext('2d');
       const dominant = (cell, y0, h) => {
@@ -250,15 +253,15 @@ export class Atlas {
         for (const [c, cnt] of m) if (cnt > n) { best = c; n = cnt; }
         return best === null ? null : `#${best.toString(16).padStart(6, '0')}`;
       };
-      out = { floor: dominant(row.tiles['floor-1'], 0, TILE), wall: dominant(row.tiles['wall-10'], 8, TALL_H - 8), moss: null };
+      out = { floor: dominant(row.tiles['floor-1'], 0, TILE), wall: dominant(row.tiles['wall-10'], 8, TALL_H - 8), highlight: null };
     }
     this.bases.set(k, out);
     return out;
   }
-  /** Set (or, with null, clear) a row's tones { floor?, wall?, moss? } (#rrggbb) and rebuild the tinted tileset. */
+  /** Set (or, with null, clear) a row's tones { floor?, wall?, highlight? } (#rrggbb) and rebuild the tinted tileset. */
   setTones(key, tones) {
     const k = key ?? 'classic';
-    const t = tones && (tones.floor || tones.wall || tones.moss) ? { ...tones } : null;
+    const t = tones && (tones.floor || tones.wall || tones.highlight) ? { ...tones } : null;
     if (t) this.toneMap.set(k, t);
     else this.toneMap.delete(k);
     this.#retint();
@@ -280,8 +283,8 @@ export class Atlas {
       const row = this.#toneRow(k);
       const base = this.baseTones(k);
       if (!row || !base) continue;
-      const moss = base.moss ? hexRgb(base.moss) : null;
-      const mossTo = moss && tones.moss ? hexRgb(tones.moss) : null;
+      const highlight = base.highlight ? hexRgb(base.highlight) : null;
+      const highlightTo = highlight && tones.highlight ? hexRgb(tones.highlight) : null;
       for (const [role, cell] of Object.entries(row.tiles)) {
         const b = baseRole(role);
         const isFloor = b === 'floor', isWall = b === 'wall' || b === 'ruin';
@@ -289,7 +292,7 @@ export class Atlas {
           if (tones.floor && base.floor) retone(g, cell.col * TILE, row.row * this.rowH, TILE, TILE, hexRgb(base.floor), hexRgb(tones.floor));
         } else if (isWall) {
           const wall = !!(tones.wall && base.wall);
-          if (wall || mossTo) retone(g, cell.col * TILE, row.row * this.rowH, TILE, TALL_H, wall ? hexRgb(base.wall) : null, wall ? hexRgb(tones.wall) : null, { moss, mossTo });
+          if (wall || highlightTo) retone(g, cell.col * TILE, row.row * this.rowH, TILE, TALL_H, wall ? hexRgb(base.wall) : null, wall ? hexRgb(tones.wall) : null, { highlight, highlightTo });
         }
       }
     }
