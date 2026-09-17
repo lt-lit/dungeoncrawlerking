@@ -412,6 +412,45 @@ pairs the same way once the generator places them — an authored entry on
 a king row is dropped at load by the engine's parse (the ban, never a
 scoot); no floor authors one yet.
 
+### 4.8 The sledgehammer and the indestructible obstacle `#` `[DECIDED 2026-09-17, NOT BUILT — the next session implements]`
+
+**The ability `[designer, 2026-09-17]`:**
+
+- A piece with the sledgehammer ability can spend its move to turn an
+  adjacent wall into a `^` tile. This counts as moving for the turn.
+- It is the property of a piece itself, not a spell.
+- Designed with the Kings in mind: an easy way to make holes in walls; the
+  trade-off is that a sledgehammer-wielding king may have to stand in a
+  fairly aggressive position to make full use of it.
+- A second kind of wall in the engine: walls that can be turned into `^`
+  (by sledgehammers, explosives, quakes or any future weakening effect)
+  and walls that cannot. No more using one glyph for walls and holes.
+
+**The glyph `[designer]`:** `#` is ANY INDESTRUCTIBLE OBSTACLE — a
+boundary wall, bedrock, a pit, and whatever comes later (a moving wall a
+pressure pad activates is the first idea). To the engine a pit and a
+bedrock wall are one thing, a square nothing enters and nothing can crack,
+so they share the glyph and the hash; the pit's look and the one map rule
+that separates them (sight passes over a pit, never through a wall) come
+from the game's own pit ledger, never from the engine. `*` stays the
+breakable wall: the gods' weaken rung and the hammer read `*` alone; a
+crumble writes `#` plus the pit entry.
+
+**The engine shape** (the portal patch's, §4.7): `#` into the per-state
+wall bitboard with a breakable subset hashed apart; a HAMMER move type
+from the piece's square to the adjacent breakable wall, plain `e1d1`
+notation, do = wall bit off and crate bit on, undo = the state pointer; it
+never gives or resolves check, so it is illegal in check; a variant key
+names the hammer piece types per colour (`k` for the stress test, both
+kings). The map files spell every wall `#` today, so the wall-kinds work
+first rewrites the stages and worlds (`#` → `*`, the ring and every
+off-map square of a crop `#`) and retires the alias.
+
+**Defaults unless the designer says otherwise:** adjacent = the king's
+eight neighbours; both kings carry it for the stress test; the hammer is a
+manual chess move on the walk as well as in the duel (§5.1 ruling 11);
+bedrock wears a darker stone so a player can tell which walls will yield.
+
 ## 5. Exploration Layer
 
 ### 5.1 Basics
@@ -609,6 +648,7 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 - Reward economy sizing (post-sweep), including the checkmate/strip tier ratio and the speed-decay curve (§8).
 - Title collision / availability check before any public release (title itself is locked).
 - The portal spell (§4.7, built 2026-09-17 for everyone): when it becomes an upgrade, what the scroll's value knob (`PORTAL_SCROLL_VALUE`) should be once the designer says how eagerly the enemy casts, a sprite for the rune ring, a blink for the teleport, whether world floors author pairs, and whether the gods ever open one.
+- The sledgehammer and `#` (§4.8, decided 2026-09-17, not built): the four defaults there (eight neighbours, both kings, the walk, a darker bedrock), the SAN for a hammer, which future obstacles ride `#` (the pressure pad's moving wall), and the ice spell after it.
 
 ---
 

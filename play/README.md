@@ -2798,6 +2798,11 @@ A stage is GROUND — walls and dimensions drawn as ASCII, nothing else
 
 `.` floor · `#` stone wall (`*` accepted — the FEN glyph) · `^` furniture
 (§4.6: the neutral capturable occupant — terrain to molding/crop/the gods,
+**DECIDED 2026-09-17, not yet built (brief §4.8): `#` becomes ANY
+INDESTRUCTIBLE OBSTACLE — bedrock, a pit, a boundary, one day a moving
+wall — and `*` the BREAKABLE wall, one meaning in map files and FEN
+alike; the wall-kinds PR rewrites every stage and world file `#` → `*`
+and drops the alias; `O` stays the world file's pit;**
 an ordinary capture in play; `^`→`.` derives the stone-only corpus control
 arm from the same file); rectangular, top rank first; 3–12 files × 5–10
 ranks (the engine's largeboard caps). An optional **`skin`** grid, the same

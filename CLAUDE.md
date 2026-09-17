@@ -1562,6 +1562,64 @@ paints it on the twin), the scroll as an upgrade, world-persistent
 portals, a god rung that opens one, SEE for portal captures (zero, as en
 passant's).**
 
+**THE SLEDGEHAMMER AND THE INDESTRUCTIBLE OBSTACLE `#` — DECIDED
+2026-09-17, NOT BUILT (the next session implements; nothing is in code
+yet).** THE DESIGNER'S FOUR RULES: (1) a piece with the sledgehammer
+ability can SPEND ITS MOVE to turn an ADJACENT WALL into a `^` tile — it
+counts as its move for the turn; (2) it is a property of a PIECE, not a
+spell; (3) designed with THE KINGS in mind ("an easy way to make holes in
+walls. The trade off is that you might have to put your sledgehammer
+wielding king in a fairly aggressive position to make full use of it");
+(4) a second kind of wall IN THE ENGINE — "No more using the same * for
+both walls and holes" — walls that CAN be turned into `^` (by
+sledgehammers, explosives, quakes or any future weakening effect) and
+walls that CANNOT. ONE HARD GLYPH, `#`, FOR ANY INDESTRUCTIBLE OBSTACLE
+(designer: "we will use # for any indestructible obstacle… # might be
+used for more than just holes and boundary walls" — pressure pads may one
+day activate moving `#` walls): a pit, a boundary wall, bedrock and a
+future moving wall are ONE THING to the engine — a square nothing enters
+and nothing can crack — so they share the glyph and the hash; what a pit
+LOOKS like (the pit art, its rim cases) and the one map rule that tells
+them apart (sight passes over a pit, never through a wall) come from the
+game's own ledger (the Director's holes list in every recorded state, the
+world file's `O` cells), never from the engine. `*` STAYS THE BREAKABLE
+WALL, so every arena, world and old log keeps its meaning; the gods'
+weaken rung and the hammer read `*` alone; a crumble writes `#` and the
+pit entry as it writes `*` and the entry today. A COLLISION TO CLEAR
+FIRST: the STAGE and WORLD FILES spell every wall `#` today (all 36
+arenas, 573 cells; the four vaults fixtures; `stage.mjs` / `world.mjs` /
+`dungeon.mjs` read `#` as an alias of `*`, and the analyzer's ASCII
+report prints `#` for a wall), so the wall-kinds PR REWRITES THEM — `#` →
+`*` for every breakable wall, the generator's ring and every off-map
+square of a duel crop `#` — and drops the alias, so `#` means
+indestructible everywhere, map file and FEN alike; `O` stays the world
+file's pit (a `#` to the engine with a pit entry). THE ENGINE PLAN (on
+the pinned trees, after the three patches, in the portal patch's shape):
+`#` parsed into the per-state wall bitboard (stock keeps `wallSquares` in
+StateInfo — walling variants change it per move — and `board_bb()` is the
+board less the walls) with a BREAKABLE subset (`*`) hashed apart from the
+hard squares, since the legal moves differ; a HAMMER move type from the
+piece's square to the adjacent breakable wall, notation the plain `e1d1`
+(unambiguous — d1 is a wall), do = the wall bit off, the crate bit
+(`deadSquares`) on, `Zobrist::wall` swapped for `Zobrist::dead`, undo =
+the state pointer; it never gives and never resolves check, so it is
+illegal in check and absent from the evasion and quiet-check generators;
+a variant key naming the hammer piece types per colour (`k` for the
+stress test — both kings, as both sides got scrolls). THE GAME PLAN: the
+hammer as a manual CHESS MOVE on the duel board (tap the king, the
+adjacent `*` light) and on the walk (ruling 11 — the wall becomes a crate
+on the floor, opened by whoever captures it), the log line, the
+analyzer's SAN; bedrock's TELL an open art question (a darker, deader
+stone as one more exact palette swap is the cheapest honest version).
+DEFAULTS TAKEN UNLESS THE DESIGNER SAYS OTHERWISE: adjacent = the king's
+EIGHT neighbours; both kings for the stress test; the hammer on the walk
+too; bedrock darker. THE ORDER: the wall kinds first (their own PR — the
+hammer, explosives and the gods all read them), then the hammer; each a
+rebuild of both binaries behind the rule-16 gate (the toolchains and the
+trees were alive in this container's scratchpad on 2026-09-17; a recycled
+container starts with the hour of reinstalling, `engine/README.md`).
+After the hammer: an ICE spell.**
+
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
 THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
