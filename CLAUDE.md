@@ -1479,6 +1479,147 @@ replay-smoke 63, and a direct check that a saved `theme: 'auto'` from
 the old build is ignored, that 'auto' picked now holds across a reload
 and that the replay page wears crypt on the sample log.**
 
+**THE PORTAL SPELL ✅ BUILT 2026-09-17 (designer, after a mechanics
+discussion that graded portals, pressure pads, explosives, ice and a
+sledgehammer by FSF feasibility: "go ahead and get started. We'll
+obviously want the portal spell to be an upgrade later, but for now let's
+give it to everyone to stress test it"). THE RULES ARE THE DESIGNER'S,
+EXACTLY AND WITH NO SPECIAL CASES: landing on a portal ALWAYS teleports
+the piece to the other portal; if the other portal is occupied THEY SWAP
+PLACES (either colour, a king included — check is judged where he ends,
+so a capture onto the twin of the enemy king's square can teleport him into
+a net); a piece standing on a portal is CAPTURED AS NORMAL and the attacker
+is teleported after the capture; a piece on one portal moving onto its
+twin ends where it stood (the capture at range and the pass that implies
+are generated, not forbidden). ONE placement rule, the designer's:
+PORTALS NEVER ON A KING ROW (the promotion zones), so no pawn promotes
+through a portal, the engine carries no promotion branch for the move, and
+the easy queen costs a move of walking. Spells are NEVER pieces: a king
+with scrolls in hand, an open half or a pair is stripped and has lost (the
+extinction count skips them). THE ENGINE HALF is `engine/patches/
+portals.patch` (489+/14−, eight files, applied after dead-squares and
+thread-stack; `engine/README.md` § "The portals patch"): a PORTAL move
+type encoded `from` + the portal square, do/undo relocating two pieces
+castling-style, one `portal_attacks_king` helper for legality and check
+detection on the virtual board, evasions generated whole and filtered, the
+CAST as a DROP of a scroll piece that only lives in hand (`portalScroll`
+key; FSF's `immobile` piece, letter `o`; `O@e4` for either side), the
+trailing FEN field `{c3-h8,e4w}` for pairs and halves, hashed from a
+separate PRNG, stock node-for-node when absent. Native debug validation
+first (hand-verified perft on ten fixtures under the state and check
+asserts), then the rule-16 gate green: test-portals-ffish 42 (a
+5,534-move gives_check sweep, 0 mismatches), test-portals-engine 55,
+every existing engine gate unchanged, depth cap re-measured (d22 110/110,
+d60 30/30 — stays d22), selftest 47/47 headless. THE GAME HALF: everyone
+gets ONE PAIR PER SIDE PER DUEL, two scrolls in the holdings `[OOoo]`,
+cast in two turns (the first opens a half owned by its caster, the second
+links it), nothing persisting past the duel; `variant.mjs dealVariant(...,
+{ portals })` mints `__portals` deal variants with the keys
+(`portalIniKeys`, `PORTAL_SCROLL_VALUE` 0 — no bonus needed, the first
+log showed);
+`dealMatchup` / `planBox` take `portals`; `?portals=off` and Options →
+Spells switch it; the ⌾ Portal button in the player's bar enters CAST MODE
+(the legal squares lit, a tap casts through the piece-move path); the
+board paints the field as rune rings IN THE CASTER'S COLOUR (`setPortals`,
+`PORTAL_TONES` — the designer, on the first log, the same day: "the enemy
+portals should be a different color. Idk if orange would be appropriate
+(like Valve's Portal). Either way, we need to make sure each new portal
+pair has a unique color so the player can see how they link": the
+player's pairs BLUE then teal / violet / green, the enemy's ORANGE then
+red / yellow / magenta, a pair nobody cast silver, a half dashed in the
+colour its pair will wear; WHO CAST WHAT is `fen.mjs portalLedger`'s
+forward walk over the positions, since the field names a pair without its
+caster — the game walks the record's states, the analyzer its line's
+(`portalFor`) and paints the same rings, a cast on its timeline a ring; a
+coded 16×16 until the atlas carries a sprite); a cast hint or the enemy's cast is a RING in
+the arrow colour; the log says what a cast did and where a portal move
+came out; the gods leave portal squares alone (`blocked.portals`, reason
+`portal`) and the fun score ignores casts; every board scan reads the
+board field alone now (`splitFen(fen).board`), since the holdings are
+nobody's pieces. Gates: selftest 47/47, test-logreport 53, replay-smoke 69 ok
+(the second sample, THE FIRST PORTAL DUEL — `replay/samples/dck-log_
+vaults-4-t75_s3904618753.json`, the designer's log, `?sample=2` — the
+halves dashed blue and orange, the pairs solid in their colours), ui-smoke
+323 ok, 0 failed (THE PORTAL SPELL block: the button, cast mode, the casts through the
+tap path, the colours; the random driver casts when it likes; the board
+comparisons and piece counts strip the holdings; the arrow dial measures a
+hint with a path), the Node gates unchanged. THE FIRST DUEL'S VERDICT, the
+same day (designer, with the log — both pairs cast in the first three
+moves, a pawn through the player's portal at ply 6, a queen at ply 56,
+seven quakes, no anomaly, 1-0 at ply 70): "the engine seems to be VERY
+aware of the advantages of portals. Best move recommendations showed
+placing them early was the play, and the enemy cleverly used their portal
+to prevent me from using mine to get an easy promotion" — IN; the value
+knob is not a conversation (designer: "not sure it's necessary"). THE
+COLOURS' VERDICT, the same day: "this is functional for now" — the branch
+MERGES AS IT STANDS; the last-move and hint MARKINGS on a portal square
+(the frame over the ring) are DEFERRED until more spells exist ("we'll
+tackle that when we have more spells to work with"). NEXT, IN THE
+DESIGNER'S ORDER: THE SLEDGEHAMMER, then an ICE spell. Held
+over: the atlas sprite, a
+blink for the teleport (the mover slides to the portal and the commit
+paints it on the twin), the scroll as an upgrade, world-persistent
+portals, a god rung that opens one, SEE for portal captures (zero, as en
+passant's).**
+
+**THE SLEDGEHAMMER AND THE INDESTRUCTIBLE OBSTACLE `#` — DECIDED
+2026-09-17, NOT BUILT (the next session implements; nothing is in code
+yet).** THE DESIGNER'S FOUR RULES: (1) a piece with the sledgehammer
+ability can SPEND ITS MOVE to turn an ADJACENT WALL into a `^` tile — it
+counts as its move for the turn; (2) it is a property of a PIECE, not a
+spell; (3) designed with THE KINGS in mind ("an easy way to make holes in
+walls. The trade off is that you might have to put your sledgehammer
+wielding king in a fairly aggressive position to make full use of it");
+(4) a second kind of wall IN THE ENGINE — "No more using the same * for
+both walls and holes" — walls that CAN be turned into `^` (by
+sledgehammers, explosives, quakes or any future weakening effect) and
+walls that CANNOT. ONE HARD GLYPH, `#`, FOR ANY INDESTRUCTIBLE OBSTACLE
+(designer: "we will use # for any indestructible obstacle… # might be
+used for more than just holes and boundary walls" — pressure pads may one
+day activate moving `#` walls): a pit, a boundary wall, bedrock and a
+future moving wall are ONE THING to the engine — a square nothing enters
+and nothing can crack — so they share the glyph and the hash; what a pit
+LOOKS like (the pit art, its rim cases) and the one map rule that tells
+them apart (sight passes over a pit, never through a wall) come from the
+game's own ledger (the Director's holes list in every recorded state, the
+world file's `O` cells), never from the engine. `*` STAYS THE BREAKABLE
+WALL, so every arena, world and old log keeps its meaning; the gods'
+weaken rung and the hammer read `*` alone; a crumble writes `#` and the
+pit entry as it writes `*` and the entry today. A COLLISION TO CLEAR
+FIRST: the STAGE and WORLD FILES spell every wall `#` today (all 36
+arenas, 573 cells; the four vaults fixtures; `stage.mjs` / `world.mjs` /
+`dungeon.mjs` read `#` as an alias of `*`, and the analyzer's ASCII
+report prints `#` for a wall), so the wall-kinds PR REWRITES THEM — `#` →
+`*` for every breakable wall, the generator's ring and every off-map
+square of a duel crop `#` — and drops the alias, so `#` means
+indestructible everywhere, map file and FEN alike; `O` stays the world
+file's pit (a `#` to the engine with a pit entry). THE ENGINE PLAN (on
+the pinned trees, after the three patches, in the portal patch's shape):
+`#` parsed into the per-state wall bitboard (stock keeps `wallSquares` in
+StateInfo — walling variants change it per move — and `board_bb()` is the
+board less the walls) with a BREAKABLE subset (`*`) hashed apart from the
+hard squares, since the legal moves differ; a HAMMER move type from the
+piece's square to the adjacent breakable wall, notation the plain `e1d1`
+(unambiguous — d1 is a wall), do = the wall bit off, the crate bit
+(`deadSquares`) on, `Zobrist::wall` swapped for `Zobrist::dead`, undo =
+the state pointer; it never gives and never resolves check, so it is
+illegal in check and absent from the evasion and quiet-check generators;
+a variant key naming the hammer piece types per colour (`k` for the
+stress test — both kings, as both sides got scrolls). THE GAME PLAN: the
+hammer as a manual CHESS MOVE on the duel board (tap the king, the
+adjacent `*` light) and on the walk (ruling 11 — the wall becomes a crate
+on the floor, opened by whoever captures it), the log line, the
+analyzer's SAN; bedrock's TELL an open art question (a darker, deader
+stone as one more exact palette swap is the cheapest honest version).
+DEFAULTS TAKEN UNLESS THE DESIGNER SAYS OTHERWISE: adjacent = the king's
+EIGHT neighbours; both kings for the stress test; the hammer on the walk
+too; bedrock darker. THE ORDER: the wall kinds first (their own PR — the
+hammer, explosives and the gods all read them), then the hammer; each a
+rebuild of both binaries behind the rule-16 gate (the toolchains and the
+trees were alive in this container's scratchpad on 2026-09-17; a recycled
+container starts with the hour of reinstalling, `engine/README.md`).
+After the hammer: an ICE spell.**
+
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
 THE ARMY RULE — the third PR (built the same day as 4a + 4b, above).** Its first step is the viewport: the
@@ -2453,8 +2594,9 @@ by stage, is listed in `play/README.md` § "Stages (schema 2)".
   only — three known defects), the rule-16 gate tests (`tests/*.cjs`), and
   `engine/README.md` (recipe, gotchas, gate results, validation evidence).
   **`play/vendor/` carries the PATCHED pair** (dead-squares 2026-08-26 +
-  thread-stack 2026-08-27, each behind a green rule-16 gate; both phone
-  feel checks passed — thread-stack's on 2026-09-01, on the v3 build). phase0's npm `node_modules` are
+  thread-stack 2026-08-27 + portals 2026-09-17, each behind a green rule-16
+  gate; the first two phone feel checks passed — thread-stack's on
+  2026-09-01, on the v3 build; the portals pair is not yet played by the designer). phase0's npm `node_modules` are
   still the STOCK pair — overlay `play/vendor/` artifacts before any
   phase0 run that must play the shipped rules (see `engine/README.md`).
 - `phase0/lib/` — shared infra: `png.mjs` (dependency-free PNG codec for the
@@ -2507,6 +2649,8 @@ node harness/hunt-stress.mjs [--flee] [--turns 120] [--world vaults-2]  # THE HU
 node harness/charge-stress.mjs [--policy charge|wait] [--kings] [--roam] [--turns 250] [--world vaults-2]  # THE CHARGE (2026-09-11): a crude thumb walks the kit AT every sentry (--roam: at every WANDERER on its beat) under the game's sight rule (--kings the old king-to-king one), the player walking on or pressing wait after first sight — first sight's turn and distance, whether and when the duel starts and whose initiative, THE RETREAT DANCE (turns the player stepped nearer and the enemy king stepped away; must stay near zero)
 node harness/sight-map.mjs [--world vaults-4] [--enemy 3] [--radius 13]  # WHERE A SPAWN SEES YOU: an ASCII map around one enemy's spawn — k its king sees your king there, a some piece of its army sees some piece of the kit stood there, . nothing
 node harness/test-dungeon.mjs        # THE DUNGEON GENERATOR (play/js/dungeon.mjs): the bed's envelope is the lint, a plain room fails, seeds replay, every floor passes, the lint's box is the game's; Node only
+FFISH_JS=$PWD/../play/vendor/ffish.js node ../engine/tests/test-portals-ffish.cjs      # THE PORTAL SPELL, ffish half: the fixtures, SAN, the field, the strip rule, the 5,534-move check-flag sweep
+ENGINE_JS=$PWD/../play/vendor/stockfish.js node ../engine/tests/test-portals-engine.cjs  # THE PORTAL SPELL, engine half: perft on the fixtures over UCI, the casts through `d`, the strip at the root, the search
 
 node harness/gen-worlds.mjs [--duel] # THE GENERATOR's fixtures in play/worlds/ (vaults-1…4, generated at fixed seeds, linted as written; --duel adds the duelable-ground coverage) + their manifest
 node harness/world-shots.mjs         # each fixture painted whole by the canvas board + the walk screen on a phone and a desktop → phase0/results/world-shots/ (THE GALLERY, for the eye)
@@ -2630,7 +2774,8 @@ run one sweep at a time.
     belong BEFORE the ffish probes — that is why the landing-safety check
     runs on the grid. Do not add per-candidate ffish work without measuring.
 15. **The vendored pair is a MATCHED SET built from one patch, two trees,
-    two toolchains.** ffish comes from FSF mainline (`src/Makefile_js`,
+    two toolchains — and THREE patches now: dead-squares, thread-stack,
+    portals, applied in that order.** ffish comes from FSF mainline (`src/Makefile_js`,
     emsdk 1.39.16); the engine from `fairy-stockfish/fairy-stockfish.wasm`
     branch `nnue` (emsdk 2.0.26) — but every rule-bearing source file is
     byte-identical between them, so ONE patch (set) feeds both —

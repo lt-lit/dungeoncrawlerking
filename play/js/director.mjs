@@ -134,7 +134,7 @@
 // still terrain to molding, crop, the camp line, and to displacement, which
 // neither moves a crate nor lands on one.
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE } from './fen.mjs';
+import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField } from './fen.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
@@ -238,6 +238,10 @@ const KING_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], 
 function blockedReason(blocked, mover, target) {
   if (!blocked) return null;
   if (blocked.touched.has(mover) || blocked.touched.has(target)) return 'touched';
+  // THE PORTAL SPELL (2026-09-17): the gods leave portal squares alone — no
+  // crumble on one, no displacement onto or off one (the engine's rule
+  // is that only a MOVE teleports; the gods never move a piece through).
+  if (blocked.portals && (blocked.portals.has(mover) || blocked.portals.has(target))) return 'portal';
   if (blocked.pieces.has(mover) || blocked.squares.has(mover) || blocked.squares.has(target)) return 'protected';
   return null;
 }
@@ -891,7 +895,8 @@ export class Director {
     let ledger = null;
     if (ffish.validateFen(fen, variant) === 1) {
       const b = new ffish.Board(variant, fen);
-      const legal = b.legalMoves();
+      // THE PORTAL SPELL: a cast is a legal move, not mobility — the fun score reads the board's moves alone.
+      const legal = b.legalMoves().split(' ').filter((m) => m && !m.includes('@')).join(' ');
       const grid = fenGrid(fen, files, ranks);
       stale = stalenessOf(grid, legal, files, ranks, this.stalenessConfig);
       ledger = this.#ledgerOf(ffish, variant, fen, files, ranks, b, grid);
@@ -1503,7 +1508,7 @@ export class Director {
     // twice, no piece moved twice); `pieces`/`squares` are the protected set
     // — every threat on the board and every forced win's net, both sides
     // (tactics.mjs). Computed once, on the board the gods are about to edit.
-    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set() };
+    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set(), portals: parsePortalField(fen).squares };
     if (this.protect) {
       const guard = protectedSet(ffish, variant, fen, files, ranks, { depth: this.winDepth, nodeBudget: this.winNodes, hints: mates });
       blocked.pieces = guard.pieces;

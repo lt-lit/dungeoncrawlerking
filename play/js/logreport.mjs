@@ -11,7 +11,7 @@
 // slice of it) explicitly. Old logs (fields missing before replay-log.1/.2:
 // `mover`, `candidates`, `pieceList`, …) degrade to shorter lines, never
 // throw — every read is optional.
-import { parseBoard } from './fen.mjs';
+import { parseBoard, splitFen } from './fen.mjs';
 
 /** jsonSafeNumbers' strings back to numbers ('Infinity', '-Infinity', 'NaN'). */
 export const num = (v) => (typeof v === 'string' && /^-?Infinity$|^NaN$/.test(v) ? Number(v) : v);
@@ -32,7 +32,7 @@ export const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/;
  *  god-cracked wall 'x', authored furniture '^', floor '·'. `files` is the
  *  footer's width when the fen has no ranks (never, in practice). */
 export function boardRows(fen, { holes = [], godCrates = [] } = {}, files = 10) {
-  const grid = parseBoard(fen.split(' ')[0]);
+  const grid = parseBoard(splitFen(fen).board);
   const holeSet = new Set(holes);
   const crateSet = new Set(godCrates);
   const rows = [];

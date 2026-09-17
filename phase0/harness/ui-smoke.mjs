@@ -382,35 +382,42 @@ if (probe) {
   expect(climbed || (!!ended && !ended.active && ended.depth >= d0), climbed ? `probe streamed a deeper paint after d${d0}` : `probe finished at d${ended?.depth} with nothing deeper to stream after d${d0} (${JSON.stringify(ended)})`);
   await shot('01-hints');
   // The arrow dials (designer 2026-09-07: "make the arrows thinner. A thickness and opacity dial wouldn't hurt"):
-  // width in floor pixels — the gold pixels the rank-1 arrow lights in its origin square of the buffer —
-  // and the opacity; the setting persists; the default is 2 px at 85%.
+  // width in floor pixels — the pixels the best hint with a path changes in its origin square of the
+  // buffer — and the opacity; the setting persists; the default is 2 px at 85%.
   const dial = await page.evaluate(async () => {
     const K = window.__DCK;
-    const first = K.cheat.arrows.find((a) => a.rank === 1);
-    const measure = () => {
-      K.renderer.paintNow();
-      const px = K.renderer.square(first.from);
-      let gold = 0;
-      for (let i = 0; i < px.length; i += 4) if (px[i] === 0xf2 && px[i + 1] === 0xc1 && px[i + 2] === 0x4e && px[i + 3] === 255) gold++;
-      return gold;
-    };
+    // THE PORTAL SPELL: a cast hint is a ring (from === to), not a shaft — the dial is
+    // read on the best hint WITH A PATH. Its colour is its rank's and its strength sets
+    // its alpha, so the dial reads the pixels the arrow CHANGES in its origin square
+    // between two styles (against the arrow at its faintest), never a count of one
+    // pure colour — a rank-2 arrow at strength 0.7 has no pure pixel at any width.
+    const first = K.cheat.arrows.find((a) => a.from !== a.to);
+    if (!first) return { skipped: true };
+    const COL = { 1: [0xf2, 0xc1, 0x4e], 2: [0xc9, 0xce, 0xd8], 3: [0xc8, 0x81, 0x3f] }[first.rank === 2 || first.rank === 3 ? first.rank : 1];
+    const paint = (w, a) => { K.setArrowStyle(w, a); K.renderer.paintNow(); return K.renderer.square(first.from); };
+    const differ = (p, q) => { let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] !== q[i] || p[i + 1] !== q[i + 1] || p[i + 2] !== q[i + 2] || p[i + 3] !== q[i + 3]) n++; return n; };
+    const pure = (p) => { let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] === COL[0] && p[i + 1] === COL[1] && p[i + 2] === COL[2] && p[i + 3] === 255) n++; return n; };
     const dflt = K.arrowStyle;
-    K.setArrowStyle(5, 1);
-    const wide = measure();
-    K.setArrowStyle(1, 1);
-    const thin = measure();
+    const faintest = paint(1, 0.2); // the arrow at its faintest and thinnest: the reference every other style is read against
+    const wide = differ(paint(5, 1), faintest);
+    const thinPaint = paint(1, 1);
+    const thin = differ(thinPaint, faintest);
     const thinStyle = K.arrowStyle;
-    K.setArrowStyle(1, 0.5);
-    const faint = measure();
+    const halfPaint = paint(1, 0.5);
+    const half = differ(halfPaint, thinPaint);
+    const halfPure = pure(halfPaint);
     const faintStyle = K.arrowStyle;
     const saved = JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}');
     K.setArrowStyle(dflt.width, dflt.alpha);
-    return { kind: K.renderer.kind, dflt, wide, thin, faint, thinStyle, faintStyle, saved: { w: saved.arrowWidth, a: saved.arrowAlpha }, back: K.arrowStyle };
+    return { kind: K.renderer.kind, rank: first.rank, from: first.from, dflt, wide, thin, half, halfPure, thinStyle, faintStyle, saved: { w: saved.arrowWidth, a: saved.arrowAlpha }, back: K.arrowStyle };
   });
+  if (dial.skipped) expect(true, 'the arrow dials: not measured this run — every hint was a portal cast (a ring, not a shaft)');
+  else {
   expect(dial.dflt.width === 2 && dial.dflt.alpha === 0.85, `the arrows' default style is 2 px at 85%: ${JSON.stringify(dial.dflt)}`);
-  expect(dial.wide > dial.thin && dial.thin > 0 && dial.thinStyle.width === 1 && dial.thinStyle.alpha === 1, `the width dial: gold pixels in the rank-1 arrow's origin square ${dial.wide} at 5 px vs ${dial.thin} at 1 px (${JSON.stringify(dial.thinStyle)})`);
-  expect(dial.faint === 0, `the opacity dial: at 50% no pixel is the pure colour any more (${dial.faint}), style ${JSON.stringify(dial.faintStyle)}`);
+  expect(dial.wide > dial.thin && dial.thin > 0 && dial.thinStyle.width === 1 && dial.thinStyle.alpha === 1, `the width dial: the rank-${dial.rank} arrow changes ${dial.wide} pixels of its origin square ${dial.from} at 5 px vs ${dial.thin} at 1 px (${JSON.stringify(dial.thinStyle)})`);
+  expect(dial.half > 0 && dial.halfPure === 0, `the opacity dial: at 50% the arrow repaints ${dial.half} pixels of ${dial.from} and none is the pure colour any more (${dial.halfPure}), style ${JSON.stringify(dial.faintStyle)}`);
   expect(dial.faintStyle.alpha === 0.5 && dial.saved.w === 1 && dial.saved.a === 0.5 && dial.back.width === dial.dflt.width, `the dials persist in the options (${JSON.stringify(dial.saved)}) and reset (${JSON.stringify(dial.back)})`);
+  }
 }
 
 // --- play random moves until each rung has fired (or the ply budget runs out)
@@ -1184,7 +1191,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const K = window.__DCK;
     await K.renderer.ready();
     const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy}, phase ${K.app.phase}, duel ${K.app.duel?.state})`); };
-    const board = (fen) => fen.split(' ')[0];
+    const board = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, ''); // the board field without the holdings (THE PORTAL SPELL: the scrolls ride the FEN)
     const out = {};
     out.world = { id: K.app.walk.world.id, facing: K.app.walk.world.start.facing, theme: K.app.walk.world.theme };
     out.walkTurn = K.walk.state.turn;
@@ -1249,7 +1256,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const re = await page5.evaluate(async () => {
     const K = window.__DCK;
     const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy}, phase ${K.app.phase}, duel ${K.app.duel?.state})`); };
-    const board = (fen) => fen.split(' ')[0];
+    const board = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, ''); // the board field without the holdings (THE PORTAL SPELL: the scrolls ride the FEN)
     await settle();
     const out = { seed: K.walk.duel?.seed, fen: K.app.duel?.fen(), ply: K.app.duel?.ply, equal: board(K.walk.arenaFen()) === board(K.app.duel.fen()) };
     // The player wins by the enemy's concession; the one button walks out.
@@ -1276,7 +1283,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const K = window.__DCK;
     await K.renderer.ready();
     const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy})`); };
-    const board = (fen) => fen.split(' ')[0];
+    const board = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, ''); // the board field without the holdings (THE PORTAL SPELL: the scrolls ride the FEN)
     const out = {};
     const st = K.walk.state;
     const k = st.king;
@@ -1350,7 +1357,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await settle();
     out.hunt.afterOne = { state: K.walk.enemies.find((e) => e.id === 2)?.state, threats: K.walk.threats.length, status: document.getElementById('walk-status').textContent, ms: K.walk.enemyMs, king: { ...K.walk.enemies.find((e) => e.id === 2).king } };
     out.hunt.turns = await untilDuel(8);
-    out.hunt.duel = { phase: K.app.phase, duel: K.walk.duel, lower: lower(), enemiesKept: K.walk.enemies.length, black: K.app.duel ? K.app.duel.fen().split(' ')[0].replace(/[^a-z]/g, '').length : null, logEnemy: K.log.build()?.world?.enemy ?? null };
+    out.hunt.duel = { phase: K.app.phase, duel: K.walk.duel, lower: lower(), enemiesKept: K.walk.enemies.length, black: K.app.duel ? K.app.duel.fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').replace(/[^a-z]/g, '').length : null, logEnemy: K.log.build()?.world?.enemy ?? null };
     out.hunt.ended = await walkOut('black');
     out.hunt.after = { phase: K.app.phase, enemies: K.walk.enemies.map((e) => `${e.id}:${e.state}`).join(' '), lower: lower(), same: cells() === standing, facing: K.walk.state.facing, last: K.walk.saved().turns.at(-1) };
     // THE AMBUSH THROUGH THE PIVOT, IN THE FAR HALF: enemy 3 six ranks north of the king (the nearest row the floor holds it on), facing south; the player's wait completes the alignment.
@@ -1477,6 +1484,112 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(/roam:(roam|hunt|search):\d+/.test(ra.saved), `the save carries each wanderer's mode, state and draw count (${ra.saved})`);
   expect(errs7.length === 0, `no page errors with the wanderers${errs7.length ? ` — ${errs7.join(' | ')}` : ''}`);
   await page7.close();
+}
+
+// --- THE PORTAL SPELL (2026-09-17; the colours by caster the same day — the
+// designer, on the first duel: "the enemy portals should be a different
+// color… each new portal pair has a unique color so the player can see how
+// they link"): on a fresh duel the Portal button shows two scrolls; the
+// button enters CAST MODE with the legal squares lit (none on a king row,
+// all empty) and a tap on a wall leaves it; a tap on a lit square casts
+// through the piece-move path — the half-open portal a dashed ring in the
+// player's BLUE, one scroll left, the log naming the cast; the second cast
+// links the pair, solid blue on both squares, the button gone; the enemy's
+// portal, when it has cast, wears ORANGE (its colour is also asserted on the
+// analyzer, replay-smoke). The debris is off so nothing lands on the rings;
+// hints off so no shaft crosses them.
+{
+  const page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs8 = [];
+  page8.on('pageerror', (e) => errs8.push(String(e).split('\n')[0]));
+  await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
+  await page8.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page8.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const ps = await page8.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const BLUE = [0x4a, 0xa3, 0xff], ORANGE = [0xff, 0x9a, 0x2e];
+    const count = (sq, rgb) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] === rgb[0] && px[i + 1] === rgb[1] && px[i + 2] === rgb[2] && px[i + 3] === 255) n++; return n; };
+    const fen = () => K.app.duel.fen();
+    const field = () => fen().match(/\{([^}]*)\}/)?.[1] ?? '';
+    const grid = () => fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const south = (sq) => `${sq[0]}${rankOf(sq) - 1}`;
+    const lit = () => [...K.app.boardUI.marks.targets];
+    const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /portal/i.test(t));
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const btn = document.getElementById('btnPortal');
+    const out = { hidden0: btn.hidden, text0: btn.textContent.trim(), disabled0: btn.disabled };
+    btn.click();
+    out.castMode = K.app.castMode;
+    const L0 = lit();
+    out.litN = L0.length;
+    out.litKingRow = L0.filter((sq) => rankOf(sq) === 1 || rankOf(sq) === ranks).length;
+    out.litEmpty = L0.every((sq) => at(sq) === '.');
+    const wall = [...K.app.boardUI.cells.keys()].find((sq) => at(sq) === '*' && !L0.includes(sq));
+    K.tap(wall);
+    out.leftAfterWallTap = !K.app.castMode && [...K.app.boardUI.marks.targets].length === 0;
+    // The first cast: a lit square off the king rows with an empty square south of it (a piece there would rise over the ring).
+    const pick = (avoid) => { const c = lit().filter((sq) => !avoid.includes(sq) && rankOf(sq) > 2 && rankOf(sq) < ranks - 1 && at(south(sq)) === '.'); return c[Math.floor(c.length / 2)] ?? lit().find((sq) => !avoid.includes(sq)); };
+    btn.click();
+    const a = pick([]);
+    K.tap(a);
+    await settle();
+    out.a = a;
+    out.fieldA = field();
+    out.textA = btn.textContent.trim();
+    out.titleA = btn.title;
+    out.aEmpty = at(a) === '.' && at(south(a)) === '.';
+    out.aBlue = count(a, BLUE);
+    out.aOrange = count(a, ORANGE);
+    out.logA = logLines();
+    out.turnA = K.app.duel.turnColor();
+    out.stateA = K.app.duel.state;
+    if (K.app.duel.state === 'playing') {
+      btn.click();
+      const b = pick([a]);
+      K.tap(b);
+      await settle();
+      out.b = b;
+      out.fieldB = field();
+      out.hiddenB = btn.hidden;
+      out.aEmptyB = at(a) === '.' && at(south(a)) === '.';
+      out.bEmpty = at(b) === '.' && at(south(b)) === '.';
+      out.aBlueB = count(a, BLUE);
+      out.bBlueB = count(b, BLUE);
+      out.logB = logLines();
+    }
+    const f = field();
+    const enemyHalf = f.match(/(?:^|,)([a-l](?:10|[1-9]))b(?:,|$)/)?.[1] ?? null;
+    const enemyPair = [...f.matchAll(/([a-l](?:10|[1-9]))-([a-l](?:10|[1-9]))/g)].map((m) => [m[1], m[2]]).find((p) => !p.includes(out.a) && !p.includes(out.b)) ?? null;
+    const esq = enemyHalf ?? enemyPair?.[0] ?? null;
+    out.enemy = esq ? { sq: esq, half: !!enemyHalf, empty: at(esq) === '.' && at(south(esq)) === '.', orange: count(esq, ORANGE), blue: count(esq, BLUE) } : null;
+    out.state = K.app.duel.state;
+    return out;
+  });
+  expect(!ps.hidden0 && /×2/.test(ps.text0) && !ps.disabled0, `the Portal button shows on the player's turn with two scrolls (${ps.text0}${ps.hidden0 ? ', hidden' : ''}${ps.disabled0 ? ', disabled' : ''})`);
+  expect(ps.castMode && ps.litN > 0 && ps.litKingRow === 0 && ps.litEmpty, `the button enters cast mode with ${ps.litN} squares lit, none on a king row (${ps.litKingRow}), all empty`);
+  expect(ps.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
+  expect(new RegExp(`(^|,)${ps.a}w(,|$)`).test(ps.fieldA) && /×1/.test(ps.textA) && /is open/.test(ps.titleA), `a tap on ${ps.a} casts: the field reads {${ps.fieldA}}, one scroll left (${ps.textA}), the title says the half is open`);
+  expect(ps.logA.some((t) => t.includes(`a portal opens at ${ps.a}`)), `the log names the cast (${ps.logA.slice(-1)[0] ?? 'nothing about a portal'})`);
+  if (ps.aEmpty) expect(ps.aBlue >= 9 && ps.aBlue <= 18 && ps.aOrange === 0, `the half-open portal is a dashed ring in the player's BLUE (${ps.aBlue} blue pixels of 18, ${ps.aOrange} orange)`);
+  else expect(ps.aBlue > 0 && ps.aOrange === 0, `the half-open portal at ${ps.a} shows blue beside the piece over it (${ps.aBlue} pixels)`);
+  if (ps.b) {
+    expect(new RegExp(`(^|,)(${ps.a}-${ps.b}|${ps.b}-${ps.a})(,|$)`).test(ps.fieldB) && ps.hiddenB, `the second cast links the pair {${ps.fieldB}} and the button goes with the last scroll`);
+    expect(ps.logB.some((t) => t.includes('the portals are linked')), 'the log says the portals are linked');
+    const solid = (n, empty) => (empty ? n >= 20 && n <= 36 : n > 0);
+    expect(solid(ps.aBlueB, ps.aEmptyB) && solid(ps.bBlueB, ps.bEmpty), `both squares of the pair wear the solid blue ring (${ps.aBlueB} / ${ps.bBlueB} blue pixels of 36${ps.aEmptyB && ps.bEmpty ? '' : ', a piece over one'})`);
+  } else expect(ps.stateA !== 'playing', `the duel ended before the second cast (${ps.stateA})`);
+  if (ps.enemy) expect(ps.enemy.empty ? ps.enemy.orange >= 9 && ps.enemy.blue === 0 : ps.enemy.orange > 0 && ps.enemy.blue === 0, `the enemy's ${ps.enemy.half ? 'half-open portal' : 'pair'} at ${ps.enemy.sq} wears ORANGE (${ps.enemy.orange} orange pixels, ${ps.enemy.blue} blue)`);
+  else expect(true, 'the enemy cast nothing in these plies (its orange is asserted on the analyzer, replay-smoke)');
+  expect(errs8.length === 0, `no page errors with the portal spell${errs8.length ? ` — ${errs8.join(' | ')}` : ''}`);
+  await page8.close();
 }
 await browser.close();
 

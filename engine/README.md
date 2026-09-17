@@ -21,6 +21,14 @@ code in its threadless build); full rule-16 gate green (see "The stack
 patch" below). Phone feel check passed 2026-09-01. Adopt upstream PR #1031 when it
 lands and drop the patch.
 
+**Status 2026-09-17: THE PORTALS PATCH shipped.** `patches/portals.patch`
+(489+/14− across eight files, applied on top of the two above, in that
+order) gives the engine the portal spell of brief §4.7: a PORTAL move type,
+the scroll cast as a drop, the trailing FEN field for the pairs, and the
+strip rule that never counts a spell. Both artifacts rebuilt from the same
+pins and toolchains; the rule-16 gate ran green end to end (see "The
+portals patch" below). Not yet played by the designer.
+
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
 diff. `patches/pr29-dead-squares-full.diff` (KOTH-Stockfish PR #29) is
@@ -230,6 +238,133 @@ vendored ffish artifacts are unchanged.
 - [x] phone feel check — passed 2026-09-01 (designer, on Pages, on the
   v3-Gods build that ships this pair: extended big-board duels, verdict
   "plays pretty well" — the stall class this patch fixes did not resurface)
+
+## The portals patch (`patches/portals.patch`) — 2026-09-17
+
+Canon: brief §4.7 (the designer's three rules, 2026-09-17: landing on a
+portal always teleports the piece to the other portal; if the other portal
+is occupied they swap places; a piece standing on a portal is captured as
+normal, and the attacker is teleported after the capture) plus one
+placement rule (portals never on a king row, which is the promotion zone,
+so no pawn ever promotes through one and the move carries no promotion).
+Authored against the pinned trees on top of `dead-squares.patch` +
+`thread-stack.patch` (apply in that order); 489 insertions / 14 deletions
+across `types.h`, `variant.h`, `parser.cpp`, `position.h`, `position.cpp`,
+`movegen.cpp`, `evaluate.cpp`, `apiutil.h`.
+
+Design, in the engine's own shapes:
+
+- **The PORTAL move type** (a free value of the 4-bit type field), encoded
+  as `from` + the portal square P, so the notation is the plain `from``to`
+  string (every move onto a portal square IS a portal move) and
+  `capture(m)` reads the victim on P as stock code does. `do_move` captures
+  on P as usual, then removes-and-places the mover on the twin Q and the
+  twin's occupant on P (castling's remove-before-place, since Q may equal
+  `from` on a twin-to-twin move: the mover ends where it stood — the
+  capture at range and the quiet pass the rule implies, both generated).
+  `undo_move` derives everything from the board and `capturedPiece`; the
+  pair table rides the copied region of StateInfo, so a cast's undo is
+  `st = st->previous` and nothing else.
+- **`portal_attacks_king(m, colour)`**, one helper for legality (the
+  mover's king) and `gives_check` (the enemy's): the three relocated
+  squares are virtual — the victim gone, the mover on Q, the swapped piece
+  on P, a king that moved or was swapped judged where he ends — and every
+  other piece attacks from where it stands through the new occupancy (the
+  en passant test's shape with two relocations).
+- **Evasions by filtering**: in check every portal move is generated whole
+  (`generate_portal_evasions`) and `legal()` decides, because a portal move
+  can block through Q, block through the swapped piece, or swap a checked
+  king out; the regular evasion masks drop portal squares so nothing is
+  emitted twice. `pseudo_legal` validates a PORTAL TT move by regeneration
+  (the stock fallback for every non-NORMAL type).
+- **The cast**: a DROP of the `portalScroll` type (a new variant key naming
+  a piece type that only ever lives in hand — the duel uses FSF's own
+  `immobile` piece, letter `o`; two per side in the holdings `[OOoo]`).
+  `do_move` places nothing: the hand loses a scroll and the caster's open
+  half closes into a pair with the square, or the square becomes the
+  caster's open half (`portalHalf[colour]`). Never while in check, never
+  on a square a portal or a half already takes (`portal_taken()`), and the
+  drop region is the variant's `dropRegionWhite/Black` (grammar: every rank
+  but the king rows). A cast gives no check and passes SEE at zero.
+- **The trailing FEN field** ` {c3-h8,d1-a9,e4w}` after the move counters —
+  pairs as `a-b` (emitted with the lower square first), halves as the
+  square plus `w`/`b` — parsed by `set()` (3check's optional trailing field
+  is the precedent; entries off the board, on a promotion rank, on a wall
+  or crate, or on a taken square are dropped), emitted by `fen()`,
+  validated and stripped by apiutil's `validate_fen`
+  (`FEN_INVALID_PORTAL_FIELD` = −15), hashed per pair and per half from a
+  separate PRNG so the stock key sequence is untouched.
+- **Spells are never pieces**: the extinction (strip) count uses
+  `count_with_hand_spellfree`, which drops scrolls in hand; the pairs and
+  halves are state, not occupancy, so no count ever sees them. The eval's
+  hand term skips the scroll type (its in-hand PSQT value stays: the
+  `pieceValueMg/Eg` of the scroll plus FSF's small in-hand bonus is the
+  engine's eagerness knob).
+- **Stock when absent**: with no portal squares and no scroll type the
+  changed expressions reduce to the stock ones — verified node-for-node
+  (`search-identity.cjs`) and by perft against the shipped pair.
+
+Known gaps, on record: a PORTAL move takes the stock "simple SEE" of every
+special move type (zero), as en passant does — a capture through a portal
+is ordered as a neutral capture, never pruned as losing; en passant is
+never offered onto a portal square; a quiet portal move that gives check
+only through the twin is not found by the QUIET_CHECKS generator (the main
+search finds it at depth one); the helper covers every piece `attacks_bb`
+covers (Janggi's palace pieces and cannons are not on that list); the UCI
+`flip` command does not turn the portal field.
+
+### Validation (2026-09-17, this container)
+
+Native first: a debug largeboard build with `pos_is_ok`'s full state check
+narrowed to the keys, the checkers and the material (`set_state`
+recomputed after every move and compared with the incremental state) and
+the `givesCheck == checkers` assert in `do_move`, driven over UCI
+(scratch `forge/native-test.py`): ten hand-verified fixtures — a quiet
+teleport, a capture through with the swap, a king refused onto an attacked
+exit and allowed onto a safe one, the enemy king swapped into check with
+its 8 evasions (one a pawn capture that swaps the king out through the
+portal), a twin-to-twin capture and pass, a pawn through a portal, no cast
+in check, the four-cast sequence, the strip fixture — every perft 1 equal
+to the hand count and every perft 3 completing under the asserts; the
+portal variant with empty hands equal to the plain one at depth 3;
+`go depth 8` taking a queen through the portal.
+
+Then the rule-16 gate on the wasm pair:
+
+- [x] `test-ffish.cjs` 19/19 · `regress-ffish.cjs` PASS (crate-free
+  perft / moves / validateFen / 12x10 identical to vendored 0.7.9)
+- [x] `test-portals-ffish.cjs` **42/42** — the fixtures through the JS API,
+  SAN (`Rc3`, `Rxc3`, `Rc3+`, `O@c3`), push/pop round trips, the field's
+  validation, the three strip fixtures decided at load, and a 5,534-move
+  consistency sweep (SAN's check suffix, i.e. `gives_check`, against push +
+  `isCheck` on every legal move of eight positions one ply deep): 0
+  mismatches
+- [x] `test-engine.cjs` 7/7 · `regress.cjs` PASS · `xcheck.cjs` PASS ·
+  `search-identity.cjs` node-for-node identical to vendored 1.1.11 at d12
+  (19459/26462/35136) · `stack-regress.cjs` 5/5
+- [x] `test-portals-engine.cjs` **55/55** — the same fixtures over UCI,
+  perft 1 and 3, the four-cast sequence through `d`, the strip rule at the
+  root (`bestmove (none)`, mate 0), `go depth 10` → `c1c3`, a 10×10
+  duel-shaped position with scrolls and a pair searched at depth 12 with
+  the instance alive after
+- [x] depth-cap re-measure (`depthcap.cjs`): d22 110/110 clean (slowest
+  1621 ms), d60 30/30 clean — the cap STAYS at d22 (rule 11 unchanged)
+- [x] `play/selftest.html` in headless Chromium: **47/47** (the new
+  portals check: cast → link → teleport + swap → strip on the game's own
+  deal variant, both binaries)
+- [x] the replay page's smoke 63/63 on the new pair; ui-smoke on the real
+  page with portals on for both sides: 330 ok, 0 failed
+- [x] the designer's own play (2026-09-17, vaults-4, 70 plies, both pairs
+  cast in the first three moves, no anomaly — the analyzer's `?sample=2`):
+  "the engine seems to be VERY aware of the advantages of portals"
+
+Build notes: `make emscripten_copy_files` needs `ARCH=wasm` on the command
+line as well (the emscripten Makefile is only included under it); the
+three toolchains were reinstalled from scratch this session (the container
+keeps nothing) — emsdk 1.39.16 and 2.0.26 in separate checkouts, the
+default net pre-downloaded next to the engine Makefile. `stockfish.js`,
+`stockfish.worker.js` and `ffish.js` came out the vendored sizes; the wasms
+grew 16 KB (ffish) and 18 KB (engine) for the portal code.
 
 ## Provenance (pin these)
 

@@ -151,6 +151,57 @@ const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
 const TARGET = 'rgba(215,180,106,0.53)'; // .cell.target::after #d7b46a88
+// THE PORTAL SPELL (2026-09-17): a rune ring on the floor — the outline (A),
+// the rim (B) and the inner ring (C) of a linked pair; a half-open portal is
+// the rim alone, dashed (it links to nothing yet). A coded 16×16 until the
+// atlas carries a sprite. THE COLOURS ARE THE CASTER'S (the designer, on the
+// first portal duel: "the enemy portals should be a different color. Idk if
+// orange would be appropriate (like Valve's Portal). Either way, we need to
+// make sure each new portal pair has a unique color so the player can see
+// how they link"): the player's pairs in cool hues, blue first; the enemy's
+// in warm hues, orange first; a second, third and fourth pair of a side a
+// hue of its own, wrapping after four; a pair nobody cast (authored, or a
+// bare FEN with no history) in silver; a half wears the colour its pair
+// will wear. Who cast what is fen.mjs's ledger (portalInfo's `owner`).
+const PORTAL_RING = [
+  '................',
+  '.....AAAAAA.....',
+  '...AABBBBBBAA...',
+  '..ABBCCCCCCBBA..',
+  '.ABCC......CCBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABCC......CCBA.',
+  '..ABBCCCCCCBBA..',
+  '...AABBBBBBAA...',
+  '.....AAAAAA.....',
+  '................',
+];
+export const PORTAL_TONES = {
+  w: [
+    { A: '#0a1430', B: '#4aa3ff', C: '#245bb8' }, // blue
+    { A: '#062420', B: '#3fe0c8', C: '#1a8c7c' }, // teal
+    { A: '#160c30', B: '#b48cff', C: '#5d3ab8' }, // violet
+    { A: '#0c2408', B: '#7be06a', C: '#3b8a2c' }, // green
+  ],
+  b: [
+    { A: '#2e1206', B: '#ff9a2e', C: '#b8531c' }, // orange
+    { A: '#2e0810', B: '#ff5a7a', C: '#b0233d' }, // red
+    { A: '#2e2406', B: '#ffd84a', C: '#b8921a' }, // yellow
+    { A: '#2e0826', B: '#ff6ae0', C: '#b02a94' }, // magenta
+  ],
+  x: [{ A: '#15171d', B: '#c9ced8', C: '#6b7080' }], // nobody's: silver
+};
+/** The tones of a side's n-th pair (wrapping); an unknown side is nobody's. */
+export function portalTones(side, n = 0) {
+  const list = PORTAL_TONES[side] ?? PORTAL_TONES.x;
+  const i = Number.isInteger(n) ? ((n % list.length) + list.length) % list.length : 0;
+  return list[i];
+}
 const THREAT = 'rgba(229,72,77,0.55)'; // the threat display's far row (--bad at half)
 const THREAT_TINT = 'rgba(229,72,77,0.16)'; // the rest of the band (the far half of a hunter's box)
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
@@ -228,6 +279,7 @@ export class CanvasBoard {
     // The board's state, all data: the world, the crop, what marks it wears.
     this.fen = null;
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
+    this.portals = null; // THE PORTAL SPELL: the position's pairs and halves (fen.mjs parsePortalField), painted on the floor
     this.cellMarks = { selected: null, targets: new Map(), threats: new Map(), badges: new Map() }; // the walk's (setCellMarks): a selection, its targets, THE THREAT DISPLAY (milestone 6: the band where a hunter's duel would start — the far row framed, the rest tinted) and the badges over the enemy kings
     this.debrisBufs = new Map(); // cell index → 16×16 RGBA in WORLD orientation (the test surface: the buffer the cell wears)
     this.debrisCanvas = new Map(); // cell index → a 16×16 canvas of it, turned to the screen
@@ -873,6 +925,15 @@ export class CanvasBoard {
       heat: heat ?? {},
     };
     this.setArrows(arrows);
+    this.invalidate();
+  }
+
+  /** THE PORTAL SPELL (2026-09-17): the pairs and half-open portals of the
+   *  position (fen.mjs portalInfo — parsePortalField plus each square's
+   *  caster and pair number, which pick the colour) — rune rings on the
+   *  floor in the flat pass, under whatever stands on them. */
+  setPortals(info) {
+    this.portals = info && info.squares && info.squares.size ? info : null;
     this.invalidate();
   }
 
@@ -1674,6 +1735,8 @@ export class CanvasBoard {
         g.fillRect(x, y, T, T);
       }
     }
+    // THE PORTAL SPELL: the rune ring on the floor, under the debris and the pieces.
+    if (sq && this.portals?.squares.has(sq)) this.#paintPortal(sq, x, y);
     // (The cell's debris is drawn AFTER its terrain, below: the DOM's
     // debris image paints over the cell's background, so on a ruin the
     // rubble lies over the stub.)
@@ -1728,6 +1791,31 @@ export class CanvasBoard {
     // Marks under the pieces (the gods' residue and the debug heat) — a
     // tall square's are painted over its sprite in #paintTall.
     if (!this.#isTall(k)) this.#paintUnderMarks(sq, x, y);
+  }
+
+  /** The rune ring of a portal square: a linked pair's three tones, or a
+   *  half-open portal's dashed rim in its caster's colour. */
+  #paintPortal(sq, x, y) {
+    const g = this.bctx;
+    const P = this.portals;
+    const isHalf = P.halves.w === sq || P.halves.b === sq;
+    // The caster from the ledger (fen.mjs portalInfo); a plain parse (no
+    // `owner`) paints a half in its side's first colour and a pair as nobody's.
+    const o = P.owner?.get(sq) ?? { side: P.halves.w === sq ? 'w' : P.halves.b === sq ? 'b' : 'x', n: 0 };
+    const tones = portalTones(o.side, o.n);
+    for (let py = 0; py < T; py++) {
+      const row = PORTAL_RING[py];
+      for (let px = 0; px < T; px++) {
+        const c = row[px];
+        if (c === '.') continue;
+        if (isHalf && c === 'C') continue; // a half has no inner ring: nothing on the far side yet
+        const tone = tones[c];
+        if (!tone) continue;
+        if (isHalf && c === 'B' && (px + py) % 2) continue; // dashed, for the same reason
+        g.fillStyle = tone;
+        g.fillRect(x + px, y + py, 1, 1);
+      }
+    }
   }
 
   /** Is this square's terrain painted in the tall pass (over the square north)? */
@@ -1929,6 +2017,16 @@ export class CanvasBoard {
     sg.imageSmoothingEnabled = false;
     for (const a of this.arrows) {
       if (!this.cells.has(a.from) || !this.cells.has(a.to)) continue;
+      if (a.from === a.to) {
+        // THE PORTAL SPELL: a cast (a hint, or the enemy's last move) has no
+        // path — a ring on its square in the arrow's own colour and strength.
+        const o = this.#origin(a.from);
+        const ga = this.bctx.globalAlpha;
+        this.bctx.globalAlpha = Math.max(0.2, Math.min(1, a.strength ?? 1));
+        this.#frame1(o.x, o.y, arrowColour(a), 1);
+        this.bctx.globalAlpha = ga;
+        continue;
+      }
       const p = this.#origin(a.from), q = this.#origin(a.to);
       const s = Math.max(0, Math.min(1, a.strength ?? 1));
       drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg });

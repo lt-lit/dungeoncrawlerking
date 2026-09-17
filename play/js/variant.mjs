@@ -28,7 +28,45 @@ const KNOWN_INI_KEYS = new Set([
   'capturesToHand',
   'dropRegionWhite',
   'dropRegionBlack',
+  // THE PORTAL SPELL (2026-09-17, engine/patches/portals.patch)
+  'immobile',
+  'portalScroll',
+  'pieceValueMg',
+  'pieceValueEg',
 ]);
+
+// THE PORTAL SPELL (2026-09-17): the scroll is a piece type that only ever
+// lives in hand (FSF's own `immobile` piece, letter `o`), two per side per
+// duel — one pair, cast in two turns. The engine's `portalScroll` key names
+// it; a drop of it opens a half (`O@e4`) or, when the caster holds an open
+// half, links that half to the square. The drop region keeps every cast
+// off the two king rows (the promotion zones), so no pawn ever promotes
+// through a portal and the engine needs no promotion branch for the move.
+// The scroll's value is the engine's eagerness knob: 0 leaves only FSF's
+// small in-hand bonus, so the enemy casts when the search sees a gain.
+export const PORTAL_SCROLL = 'o';
+export const PORTAL_SCROLLS_PER_SIDE = 2;
+export const PORTAL_SCROLL_VALUE = 0;
+export const PORTAL_VARIANT_SUFFIX = '__portals';
+
+/** The variants.ini keys that turn the portal spell on for a `ranks`-deep board. */
+export function portalIniKeys(ranks) {
+  const middle = Array.from({ length: Math.max(0, ranks - 2) }, (_, i) => `*${i + 2}`).join(' ');
+  return {
+    immobile: PORTAL_SCROLL,
+    portalScroll: PORTAL_SCROLL,
+    pieceDrops: 'true',
+    dropRegionWhite: middle,
+    dropRegionBlack: middle,
+    pieceValueMg: `${PORTAL_SCROLL}:${PORTAL_SCROLL_VALUE}`,
+    pieceValueEg: `${PORTAL_SCROLL}:${PORTAL_SCROLL_VALUE}`,
+  };
+}
+
+/** The holdings block for a duel where both sides carry their scrolls. */
+export function portalPocket(n = PORTAL_SCROLLS_PER_SIDE) {
+  return PORTAL_SCROLL.toUpperCase().repeat(n) + PORTAL_SCROLL.repeat(n);
+}
 
 /**
  * Emit a variants.ini snippet for a duel arena.
@@ -118,13 +156,14 @@ export function catalogVariantName(files, ranks) {
  * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
  * cumulative variants-ini reload (main.mjs appends to app.catalog).
  */
-export function dealVariant(files, ranks, whiteLineRank, blackLineRank) {
+export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false } = {}) {
   const w = whiteLineRank | 0;
   const b = blackLineRank | 0;
   if (w < 1 || w > ranks || b < 1 || b > ranks) {
     throw new Error(`camp lines w${w}/b${b} outside 1-${ranks}`);
   }
-  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}`;
+  // The name encodes the config (rule 7): a portal deal is its own variant.
+  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}`;
   const ini = makeDuelVariantIni({
     name,
     files,
@@ -132,9 +171,10 @@ export function dealVariant(files, ranks, whiteLineRank, blackLineRank) {
     extra: {
       doubleStepRegionWhite: Array.from({ length: w }, (_, i) => `*${i + 1}`).join(' '),
       doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
+      ...(portals ? portalIniKeys(ranks) : {}),
     },
   });
-  return { name, ini };
+  return { name, ini, portals: !!portals };
 }
 
 /**

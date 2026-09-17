@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as R from '../../play/js/logreport.mjs';
 import { classifyTerrain, residueStep } from '../../play/js/board-ui.mjs';
+import { portalLedger, portalInfo } from '../../play/js/fen.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const file = process.argv[2] ?? path.join(ROOT, 'replay/samples/dck-log_s77-the-smithy_s1818861954.json');
@@ -121,6 +122,27 @@ try {
     const k = classifyTerrain(R.stateAt(L.states, crackedAt.ply).fen, { holes: new Set(), godCrates: new Set(R.stateAt(L.states, crackedAt.ply).godCrates) }, L.files, L.ranks).get(sq);
     expect(k?.cracked === true && k.mask >= 0, `classifyTerrain: ${sq} is a cracked wall with an autotile case after the quake`);
   }
+}
+
+// THE PORTAL SPELL (2026-09-17): the second sample — the first portal duel
+// (vaults-4 at walk turn 75) — renders with its casts on the timeline, its
+// field growing cast by cast, and the casters' ledger (fen.mjs portalLedger,
+// the analyzer's walk) naming each pair's side.
+if (!process.argv[2]) {
+  const L2 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-4-t75_s3904618753.json'), 'utf8'));
+  const full2 = R.renderReport(L2, { sections: R.SECTION_NAMES });
+  const tl2 = R.timelineSection(L2);
+  expect(full2.length > 10000 && tl2.some((l) => /1… O@f5/.test(l)) && tl2.some((l) => /2\. O@b6/.test(l)) && tl2.some((l) => /3\. O@h8/.test(l)), 'the portal duel sample renders with its casts on the timeline');
+  expect(full2.includes('world vaults-4') && /kings on file f/.test(full2) && /RESULT 1-0/.test(full2), 'its header carries the world line and the result');
+  const fields = L2.states.slice(0, 6).map((s) => s.fen.match(/\{([^}]*)\}/)?.[1] ?? '').join('|');
+  expect(fields === '||f5w|f5w,b6b|f5-i9,b6b|f5-i9,b6-h8', `the FEN field grows cast by cast through the states (${fields})`);
+  const led = portalLedger(L2.states.map((s) => s.fen));
+  const P = portalInfo(L2.states[5].fen, led);
+  const own = (sq) => `${P.owner.get(sq)?.side}${P.owner.get(sq)?.n}`;
+  expect(own('f5') === 'w0' && own('i9') === 'w0' && own('b6') === 'b0' && own('h8') === 'b0' && led.count.w === 1 && led.count.b === 1, `the ledger names the player's pair f5-i9 and the enemy's b6-h8 (${own('f5')} ${own('i9')} ${own('b6')} ${own('h8')})`);
+  const H = portalInfo(L2.states[3].fen, portalLedger(L2.states.slice(0, 4).map((s) => s.fen)));
+  expect(H.owner.get('f5')?.half === true && H.owner.get('f5')?.side === 'w' && H.owner.get('b6')?.half === true && H.owner.get('b6')?.side === 'b' && H.owner.get('b6')?.n === 0, 'at ply 3 both halves are open, each its caster\'s, numbered for the pair to come');
+  expect(portalInfo(L2.states[5].fen).owner.get('f5')?.side === 'x', 'a bare FEN with no history paints every pair as nobody\'s');
 }
 
 for (const n of notes) console.log(n);

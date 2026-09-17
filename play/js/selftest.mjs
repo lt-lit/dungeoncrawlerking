@@ -10,8 +10,8 @@
 // window.__SELFTEST = { done, passed, failed, lines } (done set LAST) so a
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
-import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen } from './variant.mjs';
-import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares } from './fen.mjs';
+import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket } from './variant.mjs';
+import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { DuelController, RECORD_ARRAYS } from './duel.mjs';
@@ -357,6 +357,66 @@ async function main() {
       throw new Error(`no promotion moves on the cropped far rank (a6a7*): ${moves.join(' ')}`);
     }
     return `a6a7 promotes on duel_10x7 (${promos.join(' ')})`;
+  });
+
+  // --- THE PORTAL SPELL (2026-09-17, engine/patches/portals.patch): the
+  // scroll cast, the pair, a capture through a portal with the far occupant
+  // swapped back, the engine's agreement and its search, the strip rule —
+  // on the game's own deal variant, both binaries. ---
+  await check('portals: cast → link → teleport + swap → strip (ffish + engine, the deal variant)', async () => {
+    const pv = dealVariant(8, 8, 2, 7, { portals: true });
+    ffish.loadVariantConfig(pv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + pv.ini);
+    const start = withPocket('4k3/3p4/8/8/8/8/3P4/4K3 w - - 0 1', portalPocket());
+    if (ffish.validateFen(start, pv.name) !== 1) throw new Error(`validateFen rejected ${start}`);
+    const b = new ffish.Board(pv.name, start);
+    const casts = b.legalMoves().trim().split(/\s+/).filter((m) => m.startsWith('O@'));
+    if (casts.length !== 46 || casts.some((m) => /[18]$/.test(m))) throw new Error(`${casts.length} casts (46 expected, none on a king row)`);
+    const fens = [start];
+    for (const m of ['O@c3', 'O@f6', 'O@e5']) {
+      b.push(m);
+      fens.push(b.fen());
+    }
+    // The casters' ledger (2026-09-17): one walk over the positions names
+    // each pair's caster and its number, and a half the colour its pair gets.
+    let P = portalInfo(b.fen(), portalLedger(fens));
+    if (P.twin.get('c3') !== 'e5' || P.halves.b !== 'f6' || !b.fen().includes('[o]')) throw new Error(`after three casts: ${b.fen()}`);
+    const own = (sq) => P.owner.get(sq) ?? {};
+    if (own('c3').side !== 'w' || own('e5').side !== 'w' || own('e5').n !== 0 || own('e5').half || own('f6').side !== 'b' || own('f6').n !== 0 || !own('f6').half) throw new Error(`the ledger after three casts: ${JSON.stringify([...P.owner])}`);
+    b.push('O@a4');
+    fens.push(b.fen());
+    P = portalInfo(b.fen(), portalLedger(fens));
+    if (P.pairs.length !== 2 || P.twin.get('a4') !== 'f6' || !b.fen().includes('[]')) throw new Error(`after four casts: ${b.fen()}`);
+    if (own('a4').side !== 'b' || own('f6').side !== 'b' || own('f6').half || own('c3').side !== 'w' || portalInfo(b.fen()).owner.get('a4').side !== 'x') throw new Error(`the ledger after four casts: ${JSON.stringify([...P.owner])}`);
+    b.delete();
+    // A capture through a portal, the far occupant swapped back (F2 of the engine gate).
+    const f2 = '4k3/3p4/5b2/8/8/2n5/3P4/2R1K3 w - - 0 1 {c3-f6}';
+    const c = new ffish.Board(pv.name, f2);
+    const legal = c.legalMoves().trim().split(/\s+/).filter(Boolean);
+    if (legal.length !== 9 || !legal.includes('c1c3') || legal.includes('c1c4')) throw new Error(`F2 legal moves: ${legal.join(' ')}`);
+    if (c.sanMove('c1c3') !== 'Rxc3') throw new Error(`SAN ${c.sanMove('c1c3')}`);
+    c.push('c1c3');
+    if (!c.fen().startsWith('4k3/3p4/5R2/8/8/2b5/3P4/4K3')) throw new Error(`after c1c3: ${c.fen()}`);
+    c.pop();
+    if (!c.fen().startsWith('4k3/3p4/5b2/8/8/2n5/3P4/2R1K3')) throw new Error(`pop: ${c.fen()}`);
+    c.delete();
+    // The engine agrees on the count and takes a queen through the portal.
+    engine.setoption('UCI_Variant', pv.name);
+    engine.position({ fen: f2 });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== 9) throw new Error(`engine perft 1 = ${n1}`);
+    engine.position({ fen: '4k3/3p4/8/8/8/2q5/3P4/2R1K3 w - - 0 1 {c3-f6}' });
+    const res = await engine.go('depth 8 movetime 3000');
+    if (res.bestmove !== 'c1c3') throw new Error(`bestmove ${res.bestmove}`);
+    // The strip rule: scrolls in hand, a half-open portal and a pair are never pieces.
+    for (const [f, what] of [[withPocket('4k3/3p4/8/8/8/8/8/4K3 w - - 0 1', portalPocket()), 'scrolls'], ['4k3/3p4/8/8/8/8/8/4K3[] w - - 0 1 {e4w}', 'a half'], ['4k3/3p4/8/8/8/8/8/4K3[] w - - 0 1 {c3-f6}', 'a pair']]) {
+      const s = new ffish.Board(pv.name, f);
+      const over = s.isGameOver();
+      s.delete();
+      if (!over) throw new Error(`a king with only ${what} is not stripped`);
+    }
+    return '46 casts, two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
   });
 
   // --- Duel generation + legality cross-check (phase0 selftest, 9x8 arena) ---

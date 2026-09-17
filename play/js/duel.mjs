@@ -21,7 +21,7 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares } from './fen.mjs';
+import { findSquares, splitFen } from './fen.mjs';
 import { flipTurn, evalSoftens } from './tactics.mjs';
 
 /** The principal variation of a search result's last "info … pv …" line,
@@ -61,7 +61,7 @@ function gameEnded(board) {
 /** Non-king piece counts per color from a FEN's board field. */
 function nonKingCounts(fen) {
   const counts = { white: 0, black: 0 };
-  for (const ch of fen.split(' ')[0]) {
+  for (const ch of splitFen(fen).board) { // the board alone — the holdings (THE PORTAL SPELL's scrolls) are nobody's pieces
     if (/[A-Z]/.test(ch) && ch !== 'K') counts.white++;
     else if (/[a-z]/.test(ch) && ch !== 'k') counts.black++;
   }
@@ -75,7 +75,7 @@ function nonKingCounts(fen) {
  *  forced loss), but the game layer ends it NOW rather than letting a
  *  zombie army shuffle for a few plies. */
 function kinglessSide(fen) {
-  const boardField = fen.split(' ')[0];
+  const boardField = splitFen(fen).board;
   const hasWhiteK = boardField.includes('K');
   const hasBlackK = boardField.includes('k');
   if (!hasWhiteK && hasBlackK) return 'white';

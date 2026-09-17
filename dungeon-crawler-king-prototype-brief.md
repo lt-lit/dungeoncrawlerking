@@ -366,6 +366,91 @@ The second terrain glyph: **`^` — furniture** (crates, weak masonry, force fie
 
 ---
 
+### 4.7 The portal spell `[NEW 2026-09-17 — designer-specified rules; engine substrate is engine/patches/portals.patch; everyone has it for the stress test]`
+
+The first SPELL: instead of moving, a side casts. The engine plays it for
+and against at full strength, which is the point and the price — stock FSF
+has no such move, so the vendored pair carries the portals patch (its
+record in `engine/README.md`; the rule-17 bar cleared as furniture's did:
+not expressible in variants.ini, and a game-layer fake would leave the
+engine blind to the teleport when choosing its move).
+
+**The rules `[designer, 2026-09-17, exactly as specified — no special
+cases]`:**
+
+- Landing on one portal always teleports the piece to the other portal.
+- If the other portal is occupied, the two pieces swap places (either
+  colour, a king included; check is judged where the king ends up).
+- A piece standing on a portal is captured as normal — by attacking that
+  square, not the other portal — and the attacker is teleported after the
+  capture.
+- Portals never stand on a king row (the promotion zone). No pawn promotes
+  through a portal; the easy queen is portal to the ninth rank, then push.
+- Only a MOVE teleports: a slider passing over an empty portal square is
+  passing, a swap triggers no further teleport, a displacement by the gods
+  never lands on or leaves a portal square.
+- A piece on one portal moving onto its twin ends where it stood — the
+  capture at range and the pass that follows from the rule, both legal.
+
+**The spell:** one pair per side per duel for now (an upgrade later), two
+scrolls in hand, cast in two turns — the first cast opens a HALF that
+belongs to its caster, the second links it to the square the caster
+picks; a half is inert until paired and the enemy can never finish it. A
+cast is a legal move (`O@e4`), never while in check, never on a square a
+portal or a half already takes. Spells are NEVER pieces: a king with
+scrolls in hand, an open half or a pair is stripped and has lost. Nothing
+persists past the duel; the pairs and halves ride the FEN's trailing
+field, so the log and the analyzer carry them for free. On the board a
+pair wears its CASTER'S colour — the player's blue, the enemy's orange,
+each further pair a hue of its own — so the links read at a glance; the
+field names no caster, so the game and the analyzer rebuild who cast what
+by a forward walk over the positions.
+
+**Any number of pairs** is one representation (a square → twin map, hashed
+per pair); the count is the deal's, and the stage or world may author
+pairs the same way once the generator places them — an authored entry on
+a king row is dropped at load by the engine's parse (the ban, never a
+scoot); no floor authors one yet.
+
+### 4.8 The sledgehammer and the indestructible obstacle `#` `[DECIDED 2026-09-17, NOT BUILT — the next session implements]`
+
+**The ability `[designer, 2026-09-17]`:**
+
+- A piece with the sledgehammer ability can spend its move to turn an
+  adjacent wall into a `^` tile. This counts as moving for the turn.
+- It is the property of a piece itself, not a spell.
+- Designed with the Kings in mind: an easy way to make holes in walls; the
+  trade-off is that a sledgehammer-wielding king may have to stand in a
+  fairly aggressive position to make full use of it.
+- A second kind of wall in the engine: walls that can be turned into `^`
+  (by sledgehammers, explosives, quakes or any future weakening effect)
+  and walls that cannot. No more using one glyph for walls and holes.
+
+**The glyph `[designer]`:** `#` is ANY INDESTRUCTIBLE OBSTACLE — a
+boundary wall, bedrock, a pit, and whatever comes later (a moving wall a
+pressure pad activates is the first idea). To the engine a pit and a
+bedrock wall are one thing, a square nothing enters and nothing can crack,
+so they share the glyph and the hash; the pit's look and the one map rule
+that separates them (sight passes over a pit, never through a wall) come
+from the game's own pit ledger, never from the engine. `*` stays the
+breakable wall: the gods' weaken rung and the hammer read `*` alone; a
+crumble writes `#` plus the pit entry.
+
+**The engine shape** (the portal patch's, §4.7): `#` into the per-state
+wall bitboard with a breakable subset hashed apart; a HAMMER move type
+from the piece's square to the adjacent breakable wall, plain `e1d1`
+notation, do = wall bit off and crate bit on, undo = the state pointer; it
+never gives or resolves check, so it is illegal in check; a variant key
+names the hammer piece types per colour (`k` for the stress test, both
+kings). The map files spell every wall `#` today, so the wall-kinds work
+first rewrites the stages and worlds (`#` → `*`, the ring and every
+off-map square of a crop `#`) and retires the alias.
+
+**Defaults unless the designer says otherwise:** adjacent = the king's
+eight neighbours; both kings carry it for the stress test; the hammer is a
+manual chess move on the walk as well as in the duel (§5.1 ruling 11);
+bedrock wears a darker stone so a player can tell which walls will yield.
+
 ## 5. Exploration Layer
 
 ### 5.1 Basics
@@ -562,12 +647,14 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 - An alarm metric that separates "the arena picked the winner" from "the arena reopened a dead game" (§7).
 - Reward economy sizing (post-sweep), including the checkmate/strip tier ratio and the speed-decay curve (§8).
 - Title collision / availability check before any public release (title itself is locked).
+- The portal spell (§4.7, built 2026-09-17 for everyone): when it becomes an upgrade, what the scroll's value knob (`PORTAL_SCROLL_VALUE`) should be once the designer says how eagerly the enemy casts, a sprite for the rune ring, a blink for the teleport, whether world floors author pairs, and whether the gods ever open one.
+- The sledgehammer and `#` (§4.8, decided 2026-09-17, not built): the four defaults there (eight neighbours, both kings, the walk, a darker bedrock), the SAN for a hammer, which future obstacles ride `#` (the pressure pad's moving wall), and the ice spell after it.
 
 ---
 
 ## 12. Non-Goals (v1)
 
-- No NNUE. No engine handicapping. No duel mechanics outside FSF's grammar (auras, HP, hidden info, multi-move turns) — "FSF" meaning the vendored pair, patches included: the grammar widens only through the rule-17 patch bar, as furniture (§4.6) did. Randomness touches a duel only through the Board State Director (§4.5) — arena regeneration at the harness layer — never inside the move rules the engine reasons about. (The `depth 22` search cap is a WASM-stability measure, not handicapping: the engine was reaching depth 22–23 in live play regardless, and deeper searches crash the pthread.)
+- No NNUE. No engine handicapping. No duel mechanics outside FSF's grammar (auras, HP, hidden info, multi-move turns) — "FSF" meaning the vendored pair, patches included: the grammar widens only through the rule-17 patch bar, as furniture (§4.6) and the portal spell (§4.7) did. Randomness touches a duel only through the Board State Director (§4.5) — arena regeneration at the harness layer — never inside the move rules the engine reasons about. (The `depth 22` search cap is a WASM-stability measure, not handicapping: the engine was reaching depth 22–23 in live play regardless, and deeper searches crash the pthread.)
 - No hands/pockets as a core economy (upgrade path only).
 - No procedural map gen in v1 (hand-built maps; linter still applies).
 - No meta-progression between runs, no art/sound polish, no desktop-first layout.

@@ -292,7 +292,7 @@ function absorbMoveInto(out, uci) {
  *  duplicated here so tactics.mjs depends on nothing in director.mjs). */
 export function gridOf(fen, files, ranks) {
   const g = Array.from({ length: ranks }, () => Array(files).fill(null));
-  fen.split(' ')[0].split('/').forEach((row, ri) => {
+  splitFen(fen).board.split('/').forEach((row, ri) => { // the board field alone (the holdings ride the FEN since THE PORTAL SPELL)
     const r = ranks - 1 - ri;
     let f = 0;
     for (let i = 0; i < row.length; i++) {
