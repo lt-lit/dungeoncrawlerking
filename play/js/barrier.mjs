@@ -49,7 +49,8 @@ import { cropTransform, arenaToWorld, worldToArena, FLOOR, WALL } from './world.
 import { normFacing } from './camera.mjs';
 import { rotateBody, bagOfPattern, boxOf } from './army.mjs';
 import { buildMatchup, armiesConnected, campLineRank, registerDealVariant, lintMatchupFen } from './armygen.mjs';
-import { dealVariant } from './variant.mjs';
+import { dealVariant, portalPocket } from './variant.mjs';
+import { withPocket } from './fen.mjs';
 import { childSeed } from './prng.mjs';
 
 /** THE ARENA IS ALWAYS 10×10 (designer 2026-09-08). */
@@ -188,7 +189,7 @@ export function standingCells(army, crop, stage) {
  * }
  * Returns { ok: true, crop, stage, kingFile, enemyFile, axis, deal } or { ok: false, error, reasons }.
  */
-export function planBox(world, army, { enemy, enemyFile = null, axis = null, seed = 1, turn = 'w', ffish = null, attempts = 8, id = null } = {}) {
+export function planBox(world, army, { enemy, enemyFile = null, axis = null, seed = 1, turn = 'w', ffish = null, attempts = 8, id = null, portals = false } = {}) {
   const facing = axis === null || axis === undefined ? army.facing : normFacing(axis);
   const box = boxAt(world, army, facing);
   if (!box.ok) return { ok: false, error: 'the army does not fit the box along this axis', reasons: ['box'] };
@@ -224,7 +225,8 @@ export function planBox(world, army, { enemy, enemyFile = null, axis = null, see
       reasons.push(`attempt ${attempt}: disconnected`);
       break;
     }
-    const variant = dealVariant(stage.files, stage.ranks, campLineRank(m.white.layout.cells, 1), campLineRank(m.black.layout.cells, -1));
+    const variant = dealVariant(stage.files, stage.ranks, campLineRank(m.white.layout.cells, 1), campLineRank(m.black.layout.cells, -1), { portals });
+    if (portals) m.fen = withPocket(m.fen, portalPocket()); // THE PORTAL SPELL: the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);
       const lint = lintMatchupFen(ffish, variant.name, m.fen);

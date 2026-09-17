@@ -28,8 +28,8 @@
 // files a wall makes uncoverable are reported in `violations`, judged by
 // eye in the stage gallery rather than enforced.
 import { mulberry32, childSeed } from './prng.mjs';
-import { emptyBoard, serializeBoard, isTerrain, WALL } from './fen.mjs';
-import { catalogVariantName, dealVariant } from './variant.mjs';
+import { emptyBoard, serializeBoard, isTerrain, WALL, withPocket } from './fen.mjs';
+import { catalogVariantName, dealVariant, portalPocket } from './variant.mjs';
 import { flipStageVertical, cropStage } from './stage.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
@@ -433,6 +433,7 @@ export function armiesConnected(stage, matchup, { furnitureBlocks = false } = {}
 export function dealMatchup({
   stage, flip = false, cropTop = 0, cropBottom = 0,
   white, black, seed = 1, turn = 'w', gapMin = 1, attempts = 8, ffish = null,
+  portals = false, // THE PORTAL SPELL (2026-09-17): both sides carry their scrolls, the deal's variant knows the rule
 }) {
   let terrain;
   try {
@@ -484,8 +485,10 @@ export function dealMatchup({
       arena.files,
       arena.ranks,
       campLineRank(m.white.layout.cells, 1),
-      campLineRank(m.black.layout.cells, -1)
+      campLineRank(m.black.layout.cells, -1),
+      { portals }
     );
+    if (portals) m.fen = withPocket(m.fen, portalPocket()); // the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);
       const lint = lintMatchupFen(ffish, variant.name, m.fen);

@@ -50,7 +50,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, WALL, FURNITURE } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, WALL, FURNITURE } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -174,7 +174,7 @@ function loadManifest() {
 /** The terrain of a stage grid vs a FEN's: every wall and every '^' on the
  *  same squares (pieces stand on floor, so they never disagree). */
 function terrainMatches(stage, fen) {
-  const grid = parseBoard(fen.split(' ')[0]); // [rankFromTop][file]
+  const grid = parseBoard(splitFen(fen).board); // [rankFromTop][file] — the board field alone
   if (grid.length !== stage.ranks || (grid[0]?.length ?? 0) !== stage.files) return false;
   for (let r = 0; r < stage.ranks; r++) {
     for (let f = 0; f < stage.files; f++) {

@@ -36,8 +36,8 @@
 //   &fx=<scale>      animation speed multiplier; 0 disables motion entirely
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
-import { makeCatalogIni } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare } from './fen.mjs';
+import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, isCast, CAST_RE } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -247,6 +247,7 @@ function computeDeal() {
       black: sideSpec('black'),
       seed: setup.seed | 0 || 1,
       turn: setup.turn === 'b' ? 'b' : 'w',
+      portals: portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns
       ffish: app.ffish,
     });
   } catch (e) {
@@ -289,7 +290,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -320,6 +321,7 @@ function loadOptions() {
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
+    options.portals = options.portals !== false; // THE PORTAL SPELL (2026-09-17): everyone has it unless switched off
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
@@ -368,6 +370,9 @@ function saveOptions() {
 }
 
 const cheatHints = () => options.cheat && options.hints;
+// THE PORTAL SPELL (2026-09-17): on for every duel and every side — the
+// stress test; an upgrade later. `?portals=off` for a plain duel.
+const portalsOn = () => params.get('portals') !== 'off' && options.portals !== false;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
 // The Gods debug overlay (Phase 1.2) is a tuning instrument, not a cheat —
@@ -376,6 +381,7 @@ const godsDebug = () => options.godsDebug;
 
 function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
+  $('optPortals').checked = options.portals !== false;
   $('optHints').checked = options.hints;
   $('optHintN').value = String(options.hintN);
   $('optHintCont').checked = !!options.hintCont;
@@ -901,6 +907,7 @@ function refreshCheatUI() {
   $('eval-bar').hidden = !(cheatEval() && inDuel);
   // The replay log's flag: not a cheat, so it rides the duel alone.
   $('btnFlag').hidden = !inDuel;
+  refreshSpellUI();
 }
 
 function applyOptions() {
@@ -1083,9 +1090,10 @@ function applyHintLines(pvs, n, duel, partial) {
   const items = [];
   for (const pv of sorted) {
     const m = pv.move.match(UCI_MOVE_RE);
-    if (!m) continue;
+    const c = m ? null : pv.move.match(CAST_RE); // THE PORTAL SPELL: a cast hint is a ring on its square
+    if (!m && !c) continue;
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
-    arrows.push({ from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint' });
+    arrows.push(m ? { from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint' } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
@@ -2726,6 +2734,7 @@ function paintWithDebris(fen, ledgers) {
   const D = app.debris;
   D.kinds = classifyTerrain(fen, ledgers, app.boardUI.files, app.boardUI.ranks);
   debrisDryTick();
+  app.boardUI.setPortals?.(parsePortalField(fen)); // THE PORTAL SPELL: the pairs and halves on the floor
   app.boardUI.setPosition(fen, { ...ledgers, debris: debrisPainter() });
 }
 
@@ -2981,7 +2990,53 @@ function renderPlayMarks() {
     marks.selected = app.selectedSquare;
     marks.targets = targetsFor(app.selectedSquare);
   }
+  // THE PORTAL SPELL: in cast mode the targets are the squares a scroll may be cast on.
+  if (app.castMode && app.duel && app.duel.state === 'playing') marks.targets = castTargets();
   app.boardUI.setMarks(marks);
+}
+
+// ------------------------------------------------------ THE PORTAL SPELL
+// (2026-09-17, engine/patches/portals.patch; brief §4.7.) A cast is a drop
+// of the portal scroll — `O@e4` — the engine's own move, so the enemy casts
+// too. The first cast opens a half; the second links it to the square the
+// player picks. Cast mode: the Portal button in the player's bar lights the
+// legal squares, a tap casts, a tap elsewhere leaves the spell.
+function castTargets() {
+  if (!app.duel || app.duel.state !== 'playing') return [];
+  return [...new Set(app.duel.legalMoves().map((m) => m.match(CAST_RE)).filter(Boolean).map((p) => p[2]))];
+}
+
+/** The player's scrolls still in hand, read off the FEN's holdings. */
+function scrollsLeft() {
+  const m = app.duel?.fen()?.match(/\[([^\]]*)\]/);
+  if (!m) return 0;
+  const mine = app.session?.playerColor === 'white' ? PORTAL_SCROLL.toUpperCase() : PORTAL_SCROLL;
+  return m[1].split('').filter((c) => c === mine).length;
+}
+
+function setCastMode(on) {
+  app.castMode = !!on && castTargets().length > 0;
+  app.selectedSquare = null;
+  $('btnPortal').classList.toggle('active', app.castMode);
+  renderPlayMarks();
+}
+
+/** The Portal button: shown through a duel while the player holds a scroll,
+ *  enabled on the player's turn, its count and its title from the position. */
+function refreshSpellUI() {
+  const btn = $('btnPortal');
+  const inDuel = !!app.duel && app.phase === 'playing' && app.duel.state === 'playing';
+  const mine = inDuel && !!app.session && app.duel.turnColor() === app.session.playerColor && !app.busy;
+  const n = inDuel ? scrollsLeft() : 0;
+  btn.hidden = !inDuel || n === 0;
+  btn.disabled = !mine || !castTargets().length;
+  $('btnPortalN').textContent = n ? `×${n}` : '';
+  const half = inDuel ? parsePortalField(app.duel.fen()).halves[app.session?.playerColor === 'white' ? 'w' : 'b'] : null;
+  btn.title = half ? `your portal at ${half} is open: pick the square it links to` : 'cast a portal: pick a square; the second cast links it to the first';
+  if (!mine && app.castMode) {
+    app.castMode = false;
+    btn.classList.remove('active');
+  }
 }
 
 function targetsFor(from) {
@@ -2998,6 +3053,11 @@ function onSquareTap(sq) {
   if (app.phase !== 'playing' || !app.duel || app.duel.state !== 'playing') return;
   if (app.duel.turnColor() !== app.session.playerColor) return;
 
+  // THE PORTAL SPELL: a tap on a lit square casts; a tap elsewhere leaves the spell.
+  if (app.castMode) {
+    if (castTargets().includes(sq)) return void playPlayerMove(null, sq, [`${PORTAL_SCROLL.toUpperCase()}@${sq}`]);
+    setCastMode(false);
+  }
   const legal = app.duel.legalMoves();
   const from = app.selectedSquare;
   if (from && sq !== from) {
@@ -3023,7 +3083,9 @@ function lastMoveArrow() {
   if (!moves || !moves.length) return null;
   if (duel.turnColor() !== app.session.playerColor) return null; // the player moved last
   const p = moves[moves.length - 1].match(UCI_MOVE_RE);
-  return p ? { from: p[1], to: p[2], strength: 1, kind: 'last' } : null;
+  if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last' };
+  const c = moves[moves.length - 1].match(CAST_RE); // THE PORTAL SPELL: the enemy's cast, a red ring on the square
+  return c ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : null;
 }
 
 async function playPlayerMove(from, to, matches) {
@@ -3038,6 +3100,8 @@ async function playPlayerMove(from, to, matches) {
   }
   app.busy = true;
   app.selectedSquare = null;
+  app.castMode = false;
+  $('btnPortal').classList.remove('active');
   app.boardUI.setInteractive(false);
   await cancelIdleProbes(); // the engine must be quiet before its reply search
   try {
@@ -3101,7 +3165,16 @@ async function onMove({ uci, san, mover, ply }) {
   renderPlayMarks();
   const n = Math.ceil(ply / 2);
   const isWhiteMove = ply % 2 === 1;
-  log($('duel-log'), `${n}${isWhiteMove ? '.' : '…'} ${san}${mover === 'engine' && lastEngineInfo ? `  (${lastEngineInfo})` : ''}`);
+  // THE PORTAL SPELL: say what a cast did and where a portal move came out.
+  let note = '';
+  {
+    const P = parsePortalField(duel.fen());
+    if (isCast(uci)) {
+      const half = P.halves[mover === 'player' ? 'w' : 'b'];
+      note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
+    } else if (parts && P.twin.has(parts[2])) note = ` — through the portal to ${P.twin.get(parts[2])}`;
+  }
+  log($('duel-log'), `${n}${isWhiteMove ? '.' : '…'} ${san}${note}${mover === 'engine' && lastEngineInfo ? `  (${lastEngineInfo})` : ''}`);
   if (mover === 'engine') lastEngineInfo = null;
 }
 
@@ -3373,12 +3446,13 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optPortals', 'portals'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
   });
 }
+$('btnPortal').addEventListener('click', () => setCastMode(!app.castMode)); // THE PORTAL SPELL
 $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
@@ -4356,8 +4430,8 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
       pivoted = true;
     }
     const plan = enemyFile !== null && enemyFile !== undefined
-      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis })
-      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis });
+      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn() })
+      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn() });
     if (!plan.ok) {
       if (pivoted) {
         W.world = World.load(snapshot.world);

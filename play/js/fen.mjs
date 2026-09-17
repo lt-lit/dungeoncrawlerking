@@ -23,6 +23,15 @@
 export const WALL = '*';
 export const FURNITURE = '^';
 
+// THE PORTALS (2026-09-17, engine/patches/portals.patch): a cast is a DROP of
+// the portal scroll, `O@e4` for either side (FSF prints the piece letter
+// uppercase for both hands); a move whose target is a portal square is a
+// portal move — plain `from``to` notation, the engine and the game both know
+// the square is a portal. The pairs and the half-open portals ride the
+// FEN's trailing field, `{c3-h8,d1-a9,e4w}`.
+export const CAST_RE = /^([A-Za-z])@([a-l](?:10|[1-9]))$/;
+export const isCast = (uci) => CAST_RE.test(uci);
+
 /** Is this cell terrain (stone wall or furniture)? Safe on null/undefined. */
 export const isTerrain = (c) => c === WALL || c === FURNITURE;
 
@@ -98,6 +107,45 @@ export function serializeBoard(board) {
       return out;
     })
     .join('/');
+}
+
+/**
+ * The portal field of a FEN: `{c3-h8,d1-a9,e4w}` after the move counters —
+ * linked pairs (`a-b`) and half-open portals (a square and the colour that
+ * opened it, `e4w` / `f6b`). Returns the pairs, the halves by colour, a
+ * square → twin map and the set of every square a portal or a half stands
+ * on. A FEN without the field parses to the empty shape.
+ */
+export function parsePortalField(fen) {
+  const out = { pairs: [], halves: { w: null, b: null }, twin: new Map(), squares: new Set() };
+  const m = String(fen ?? '').match(/\{([^}]*)\}/);
+  if (!m) return out;
+  for (const entry of m[1].split(',')) {
+    const e = entry.trim();
+    if (!e) continue;
+    const pair = e.match(/^([a-l](?:10|[1-9]))-([a-l](?:10|[1-9]))$/);
+    if (pair) {
+      out.pairs.push([pair[1], pair[2]]);
+      out.twin.set(pair[1], pair[2]);
+      out.twin.set(pair[2], pair[1]);
+      out.squares.add(pair[1]);
+      out.squares.add(pair[2]);
+      continue;
+    }
+    const half = e.match(/^([a-l](?:10|[1-9]))([wb])$/);
+    if (half) {
+      out.halves[half[2]] = half[1];
+      out.squares.add(half[1]);
+    }
+  }
+  return out;
+}
+
+/** The FEN with its holdings block set (`[OOoo]`): the scrolls in hand. */
+export function withPocket(fen, pocket) {
+  const f = splitFen(fen);
+  f.pocket = pocket;
+  return joinFen(f);
 }
 
 /** Reassemble a full FEN from split fields (as returned by splitFen). */

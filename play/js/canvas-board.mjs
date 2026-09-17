@@ -151,6 +151,30 @@ const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
 const TARGET = 'rgba(215,180,106,0.53)'; // .cell.target::after #d7b46a88
+// THE PORTAL SPELL (2026-09-17): a rune ring on the floor — the outline, the
+// rim and the inner ring of a linked pair, and the rim of a half-open portal
+// in the colour of the side that opened it (dashed: it links to nothing
+// yet). A coded 16×16 until the atlas carries a sprite.
+const PORTAL_RING = [
+  '................',
+  '.....AAAAAA.....',
+  '...AABBBBBBAA...',
+  '..ABBCCCCCCBBA..',
+  '.ABCC......CCBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABC........CBA.',
+  '.ABCC......CCBA.',
+  '..ABBCCCCCCBBA..',
+  '...AABBBBBBAA...',
+  '.....AAAAAA.....',
+  '................',
+];
+const PORTAL_PAIR = { A: '#16102b', B: '#9fe0ff', C: '#4a3f8f' };
+const PORTAL_HALF = { w: { A: '#2a2010', B: GOLD, C: null }, b: { A: '#2a1012', B: BAD, C: null } };
 const THREAT = 'rgba(229,72,77,0.55)'; // the threat display's far row (--bad at half)
 const THREAT_TINT = 'rgba(229,72,77,0.16)'; // the rest of the band (the far half of a hunter's box)
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
@@ -228,6 +252,7 @@ export class CanvasBoard {
     // The board's state, all data: the world, the crop, what marks it wears.
     this.fen = null;
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
+    this.portals = null; // THE PORTAL SPELL: the position's pairs and halves (fen.mjs parsePortalField), painted on the floor
     this.cellMarks = { selected: null, targets: new Map(), threats: new Map(), badges: new Map() }; // the walk's (setCellMarks): a selection, its targets, THE THREAT DISPLAY (milestone 6: the band where a hunter's duel would start — the far row framed, the rest tinted) and the badges over the enemy kings
     this.debrisBufs = new Map(); // cell index → 16×16 RGBA in WORLD orientation (the test surface: the buffer the cell wears)
     this.debrisCanvas = new Map(); // cell index → a 16×16 canvas of it, turned to the screen
@@ -873,6 +898,14 @@ export class CanvasBoard {
       heat: heat ?? {},
     };
     this.setArrows(arrows);
+    this.invalidate();
+  }
+
+  /** THE PORTAL SPELL (2026-09-17): the pairs and half-open portals of the
+   *  position (fen.mjs parsePortalField) — rune rings on the floor in the
+   *  flat pass, under whatever stands on them. */
+  setPortals(info) {
+    this.portals = info && info.squares && info.squares.size ? info : null;
     this.invalidate();
   }
 
@@ -1674,6 +1707,8 @@ export class CanvasBoard {
         g.fillRect(x, y, T, T);
       }
     }
+    // THE PORTAL SPELL: the rune ring on the floor, under the debris and the pieces.
+    if (sq && this.portals?.squares.has(sq)) this.#paintPortal(sq, x, y);
     // (The cell's debris is drawn AFTER its terrain, below: the DOM's
     // debris image paints over the cell's background, so on a ruin the
     // rubble lies over the stub.)
@@ -1728,6 +1763,27 @@ export class CanvasBoard {
     // Marks under the pieces (the gods' residue and the debug heat) — a
     // tall square's are painted over its sprite in #paintTall.
     if (!this.#isTall(k)) this.#paintUnderMarks(sq, x, y);
+  }
+
+  /** The rune ring of a portal square: a linked pair's three tones, or a
+   *  half-open portal's dashed rim in its caster's colour. */
+  #paintPortal(sq, x, y) {
+    const g = this.bctx;
+    const P = this.portals;
+    const half = P.halves.w === sq ? 'w' : P.halves.b === sq ? 'b' : null;
+    const tones = half ? PORTAL_HALF[half] : PORTAL_PAIR;
+    for (let py = 0; py < T; py++) {
+      const row = PORTAL_RING[py];
+      for (let px = 0; px < T; px++) {
+        const c = row[px];
+        if (c === '.') continue;
+        const tone = tones[c];
+        if (!tone) continue;
+        if (half && c === 'B' && (px + py) % 2) continue; // dashed: nothing on the far side yet
+        g.fillStyle = tone;
+        g.fillRect(x + px, y + py, 1, 1);
+      }
+    }
   }
 
   /** Is this square's terrain painted in the tall pass (over the square north)? */
@@ -1929,6 +1985,16 @@ export class CanvasBoard {
     sg.imageSmoothingEnabled = false;
     for (const a of this.arrows) {
       if (!this.cells.has(a.from) || !this.cells.has(a.to)) continue;
+      if (a.from === a.to) {
+        // THE PORTAL SPELL: a cast (a hint, or the enemy's last move) has no
+        // path — a ring on its square in the arrow's own colour and strength.
+        const o = this.#origin(a.from);
+        const ga = this.bctx.globalAlpha;
+        this.bctx.globalAlpha = Math.max(0.2, Math.min(1, a.strength ?? 1));
+        this.#frame1(o.x, o.y, arrowColour(a), 1);
+        this.bctx.globalAlpha = ga;
+        continue;
+      }
       const p = this.#origin(a.from), q = this.#origin(a.to);
       const s = Math.max(0, Math.min(1, a.strength ?? 1));
       drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg });

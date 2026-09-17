@@ -382,35 +382,42 @@ if (probe) {
   expect(climbed || (!!ended && !ended.active && ended.depth >= d0), climbed ? `probe streamed a deeper paint after d${d0}` : `probe finished at d${ended?.depth} with nothing deeper to stream after d${d0} (${JSON.stringify(ended)})`);
   await shot('01-hints');
   // The arrow dials (designer 2026-09-07: "make the arrows thinner. A thickness and opacity dial wouldn't hurt"):
-  // width in floor pixels — the gold pixels the rank-1 arrow lights in its origin square of the buffer —
-  // and the opacity; the setting persists; the default is 2 px at 85%.
+  // width in floor pixels — the pixels the best hint with a path changes in its origin square of the
+  // buffer — and the opacity; the setting persists; the default is 2 px at 85%.
   const dial = await page.evaluate(async () => {
     const K = window.__DCK;
-    const first = K.cheat.arrows.find((a) => a.rank === 1);
-    const measure = () => {
-      K.renderer.paintNow();
-      const px = K.renderer.square(first.from);
-      let gold = 0;
-      for (let i = 0; i < px.length; i += 4) if (px[i] === 0xf2 && px[i + 1] === 0xc1 && px[i + 2] === 0x4e && px[i + 3] === 255) gold++;
-      return gold;
-    };
+    // THE PORTAL SPELL: a cast hint is a ring (from === to), not a shaft — the dial is
+    // read on the best hint WITH A PATH. Its colour is its rank's and its strength sets
+    // its alpha, so the dial reads the pixels the arrow CHANGES in its origin square
+    // between two styles (against the arrow at its faintest), never a count of one
+    // pure colour — a rank-2 arrow at strength 0.7 has no pure pixel at any width.
+    const first = K.cheat.arrows.find((a) => a.from !== a.to);
+    if (!first) return { skipped: true };
+    const COL = { 1: [0xf2, 0xc1, 0x4e], 2: [0xc9, 0xce, 0xd8], 3: [0xc8, 0x81, 0x3f] }[first.rank === 2 || first.rank === 3 ? first.rank : 1];
+    const paint = (w, a) => { K.setArrowStyle(w, a); K.renderer.paintNow(); return K.renderer.square(first.from); };
+    const differ = (p, q) => { let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] !== q[i] || p[i + 1] !== q[i + 1] || p[i + 2] !== q[i + 2] || p[i + 3] !== q[i + 3]) n++; return n; };
+    const pure = (p) => { let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] === COL[0] && p[i + 1] === COL[1] && p[i + 2] === COL[2] && p[i + 3] === 255) n++; return n; };
     const dflt = K.arrowStyle;
-    K.setArrowStyle(5, 1);
-    const wide = measure();
-    K.setArrowStyle(1, 1);
-    const thin = measure();
+    const faintest = paint(1, 0.2); // the arrow at its faintest and thinnest: the reference every other style is read against
+    const wide = differ(paint(5, 1), faintest);
+    const thinPaint = paint(1, 1);
+    const thin = differ(thinPaint, faintest);
     const thinStyle = K.arrowStyle;
-    K.setArrowStyle(1, 0.5);
-    const faint = measure();
+    const halfPaint = paint(1, 0.5);
+    const half = differ(halfPaint, thinPaint);
+    const halfPure = pure(halfPaint);
     const faintStyle = K.arrowStyle;
     const saved = JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}');
     K.setArrowStyle(dflt.width, dflt.alpha);
-    return { kind: K.renderer.kind, dflt, wide, thin, faint, thinStyle, faintStyle, saved: { w: saved.arrowWidth, a: saved.arrowAlpha }, back: K.arrowStyle };
+    return { kind: K.renderer.kind, rank: first.rank, from: first.from, dflt, wide, thin, half, halfPure, thinStyle, faintStyle, saved: { w: saved.arrowWidth, a: saved.arrowAlpha }, back: K.arrowStyle };
   });
+  if (dial.skipped) expect(true, 'the arrow dials: not measured this run — every hint was a portal cast (a ring, not a shaft)');
+  else {
   expect(dial.dflt.width === 2 && dial.dflt.alpha === 0.85, `the arrows' default style is 2 px at 85%: ${JSON.stringify(dial.dflt)}`);
-  expect(dial.wide > dial.thin && dial.thin > 0 && dial.thinStyle.width === 1 && dial.thinStyle.alpha === 1, `the width dial: gold pixels in the rank-1 arrow's origin square ${dial.wide} at 5 px vs ${dial.thin} at 1 px (${JSON.stringify(dial.thinStyle)})`);
-  expect(dial.faint === 0, `the opacity dial: at 50% no pixel is the pure colour any more (${dial.faint}), style ${JSON.stringify(dial.faintStyle)}`);
+  expect(dial.wide > dial.thin && dial.thin > 0 && dial.thinStyle.width === 1 && dial.thinStyle.alpha === 1, `the width dial: the rank-${dial.rank} arrow changes ${dial.wide} pixels of its origin square ${dial.from} at 5 px vs ${dial.thin} at 1 px (${JSON.stringify(dial.thinStyle)})`);
+  expect(dial.half > 0 && dial.halfPure === 0, `the opacity dial: at 50% the arrow repaints ${dial.half} pixels of ${dial.from} and none is the pure colour any more (${dial.halfPure}), style ${JSON.stringify(dial.faintStyle)}`);
   expect(dial.faintStyle.alpha === 0.5 && dial.saved.w === 1 && dial.saved.a === 0.5 && dial.back.width === dial.dflt.width, `the dials persist in the options (${JSON.stringify(dial.saved)}) and reset (${JSON.stringify(dial.back)})`);
+  }
 }
 
 // --- play random moves until each rung has fired (or the ply budget runs out)
@@ -1184,7 +1191,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const K = window.__DCK;
     await K.renderer.ready();
     const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy}, phase ${K.app.phase}, duel ${K.app.duel?.state})`); };
-    const board = (fen) => fen.split(' ')[0];
+    const board = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, ''); // the board field without the holdings (THE PORTAL SPELL: the scrolls ride the FEN)
     const out = {};
     out.world = { id: K.app.walk.world.id, facing: K.app.walk.world.start.facing, theme: K.app.walk.world.theme };
     out.walkTurn = K.walk.state.turn;
@@ -1249,7 +1256,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const re = await page5.evaluate(async () => {
     const K = window.__DCK;
     const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy}, phase ${K.app.phase}, duel ${K.app.duel?.state})`); };
-    const board = (fen) => fen.split(' ')[0];
+    const board = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, ''); // the board field without the holdings (THE PORTAL SPELL: the scrolls ride the FEN)
     await settle();
     const out = { seed: K.walk.duel?.seed, fen: K.app.duel?.fen(), ply: K.app.duel?.ply, equal: board(K.walk.arenaFen()) === board(K.app.duel.fen()) };
     // The player wins by the enemy's concession; the one button walks out.
@@ -1276,7 +1283,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const K = window.__DCK;
     await K.renderer.ready();
     const settle = async () => { for (let i = 0; i < 1200 && (K.app.busy || K.walk.busy); i++) await new Promise((r) => setTimeout(r, 25)); if (K.app.busy || K.walk.busy) throw new Error(`still busy after 30 s (app ${K.app.busy}, walk ${K.walk.busy})`); };
-    const board = (fen) => fen.split(' ')[0];
+    const board = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, ''); // the board field without the holdings (THE PORTAL SPELL: the scrolls ride the FEN)
     const out = {};
     const st = K.walk.state;
     const k = st.king;
@@ -1350,7 +1357,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await settle();
     out.hunt.afterOne = { state: K.walk.enemies.find((e) => e.id === 2)?.state, threats: K.walk.threats.length, status: document.getElementById('walk-status').textContent, ms: K.walk.enemyMs, king: { ...K.walk.enemies.find((e) => e.id === 2).king } };
     out.hunt.turns = await untilDuel(8);
-    out.hunt.duel = { phase: K.app.phase, duel: K.walk.duel, lower: lower(), enemiesKept: K.walk.enemies.length, black: K.app.duel ? K.app.duel.fen().split(' ')[0].replace(/[^a-z]/g, '').length : null, logEnemy: K.log.build()?.world?.enemy ?? null };
+    out.hunt.duel = { phase: K.app.phase, duel: K.walk.duel, lower: lower(), enemiesKept: K.walk.enemies.length, black: K.app.duel ? K.app.duel.fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').replace(/[^a-z]/g, '').length : null, logEnemy: K.log.build()?.world?.enemy ?? null };
     out.hunt.ended = await walkOut('black');
     out.hunt.after = { phase: K.app.phase, enemies: K.walk.enemies.map((e) => `${e.id}:${e.state}`).join(' '), lower: lower(), same: cells() === standing, facing: K.walk.state.facing, last: K.walk.saved().turns.at(-1) };
     // THE AMBUSH THROUGH THE PIVOT, IN THE FAR HALF: enemy 3 six ranks north of the king (the nearest row the floor holds it on), facing south; the player's wait completes the alignment.

@@ -366,6 +366,48 @@ The second terrain glyph: **`^` — furniture** (crates, weak masonry, force fie
 
 ---
 
+### 4.7 The portal spell `[NEW 2026-09-17 — designer-specified rules; engine substrate is engine/patches/portals.patch; everyone has it for the stress test]`
+
+The first SPELL: instead of moving, a side casts. The engine plays it for
+and against at full strength, which is the point and the price — stock FSF
+has no such move, so the vendored pair carries the portals patch (its
+record in `engine/README.md`; the rule-17 bar cleared as furniture's did:
+not expressible in variants.ini, and a game-layer fake would leave the
+engine blind to the teleport when choosing its move).
+
+**The rules `[designer, 2026-09-17, exactly as specified — no special
+cases]`:**
+
+- Landing on one portal always teleports the piece to the other portal.
+- If the other portal is occupied, the two pieces swap places (either
+  colour, a king included; check is judged where the king ends up).
+- A piece standing on a portal is captured as normal — by attacking that
+  square, not the other portal — and the attacker is teleported after the
+  capture.
+- Portals never stand on a king row (the promotion zone). No pawn promotes
+  through a portal; the easy queen is portal to the ninth rank, then push.
+- Only a MOVE teleports: a slider passing over an empty portal square is
+  passing, a swap triggers no further teleport, a displacement by the gods
+  never lands on or leaves a portal square.
+- A piece on one portal moving onto its twin ends where it stood — the
+  capture at range and the pass that follows from the rule, both legal.
+
+**The spell:** one pair per side per duel for now (an upgrade later), two
+scrolls in hand, cast in two turns — the first cast opens a HALF that
+belongs to its caster, the second links it to the square the caster
+picks; a half is inert until paired and the enemy can never finish it. A
+cast is a legal move (`O@e4`), never while in check, never on a square a
+portal or a half already takes. Spells are NEVER pieces: a king with
+scrolls in hand, an open half or a pair is stripped and has lost. Nothing
+persists past the duel; the pairs and halves ride the FEN's trailing
+field, so the log and the analyzer carry them for free.
+
+**Any number of pairs** is one representation (a square → twin map, hashed
+per pair); the count is the deal's, and the stage or world may author
+pairs the same way once the generator places them — an authored entry on
+a king row is dropped at load by the engine's parse (the ban, never a
+scoot); no floor authors one yet.
+
 ## 5. Exploration Layer
 
 ### 5.1 Basics
@@ -562,12 +604,13 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 - An alarm metric that separates "the arena picked the winner" from "the arena reopened a dead game" (§7).
 - Reward economy sizing (post-sweep), including the checkmate/strip tier ratio and the speed-decay curve (§8).
 - Title collision / availability check before any public release (title itself is locked).
+- The portal spell (§4.7, built 2026-09-17 for everyone): when it becomes an upgrade, what the scroll's value knob (`PORTAL_SCROLL_VALUE`) should be once the designer says how eagerly the enemy casts, a sprite for the rune ring, a blink for the teleport, whether world floors author pairs, and whether the gods ever open one.
 
 ---
 
 ## 12. Non-Goals (v1)
 
-- No NNUE. No engine handicapping. No duel mechanics outside FSF's grammar (auras, HP, hidden info, multi-move turns) — "FSF" meaning the vendored pair, patches included: the grammar widens only through the rule-17 patch bar, as furniture (§4.6) did. Randomness touches a duel only through the Board State Director (§4.5) — arena regeneration at the harness layer — never inside the move rules the engine reasons about. (The `depth 22` search cap is a WASM-stability measure, not handicapping: the engine was reaching depth 22–23 in live play regardless, and deeper searches crash the pthread.)
+- No NNUE. No engine handicapping. No duel mechanics outside FSF's grammar (auras, HP, hidden info, multi-move turns) — "FSF" meaning the vendored pair, patches included: the grammar widens only through the rule-17 patch bar, as furniture (§4.6) and the portal spell (§4.7) did. Randomness touches a duel only through the Board State Director (§4.5) — arena regeneration at the harness layer — never inside the move rules the engine reasons about. (The `depth 22` search cap is a WASM-stability measure, not handicapping: the engine was reaching depth 22–23 in live play regardless, and deeper searches crash the pthread.)
 - No hands/pockets as a core economy (upgrade path only).
 - No procedural map gen in v1 (hand-built maps; linter still applies).
 - No meta-progression between runs, no art/sound polish, no desktop-first layout.

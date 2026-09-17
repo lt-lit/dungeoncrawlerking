@@ -1,0 +1,807 @@
+diff --git a/src/apiutil.h b/src/apiutil.h
+index b9fa5738..a3257094 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -443,6 +443,7 @@ inline Bitboard checked(const Position& pos) {
+ namespace FEN {
+ 
+ enum FenValidation : int {
++    FEN_INVALID_PORTAL_FIELD = -15,
+     FEN_INVALID_COUNTING_RULE = -14,
+     FEN_INVALID_CHECK_COUNT = -13,
+     FEN_INVALID_PROMOTED_PIECE = -12,
+@@ -990,6 +991,62 @@ inline std::string get_valid_special_chars(const Variant* v) {
+     return validSpecialCharactersFirstField;
+ }
+ 
++// The trailing portal field: "{c3-h8,d1-a9,e4w}" - pairs and half-open portals.
++// Squares must lie on the board and off both promotion zones, and no square may
++// appear twice.
++inline Validation check_portal_field(const std::string& field, const Variant* v) {
++    if (field.size() < 2 || field.front() != '{' || field.back() != '}')
++        return NOK;
++    std::string body = field.substr(1, field.size() - 2);
++    std::vector<Square> seen;
++    auto parse_square = [&](size_t& i) -> Square {
++        if (i >= body.size() || body[i] < 'a' || body[i] > 'a' + int(v->maxFile))
++            return SQ_NONE;
++        File f = File(body[i++] - 'a');
++        int r = 0, digits = 0;
++        while (i < body.size() && isdigit((unsigned char)body[i]) && digits < 2)
++        {
++            r = 10 * r + (body[i++] - '0');
++            ++digits;
++        }
++        if (r < 1 || r > int(v->maxRank) + 1)
++            return SQ_NONE;
++        return make_square(f, Rank(r - 1));
++    };
++    auto admit = [&](Square s) {
++        if (s == SQ_NONE || ((v->promotionRegion[WHITE] | v->promotionRegion[BLACK]) & s))
++            return false;
++        for (Square t : seen)
++            if (t == s)
++                return false;
++        seen.push_back(s);
++        return true;
++    };
++    size_t i = 0;
++    while (i < body.size())
++    {
++        if (body[i] == ',' || body[i] == ' ')
++        {
++            ++i;
++            continue;
++        }
++        Square a = parse_square(i);
++        if (!admit(a))
++            return NOK;
++        if (i < body.size() && body[i] == '-')
++        {
++            ++i;
++            if (!admit(parse_square(i)))
++                return NOK;
++        }
++        else if (i < body.size() && (body[i] == 'w' || body[i] == 'b'))
++            ++i;
++        else
++            return NOK;
++    }
++    return OK;
++}
++
+ inline FenValidation validate_fen(const std::string& fen, const Variant* v, bool chess960 = false) {
+ 
+     const std::string validSpecialCharactersFirstField = get_valid_special_chars(v);
+@@ -1004,6 +1061,17 @@ inline FenValidation validate_fen(const std::string& fen, const Variant* v, bool
+     std::vector<std::string> fenParts = get_fen_parts(fen, ' ');
+     std::vector<std::string> startFenParts = get_fen_parts(v->startFen, ' ');
+ 
++    // Trailing portal field: validated here, then stripped so the standard checks see a plain FEN
++    if (fenParts.size() > 1 && !fenParts.back().empty() && fenParts.back()[0] == '{')
++    {
++        if (check_portal_field(fenParts.back(), v) == NOK)
++        {
++            std::cerr << "Invalid portal field: '" << fenParts.back() << "'." << std::endl;
++            return FEN_INVALID_PORTAL_FIELD;
++        }
++        fenParts.pop_back();
++    }
++
+     // check for number of parts
+     const unsigned int maxNumberFenParts = 6 + v->checkCounting;
+     if (fenParts.size() < 1 || fenParts.size() > maxNumberFenParts)
+diff --git a/src/evaluate.cpp b/src/evaluate.cpp
+index ce30aa04..2b8bb471 100644
+--- a/src/evaluate.cpp
++++ b/src/evaluate.cpp
+@@ -628,7 +628,7 @@ namespace {
+ 
+     Score score = SCORE_ZERO;
+ 
+-    if (pos.count_in_hand(Us, pt) > 0 && pt != KING)
++    if (pos.count_in_hand(Us, pt) > 0 && pt != KING && !pos.is_portal_scroll(pt))
+     {
+         Bitboard b = pos.drop_region(Us, pt) & ~pos.pieces() & (~attackedBy2[Them] | attackedBy[Us][ALL_PIECES]);
+         if ((b & kingRing[Them]) && pt != SHOGI_PAWN)
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index 070be545..bd936660 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -64,7 +64,13 @@ namespace {
+         return moveList;
+     }
+ 
+-    *moveList++ = make<T>(from, to, pt);
++    // A move landing on a portal square is a portal move; en passant never lands on one
++    if (T == NORMAL && (pos.portal_squares() & to))
++        *moveList++ = make<PORTAL>(from, to);
++    else if (T == EN_PASSANT && (pos.portal_squares() & to))
++        return moveList;
++    else
++        *moveList++ = make<T>(from, to, pt);
+ 
+     // Gating moves
+     if (pos.seirawan_gating() && (pos.gates(us) & from))
+@@ -113,6 +119,14 @@ namespace {
+         // Restrict to valid target
+         b &= pos.drop_region(Us, pt);
+ 
++        // A portal scroll is cast on empty floor that is not already a portal, never while in check
++        if (pos.is_portal_scroll(pt))
++        {
++            if (pos.checkers())
++                return moveList;
++            b &= ~pos.portal_taken();
++        }
++
+         // Add to move list
+         if (pos.drop_promoted() && pos.promoted_piece_type(pt))
+         {
+@@ -372,6 +386,57 @@ namespace {
+   }
+ 
+ 
++  // Portal moves as check evasions. The evasion masks describe where a piece
++  // must LAND, but a portal move lands on the twin of its target and may also
++  // carry a piece (the king included) the other way, so every portal move is
++  // generated whole here and legal() decides. The regular evasion generation
++  // masks portal squares out so nothing is emitted twice.
++  template<Color Us>
++  ExtMove* generate_portal_evasions(const Position& pos, ExtMove* moveList) {
++
++    constexpr Color     Them     = ~Us;
++    constexpr Direction Up       = pawn_push(Us);
++    constexpr Direction UpRight  = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
++    constexpr Direction UpLeft   = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
++
++    const Bitboard portals = pos.portal_squares() & ~pos.pieces(Us);
++    if (!portals)
++        return moveList;
++
++    // Pawns: pushes and captures exactly as generate_pawn_moves defines them
++    if (pos.pieces(Us, PAWN))
++    {
++        const Bitboard pawns      = pos.pieces(Us, PAWN);
++        const Bitboard movable    = pos.board_bb(Us, PAWN) & ~pos.pieces();
++        const Bitboard capturable = pos.board_bb(Us, PAWN) & pos.pieces(Them);
++        Bitboard b1  = shift<Up>(pawns) & movable & portals;
++        Bitboard b2  = shift<Up>(shift<Up>(pawns & pos.double_step_region(Us)) & movable) & movable & portals;
++        Bitboard brc = shift<UpRight>(pawns) & capturable & portals;
++        Bitboard blc = shift<UpLeft >(pawns) & capturable & portals;
++        while (b1)  { Square to = pop_lsb(b1);  *moveList++ = make<PORTAL>(to - Up, to); }
++        while (b2)  { Square to = pop_lsb(b2);  *moveList++ = make<PORTAL>(to - Up - Up, to); }
++        while (brc) { Square to = pop_lsb(brc); *moveList++ = make<PORTAL>(to - UpRight, to); }
++        while (blc) { Square to = pop_lsb(blc); *moveList++ = make<PORTAL>(to - UpLeft, to); }
++    }
++
++    // Every other piece, the king included
++    for (PieceSet ps = pos.piece_types() & ~piece_set(PAWN); ps;)
++    {
++        PieceType pt = pop_lsb(ps);
++        for (Bitboard bb = pos.pieces(Us, pt); bb; )
++        {
++            Square from = pop_lsb(bb);
++            Bitboard b = (  (pos.attacks_from(Us, pt, from) & pos.pieces())
++                          | (pos.moves_from(Us, pt, from) & ~pos.pieces())) & portals;
++            while (b)
++                *moveList++ = make<PORTAL>(from, pop_lsb(b));
++        }
++    }
++
++    return moveList;
++  }
++
++
+   template<Color Us, GenType Type>
+   ExtMove* generate_all(const Position& pos, ExtMove* moveList) {
+ 
+@@ -402,6 +467,10 @@ namespace {
+         // Remove inaccessible squares (outside board + wall squares)
+         target &= pos.board_bb();
+ 
++        // Portal evasions are generated whole below
++        if (Type == EVASIONS)
++            target &= ~pos.portal_squares();
++
+         moveList = generate_pawn_moves<Us, Type>(pos, moveList, target);
+         for (PieceSet ps = pos.piece_types() & ~(piece_set(PAWN) | KING); ps;)
+             moveList = generate_moves<Us, Type>(pos, moveList, pop_lsb(ps), target);
+@@ -456,7 +525,7 @@ namespace {
+     if (pos.count<KING>(Us) && (!Checks || pos.blockers_for_king(~Us) & ksq))
+     {
+         Bitboard b = (  (pos.attacks_from(Us, KING, ksq) & pos.pieces())
+-                      | (pos.moves_from(Us, KING, ksq) & ~pos.pieces())) & (Type == EVASIONS ? ~pos.pieces(Us) : target);
++                      | (pos.moves_from(Us, KING, ksq) & ~pos.pieces())) & (Type == EVASIONS ? ~pos.pieces(Us) & ~pos.portal_squares() : target);
+         while (b)
+             moveList = make_move_and_gating<NORMAL>(pos, moveList, Us, ksq, pop_lsb(b));
+ 
+@@ -470,6 +539,9 @@ namespace {
+                     moveList = make_move_and_gating<CASTLING>(pos, moveList, Us,ksq, pos.castling_rook_square(cr));
+     }
+ 
++    if (Type == EVASIONS)
++        moveList = generate_portal_evasions<Us>(pos, moveList);
++
+     return moveList;
+   }
+ 
+diff --git a/src/parser.cpp b/src/parser.cpp
+index cbd24046..cf88d80f 100644
+--- a/src/parser.cpp
++++ b/src/parser.cpp
+@@ -444,6 +444,7 @@ Variant* VariantParser<DoCheck>::parse(Variant* v) {
+     parse_attribute("castlingKingPiece", v->castlingKingPiece[BLACK], v->pieceToChar);
+     parse_attribute("castlingKingPieceWhite", v->castlingKingPiece[WHITE], v->pieceToChar);
+     parse_attribute("castlingKingPieceBlack", v->castlingKingPiece[BLACK], v->pieceToChar);
++    parse_attribute("portalScroll", v->portalScroll, v->pieceToChar);
+     parse_attribute("castlingRookKingsideFile", v->castlingRookKingsideFile);
+     parse_attribute("castlingRookQueensideFile", v->castlingRookQueensideFile);
+     parse_attribute("castlingRookPieces", v->castlingRookPieces[WHITE], v->pieceToChar);
+diff --git a/src/position.cpp b/src/position.cpp
+index e2c3646e..3da35e5a 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -46,6 +46,8 @@ namespace Zobrist {
+   Key checks[COLOR_NB][CHECKS_NB];
+   Key wall[SQUARE_NB];
+   Key dead[SQUARE_NB];
++  Key portalPair[SQUARE_NB][SQUARE_NB];
++  Key portalHalf[COLOR_NB][SQUARE_NB];
+   Key endgame[EG_EVAL_NB];
+ }
+ 
+@@ -191,6 +193,16 @@ void Position::init() {
+       Zobrist::dead[s] = rng.rand<Key>();
+   }
+ 
++  // Portal keys come from their own generator so the stock key sequence is untouched
++  PRNG portalRng(0x9E3779B97F4A7C15ULL);
++  for (Square s1 = SQ_A1; s1 <= SQ_MAX; ++s1)
++  {
++      for (Square s2 = SQ_A1; s2 <= SQ_MAX; ++s2)
++          Zobrist::portalPair[s1][s2] = portalRng.rand<Key>();
++      for (Color c : {WHITE, BLACK})
++          Zobrist::portalHalf[c][s1] = portalRng.rand<Key>();
++  }
++
+   for (int i = NO_EG_EVAL; i < EG_EVAL_NB; ++i)
+       Zobrist::endgame[i] = rng.rand<Key>();
+ 
+@@ -279,6 +291,7 @@ Position& Position::set(const Variant* v, const string& fenStr, bool isChess960,
+   std::memset(this, 0, sizeof(Position));
+   std::memset(si, 0, sizeof(StateInfo));
+   st = si;
++  st->portalHalf[WHITE] = st->portalHalf[BLACK] = SQ_NONE;
+ 
+   var = v;
+ 
+@@ -554,6 +567,25 @@ Position& Position::set(const Variant* v, const string& fenStr, bool isChess960,
+       }
+   }
+ 
++  // 7. Portals: an optional trailing field " {c3-h8,d1-a9,e4w}" - linked pairs and
++  // half-open portals (a square and the colour that opened it). Parsed after the
++  // move counters so a plain FEN is untouched.
++  {
++      char portalToken;
++      if (ss >> std::skipws >> portalToken)
++      {
++          if (portalToken == '{')
++          {
++              std::string field;
++              std::getline(ss, field, '}');
++              parse_portal_field(field);
++          }
++          else
++              ss.putback(portalToken);
++      }
++      ss.clear();
++  }
++
+   chess960 = isChess960 || v->chess960;
+   tsumeMode = Options["TsumeMode"];
+   thisThread = th;
+@@ -667,6 +699,17 @@ void Position::set_state(StateInfo* si) const {
+ 
+   si->key ^= Zobrist::castling[si->castlingRights];
+ 
++  for (Bitboard b = si->portalSquares; b; )
++  {
++      Square s = pop_lsb(b);
++      Square t = Square(si->portalTwin[s]);
++      if (s < t)
++          si->key ^= Zobrist::portalPair[s][t];
++  }
++  for (Color c : {WHITE, BLACK})
++      if (si->portalHalf[c] != SQ_NONE)
++          si->key ^= Zobrist::portalHalf[c][si->portalHalf[c]];
++
+   for (Color c : {WHITE, BLACK})
+       for (PieceType pt = PAWN; pt <= KING; ++pt)
+       {
+@@ -849,6 +892,30 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+ 
+   ss << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+ 
++  // Portal field
++  if (st->portalSquares || st->portalHalf[WHITE] != SQ_NONE || st->portalHalf[BLACK] != SQ_NONE)
++  {
++      ss << " {";
++      bool first = true;
++      for (Bitboard b = st->portalSquares; b; )
++      {
++          Square s = pop_lsb(b);
++          Square t = Square(st->portalTwin[s]);
++          if (s < t)
++          {
++              ss << (first ? "" : ",") << UCI::square(*this, s) << "-" << UCI::square(*this, t);
++              first = false;
++          }
++      }
++      for (Color c : {WHITE, BLACK})
++          if (st->portalHalf[c] != SQ_NONE)
++          {
++              ss << (first ? "" : ",") << UCI::square(*this, st->portalHalf[c]) << (c == WHITE ? "w" : "b");
++              first = false;
++          }
++      ss << "}";
++  }
++
+   return ss.str();
+ }
+ 
+@@ -1230,6 +1297,14 @@ bool Position::legal(Move m) const {
+   )
+   return false;
+ 
++  // Portal moves relocate two pieces: test the king's safety on the resulting board
++  if (type_of(m) == PORTAL)
++      return !portal_attacks_king(m, us);
++
++  // A portal scroll cast never answers a check and never lands on a portal square
++  if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
++      return !checkers() && !(portal_taken() & to);
++
+   // En passant captures are a tricky special case. Because they are rather
+   // uncommon, we do it simply by testing whether the king is attacked after
+   // the move is made.
+@@ -1452,6 +1527,14 @@ bool Position::gives_check(Move m) const {
+   if (!count<KING>(~sideToMove))
+       return false;
+ 
++  // Portal moves relocate two pieces: judge the resulting board
++  if (type_of(m) == PORTAL)
++      return portal_attacks_king(m, ~sideToMove);
++
++  // A portal scroll cast moves nothing on the board
++  if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
++      return false;
++
+   Bitboard occupied = (type_of(m) != DROP ? pieces() ^ from : pieces()) | to;
+   Bitboard janggiCannons = pieces(JANGGI_CANNON);
+   if (type_of(moved_piece(m)) == JANGGI_CANNON)
+@@ -1592,6 +1675,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   Color them = ~us;
+   Square from = from_sq(m);
+   Square to = to_sq(m);
++  Square dest = type_of(m) == PORTAL ? portal_twin(to) : to; // where the mover ends up
+   Piece pc = moved_piece(m);
+   Piece captured = piece_on(type_of(m) == EN_PASSANT ? capture_square(to) : to);
+   if (to == from)
+@@ -1704,7 +1788,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   if (type_of(m) == DROP)
+   {
+       Piece pc_hand = make_piece(us, in_hand_piece_type(m));
+-      k ^=  Zobrist::psq[pc][to]
++      k ^=  (is_portal_scroll(type_of(pc)) ? Key(0) : Zobrist::psq[pc][to])
+           ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)] - 1]
+           ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)]];
+ 
+@@ -1713,7 +1797,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   }
+   else
+   {
+-      k ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
++      k ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][dest];
+ 
+       // Reset rule 50 draw counter for irreversible moves
+       // - irreversible pawn/piece promotions
+@@ -1721,7 +1805,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       if (    type_of(m) == PROMOTION
+           || (type_of(m) == PIECE_PROMOTION && !piece_demotion())
+           || (    (var->nMoveRuleTypes[us] & type_of(pc))
+-              && !(PseudoMoves[0][us][type_of(pc)][to] & from)))
++              && !(PseudoMoves[0][us][type_of(pc)][dest] & from)))
+           st->rule50 = 0;
+   }
+ 
+@@ -1730,10 +1814,10 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       k ^= Zobrist::enpassant[file_of(pop_lsb(st->epSquares))];
+ 
+   // Update castling rights if needed
+-  if (type_of(m) != DROP && !is_pass(m) && st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to]))
++  if (type_of(m) != DROP && !is_pass(m) && st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]))
+   {
+       k ^= Zobrist::castling[st->castlingRights];
+-      st->castlingRights &= ~(castlingRightsMask[from] | castlingRightsMask[to]);
++      st->castlingRights &= ~(castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]);
+ 
+       // Remove castling rights from opponent on the same side if oppositeCastling
+       if ((var->oppositeCastling) && (type_of(m) == CASTLING))
+@@ -1799,10 +1883,34 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+           dp.to[0] = to;
+       }
+ 
++      if (is_portal_scroll(type_of(pc)))
++      {
++          // A portal scroll cast: nothing lands. The hand loses the scroll and the
++          // portal state changes - the caster's open half closes into a pair with
++          // this square, or this square becomes the caster's open half.
++          remove_from_hand(make_piece(us, in_hand_piece_type(m)));
++          if (st->portalHalf[us] != SQ_NONE)
++          {
++              Square h = st->portalHalf[us];
++              st->portalSquares |= square_bb(h) | to;
++              st->portalTwin[h] = int8_t(to);
++              st->portalTwin[to] = int8_t(h);
++              k ^= Zobrist::portalHalf[us][h] ^ Zobrist::portalPair[std::min(h, to)][std::max(h, to)];
++              st->portalHalf[us] = SQ_NONE;
++          }
++          else
++          {
++              st->portalHalf[us] = to;
++              k ^= Zobrist::portalHalf[us][to];
++          }
++      }
++      else
++      {
+       drop_piece(make_piece(us, in_hand_piece_type(m)), pc, to);
+       st->materialKey ^= Zobrist::psq[pc][pieceCount[pc]-1];
+       if (type_of(pc) != PAWN)
+           st->nonPawnMaterial[us] += PieceValue[MG][pc];
++      }
+       // Set castling rights for dropped king or rook
+       if (castling_dropped_piece() && rank_of(to) == castling_rank(us))
+       {
+@@ -1830,6 +1938,42 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+           }
+       }
+   }
++  else if (type_of(m) == PORTAL)
++  {
++      // Portal move: the victim on 'to' is gone already. The mover lands on the
++      // twin square and whatever stood there is carried back onto 'to'. Remove
++      // before placing, as castling does, since the squares may coincide.
++      Square q = dest;
++      Piece swapped = q != from ? piece_on(q) : NO_PIECE;
++      bool swappedPromoted = swapped && is_promoted(q);
++      Piece swappedUnpromoted = swapped ? unpromoted_piece_on(q) : NO_PIECE;
++
++      if (Eval::useNNUE)
++      {
++          dp.piece[0] = pc;
++          dp.from[0] = from;
++          dp.to[0] = q;
++          if (swapped)
++          {
++              dp.piece[dp.dirty_num] = swapped;
++              dp.handPiece[dp.dirty_num] = NO_PIECE;
++              dp.from[dp.dirty_num] = q;
++              dp.to[dp.dirty_num] = to;
++              dp.dirty_num++;
++          }
++      }
++
++      if (swapped)
++          remove_piece(q);
++      move_piece(from, q);
++      if (swapped)
++      {
++          put_piece(swapped, to, swappedPromoted, swappedUnpromoted);
++          k ^= Zobrist::psq[swapped][q] ^ Zobrist::psq[swapped][to];
++          if (type_of(swapped) == PAWN)
++              st->pawnKey ^= Zobrist::psq[swapped][q] ^ Zobrist::psq[swapped][to];
++      }
++  }
+   else if (type_of(m) != CASTLING)
+   {
+       if (Eval::useNNUE)
+@@ -1879,7 +2023,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       }
+ 
+       // Set en passant square(s) if the moved pawn can be captured
+-      else if (   type_of(m) != DROP
++      else if (   type_of(m) != DROP && type_of(m) != PORTAL
+           && (   std::abs(int(to) - int(from)) == 2 * NORTH
+               || std::abs(int(to) - int(from)) == 3 * NORTH))
+       {
+@@ -1901,7 +2045,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       }
+ 
+       // Update pawn hash key
+-      st->pawnKey ^= (type_of(m) != DROP ? Zobrist::psq[pc][from] : 0) ^ Zobrist::psq[pc][to];
++      st->pawnKey ^= (type_of(m) != DROP ? Zobrist::psq[pc][from] : 0) ^ Zobrist::psq[pc][dest];
+   }
+   else if (type_of(m) == PROMOTION || type_of(m) == PIECE_PROMOTION)
+   {
+@@ -2178,7 +2322,7 @@ void Position::undo_move(Move m) {
+   Square to = to_sq(m);
+   Piece pc = piece_on(to);
+ 
+-  assert(type_of(m) == DROP || empty(from) || type_of(m) == CASTLING || is_gating(m)
++  assert(type_of(m) == DROP || type_of(m) == PORTAL || empty(from) || type_of(m) == CASTLING || is_gating(m)
+          || (type_of(m) == PROMOTION && sittuyin_promotion())
+          || (is_pass(m) && (pass(us) || var->wallOrMove)));
+   assert(type_of(st->capturedPiece) != KING);
+@@ -2255,7 +2399,24 @@ void Position::undo_move(Move m) {
+   else
+   {
+       if (type_of(m) == DROP)
+-          undrop_piece(make_piece(us, in_hand_piece_type(m)), to); // Remove the dropped piece
++      {
++          if (is_portal_scroll(in_hand_piece_type(m)))
++              add_to_hand(make_piece(us, in_hand_piece_type(m))); // A cast placed nothing; the portal state returns with st->previous
++          else
++              undrop_piece(make_piece(us, in_hand_piece_type(m)), to); // Remove the dropped piece
++      }
++      else if (type_of(m) == PORTAL)
++      {
++          Square q = portal_twin(to);
++          Piece swapped = q != from ? piece_on(to) : NO_PIECE;
++          bool swappedPromoted = swapped && is_promoted(to);
++          Piece swappedUnpromoted = swapped ? unpromoted_piece_on(to) : NO_PIECE;
++          if (swapped)
++              remove_piece(to);
++          move_piece(q, from); // The mover comes back from the twin square
++          if (swapped)
++              put_piece(swapped, q, swappedPromoted, swappedUnpromoted);
++      }
+       else
+           move_piece(to, from); // Put the piece back at the source square
+ 
+@@ -2506,6 +2667,8 @@ bool Position::see_ge(Move m, Value threshold) const {
+   // Only deal with normal moves, assume others pass a simple SEE
+   if (type_of(m) != NORMAL && type_of(m) != DROP && type_of(m) != PIECE_PROMOTION)
+       return VALUE_ZERO >= threshold;
++  if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
++      return VALUE_ZERO >= threshold;
+ 
+   Square from = from_sq(m), to = to_sq(m);
+ 
+@@ -2803,8 +2966,8 @@ bool Position::is_immediate_game_end(Value& result, int ply) const {
+           for (PieceSet ps = extinction_piece_types(); ps;)
+           {
+               PieceType pt = pop_lsb(ps);
+-              if (   count_with_hand( c, pt) <= var->extinctionPieceCount
+-                  && count_with_hand(~c, pt) >= var->extinctionOpponentPieceCount + (extinction_claim() && c == sideToMove))
++              if (   count_with_hand_spellfree( c, pt) <= var->extinctionPieceCount
++                  && count_with_hand_spellfree(~c, pt) >= var->extinctionOpponentPieceCount + (extinction_claim() && c == sideToMove))
+               {
+                   result = c == sideToMove ? extinction_value(ply) : -extinction_value(ply);
+                   return true;
+@@ -3312,6 +3475,124 @@ void Position::flip() {
+ /// position object and raises an asserts if something wrong is detected.
+ /// This is meant to be helpful when debugging.
+ 
++/// Position::portal_attacks_king() answers whether the king of kingColor is
++/// attacked after the portal move m is made: the victim on the target square is
++/// gone, the mover stands on the twin, and whatever stood on the twin stands on
++/// the target. Used by legal() for the mover's own king and by gives_check() for
++/// the enemy's. Only the three relocated squares are virtual; every other piece
++/// attacks from where it is, through the new occupancy.
++
++bool Position::portal_attacks_king(Move m, Color kingColor) const {
++
++  assert(type_of(m) == PORTAL);
++
++  if (!count<KING>(kingColor))
++      return false;
++
++  Square from = from_sq(m);
++  Square p = to_sq(m);
++  Square q = portal_twin(p);
++  Piece mover = piece_on(from);
++  Piece victim = piece_on(p);
++  Piece swapped = q != from ? piece_on(q) : NO_PIECE;
++  Color att = ~kingColor;
++
++  Square ksq = square<KING>(kingColor);
++  if (ksq == from)
++      ksq = q;
++  else if (ksq == q && swapped)
++      ksq = p;
++
++  Bitboard occupied = pieces() ^ from;
++  if (victim)
++      occupied ^= p;
++  occupied |= q;
++  if (swapped)
++      occupied |= p;
++
++  // Pieces that stay where they are, through the new occupancy
++  if (attackers_to(ksq, occupied, att) & ~(square_bb(from) | q | p))
++      return true;
++
++  // The mover, from the twin square
++  if (color_of(mover) == att && (attacks_bb(att, type_of(mover), q, occupied) & ksq))
++      return true;
++
++  // The swapped piece, from the target square
++  if (swapped && color_of(swapped) == att && (attacks_bb(att, type_of(swapped), p, occupied) & ksq))
++      return true;
++
++  return false;
++}
++
++
++/// Position::parse_portal_field() reads the FEN's trailing portal field, the
++/// text between the braces: entries separated by commas, a pair as "c3-h8",
++/// a half-open portal as "e4w" or "e4b". Entries that cannot stand - off the
++/// board, in either promotion zone, on a wall or crate, or on a square already
++/// taken by a portal - are dropped.
++
++void Position::parse_portal_field(const std::string& field) {
++
++  auto parse_square = [&](size_t& i) -> Square {
++      if (i >= field.size() || field[i] < 'a' || field[i] > 'a' + int(max_file()))
++          return SQ_NONE;
++      File f = File(field[i++] - 'a');
++      int r = 0, digits = 0;
++      while (i < field.size() && isdigit((unsigned char)field[i]) && digits < 2)
++      {
++          r = 10 * r + (field[i++] - '0');
++          ++digits;
++      }
++      if (r < 1 || r > int(max_rank()) + 1)
++          return SQ_NONE;
++      return make_square(f, Rank(r - 1));
++  };
++
++  auto can_hold = [&](Square s) {
++      return  s != SQ_NONE
++           && (board_bb() & s)
++           && !((promotion_zone(WHITE) | promotion_zone(BLACK)) & s)
++           && !(st->portalSquares & s)
++           && (!(pieces() & s) || piece_on(s) != NO_PIECE);
++  };
++
++  size_t i = 0;
++  while (i < field.size())
++  {
++      if (field[i] == ',' || field[i] == ' ')
++      {
++          ++i;
++          continue;
++      }
++      Square a = parse_square(i);
++      if (a == SQ_NONE)
++          break;
++      if (i < field.size() && field[i] == '-')
++      {
++          ++i;
++          Square b = parse_square(i);
++          if (b == SQ_NONE)
++              break;
++          if (a != b && can_hold(a) && can_hold(b))
++          {
++              st->portalSquares |= square_bb(a) | b;
++              st->portalTwin[a] = int8_t(b);
++              st->portalTwin[b] = int8_t(a);
++          }
++      }
++      else if (i < field.size() && (field[i] == 'w' || field[i] == 'b'))
++      {
++          Color c = field[i++] == 'w' ? WHITE : BLACK;
++          if (can_hold(a) && a != st->portalHalf[~c])
++              st->portalHalf[c] = a;
++      }
++      else
++          break;
++  }
++}
++
++
+ bool Position::pos_is_ok() const {
+ 
+   constexpr bool Fast = true; // Quick (default) or full check?
+diff --git a/src/position.h b/src/position.h
+index d36493da..e051b9f5 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -56,6 +56,9 @@ struct StateInfo {
+   Square castlingKingSquare[COLOR_NB];
+   Bitboard wallSquares;
+   Bitboard deadSquares;
++  Bitboard portalSquares;
++  Square   portalHalf[COLOR_NB];
++  int8_t   portalTwin[SQUARE_NB];
+   Bitboard gatesBB[COLOR_NB];
+ 
+   // Not copied when making a move (will be recomputed anyhow)
+@@ -127,6 +130,15 @@ public:
+   Bitboard board_bb() const;
+   Bitboard board_bb(Color c, PieceType pt) const;
+   Bitboard dead_squares() const;
++  Bitboard portal_squares() const;
++  Bitboard portal_taken() const;
++  Square portal_twin(Square s) const;
++  Square portal_half(Color c) const;
++  PieceType portal_scroll() const;
++  bool is_portal_scroll(PieceType pt) const;
++  bool portal_attacks_king(Move m, Color kingColor) const;
++  int count_with_hand_spellfree(Color c, PieceType pt) const;
++  void parse_portal_field(const std::string& field);
+   PieceSet piece_types() const;
+   const std::string& piece_to_char() const;
+   const std::string& piece_to_char_synonyms() const;
+@@ -439,6 +451,45 @@ inline Bitboard Position::dead_squares() const {
+   return st->deadSquares;
+ }
+ 
++inline Bitboard Position::portal_squares() const {
++  return st->portalSquares;
++}
++
++// Every square a portal or a half-open portal occupies: no cast may land on one
++inline Bitboard Position::portal_taken() const {
++  Bitboard b = st->portalSquares;
++  for (Color c : {WHITE, BLACK})
++      if (st->portalHalf[c] != SQ_NONE)
++          b |= st->portalHalf[c];
++  return b;
++}
++
++inline Square Position::portal_twin(Square s) const {
++  assert(st->portalSquares & s);
++  return Square(st->portalTwin[s]);
++}
++
++inline Square Position::portal_half(Color c) const {
++  return st->portalHalf[c];
++}
++
++inline PieceType Position::portal_scroll() const {
++  assert(var != nullptr);
++  return var->portalScroll;
++}
++
++inline bool Position::is_portal_scroll(PieceType pt) const {
++  return pt != NO_PIECE_TYPE && pt == var->portalScroll;
++}
++
++// Spells are never pieces: the extinction (strip) count ignores scrolls in hand
++inline int Position::count_with_hand_spellfree(Color c, PieceType pt) const {
++  int n = count_with_hand(c, pt);
++  if (var->portalScroll != NO_PIECE_TYPE && (pt == ALL_PIECES || pt == var->portalScroll))
++      n -= pieceCountInHand[c][var->portalScroll];
++  return n;
++}
++
+ inline PieceSet Position::piece_types() const {
+   assert(var != nullptr);
+   return var->pieceTypes;
+diff --git a/src/types.h b/src/types.h
+index 844d1955..5e96399e 100644
+--- a/src/types.h
++++ b/src/types.h
+@@ -270,6 +270,7 @@ enum MoveType : int {
+   PIECE_PROMOTION    = 5 << (2 * SQUARE_BITS),
+   PIECE_DEMOTION     = 6 << (2 * SQUARE_BITS),
+   SPECIAL            = 7 << (2 * SQUARE_BITS),
++  PORTAL             = 8 << (2 * SQUARE_BITS),
+ };
+ 
+ constexpr int MOVE_TYPE_BITS = 4;
+diff --git a/src/variant.h b/src/variant.h
+index 0e6d44c3..8a5f007a 100644
+--- a/src/variant.h
++++ b/src/variant.h
+@@ -118,6 +118,7 @@ struct Variant {
+   Rank soldierPromotionRank = RANK_1;
+   EnclosingRule flipEnclosedPieces = NO_ENCLOSING;
+   bool freeDrops = false;
++  PieceType portalScroll = NO_PIECE_TYPE;
+ 
+   // game end
+   PieceSet nMoveRuleTypes[COLOR_NB] = {piece_set(PAWN), piece_set(PAWN)};
