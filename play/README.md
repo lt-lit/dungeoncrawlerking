@@ -2649,9 +2649,12 @@ cast; the random driver casts when it likes). THE FIRST DUEL'S VERDICT
 aware of the advantages of portals. Best move recommendations showed
 placing them early was the play, and the enemy cleverly used their portal
 to prevent me from using mine to get an easy promotion" — the portals are
-IN. Held over: the atlas sprite, a blink for the teleport, the scroll as
-an upgrade instead of everyone's, world-persistent portals, a god rung
-that opens one.
+IN. THE COLOURS' VERDICT (designer, the same day): "this is functional for
+now" — the markings for previous and recommended moves on portal squares
+wait for more spells ("we'll tackle that when we have more spells to work
+with"); next the sledgehammer, then ice. Held over: the atlas sprite, a
+blink for the teleport, the scroll as an upgrade instead of everyone's,
+world-persistent portals, a god rung that opens one.
 
 ## The debris layer (2026-09-07)
 

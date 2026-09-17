@@ -1550,7 +1550,12 @@ seven quakes, no anomaly, 1-0 at ply 70): "the engine seems to be VERY
 aware of the advantages of portals. Best move recommendations showed
 placing them early was the play, and the enemy cleverly used their portal
 to prevent me from using mine to get an easy promotion" — IN; the value
-knob is not a conversation (designer: "not sure it's necessary"). Held
+knob is not a conversation (designer: "not sure it's necessary"). THE
+COLOURS' VERDICT, the same day: "this is functional for now" — the branch
+MERGES AS IT STANDS; the last-move and hint MARKINGS on a portal square
+(the frame over the ring) are DEFERRED until more spells exist ("we'll
+tackle that when we have more spells to work with"). NEXT, IN THE
+DESIGNER'S ORDER: THE SLEDGEHAMMER, then an ICE spell. Held
 over: the atlas sprite, a
 blink for the teleport (the mover slides to the portal and the commit
 paints it on the twin), the scroll as an upgrade, world-persistent
