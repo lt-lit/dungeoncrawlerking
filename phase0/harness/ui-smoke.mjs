@@ -1485,6 +1485,112 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs7.length === 0, `no page errors with the wanderers${errs7.length ? ` — ${errs7.join(' | ')}` : ''}`);
   await page7.close();
 }
+
+// --- THE PORTAL SPELL (2026-09-17; the colours by caster the same day — the
+// designer, on the first duel: "the enemy portals should be a different
+// color… each new portal pair has a unique color so the player can see how
+// they link"): on a fresh duel the Portal button shows two scrolls; the
+// button enters CAST MODE with the legal squares lit (none on a king row,
+// all empty) and a tap on a wall leaves it; a tap on a lit square casts
+// through the piece-move path — the half-open portal a dashed ring in the
+// player's BLUE, one scroll left, the log naming the cast; the second cast
+// links the pair, solid blue on both squares, the button gone; the enemy's
+// portal, when it has cast, wears ORANGE (its colour is also asserted on the
+// analyzer, replay-smoke). The debris is off so nothing lands on the rings;
+// hints off so no shaft crosses them.
+{
+  const page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs8 = [];
+  page8.on('pageerror', (e) => errs8.push(String(e).split('\n')[0]));
+  await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
+  await page8.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page8.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const ps = await page8.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const BLUE = [0x4a, 0xa3, 0xff], ORANGE = [0xff, 0x9a, 0x2e];
+    const count = (sq, rgb) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] === rgb[0] && px[i + 1] === rgb[1] && px[i + 2] === rgb[2] && px[i + 3] === 255) n++; return n; };
+    const fen = () => K.app.duel.fen();
+    const field = () => fen().match(/\{([^}]*)\}/)?.[1] ?? '';
+    const grid = () => fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const south = (sq) => `${sq[0]}${rankOf(sq) - 1}`;
+    const lit = () => [...K.app.boardUI.marks.targets];
+    const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /portal/i.test(t));
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const btn = document.getElementById('btnPortal');
+    const out = { hidden0: btn.hidden, text0: btn.textContent.trim(), disabled0: btn.disabled };
+    btn.click();
+    out.castMode = K.app.castMode;
+    const L0 = lit();
+    out.litN = L0.length;
+    out.litKingRow = L0.filter((sq) => rankOf(sq) === 1 || rankOf(sq) === ranks).length;
+    out.litEmpty = L0.every((sq) => at(sq) === '.');
+    const wall = [...K.app.boardUI.cells.keys()].find((sq) => at(sq) === '*' && !L0.includes(sq));
+    K.tap(wall);
+    out.leftAfterWallTap = !K.app.castMode && [...K.app.boardUI.marks.targets].length === 0;
+    // The first cast: a lit square off the king rows with an empty square south of it (a piece there would rise over the ring).
+    const pick = (avoid) => { const c = lit().filter((sq) => !avoid.includes(sq) && rankOf(sq) > 2 && rankOf(sq) < ranks - 1 && at(south(sq)) === '.'); return c[Math.floor(c.length / 2)] ?? lit().find((sq) => !avoid.includes(sq)); };
+    btn.click();
+    const a = pick([]);
+    K.tap(a);
+    await settle();
+    out.a = a;
+    out.fieldA = field();
+    out.textA = btn.textContent.trim();
+    out.titleA = btn.title;
+    out.aEmpty = at(a) === '.' && at(south(a)) === '.';
+    out.aBlue = count(a, BLUE);
+    out.aOrange = count(a, ORANGE);
+    out.logA = logLines();
+    out.turnA = K.app.duel.turnColor();
+    out.stateA = K.app.duel.state;
+    if (K.app.duel.state === 'playing') {
+      btn.click();
+      const b = pick([a]);
+      K.tap(b);
+      await settle();
+      out.b = b;
+      out.fieldB = field();
+      out.hiddenB = btn.hidden;
+      out.aEmptyB = at(a) === '.' && at(south(a)) === '.';
+      out.bEmpty = at(b) === '.' && at(south(b)) === '.';
+      out.aBlueB = count(a, BLUE);
+      out.bBlueB = count(b, BLUE);
+      out.logB = logLines();
+    }
+    const f = field();
+    const enemyHalf = f.match(/(?:^|,)([a-l](?:10|[1-9]))b(?:,|$)/)?.[1] ?? null;
+    const enemyPair = [...f.matchAll(/([a-l](?:10|[1-9]))-([a-l](?:10|[1-9]))/g)].map((m) => [m[1], m[2]]).find((p) => !p.includes(out.a) && !p.includes(out.b)) ?? null;
+    const esq = enemyHalf ?? enemyPair?.[0] ?? null;
+    out.enemy = esq ? { sq: esq, half: !!enemyHalf, empty: at(esq) === '.' && at(south(esq)) === '.', orange: count(esq, ORANGE), blue: count(esq, BLUE) } : null;
+    out.state = K.app.duel.state;
+    return out;
+  });
+  expect(!ps.hidden0 && /×2/.test(ps.text0) && !ps.disabled0, `the Portal button shows on the player's turn with two scrolls (${ps.text0}${ps.hidden0 ? ', hidden' : ''}${ps.disabled0 ? ', disabled' : ''})`);
+  expect(ps.castMode && ps.litN > 0 && ps.litKingRow === 0 && ps.litEmpty, `the button enters cast mode with ${ps.litN} squares lit, none on a king row (${ps.litKingRow}), all empty`);
+  expect(ps.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
+  expect(new RegExp(`(^|,)${ps.a}w(,|$)`).test(ps.fieldA) && /×1/.test(ps.textA) && /is open/.test(ps.titleA), `a tap on ${ps.a} casts: the field reads {${ps.fieldA}}, one scroll left (${ps.textA}), the title says the half is open`);
+  expect(ps.logA.some((t) => t.includes(`a portal opens at ${ps.a}`)), `the log names the cast (${ps.logA.slice(-1)[0] ?? 'nothing about a portal'})`);
+  if (ps.aEmpty) expect(ps.aBlue >= 9 && ps.aBlue <= 18 && ps.aOrange === 0, `the half-open portal is a dashed ring in the player's BLUE (${ps.aBlue} blue pixels of 18, ${ps.aOrange} orange)`);
+  else expect(ps.aBlue > 0 && ps.aOrange === 0, `the half-open portal at ${ps.a} shows blue beside the piece over it (${ps.aBlue} pixels)`);
+  if (ps.b) {
+    expect(new RegExp(`(^|,)(${ps.a}-${ps.b}|${ps.b}-${ps.a})(,|$)`).test(ps.fieldB) && ps.hiddenB, `the second cast links the pair {${ps.fieldB}} and the button goes with the last scroll`);
+    expect(ps.logB.some((t) => t.includes('the portals are linked')), 'the log says the portals are linked');
+    const solid = (n, empty) => (empty ? n >= 20 && n <= 36 : n > 0);
+    expect(solid(ps.aBlueB, ps.aEmptyB) && solid(ps.bBlueB, ps.bEmpty), `both squares of the pair wear the solid blue ring (${ps.aBlueB} / ${ps.bBlueB} blue pixels of 36${ps.aEmptyB && ps.bEmpty ? '' : ', a piece over one'})`);
+  } else expect(ps.stateA !== 'playing', `the duel ended before the second cast (${ps.stateA})`);
+  if (ps.enemy) expect(ps.enemy.empty ? ps.enemy.orange >= 9 && ps.enemy.blue === 0 : ps.enemy.orange > 0 && ps.enemy.blue === 0, `the enemy's ${ps.enemy.half ? 'half-open portal' : 'pair'} at ${ps.enemy.sq} wears ORANGE (${ps.enemy.orange} orange pixels, ${ps.enemy.blue} blue)`);
+  else expect(true, 'the enemy cast nothing in these plies (its orange is asserted on the analyzer, replay-smoke)');
+  expect(errs8.length === 0, `no page errors with the portal spell${errs8.length ? ` — ${errs8.join(' | ')}` : ''}`);
+  await page8.close();
+}
 await browser.close();
 
 server.close();

@@ -37,7 +37,7 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, isCast, CAST_RE } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, CAST_RE } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -2734,7 +2734,10 @@ function paintWithDebris(fen, ledgers) {
   const D = app.debris;
   D.kinds = classifyTerrain(fen, ledgers, app.boardUI.files, app.boardUI.ranks);
   debrisDryTick();
-  app.boardUI.setPortals?.(parsePortalField(fen)); // THE PORTAL SPELL: the pairs and halves on the floor
+  // THE PORTAL SPELL: the pairs and halves on the floor, each in its caster's
+  // colour — the ledger is one walk over the duel record's positions plus
+  // this one (fen.mjs portalLedger; a paint before any duel has none).
+  app.boardUI.setPortals?.(portalInfo(fen, portalLedger([...(app.duel?.record?.states ?? []).map((s) => s.fen), fen])));
   app.boardUI.setPosition(fen, { ...ledgers, debris: debrisPainter() });
 }
 
@@ -5235,6 +5238,8 @@ window.__DCK = {
   preview: () => openStagePreview(),
   begin: () => beginDuel(),
   legalMoves: () => app.duel.legalMoves(),
+  /** A tap on a square of the duel board, as the pointer would (the cast mode's targets included). */
+  tap: (sq) => onSquareTap(sq),
   randomMove: () => {
     const legal = app.duel.legalMoves();
     return legal[Math.floor(Math.random() * legal.length)];

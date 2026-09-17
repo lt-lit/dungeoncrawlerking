@@ -400,7 +400,11 @@ cast is a legal move (`O@e4`), never while in check, never on a square a
 portal or a half already takes. Spells are NEVER pieces: a king with
 scrolls in hand, an open half or a pair is stripped and has lost. Nothing
 persists past the duel; the pairs and halves ride the FEN's trailing
-field, so the log and the analyzer carry them for free.
+field, so the log and the analyzer carry them for free. On the board a
+pair wears its CASTER'S colour — the player's blue, the enemy's orange,
+each further pair a hue of its own — so the links read at a glance; the
+field names no caster, so the game and the analyzer rebuild who cast what
+by a forward walk over the positions.
 
 **Any number of pairs** is one representation (a square → twin map, hashed
 per pair); the count is the deal's, and the stage or world may author

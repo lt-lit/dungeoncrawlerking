@@ -1515,22 +1515,43 @@ gets ONE PAIR PER SIDE PER DUEL, two scrolls in the holdings `[OOoo]`,
 cast in two turns (the first opens a half owned by its caster, the second
 links it), nothing persisting past the duel; `variant.mjs dealVariant(...,
 { portals })` mints `__portals` deal variants with the keys
-(`portalIniKeys`, `PORTAL_SCROLL_VALUE` 0 the enemy's eagerness knob);
+(`portalIniKeys`, `PORTAL_SCROLL_VALUE` 0 — no bonus needed, the first
+log showed);
 `dealMatchup` / `planBox` take `portals`; `?portals=off` and Options →
 Spells switch it; the ⌾ Portal button in the player's bar enters CAST MODE
 (the legal squares lit, a tap casts through the piece-move path); the
-board paints the field as rune rings (`setPortals`, a coded 16×16 until
-the atlas carries a sprite); a cast hint or the enemy's cast is a RING in
+board paints the field as rune rings IN THE CASTER'S COLOUR (`setPortals`,
+`PORTAL_TONES` — the designer, on the first log, the same day: "the enemy
+portals should be a different color. Idk if orange would be appropriate
+(like Valve's Portal). Either way, we need to make sure each new portal
+pair has a unique color so the player can see how they link": the
+player's pairs BLUE then teal / violet / green, the enemy's ORANGE then
+red / yellow / magenta, a pair nobody cast silver, a half dashed in the
+colour its pair will wear; WHO CAST WHAT is `fen.mjs portalLedger`'s
+forward walk over the positions, since the field names a pair without its
+caster — the game walks the record's states, the analyzer its line's
+(`portalFor`) and paints the same rings, a cast on its timeline a ring; a
+coded 16×16 until the atlas carries a sprite); a cast hint or the enemy's cast is a RING in
 the arrow colour; the log says what a cast did and where a portal move
 came out; the gods leave portal squares alone (`blocked.portals`, reason
 `portal`) and the fun score ignores casts; every board scan reads the
 board field alone now (`splitFen(fen).board`), since the holdings are
-nobody's pieces. Gates: selftest 47/47, replay-smoke 63, ui-smoke
-330 ok, 0 failed (its random driver casts when it likes; its board comparisons
-and piece counts strip the holdings; its arrow dial measures a hint with a
-path), the Node gates unchanged. NOT YET PLAYED BY THE DESIGNER — on
-record to watch: whether the enemy casts at sensible moments (the value
-knob), and the first easy-queen attempt. Held over: the atlas sprite, a
+nobody's pieces. Gates: selftest 47/47, test-logreport 53, replay-smoke 69 ok
+(the second sample, THE FIRST PORTAL DUEL — `replay/samples/dck-log_
+vaults-4-t75_s3904618753.json`, the designer's log, `?sample=2` — the
+halves dashed blue and orange, the pairs solid in their colours), ui-smoke
+323 ok, 0 failed (THE PORTAL SPELL block: the button, cast mode, the casts through the
+tap path, the colours; the random driver casts when it likes; the board
+comparisons and piece counts strip the holdings; the arrow dial measures a
+hint with a path), the Node gates unchanged. THE FIRST DUEL'S VERDICT, the
+same day (designer, with the log — both pairs cast in the first three
+moves, a pawn through the player's portal at ply 6, a queen at ply 56,
+seven quakes, no anomaly, 1-0 at ply 70): "the engine seems to be VERY
+aware of the advantages of portals. Best move recommendations showed
+placing them early was the play, and the enemy cleverly used their portal
+to prevent me from using mine to get an easy promotion" — IN; the value
+knob is not a conversation (designer: "not sure it's necessary"). Held
+over: the atlas sprite, a
 blink for the teleport (the mover slides to the portal and the commit
 paints it on the twin), the scroll as an upgrade, world-persistent
 portals, a god rung that opens one, SEE for portal captures (zero, as en

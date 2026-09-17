@@ -148,6 +148,80 @@ export function withPocket(fen, pocket) {
   return joinFen(f);
 }
 
+// ---- THE PORTAL SPELL's ledger (2026-09-17 — the designer, on the first
+// portal duel: "the enemy portals should be a different color… each new
+// portal pair has a unique color so the player can see how they link").
+// The FEN's field names a pair without its caster (`c3-h8`) — only a half
+// wears its side (`e4w`) — so who cast each pair, and in what order, is
+// rebuilt by ONE FORWARD WALK over the positions (the residue rule's shape,
+// board-ui residueStep): a pair that appears while a side's half stood on
+// one of its squares is that side's, numbered in the order the side linked
+// them; a pair with no such history (an authored pair, a bare FEN) is
+// nobody's ('x'). The game walks the duel record's states, the analyzer a
+// line's; a bare FEN alone paints every pair as nobody's.
+
+const squareOrder = (sq) => {
+  const s = parseSquare(sq);
+  return s.rankFromBottom * 12 + s.file;
+};
+
+/** A pair's key, the lower square first (as the engine emits it). */
+export function portalPairKey(a, b) {
+  return squareOrder(a) <= squareOrder(b) ? `${a}-${b}` : `${b}-${a}`;
+}
+
+export function portalLedgerEmpty() {
+  return { pairs: new Map(), count: { w: 0, b: 0, x: 0 } };
+}
+
+/** The ledger after one position follows another: every pair of `nextFen`
+ *  keeps its entry, a new one is the side whose half stood on it in
+ *  `prevFen` (else nobody's), numbered among that side's pairs. */
+export function portalLedgerStep(ledger, prevFen, nextFen) {
+  const prev = parsePortalField(prevFen);
+  const next = parsePortalField(nextFen);
+  const out = { pairs: new Map(), count: { ...ledger.count } };
+  for (const [a, b] of next.pairs) {
+    const key = portalPairKey(a, b);
+    const known = ledger.pairs.get(key);
+    if (known) {
+      out.pairs.set(key, known);
+      continue;
+    }
+    const side = prev.halves.w === a || prev.halves.w === b ? 'w' : prev.halves.b === a || prev.halves.b === b ? 'b' : 'x';
+    out.pairs.set(key, { side, n: out.count[side]++ });
+  }
+  return out;
+}
+
+/** The ledger of a whole line of positions, walked from the first. */
+export function portalLedger(fens) {
+  let led = portalLedgerEmpty();
+  let prev = null;
+  for (const f of fens) {
+    if (!f) continue;
+    led = portalLedgerStep(led, prev, f);
+    prev = f;
+  }
+  return led;
+}
+
+/** The field parsed (parsePortalField) plus `owner`: square → { side, n,
+ *  half } — a pair's caster and its number among that caster's pairs, a
+ *  half's side with the number its pair will get when it links. Without a
+ *  ledger every pair is nobody's. */
+export function portalInfo(fen, ledger = null) {
+  const P = parsePortalField(fen);
+  P.owner = new Map();
+  for (const [a, b] of P.pairs) {
+    const o = ledger?.pairs.get(portalPairKey(a, b)) ?? { side: 'x', n: 0 };
+    P.owner.set(a, o);
+    P.owner.set(b, o);
+  }
+  for (const side of ['w', 'b']) if (P.halves[side]) P.owner.set(P.halves[side], { side, n: ledger?.count[side] ?? 0, half: true });
+  return P;
+}
+
 /** Reassemble a full FEN from split fields (as returned by splitFen). */
 export function joinFen(f) {
   const boardField = f.pocket !== null && f.pocket !== undefined ? `${f.board}[${f.pocket}]` : f.board;

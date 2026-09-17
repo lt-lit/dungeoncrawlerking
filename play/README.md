@@ -2575,9 +2575,9 @@ the duel: the pairs and halves ride the FEN's trailing field
   barrier's `planBox` take `portals`): the deal variant gains the engine's
   keys — the scroll piece (FSF's `immobile`, letter `o`), `portalScroll`,
   `pieceDrops`, the drop region of every rank but the king rows, the
-  scroll's value (`PORTAL_SCROLL_VALUE` 0: the engine's eagerness knob —
-  FSF adds a small in-hand bonus of its own, so the enemy casts when the
-  search sees a gain) — under the name suffix `__portals` (rule 7).
+  scroll's value (`PORTAL_SCROLL_VALUE` 0 — the engine wants portals with no
+  bonus: the first log had both sides cast in the first three moves) —
+  under the name suffix `__portals` (rule 7).
   `?portals=off` deals a plain duel; Options → Spells is the same switch,
   saved (`options.portals`, on by default).
 - **The page** (main.mjs § THE PORTAL SPELL): the ⌾ Portal button in the
@@ -2591,18 +2591,41 @@ the duel: the pairs and halves ride the FEN's trailing field
   arrows' `from === to` case, canvas-board `#paintArrows`). A portal move
   slides to the portal square and the commit paints the mover on the twin
   (a cut for now).
-- **The board** (`canvas-board.mjs setPortals`, `#paintPortal`): the FEN's
-  field (`fen.mjs parsePortalField`) is painted in the flat pass under the
-  debris and the pieces — a rune ring on the floor: a linked pair's three
-  tones, a half-open portal's dashed rim in its caster's colour. A coded
-  16×16 until the atlas carries a sprite.
+- **The board** (`canvas-board.mjs setPortals`, `#paintPortal`,
+  `PORTAL_TONES`): the FEN's field is painted in the flat pass under the
+  debris and the pieces — a rune ring on the floor: a linked pair's
+  outline, rim and inner ring, a half-open portal the rim alone, dashed.
+  THE COLOURS ARE THE CASTER'S (designer, on the first log, the same day:
+  "the enemy portals should be a different color. Idk if orange would be
+  appropriate (like Valve's Portal). Either way, we need to make sure each
+  new portal pair has a unique color so the player can see how they
+  link"): the player's pairs in cool hues, BLUE first (then teal, violet,
+  green), the enemy's in warm hues, ORANGE first (then red, yellow,
+  magenta), wrapping after four; a pair nobody cast (authored, or a bare
+  FEN) in silver; a half in the colour its pair will wear. The field names
+  a pair without its caster (`c3-h8`; only a half wears its side, `e4w`),
+  so WHO CAST WHAT IS A LEDGER rebuilt by one forward walk over the
+  positions — `fen.mjs portalLedgerStep` / `portalLedger` / `portalInfo`
+  (the residue rule's shape): a pair that appears while a side's half
+  stood on one of its squares is that side's, numbered in the order the
+  side linked them; the game walks the duel record's states plus the
+  position it paints, the analyzer each line's states (`portalFor`, cached
+  like the residue, the parent's prefix reused); a bare FEN with no
+  history paints every pair silver. A coded 16×16 until the atlas carries
+  a sprite.
 - **The gods** (director.mjs): portal squares join the blocked set with
   their own reason (`portal`) — never a crumble on one, never a
   displacement onto or off one (only a MOVE teleports); the fun score reads
   the board's moves alone, a cast is not mobility. The engine's mate
   probes and the eval gate see the field through the FEN as ever.
 - **The record**: the FEN carries the holdings and the field, so the
-  replay log, the analyzer and the run's duel entry need nothing new; every
+  replay log, the analyzer and the run's duel entry need nothing new — the
+  ANALYZER paints the pairs and halves in their casters' colours from its
+  own walk and a cast on its timeline as a ring (`?sample=2` is THE FIRST
+  PORTAL DUEL, `replay/samples/dck-log_vaults-4-t75_s3904618753.json`, the
+  designer's log of 2026-09-17: both pairs cast in the first three moves,
+  a pawn through the player's portal at ply 6 and a queen on i10 at ply
+  56, seven quakes, no anomaly, 1-0 at ply 70); every
   board scan reads the board field alone (`splitFen(fen).board` —
   `nonKingCounts`, `kinglessSide`, tactics' `gridOf`, the report's and the
   analyzer's grids), since the holdings are nobody's pieces.
@@ -2611,10 +2634,24 @@ the duel: the pairs and halves ride the FEN's trailing field
   gates).
 
 Gates: `engine/tests/test-portals-ffish.cjs` 42, `test-portals-engine.cjs`
-55, selftest 47/47 (the portals check), replay-smoke 63, ui-smoke
-330 ok, 0 failed with the random driver casting when it likes. Held over: the
-atlas sprite, a blink for the teleport, the scroll as an upgrade instead
-of everyone's, world-persistent portals, a god rung that opens one.
+55, selftest 47/47 (the portals check, the ledger on its casts), test-logreport 53
+(the second sample: the casts on the timeline, the field growing cast by
+cast, the ledger naming both pairs, a bare FEN nobody's), replay-smoke 69 ok
+(the second sample: a dashed blue half at ply 2, a dashed orange half at
+ply 3, both pairs solid in their colours at ply 5, the pawn out on i9 at
+ply 6), ui-smoke 323 ok, 0 failed (THE PORTAL SPELL block on a fresh duel: the button
+with two scrolls, cast mode with the legal squares lit and none on a king
+row, a wall tap leaving it, a cast through the tap path with the half a
+dashed blue ring and the log naming it, the second cast linking the pair
+solid blue and the button gone, the enemy's portal orange when it has
+cast; the random driver casts when it likes). THE FIRST DUEL'S VERDICT
+(designer, 2026-09-17, with the log above): "the engine seems to be VERY
+aware of the advantages of portals. Best move recommendations showed
+placing them early was the play, and the enemy cleverly used their portal
+to prevent me from using mine to get an easy promotion" — the portals are
+IN. Held over: the atlas sprite, a blink for the teleport, the scroll as
+an upgrade instead of everyone's, world-persistent portals, a god rung
+that opens one.
 
 ## The debris layer (2026-09-07)
 

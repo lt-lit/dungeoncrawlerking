@@ -354,7 +354,9 @@ Then the rule-16 gate on the wasm pair:
   deal variant, both binaries)
 - [x] the replay page's smoke 63/63 on the new pair; ui-smoke on the real
   page with portals on for both sides: 330 ok, 0 failed
-- [ ] the designer's own play
+- [x] the designer's own play (2026-09-17, vaults-4, 70 plies, both pairs
+  cast in the first three moves, no anomaly — the analyzer's `?sample=2`):
+  "the engine seems to be VERY aware of the advantages of portals"
 
 Build notes: `make emscripten_copy_files` needs `ARCH=wasm` on the command
 line as well (the emscripten Makefile is only included under it); the

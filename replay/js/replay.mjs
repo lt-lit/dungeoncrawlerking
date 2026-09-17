@@ -50,12 +50,17 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, WALL, FURNITURE } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, WALL, FURNITURE, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
 export const REPLAY_BUILD = '2026-09-07 replay-ui.1';
 const params = new URLSearchParams(location.search);
+// The committed samples (`?sample=N`, the load panel's button opens the first):
+// 1 — the designer's third log, s77 The Smithy (2026-09-06); 2 — THE FIRST
+// PORTAL DUEL (2026-09-17, vaults-4 at walk turn 75): both pairs cast in the
+// first three moves, a pawn through the player's portal to the promotion row.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json'];
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;
@@ -295,6 +300,31 @@ function residueFor(line) {
   return out;
 }
 
+/** THE PORTAL SPELL (2026-09-17): who cast each pair, per state of a line —
+ *  one forward walk over the states (fen.mjs portalLedgerStep), the
+ *  parent's prefix reused, cached per line as the residue is. */
+function portalFor(line) {
+  if (app.portals.has(line.id)) return app.portals.get(line.id);
+  const states = line.states ?? [];
+  let out = [];
+  let start = 0;
+  let led = portalLedgerEmpty();
+  if (line.parent) {
+    const parent = app.tree.byId.get(line.parent);
+    const pl = portalFor(parent);
+    const n = states.findIndex((s) => (s.ply ?? 0) > line.forkPly);
+    start = n < 0 ? states.length : n;
+    out = pl.slice(0, start);
+    led = out[start - 1] ?? led;
+  }
+  for (let i = start; i < states.length; i++) {
+    if (states[i]?.fen) led = portalLedgerStep(led, i > 0 ? states[i - 1]?.fen ?? null : null, states[i].fen);
+    out.push(led);
+  }
+  app.portals.set(line.id, out);
+  return out;
+}
+
 /** The state (and its index) shown at a ply of the current line. */
 function stateIndexAt(line, ply) {
   const states = line.states ?? [];
@@ -327,7 +357,12 @@ function quakeMarksOf(ev) {
 
 function moveArrow(st) {
   const p = st?.move?.match(R.UCI_MOVE_RE);
-  if (!p) return null;
+  if (!p) {
+    // THE PORTAL SPELL: a cast has no path — a ring on its square (the board's from === to case), in the mover's colour.
+    const c = st?.move?.match(CAST_RE);
+    if (!c) return null;
+    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: true };
+  }
   // Gold is the player's colour, red the enemy's last move (style.css roles).
   return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last' } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint' };
 }
@@ -343,6 +378,7 @@ function paint() {
   const st = stateAt(line, ply);
   const i = stateIndexAt(line, ply);
   const res = residueFor(line)[i] ?? { opened: new Set(), rubble: new Set() };
+  const portalsAt = (f) => ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); // THE PORTAL SPELL: each pair in its caster's colour
   const ix = idx();
   const q = ix.quakes.get(ply) ?? null;
   const t = ix.traces.get(ply) ?? null;
@@ -353,6 +389,7 @@ function paint() {
     if (show?.kind === 'before' && q) {
       const prev = stateAt(line, ply - 1);
       const pres = residueFor(line)[stateIndexAt(line, ply - 1)] ?? res;
+      portalsAt(q.preFen);
       ui.setPosition(q.preFen, { ...ledgers(prev), skins: app.skins, ...pres });
       fenShown = q.preFen;
       marks = {};
@@ -364,10 +401,12 @@ function paint() {
       for (const e of a.terrain ?? []) if (e.kind === 'weaken') led.godCrates.add(e.square);
       const pres = residueFor(line)[stateIndexAt(line, ply - 1)] ?? res;
       const ares = residueStep({ fen: q?.preFen ?? prev?.fen, holes: toSet(prev?.holes), godCrates: toSet(prev?.godCrates), ...pres }, { fen: a.postFen, holes: led.holes }, app.skins, L.files, L.ranks);
+      portalsAt(a.postFen);
       ui.setPosition(a.postFen, { ...led, skins: app.skins, ...ares });
       fenShown = a.postFen;
       marks = quakeMarksOf(a);
     } else {
+      portalsAt(st.fen);
       ui.setPosition(st.fen, { ...ledgers(st), skins: app.skins, ...res });
       const arrows = [];
       const mv = moveArrow(st);
@@ -1008,6 +1047,7 @@ export async function openLog(data, source = 'object') {
   app.ply = 0;
   app.showing = null;
   app.residue = new Map();
+  app.portals = new Map(); // THE PORTAL SPELL: the casters' ledger per line (portalFor)
   app.probe.queue.length = 0;
   if (L.variantIni && !app.variantInis.has(L.variantIni)) {
     app.variantInis.add(L.variantIni);
@@ -1152,7 +1192,7 @@ $('btnPasteOpen').addEventListener('click', () => {
   if (!text) return;
   void tryOpen(() => openLog(text, 'pasted JSON'), 'the pasted text');
 });
-$('btnSampleOpen').addEventListener('click', () => void tryOpen(() => openUrl('samples/dck-log_s77-the-smithy_s1818861954.json'), 'the sample'));
+$('btnSampleOpen').addEventListener('click', () => void tryOpen(() => openUrl(SAMPLES[0]), 'the sample'));
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => {
   e.preventDefault();
@@ -1177,7 +1217,7 @@ async function boot() {
   if (!window.crossOriginIsolated) note('crossOriginIsolated = false — probes need SharedArrayBuffer; coi-serviceworker fixes this after ONE reload', 'warn');
   const url = params.get('url');
   const slot = params.get('slot');
-  if (params.has('sample')) await tryOpen(() => openUrl('samples/dck-log_s77-the-smithy_s1818861954.json'), 'the sample');
+  if (params.has('sample')) await tryOpen(() => openUrl(SAMPLES[(parseInt(params.get('sample'), 10) || 1) - 1] ?? SAMPLES[0]), 'the sample');
   else if (url) await tryOpen(() => openUrl(url), url);
   else if (slot !== null) await tryOpen(() => openSlot(parseInt(slot, 10)), `slot ${slot}`);
   else if (params.has('latest')) {
@@ -1270,6 +1310,10 @@ window.__DCK = {
       while (app.probe.busy || app.probe.queue.length) await new Promise((r) => setTimeout(r, 50));
       return true;
     },
+    /** The mounted board's art decoded (await it before reading pixels: a frame before that paints nothing). */
+    boardReady: () => app.boardUI?.ready ?? Promise.resolve(true),
+    /** A square's painted pixels (the buffer repainted first) — the portal rings' colours (replay-smoke). */
+    pixels: (sq) => { app.boardUI?.paintNow?.(); return app.boardUI?.squarePixels(sq) ?? null; },
     build: REPLAY_BUILD,
   },
   get app() {

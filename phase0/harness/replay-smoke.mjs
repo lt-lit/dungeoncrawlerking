@@ -352,6 +352,34 @@ v = await view();
 expect(v.plies === L.plies && v.line === 'main', '?latest=1 opens the newest saved log');
 await shot('08-latest', true);
 
+// ------------------------------------------------------------- THE PORTAL SPELL (2026-09-17): the second sample — the first portal duel — paints each pair in its caster's colour
+await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=2&fx=0`);
+await page.evaluate(() => window.__DCK.ready);
+const por = await page.evaluate(async () => {
+  const Rp = window.__DCK.replay;
+  await Rp.boardReady(); // the board's art decoded — a frame before that paints nothing
+  const BLUE = [0x4a, 0xa3, 0xff], ORANGE = [0xff, 0x9a, 0x2e];
+  const count = (sq, rgb) => { const px = Rp.pixels(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] === rgb[0] && px[i + 1] === rgb[1] && px[i + 2] === rgb[2] && px[i + 3] === 255) n++; return n; };
+  const at = (ply) => { Rp.goto(ply); return Rp.view.fen; };
+  const out = { stage: Rp.view.stage, plies: Rp.view.plies };
+  out.f2 = at(2);
+  out.p2 = { f5b: count('f5', BLUE), f5o: count('f5', ORANGE), arrows: Rp.view.marks?.arrows ?? null };
+  out.f3 = at(3);
+  out.p3 = { b6o: count('b6', ORANGE), b6b: count('b6', BLUE), f5b: count('f5', BLUE) };
+  out.f5 = at(5);
+  out.p5 = { f5: count('f5', BLUE), i9: count('i9', BLUE), b6: count('b6', ORANGE), h8: count('h8', ORANGE), f5o: count('f5', ORANGE), b6b: count('b6', BLUE) };
+  out.f6 = at(6);
+  out.p6 = { i9: count('i9', BLUE) };
+  return out;
+});
+expect(/^vaults-4/.test(por.stage) && por.plies === 70, `?sample=2 opens the first portal duel (${por.stage}, ${por.plies} plies)`);
+expect(/\{f5w\}/.test(por.f2) && por.p2.f5b >= 9 && por.p2.f5b <= 18 && por.p2.f5o === 0, `ply 2: the player's half-open portal at f5 is a dashed BLUE ring (${por.p2.f5b} blue pixels of 18, ${por.p2.f5o} orange)`);
+expect(/\{f5w,b6b\}/.test(por.f3) && por.p3.b6o >= 9 && por.p3.b6o <= 18 && por.p3.b6b === 0, `ply 3: the enemy's half at b6 is dashed ORANGE (${por.p3.b6o} orange pixels of 18, ${por.p3.b6b} blue)`);
+expect(/\{f5-i9,b6-h8\}/.test(por.f5) && por.p5.f5 >= 20 && por.p5.i9 >= 20 && por.p5.f5 <= 36 && por.p5.i9 <= 36 && por.p5.f5o === 0, `ply 5: the player's pair f5-i9 wears the solid blue ring on both squares (${por.p5.f5} / ${por.p5.i9} of 36)`);
+expect(por.p5.b6 >= 20 && por.p5.h8 >= 20 && por.p5.b6 <= 36 && por.p5.h8 <= 36 && por.p5.b6b === 0, `ply 5: the enemy's pair b6-h8 wears the solid orange ring (${por.p5.b6} / ${por.p5.h8} of 36)`);
+expect(/\/\^\^1\*\*3P1\//.test(por.f6) && por.p6.i9 < por.p5.i9, `ply 6: the pawn stepped onto f5 and came out on i9, over its ring (${por.p6.i9} blue pixels left of ${por.p5.i9})`);
+await shot('09-portals', true);
+
 expect(pageErrors.length === 0, `no page errors${pageErrors.length ? ` — ${pageErrors.join(' | ')}` : ''}`);
 
 await browser.close();

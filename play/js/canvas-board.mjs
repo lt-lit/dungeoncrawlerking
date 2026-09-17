@@ -151,10 +151,18 @@ const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
 const TARGET = 'rgba(215,180,106,0.53)'; // .cell.target::after #d7b46a88
-// THE PORTAL SPELL (2026-09-17): a rune ring on the floor — the outline, the
-// rim and the inner ring of a linked pair, and the rim of a half-open portal
-// in the colour of the side that opened it (dashed: it links to nothing
-// yet). A coded 16×16 until the atlas carries a sprite.
+// THE PORTAL SPELL (2026-09-17): a rune ring on the floor — the outline (A),
+// the rim (B) and the inner ring (C) of a linked pair; a half-open portal is
+// the rim alone, dashed (it links to nothing yet). A coded 16×16 until the
+// atlas carries a sprite. THE COLOURS ARE THE CASTER'S (the designer, on the
+// first portal duel: "the enemy portals should be a different color. Idk if
+// orange would be appropriate (like Valve's Portal). Either way, we need to
+// make sure each new portal pair has a unique color so the player can see
+// how they link"): the player's pairs in cool hues, blue first; the enemy's
+// in warm hues, orange first; a second, third and fourth pair of a side a
+// hue of its own, wrapping after four; a pair nobody cast (authored, or a
+// bare FEN with no history) in silver; a half wears the colour its pair
+// will wear. Who cast what is fen.mjs's ledger (portalInfo's `owner`).
 const PORTAL_RING = [
   '................',
   '.....AAAAAA.....',
@@ -173,8 +181,27 @@ const PORTAL_RING = [
   '.....AAAAAA.....',
   '................',
 ];
-const PORTAL_PAIR = { A: '#16102b', B: '#9fe0ff', C: '#4a3f8f' };
-const PORTAL_HALF = { w: { A: '#2a2010', B: GOLD, C: null }, b: { A: '#2a1012', B: BAD, C: null } };
+export const PORTAL_TONES = {
+  w: [
+    { A: '#0a1430', B: '#4aa3ff', C: '#245bb8' }, // blue
+    { A: '#062420', B: '#3fe0c8', C: '#1a8c7c' }, // teal
+    { A: '#160c30', B: '#b48cff', C: '#5d3ab8' }, // violet
+    { A: '#0c2408', B: '#7be06a', C: '#3b8a2c' }, // green
+  ],
+  b: [
+    { A: '#2e1206', B: '#ff9a2e', C: '#b8531c' }, // orange
+    { A: '#2e0810', B: '#ff5a7a', C: '#b0233d' }, // red
+    { A: '#2e2406', B: '#ffd84a', C: '#b8921a' }, // yellow
+    { A: '#2e0826', B: '#ff6ae0', C: '#b02a94' }, // magenta
+  ],
+  x: [{ A: '#15171d', B: '#c9ced8', C: '#6b7080' }], // nobody's: silver
+};
+/** The tones of a side's n-th pair (wrapping); an unknown side is nobody's. */
+export function portalTones(side, n = 0) {
+  const list = PORTAL_TONES[side] ?? PORTAL_TONES.x;
+  const i = Number.isInteger(n) ? ((n % list.length) + list.length) % list.length : 0;
+  return list[i];
+}
 const THREAT = 'rgba(229,72,77,0.55)'; // the threat display's far row (--bad at half)
 const THREAT_TINT = 'rgba(229,72,77,0.16)'; // the rest of the band (the far half of a hunter's box)
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
@@ -902,8 +929,9 @@ export class CanvasBoard {
   }
 
   /** THE PORTAL SPELL (2026-09-17): the pairs and half-open portals of the
-   *  position (fen.mjs parsePortalField) — rune rings on the floor in the
-   *  flat pass, under whatever stands on them. */
+   *  position (fen.mjs portalInfo — parsePortalField plus each square's
+   *  caster and pair number, which pick the colour) — rune rings on the
+   *  floor in the flat pass, under whatever stands on them. */
   setPortals(info) {
     this.portals = info && info.squares && info.squares.size ? info : null;
     this.invalidate();
@@ -1770,16 +1798,20 @@ export class CanvasBoard {
   #paintPortal(sq, x, y) {
     const g = this.bctx;
     const P = this.portals;
-    const half = P.halves.w === sq ? 'w' : P.halves.b === sq ? 'b' : null;
-    const tones = half ? PORTAL_HALF[half] : PORTAL_PAIR;
+    const isHalf = P.halves.w === sq || P.halves.b === sq;
+    // The caster from the ledger (fen.mjs portalInfo); a plain parse (no
+    // `owner`) paints a half in its side's first colour and a pair as nobody's.
+    const o = P.owner?.get(sq) ?? { side: P.halves.w === sq ? 'w' : P.halves.b === sq ? 'b' : 'x', n: 0 };
+    const tones = portalTones(o.side, o.n);
     for (let py = 0; py < T; py++) {
       const row = PORTAL_RING[py];
       for (let px = 0; px < T; px++) {
         const c = row[px];
         if (c === '.') continue;
+        if (isHalf && c === 'C') continue; // a half has no inner ring: nothing on the far side yet
         const tone = tones[c];
         if (!tone) continue;
-        if (half && c === 'B' && (px + py) % 2) continue; // dashed: nothing on the far side yet
+        if (isHalf && c === 'B' && (px + py) % 2) continue; // dashed, for the same reason
         g.fillStyle = tone;
         g.fillRect(x + px, y + py, 1, 1);
       }
