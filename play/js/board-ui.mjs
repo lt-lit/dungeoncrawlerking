@@ -144,8 +144,8 @@ export const WALL_MASK_CODES = [...new Set(Array.from({ length: 256 }, (_, m) =>
  * the diagonal is solid too; the neighbours hold the same bands. A
  * face-on door leaf stands DOOR_LIFT pixels off its own square's seam,
  * its foot on the wall's foot line; an EDGE-ON leaf stands EDGE_DOOR_LIFT
- * off it, on the rows its square's own band would fill (DEFAULT_DOOR_FIT
- * below — the rule since 2026-09-16; the designer's verdicts on the way,
+ * off it, one row under the near wall's roof (DEFAULT_DOOR_FIT below —
+ * the designer's own pixel, 2026-09-16/17; their verdicts on the way,
  * 2026-09-12: a leaf at the face-on lift was "WAY too low on the wall for
  * the vertical door", one reaching the far face's top "look[ed] like they
  * connect all the way at the top of the wall").
@@ -160,18 +160,21 @@ export const WALL_DY = WALL_SPRITE_H - 16 + WALL_RAISE; // 7: the sprite's top a
 /** The door leaves' lifts off their square's seam, in whole pixels
  *  (Options → Look, `?doorlift=` / `?edgelift=`). THE RULE (2026-09-16,
  *  the designer on the first shorter-face build: "Vertical doors are
- *  misaligned again"): a leaf stands where the wall it replaces would —
- *  the FACE-ON leaf's foot on the wall's foot line (lift 3: rows −3…12
- *  of its square, four rows of the neighbours' roof band above its head;
- *  5 made a door as tall as the wall, 1 sank its foot under the faces'),
- *  and the EDGE-ON leaf on exactly the rows its square's own band would
- *  fill (lift WALL_DY: rows −7…8, the roof plane's sixteen rows), so its
- *  foot meets the row the near wall's roof begins on with no floor
- *  between, and its head stands four rows up the far wall's twelve-row
- *  face (8 left a row of floor under the foot — the misalignment; 6 put
- *  the head three rows up the face, near the lift the designer called
- *  "WAY too low"; 10 four rows of floor). */
-export const DEFAULT_DOOR_FIT = { doorLift: 3, edgeLift: WALL_DY };
+ *  misaligned again"; 2026-09-17, on lift 7: "Vertical door still
+ *  misaligned. It needs to be moved down one more pixel"): a leaf stands
+ *  where the wall it replaces would — the FACE-ON leaf's foot on the
+ *  wall's foot line (lift 3: rows −3…12 of its square, four rows of the
+ *  neighbours' roof band above its head; 5 made a door as tall as the
+ *  wall, 1 sank its foot under the faces'), and the EDGE-ON leaf ONE ROW
+ *  UNDER THE NEAR WALL'S ROOF (lift WALL_DY − 1 = 6: rows −6…9 of its
+ *  square, the roof plane's rows shifted one down, so the near wall —
+ *  painted after it in the tall pass — covers its foot row, and the leaf
+ *  runs from three rows up the far wall's twelve-row face to behind the
+ *  near roof; 7 put the foot exactly on the roof's first row and the
+ *  head four rows up the face — "one more pixel"; 8 left a row of floor
+ *  under the foot — "misaligned again"; 10 four rows of floor). The
+ *  designer's eye is the rule; the dial stays. */
+export const DEFAULT_DOOR_FIT = { doorLift: 3, edgeLift: WALL_DY - 1 };
 export const DOOR_LIFT_RANGE = [-4, 12];
 export const EDGE_DOOR_LIFT_RANGE = [0, 14];
 export const DOOR_LIFT = DEFAULT_DOOR_FIT.doorLift;

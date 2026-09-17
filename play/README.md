@@ -2489,7 +2489,13 @@ square's own band would fill: `DEFAULT_DOOR_FIT.edgeLift = WALL_DY` 7,
 rows −7…8 of its square, its head four rows up the far wall's
 twelve-row face, its foot on the row the near wall's roof begins, no
 floor between, a stacked double one strip from the far face into the
-near roof; the dial stays, 0…14. THE HIGHLIGHT: the roof's lit line
+near roof; the dial stays, 0…14. ONE MORE PIXEL (2026-09-17, the
+designer on that build: "Vertical door still misaligned. It needs to be
+moved down one more pixel"): `edgeLift = WALL_DY − 1` = 6 — rows −6…9
+of its square, the foot row under the near wall's roof (the near wall
+paints after the leaf in the tall pass and covers it), the head three
+rows up the far face; the designer's eye is the rule (ui-smoke 297 ok,
+selftest 46/46, facing-walk 108/108 on that build). THE HIGHLIGHT: the roof's lit line
 (`lit`) and the face's flecks (`brickLight`) were two colours in every
 set's swap, so the slot moved the flecks and left the roof's line in
 the wall's stone; now they are ONE colour per set (`lit === brickLight`

@@ -99,12 +99,13 @@ in the GAP it is — the walls above and below END with their own autotile
 end cases, the brick face on a south end (canvas-board `#wallMask`: an
 edge-on door, or any opened doorway, is not solid for the wall masks
 around it, in screen space) — drawn in the tall pass as furniture, one
-tile tall, standing on the rows its square's own wall band would fill
-since 2026-09-16 (the Edge door lift dial's default, `WALL_DY` 7 off
-its seam: its head four rows up the far wall's face, its foot on the
-near wall's roof — 10 under the 24-row wall, 8 on the first
+tile tall, standing ONE ROW UNDER THE NEAR WALL'S ROOF since 2026-09-17
+(the Edge door lift dial's default, `WALL_DY − 1` = 6 off its seam: its
+head three rows up the far wall's face, its foot row covered by the
+near wall painted after it — 10 under the 24-row wall, 8 on the first
 shorter-face build, which left a row of floor under the foot:
-"misaligned again");
+"misaligned again", 7 on the next, the foot exactly on the roof's first
+row: "still misaligned. It needs to be moved down one more pixel");
 a generated slab stood in from the camera, 2026-09-08,
 and before that a north–south door was a WEAK SPOT wearing the crack —
 and an authored double is
@@ -1362,7 +1363,7 @@ strip-ruin-chips reads `WALL_SPRITE_H`. THE DOOR LEAVES are sixteen rows
 in a twenty-row wall now, so their lifts are DIALS — Options → Look
 "Door lift" / "Edge door lift", whole pixels, saved, `?doorlift=` /
 `?edgelift=`, canvas-board `setDoorFit`, `DEFAULT_DOOR_FIT` doorLift 3 /
-edgeLift 8 (7 since 2026-09-16, the next paragraph), settled on crops of s59: the face-on leaf with four rows of
+edgeLift 8 (7 on 2026-09-16, 6 since 2026-09-17 — the next paragraph), settled on crops of s59: the face-on leaf with four rows of
 the neighbours' roof band above its head and its foot on the wall's
 foot line (5 made a door as tall as the wall, 1 sank its foot under the
 faces'); the edge-on leaf's head five rows up the far wall's twelve-row
@@ -1411,7 +1412,14 @@ replaces would: the face-on leaf's foot on the wall's foot line (lift
 band would fill — `DEFAULT_DOOR_FIT.edgeLift = WALL_DY` 7 (rows −7…8:
 its head four rows up the far wall's twelve-row face, its foot on the
 row the near wall's roof begins, no floor between; a stacked double is
-one strip from the far face into the near roof; the dial stays). (2)
+one strip from the far face into the near roof; the dial stays). ONE
+MORE PIXEL (2026-09-17, the designer on that build: "Vertical door
+still misaligned. It needs to be moved down one more pixel"):
+`edgeLift = WALL_DY − 1` = 6 — rows −6…9, the foot row under the near
+wall's roof (the near wall paints after the leaf in the tall pass and
+covers it), the head three rows up the far face; the designer's eye is
+the rule (ui-smoke 297 ok, selftest 46/46, facing-walk 108/108 on that
+build). (2)
 THE HIGHLIGHT IS ONE COLOUR, ROOF AND FACE: the roof's lit line (`lit`)
 and the brick flecks (`brickLight`) were two colours in every set's
 swap, so the third slot moved the flecks and left the roof's line in
