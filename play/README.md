@@ -494,8 +494,10 @@ ranks×16 tall plus HEADROOM for the top rank's tall pieces (fit − 16 +
 lift, so a head never leaves the buffer) — repainted from scratch on
 every change in painter's order: floor (+ the dark square's shade), flat
 terrain by `classifyTerrain` (the one terrain rule, shared with the DOM
-board and the replay analyzer: wall cases, holes, ruins, cracked walls
-with the crack masked to the wall's pixels by `source-atop`), the
+board and the replay analyzer: the pits — since the TALL WALLS of
+2026-09-12, round 21 below, a wall case, a cracked wall with the crack
+masked onto its face by `source-atop`, a weak spot and a ruin's stub are
+16×24 sprites of the TALL pass, standing at the square's y − 11), the
 square's DEBRIS (the painter's 16×16 buffer put straight in), decor and
 the open doorway above it (the DOM's decor span is above its debris
 image, so the posts stand on the rubble), the marks under the pieces
@@ -688,7 +690,11 @@ below in the doorway's post tones; composited once per theme / door set
 / case, the classic row from its own leaf; a breach bursts the slab; the
 class is `door-edge`), a double edge-on is two of them, and an opened
 north–south doorway is the doorway tile TURNED a quarter (posts above
-and below; mixed cases overlay both). THE CAMERA OWNS THE SCREEN on a
+and below; mixed cases overlay both) `[2026-09-11: the placeholder and
+the quarter turn are GONE — the drawn edge-on door, § "Art themes",
+round 20: the door set's leaf is the designer's own 5×16 profile door,
+standing in the wall band; the north–south doorway has its own post
+tiles; the class is still `door-edge`]`. THE CAMERA OWNS THE SCREEN on a
 wide screen: main.mjs stamps `body.layout-wide` at ONE breakpoint
 (`WIDE_LAYOUT`, 900 px; `?layout=wide|stack` pins it) and style.css
 turns the duel screen into two columns — the board an explicit box
@@ -708,7 +714,8 @@ facing and the fit. The turn buttons wait for the army: Options → Look →
 arena — the buffer as a viewport over a world grid, the dimmed dungeon
 around a duel — which is the first step of the world milestone, since
 there is no world to paint yet; per-theme edge-on door ART (the
-placeholder stands until the designer wants better).
+placeholder stands until the designer wants better — ✅ drawn 2026-09-11,
+§ "Art themes", round 20).
 **Gates.** `phase0/harness/camera-guard.mjs` — the retirement's method:
 `dump` records, on a build, six cases (the three themes, the classic set,
 a door set, another piece set) at the start and fourteen hot plies —
@@ -2050,6 +2057,498 @@ the lid seated on a body a pixel wider and is the one extra silhouette.
 is the dependency-free codec the tool uses. The Options panel names the
 three packs with links, and `CREDITS.md` carries the terms and a per-tile
 provenance table.
+
+**Round 20 (2026-09-11) — THE EDGE-ON DOOR.** The designer, after the
+wanderers: "can we finally get a proper vertical door asset? The
+placeholder looks like ass." Since the camera (milestone 3) a door whose
+wall line ran up the screen had painted a GENERATED slab — the wall's
+band with a four-column bar through it — and an opened north–south
+doorway the east–west doorway tile turned a quarter, sixteen wide against
+a twelve-wide band. THREE CUTS WENT BEFORE THE ASSET: a framed
+eight-column leaf lying flat in the band between two post caps with
+floor either side ("these aren't great"), a sheet of four alternatives
+(the face-on leaf squeezed to the band, the same inset between the
+band's bevels, a thicker slab, an arch), and a tall 16×32 leaf drawn to a
+reference the designer sent — then THE DESIGNER DREW IT ("Use this one"):
+`phase0/lib/inhouse/door-profile.png`, a 5×16 side-view door, one tile
+tall, in pixel-poem's face-on leaf's exact colours — the lit body
+(#bf704d) crossed by board rows in the plank timber (#895a45), the
+outline (#25131a) down its left and along its foot, the hinges' two
+irons (#adc1cf / #90919e) down the leftmost column. BUILT TO IT: (1) THE
+LEAF is that file, committed, read by `inhouse.mjs profileDoor` and placed
+at column `EDGE_LEAF_X` 5 of a 16×16 tile so it stands in the middle of
+the wall band (columns 2–13); the repack tool emits it per theme
+recoloured by the door tint SCALED AGAINST THE PLANK TIMBER
+(`recolourHue` gained a `dominant` base — the lit body dominates the
+sprite, and the histogram would otherwise have scaled the castle's and
+the crypt's leaves darker than their face-on doors; the castle's body is
+#a2816e over #7d6455 boards, the crypt's #77604e over #5c4a3c, the
+face-on tiles' own values), and the classic set wears the same sprite
+mapped into its own wood and iron (`CLASSIC_LEAF`); the hall's tile is
+the file byte for byte and every theme's has the file's exact shape
+(test-debris). (2) IT STANDS IN THE GAP IT IS: canvas-board `#wallMask`
+treats a door standing edge-on, or an opened doorway whose walls stand
+above and below it on the screen (`#gapUp`), as NOT SOLID for the wall
+masks of the cells around it — classifyTerrain's world mask still counts
+every door and doorway as solid so a line runs through a break, which is
+right across the screen where a leaf fills its tile, and the exception
+is taken in SCREEN space at paint time, recomputed from the neighbours'
+kinds only for a wall with such a gap beside it — so the walls above and
+below END with their own autotile end cases, the brick face on a south
+end and the bevelled top on a north end, exactly as a wall ends at floor
+anywhere. The door's own tile is floor, and the leaf is FURNITURE in the
+tall pass (`#furnitureSprite` returns it for an edge-on door, a 16×16
+sprite like the face-on leaf), standing from the north wall's face to the
+south wall's edge, so a piece to its south stands in front of it, a
+breach bursts it like any furniture and leaves the gap between the same
+two wall ends, and a slide carries it; the door SET option swaps the
+leaf (`atlas.mjs tileOf` routes `door-edge` like `door` and the double).
+A stacked double is two leaves in a row between the two wall ends. TWO
+CUTS WENT BEFORE THIS: the flat pass ran the wall band on under the leaf
+(designer: "you can't just slap it on top of a wall, why do I see wall
+in front of and behind the door?"), then generated CAPS — the
+north–south post tiles `doorway-ns` / `-n` / `-s`, a lit row over a dark
+row in the post material at the band's end — framed the door and the
+opened doorway alike (designer: "these lazy ass door frames completely
+abandon the wall autotiling. Shouldn't we be seeing the bricks?"); the
+post tiles are gone from the atlas and the repack tool, and an opened
+north–south doorway paints nothing of its own — its walls' end cases are
+its frame. (3) THE EAST–WEST DOORWAY keeps round 11's generated posts
+(`doorway` / `-8` / `-2`, for a doorway whose walls stand across the
+screen); the same autotile-end treatment is one flag away if wanted.
+The atlas grew ONE role (132 → 133, `door-edge`), appended after the
+crack; every old tile is byte-identical. `camera-guard.mjs compare
+--allow door` admits the door squares, the doorways they leave and every
+square touching one (the walls whose ends changed). THE GUARD EARNED ITS KEEP on the tall cut: reporting the prop
+height for every prop role of the classic row had floated the classic
+crates a square north, and only the guard's mirror rows saw it (its
+facing-0 rows drift after ply 0 on the pristine build — a pre-existing
+gap, on record); test-debris now asserts every prop height, so a 16-tall
+tile can never report the box again.
+
+**Round 21 (2026-09-12) — TALL WALLS.** The designer, on the edge-on door:
+"now the door doesn't look like it actually intersects with the wall to
+the north at all… I want tall walls, walls that overlap the northern
+tiles, just like the tall chess pieces do." TEN MOCK-UP ROUNDS off the
+atlas and the packs (nothing in the repo until the build): (1) the first
+cut's overlap — eight rows into the square north — "is the maximum", but
+a roof that deep was "too much of the wall… roof, not the actual south
+face"; (2) an 8-row roof strip over a 16-row face "is good, proportions
+wise", the generated running-bond bricks "look too much like drawers",
+"the vertical doors need to connect higher on the wall face", "the
+ceiling above horizontal doors needs to go", "the horizontal doors should
+move north a few pixels"; (3) "have a look at the original assets again,
+these look so much better" — the packs' own faces, and their own roof art
+where they had any: pixel-poem has none but a four-row ledge and a coping
+stone, Dungeon Gathering a sixteen-wide slab, the Catacombs a seven-pixel
+bevelled frame; (4) "3B is the only one that looks decent… the other
+attempts look like a lost cause. Let's just focus on fixing 3B and make
+palette swaps of it when we're done" — the crypt, with the face three
+pixels off its seam and the floor showing under it (the designer's own
+question the round before: "should wall faces be moved north a few
+pixels, revealing some of the floor tile it's standing on?"); (5) the
+vertical roofs, sampled off the pack's own vertical band with its two lit
+lines and a groove colliding on our ten-pixel band, were "awful for no
+reason. Like, just turn the horizontal ones sideways" — done: the strip's
+outline and lit line down the band's west side, the outline down its
+east; (6) the band's middle was then "flat and textureless" — the pack's
+four cracked fill rows, whose marks run front to back across the strip,
+STRETCHED over the band's seven fill columns so every mark crosses the
+band as a rung; (7) a per-cell offset into the pack's band made those
+marks "stop halfway, or have this other weird variation with one pixel
+missing" — the strip is the pack's tile verbatim on every cell, and the
+rungs align across cells; (8) "why do the roofs look incomplete? It looks
+like you've trimmed out so much" — the raised face had cut the strip to
+five rows; the pack's north band is worn WHOLE, outline, lit line, four
+fill rows, inner outline, a row of fill, which with the three-pixel raise
+puts the wall's top ELEVEN rows into the square north (past the "maximum"
+of round 1 — the designer's pick over the seam-tight version); (9) "take
+3 and get rid of the roof segments that show above horizontal doors";
+(10) stray dashes on a vertical band's north end were the horizontal
+band's own crack marks — a band's ends wear only the outline and lit
+line, and its rungs run on through a T; "shift the doors down a couple
+pixels and build it".
+
+THE BUILD. `js/board-ui.mjs` carries the geometry: `WALL_BAND` (columns
+3–12), `WALL_LIFT` 8 (the roof plane, one tile deep, shifted north),
+`WALL_RAISE` 3 (the face off its seam), `WALL_SPRITE_H` 24, `DOOR_LIFT`
+5 (a leaf, face-on or edge-on, two pixels above the face's foot),
+`wallBody(mask)` (the shipped blob footprint of round 5: an east–west run
+the width, a north–south run the band, corners, T's and crosses their
+union, a thick block's inner corner only with its diagonal) and
+`wallFaceCols(mask)` (the columns where the roof's body ends at the
+square's south edge). The repack tool composes EVERY CASE FROM TWO
+CATACOMBS TILES — the frame's north band (5,3) and the brick face (5,9)
+— into a 16×24 sprite: rows 0–7 the roof's far half, rows 8–23 the face
+in the face columns and the roof's near half where it runs on. The roof
+is drawn by DEPTH from its open edges: a horizontal top wears the band's
+rows on its far edge (outline, lit line, the four cracked fill rows, the
+inner outline), the outline and lit line turned on its west end, the
+outline on its east; a vertical band the same two down its west side,
+the stretched rungs, the outline down its east, and its rungs run on
+through a horizontal wall where it meets one; corners and ends by the
+nearest edge. The RUIN is the same drawing with each joining wall's
+ragged tongue (a flush pixel and up to two of fringe, hashed per pair of
+rows), the face under a west or east tongue's south edge, six rows of it
+as a low stump under a north tongue, nothing under a south tongue (the
+wall's own roof is right below it); chips none, as before. The hall, the
+castle and the classic set are EXACT PALETTE SWAPS of the crypt's tiles
+(`WALL_SWAPS` names every colour of the crypt's drawing — the tool
+refuses one it does not name); the classic row keeps its drawn props and
+cracks and takes its walls and ruins from the crypt row, so they
+regenerate without the pack. The doorway post tiles (`doorway`,
+`doorway-8`, `doorway-2`) are gone: an opened doorway is a gap and the
+walls beside it end with their own cases (`#gapUp` is any doorway).
+`door-edge` is the designer's 5×16 leaf as drawn, one tile tall, in the
+band's middle (`inhouse.mjs profileDoor`; the first build stretched it
+to 27 rows — the second round, below, put it back).
+
+THE CANVAS BOARD paints walls, cracked walls, weak spots and ruins in
+THE TALL PASS, at the square's y − 11 — the roof over the feet of
+whatever stands north, as a nearer head covers the piece behind it —
+with the crack masked onto the face where there is one and onto the roof
+where a band runs on (the crack is the tell that a wall is weakened; a
+band mid-run has no face), the cracking flash over the whole sprite, the
+whole sprite bursting on a breach, a ruin's stub with the square's
+debris put back over its foot, a wall prop (torch / banner / chain) on
+the face, and the residue and heat frames over the sprite; either leaf
+at y − 5 — a door stands at its own square's depth, face-on or edge-on
+(the edge-on leaf's head meets the far face's bottom, the near wall's
+roof covers of its foot what it covers of anything); the options legend
+shows the face under the roof's last rows. Gates green on the build:
+`test-debris` 70 (the boxes, the classic row's own cases, the leaf's
+exact shape and the hall's byte for byte, no doorway role), `strip-ruin-chips --check`
+(reads the whole sprite, row 15 attached — a south tongue runs into the
+neighbour's roof), selftest 46/46, ui-smoke 270 (a cracked band mid-run
+wears its ink on the roof), facing-walk 108/108, replay-smoke 63,
+test-camera 80, test-world 125, test-barrier 160, test-logreport 47,
+canvas-grid `none` / `margin` 4/4 in Chromium; the camera guard's dump
+self-check drifts from ply 2 exactly as on the build before (on record)
+and a fresh baseline was dumped. The hall's, the castle's and the
+classic set's palettes are first picks for the designer to retune.
+
+THE SECOND ROUND, the same day. The designer, on two screenshots of the
+build's walk screen: "Roofs on clusters of walls look kinda odd. Either
+we should make it fade to black, or smooth it out. Also, vertical doors
+look weird in several ways. They look like they connect all the way at
+the top of the wall, unlike the forward facing doors. And it looks super
+weird when you break the lower door of a double door set, there's no
+visible side edge of the door like you'd expect." Two fixes, built the
+same day. (1) A MASS FADES TO BLACK. The first build's `roofOf` drew
+every cell by the same profiles, so a thick wall tiled the band and the
+rungs over every interior cell — a lattice of ledges. The pack itself
+never draws a thick wall's top: its frame is a bevelled RIM around a
+BLACK VOID (the band, two rows of shade, then black), and that is what
+a mass is now. `roofOf` takes `mass` (the cell has a diagonal set, so
+it sits in a 2×2 block of walls) and, for a pixel that is thick both
+ways (a run longer than a cell across AND along — a T of thin walls in
+a mass cell keeps its band), lays the nearest RIM by depth from the
+open edge: the far edge the band's seven rows; the near edge, over the
+face, the band and its row of fill — exactly a thin wall's roof, so a
+thin east–west wall joining a mass runs into its near or far rim
+without a seam; the west and east edges exactly a thin vertical band,
+ten columns (outline, lit line, the seven stretched rungs, outline —
+lit on the west side as the thin band is, so a thin vertical wall
+joining a mass continues into its side rim without a seam); the side
+rims are cast on the roof MINUS the eight rows the face hides, so at
+an inner corner of the void a side rim runs up to the face stub's top
+instead of stopping a square short; a lone band entering from the
+north runs its rungs over the far rim to the void, one leaving south
+starts from the void and runs on; everything else is the pack's shade
+for two rows under the far rim and then its black (`CRYPT.black`,
+named per theme in `WALL_SWAPS` — the band's three black flecks, which
+the first build's swaps folded into the outline colour, now swap to the
+void's black on every theme, the one change to a thin tile outside the
+crypt; every thin case is byte-identical to the first build in the
+crypt's own colours; the shade became the ramp in the third round,
+below). Ruins pass `mass` false and are untouched. (2) THE EDGE-ON LEAF IS ONE TILE AGAIN. The 27-row stretch
+reached from the far face's top to behind the near roof, which read as
+a door hung from the roof — "they look like they connect all the way at
+the top of the wall" — and when the lower leaf of a stacked double
+broke, the upper leaf's foot was the stretch's middle, no edge at all.
+`door-edge` is the designer's 5×16 file as drawn (`inhouse.mjs
+profileDoor`, `EDGE_LEAF_X` 5), a 16×16 tile like the face-on leaf,
+drawn by the canvas board at `DOOR_LIFT` like the face-on leaf: its head
+meets the far face's bottom (the face stands three pixels off its seam,
+the leaf rises five, so they overlap by two — the leaf enters the wall),
+its foot stands clear when the leaf below it is gone, and the near
+wall's roof covers of it what it covers of anything standing there.
+`edgeLeafRows`, `EDGE_LEAF_ROWS` and `EDGE_LEAF_H` are gone; test-debris
+asserts the tile's height, the file's exact shape on every theme and the
+hall's leaf byte for byte. The masses were judged on a scratch composer
+laying wall grids off the atlas the way the board paints them (a 4×3
+block, a 2-wide ring, an L of 2-wide walls, thin walls joining a 3×3
+block on all four sides, per theme) beside the same grids off the first
+build's atlas, and the doors on `s59`'s d8 and the g5–h5 double turned
+east-up with its lower leaf opened, at a dpr-3 phone's k 6. Gates
+green on the second round: `test-debris` 70, `strip-ruin-chips
+--check`, selftest 46/46, ui-smoke 280, facing-walk 108/108,
+replay-smoke 63, test-camera 80, test-world 125, test-logreport 47,
+canvas-grid `none` / `margin` 4/4 in Chromium.
+
+THE THIRD ROUND, the same day. The designer, on the second: "That's WAY
+too low on the wall for the vertical door. And the roof darkness needs
+to be on a gradient." (1) THE EDGE-ON LEAF CLIMBS THE WALL. At the
+face-on lift its head sat a row under the far wall's face foot; the
+27-row stretch had reached the face's top. `EDGE_DOOR_LIFT` 10
+(`board-ui`, `WALL_LIFT + WALL_RAISE − 1`) puts the leaf's head seven
+rows up the far wall's face and its foot on the very row the near
+wall's roof begins (y + 5, where the near sprite starts at y − 11 of
+its own square), so a door seen edge-on runs from mid-face to behind
+the wall in front of it, with the foot's outline tucked under that
+roof; a stacked double is one continuous strip (the lower leaf's head
+meets the upper's foot), and a broken lower half leaves the upper
+leaf's foot on the doorway's floor, ten rows above the square's front
+edge. (2) THE VOID IS A RAMP. The pack's two rows of shade and flat
+black read as a hole; the void now darkens by depth from the nearest
+rim: `SHADES` 6 steps from a theme's outline to its black, one per
+pixel (`shade1…6`, computed in the tool from each palette's own
+outline and black so the swaps stay exact — the last step is the black
+itself, the crypt's ramp #181614 → #070707); `roofOf` casts its rays to
+`REACH` 33 (past every rim and the ramp — the old cap of 17 would have
+clipped the near rim's depth to one step), measures the depth past
+each rim (the far rim's seven rows, the near rim's sixteen from the
+face, the side rims' ten) and takes the nearest; a band entering from
+the north ends where the far rim would, and the ramp starts there as
+it does beside it. A 2-wide wall's six-pixel void never reaches black;
+a block's centre does within six pixels of every rim. Gates green on
+the third round: test-debris 70, strip-ruin-chips, selftest 46/46, ui-smoke 313, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
+
+THE PALETTE ROUND, the same day. The designer, on the third build: "We
+need to re think the color palettes overall. 1. I think the roof and
+walls should be a lot closer color wise. 2. Also, not a fan of the
+purple floor or the grey castle floor. Both are too similar to the
+piece set I like. 3. Also the wall faces have some overly dark lines in
+the brick pattern. Makes it hard to see the cracks for weak walls." The
+NullTale set is light blue-grey against wine red, and the hall's plum
+and the castle's blue-grey floors sat right beside them. Candidate
+sheets (a scratch composer laying a cracked wall, a block, both doors
+and the NullTale kings and pawns per theme, off atlases the repack tool
+built under `DCK_PALETTE` overrides) drew the rulings: "browns and tans
+and dark greys for the floors. No moroons or greens or lite greys (like
+my pieces). Also be sure that the walls don't blend too heavily with
+the floors"; "what happened to the checkerboard pattern?" — nothing, it
+is the 22% shade the board lays over every dark square at draw time,
+which a raw-tile composite never shows, so the picks were re-rendered
+on the live board; and then "Can I get an in-game color selector? 2
+tones, for the floor and walls." BUILT: THE WALLS — `WALL_SWAPS` names
+every set, the crypt included (the pack's own drawing is swapped like
+the rest now): a roof's fill is its face's brick, its lit line the
+brick lightened by a sixth toward white, its outline the mortar; the
+mortar lines are lifted halfway to the brick so the black crack reads
+on a weak wall's face. THE FLOORS — `FLOOR_BASES`, one base colour per
+set, the six flagstones recoloured from the pack's stones by the ratio
+rule (the pack-floor tints are gone): crypt #2c2c2f, hall #4a3629,
+castle #2e2f33, classic #2a2a2e — the classic row carries the
+flagstones now (its flat olive checker was a green; the flat colours
+remain the fallback under a row without floors; `flagstones()` reads
+the pack or, without it, the last atlas's classic or crypt row, and
+the classic row's walls are read back too when the pack is off disk).
+THE TONES — Options → Tones: two colour pickers, the floor's stone and
+the walls' stone of the art set the board wears. `atlas.mjs setTones
+(key, { floor, wall })` builds a tinted copy of the tileset with the
+row's floor, wall and ruin tiles recoloured by the ratio rule from the
+row's own base (`baseTones`: the first flagstone's dominant colour,
+the east–west wall face's dominant brick), and every tile is served
+from the copy, so the bevels, the mortar, the crack flecks, the void's
+ramp and the debris sampler all follow; doors, props, cracks and pieces
+are untouched. The board's `setTones` clears the cracked-wall
+composites and repaints; the legend repaints. Saved per set
+(`options.tones[key]`, key the theme or 'classic'), applied as the
+picker drags, the hex beside each picker the number to report, reset
+the set's own; `?floor=` / `?wall=` override for a shot, unsaved;
+`__DCK.tones` get / set / reset / key / base. Known gap: debris chunks
+cut before a tone change keep their sprite's old colours until they
+are repainted. THE GATES: ui-smoke grew THE TONES block (the floor's
+and the wall's signatures before / toned / after reset, measured with
+the hint arrows OFF — the streaming probe kicked by the option change
+above lands its arrows over the floor square at every depth, and the
+block's first run read "before" and "after reset" under two depths'
+arrows — the legend following, the save per set, the pickers' values,
+reset restoring the set's own), and its breach-debris check now skips
+a breached square the gods have since crumbled into a pit (debris
+paints on floor only; one run's single breach, f9, collapsed two
+quakes later). Gates green: test-debris 71, strip-ruin-chips, selftest 46/46, ui-smoke 251 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium.
+
+THE PICKER, the same day (designer, on the phone: "What the fuck are
+these color options? I get one usable shade of brown and everything
+else is unusably garish. Who tf wants bright yellow or fucking traffic
+cone orange for the floor colors??? … This supposed to be a color
+selector for a DUNGEON not a fucking CIRCUS TENT"). The first cut's
+pickers were two `<input type="color">`, and on FIREFOX FOR ANDROID the
+native colour dialog is a FIXED LIST OF NINE SWATCHES — red, orange,
+yellow, green, blue, navy, purple, light grey, white, plus the current
+colour — with no way to enter a colour at all. So the picker is IN THE
+PAGE now, one implementation on every browser (main.mjs § THE TONE
+PICKER, `#tone-picker` in index.html, the `.tone-*` rules in style.css):
+the Tones row is two CHIPS, each showing its slot's colour and hex (the
+number to report); a tap opens the picker on that slot, a second tap
+closes it, `aria-pressed` marks the open one. The picker: a grid of 24
+DUNGEON STONES (`TONE_SWATCHES` — a row of neutral-to-cool greys, a row
+of warm greys into browns, a row of tans, umbers and olive stone: the
+designer's "browns and tans and dark greys" ruling as swatches, the
+one under the tone ringed), HUE / SATURATION / LIGHTNESS sliders
+(`input type=range`, restyled; each track painted by `paintToneTracks`
+in the colours it leads to — the hue ring at a saturation the eye can
+read, since a dungeon stone's own would show as grey, saturation from
+grey to full at the tone's lightness, lightness from black through the
+tone to white) and a HEX field that takes a number with or without the
+#. Every change goes through `setTone` and applies live — one apply per
+task, on the last value, so a drag's dozens of inputs a second cost one
+re-tint and one repaint each frame — and the picker keeps its own
+H/S/L (`tonePicker.hsl`) while a slider is dragged: hex → H/S/L rounds,
+and re-reading the tone would have moved the thumb under the finger.
+`hexToHsl` / `hslToHex` are the conversions. `__DCK.tones` grew
+`open(slot)`, `picker()` (slot, hsl, hidden), `swatches` and `hsl`.
+ui-smoke's TONES block now drives the picker: the floor chip opens it
+on #804020 (20° 60% 31%, 24 stones, painted tracks), a swatch sets the
+tone with the chip, the ring and the hex following, a lightness input
+moves the tone and repaints the floor with the slider keeping its own
+number, a hex typed without the # lands with the sliders following,
+reset returns the chips and the open picker to the base, the second tap
+closes it. Gates green: ui-smoke 351 ok (one run before it died on an engine transport glue — `bestmove c4b5 ponder e7d8readyok` arrived as ONE line, so `isready` never saw its `readyok`; the re-run green; engine.mjs untouched, on record), the picker exercised by hand in Chromium at phone width (a swatch, a slider, reset); a page-only change, the Node gates and the replay page untouched.
+
+THE SHORTER FACE AND THE MOSS (2026-09-15; designer: "I need the walls
+shortened by about 4 pixels or about one 'brick'. They're overlapping
+the square to the north a little too much. Just crop the face of the
+wall, do not fuck up the roof. Also, I need a color selector for the
+green 'moss' highlights in the brick work of the walls. I can change
+the wall palette but there's these permanent green highlights that I
+can't change currently."). THE FACE: the Catacombs brick face is four
+courses of four rows — a mortar line over three rows of brick — and the
+sprite now keeps the lower three (board-ui `WALL_FACE_CROP` 4,
+`WALL_FACE_H` 12, `WALL_SPRITE_H` 20; `tallSprite` crops the face and
+the ruin's stump alike), drawn at `WALL_DY` 7 above its square with the
+foot still `WALL_RAISE` 3 off the seam: the roof is the band as drawn, a
+mortar line still runs under its last row, the foot is where it was, the
+wall's top stands seven rows into the square north where it stood
+eleven; the crack drawings (three of the four run all sixteen rows) stay
+whole, masked from the roof's near edge down the face as `#crackedTile`
+already clipped them; a north–south band runs the roof plane's sixteen
+rows and nothing below, the next square's roof covering the rest as
+before. `atlas.mjs TALL_H` 20; strip-ruin-chips reads `WALL_SPRITE_H`.
+THE DOOR LEAVES are sixteen rows in a twenty-row wall now, so their
+lifts are DIALS: Options → Look "Door lift" and "Edge door lift", whole
+pixels off the leaf's square's seam, saved, `?doorlift=` / `?edgelift=`
+for a shot, canvas-board `setDoorFit` / `doorFit`, `__DCK.doorFit()`;
+`DEFAULT_DOOR_FIT` doorLift 3 / edgeLift 8, settled on crops of s59 at
+k 6 — the face-on double g5+h5 at 5 / 3 / 1 (5: its head two rows under
+the roof's top edge, a door as tall as the wall; 3: four rows of the
+neighbours' roof band above its head, its foot on the wall's foot line;
+1: its foot two rows under the faces'), the edge-on d8 at 10 / 8 / 6
+(10: four rows of floor between its foot and the near roof; 8: its head
+five rows up the far wall's twelve-row face, its foot two rows short of
+the near roof; 6: the head three rows up the face, near the lift the
+designer called "WAY too low"). THE MOSS: the "green highlights" were
+the pack's olive highlight flecks on the bricks — `brickLight`, one
+flat colour, twenty-five pixels a tile (`brickDark`, the same hue, is
+the flecks' shadow) — under the live tones' first rule, a per-channel
+ratio (the repack tool's floor rule): every pixel scaled by the tone's
+channels over the base's, so a pixel whose hue differs from the base's
+lands green or cyan whenever the tone's hue does — a grey tone and a
+tan tone both did it on all four sets (`phase0`'s scratch probe laid the
+rules side by side); the baked palettes never did (their flecks are
+olive by the pack's hand, or plum, or steel blue). `atlas.mjs retone` is
+HUE-TRUE now: every pixel takes the tone's hue, its saturation scaled by
+the tone's over the base's (the tone's own where the base is near grey,
+as the floors' bases are), its lightness scaled by the tone's over the
+base's — a grey wall is grey to the last fleck, a tan wall's flecks a
+lighter tan. And THE MOSS IS A THIRD SLOT: the repack tool records each
+row's palette on the atlas index (`themes[t].palette = { floor, wall,
+moss }` — the floor's base colour, the wall's brick, `brickLight`, the
+classic row included), `baseTones` reads it (the dominant-colour read
+stays the fallback for an index without one), `setTones` takes `moss`,
+the retint finds the flecks by their exact colour and paints them the
+moss tone verbatim (with no moss tone they follow the wall), and
+Options → Tones has a third chip, moss, opening the same picker
+(`?moss=`; saved per set under `options.tones[key].moss`; reset clears
+it with the rest). Gates: test-debris 75 (every row's palette as hex
+with the moss its own colour; the east–west wall's face twelve opaque
+rows under the roof, brick in the wall colour with the flecks in the
+moss colour, nothing under the foot; the mortar line under the roof
+and brick at the foot; the band's sixteen rows and nothing below),
+strip-ruin-chips, ui-smoke's TONES block grew THE MOSS (the flecks
+counted in the moss colour on the walls, the floor's signature
+untouched, the chip and the save carrying it alone, reset clearing it)
+and the door block the lift dial (d8 repainted three pixels higher, the
+board wearing the number, back at the default), selftest 46/46, ui-smoke 318 ok, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium; the gallery re-rendered.
+
+THE WALL HIGHLIGHT, THE DESIGNER'S SLATE AND THE EDGE DOOR ON ITS BAND
+(2026-09-16; designer, on the shorter-face build, the Tones row reading
+floor #5b5b62 · walls #333844 · moss #3f4555: "Vertical doors are
+misaligned again. Let's rename 'moss' to 'wall highlight' or something.
+And make it effect the highlights on the roof bricks as well. Also,
+these are the values I like the most right now. Let's make these the
+default."). THE EDGE-ON LEAF: at edge lift 8 its foot sat one row above
+the near wall's roof with a row of floor between (a stacked pair's
+leaves measured contiguous and on the same columns on the build, so that
+row was the step the designer saw); the rule is that a leaf stands where
+the wall it replaces would — the face-on leaf's foot on the wall's foot
+line (lift 3, unchanged), the edge-on leaf on exactly the rows its
+square's own band would fill: `DEFAULT_DOOR_FIT.edgeLift = WALL_DY` 7,
+rows −7…8 of its square, its head four rows up the far wall's
+twelve-row face, its foot on the row the near wall's roof begins, no
+floor between, a stacked double one strip from the far face into the
+near roof; the dial stays, 0…14. ONE MORE PIXEL (2026-09-17, the
+designer on that build: "Vertical door still misaligned. It needs to be
+moved down one more pixel"): `edgeLift = WALL_DY − 1` = 6 — rows −6…9
+of its square, the foot row under the near wall's roof (the near wall
+paints after the leaf in the tall pass and covers it), the head three
+rows up the far face; the designer's eye is the rule (ui-smoke 297 ok,
+selftest 46/46, facing-walk 108/108 on that build). THE HIGHLIGHT: the roof's lit line
+(`lit`) and the face's flecks (`brickLight`) were two colours in every
+set's swap, so the slot moved the flecks and left the roof's line in
+the wall's stone; now they are ONE colour per set (`lit === brickLight`
+in every `WALL_SWAPS` entry — the tool refuses otherwise), the slot is
+`highlight` everywhere (the index's `palette: { floor, wall, highlight
+}`, `baseTones` / `setTones`, `options.tones[key].highlight`,
+`?highlight=`, the chip "highlight", atlas.mjs `retone` matching the one
+colour on the roof's line and the face's flecks alike; a saved `moss`
+is not read). THE CRYPT'S DEFAULTS: every generated floor is the crypt
+(the vaults style's theme), so the designer's three values are its
+baked palette — `FLOOR_BASES.crypt` #5b5b62, `WALL_SWAPS.crypt` brick
+#333844, `lit` / `brickLight` #3f4555 — the rest of the crypt's swap
+(outline, mortar, dark, mid, fill, the six shades) derived from the old
+swap by the live tone rule (hue-true, brick #312220 → #333844), so the
+baked row is what they tuned on screen and reset returns to it; the
+hall, the castle and the classic set keep theirs. THE READ-BACK
+RE-PALETTE: the art packs under gitignored `phase0/assets-src/` did not
+survive a container restart, so the repack tool's read-back path (the
+committed atlas as the source when a pack is off disk) now REMAPS every
+wall and ruin tile name-for-name from the row's recorded `swap` (the
+whole swap incl. the shades, written on the index by this build;
+`LAST_SWAPS` — the 2026-09-15 values — stands in for an index without
+one) to the current `WALL_SWAPS` (`repalette`, an exact colour → colour
+map), and recolours every floor from its recorded base to the current
+`FLOOR_BASES` by the ratio rule — a palette change ships without the
+packs, and the atlas was verified by census (every row's wall tiles
+carry only named colours, the highlight ×35 with the lit row, the
+floors' tops the bases, the `swap` recorded on all four rows). Gates:
+test-debris 76 (every row's palette with the highlight its own colour,
+the east–west face's flecks AND the roof's lit row in it, the crypt's
+defaults the slate), strip-ruin-chips, ui-smoke 314 ok (the HIGHLIGHT
+block counts the colour on the roof's rows too, the floor untouched,
+the chip and the save, reset; the edge door lift dial moving d8 and
+returning), selftest 46/46, facing-walk 108/108, replay-smoke 63,
+test-camera 80, test-world 125, test-logreport 47, canvas-grid `none`
+/ `margin` 4/4 in Chromium; the gallery re-rendered.
+
+THE CRYPT EVERYWHERE (2026-09-17; designer, after the one-pixel door:
+"Actually make crypt the default look everywhere for now. Hall and
+Castle look like shit but I'm just tired of messing with the aesthetics
+for a while"). Options → Art set defaults to Crypt: `options.art`
+(renamed from `theme`, so a phone's saved 'auto' from before is
+forgotten) is 'crypt' unless changed; "The stage's own" is the explicit
+'auto' choice; `?theme=` overrides either for a shot; the replay page
+reads the same option (crypt when unset); the stages keep their
+authored `theme` in the files, the generator's floors were crypt
+already, and the hall and castle sets stay in the atlas and the picker.
+ui-smoke's themes block asserts the default (crypt over s59's hall, the
+legend with it) and 'auto' returning the stage's own; gates ui-smoke
+325 ok, selftest 46/46, replay-smoke 63, and a direct check that a
+saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
+now holds across a reload and that the replay page wears crypt on the
+sample log.
 
 ## The debris layer (2026-09-07)
 

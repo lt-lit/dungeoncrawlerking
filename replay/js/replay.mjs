@@ -135,7 +135,9 @@ const clampNum = (v, lo, hi, dflt) => {
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n * 100) / 100)) : dflt;
 };
 function themeFor(stage) {
-  const pick = params.get('theme') ?? options.theme;
+  // The game's Art set (options.art — crypt by default since 2026-09-17,
+  // THE CRYPT EVERYWHERE; 'auto' the stage's own), `?theme=` over it.
+  const pick = params.get('theme') ?? options.art ?? 'crypt';
   if (pick && pick !== 'auto') return THEMES.includes(pick) ? pick : null;
   return stage?.theme ?? null;
 }

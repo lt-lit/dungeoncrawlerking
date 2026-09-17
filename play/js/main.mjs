@@ -40,7 +40,7 @@ import { makeCatalogIni } from './variant.mjs';
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
-import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
+import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
 // THE 16×16 RENDERER (Phase 2, 2026-09-07): one native buffer scaled once to
 // the screen — the one board since the DOM board's retirement the same day
 // (CLAUDE.md § Phase 2). The atlas is its art and the debris sampler's.
@@ -289,7 +289,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -324,12 +324,21 @@ function loadOptions() {
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
     options.arrowAlpha = clampNum(options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
-    if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
+    // THE CRYPT EVERYWHERE (2026-09-17): the Art set defaults to crypt; saved under `art`, so a phone's saved `theme` ('auto', the stage's own) from before is forgotten.
+    if (!['auto', 'classic', ...THEMES].includes(options.art)) options.art = 'crypt';
     if (!PIECE_SETS.includes(options.pieces)) options.pieces = 'nulltale'; // (a saved 'classic' — the glyph set, retired with the DOM board — lands here)
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
+    // THE TONES (2026-09-12): per art set, a floor and a wall base colour, #rrggbb or nothing.
+    {
+      const clean = {};
+      if (options.tones && typeof options.tones === 'object') for (const [k, t] of Object.entries(options.tones)) { const e = {}; if (HEX6.test(t?.floor ?? '')) e.floor = t.floor.toLowerCase(); if (HEX6.test(t?.wall ?? '')) e.wall = t.wall.toLowerCase(); if (HEX6.test(t?.highlight ?? '')) e.highlight = t.highlight.toLowerCase(); if (Object.keys(e).length) clean[k] = e; }
+      options.tones = clean;
+    }
     // (A saved renderer / piece-pixel mode / % dial from the DOM era is not read.)
     options.tileLift = Math.round(clampNum(options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift));
     options.tileShift = Math.round(clampNum(options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
+    options.doorLift = Math.round(clampNum(options.doorLift, DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.doorLift));
+    options.edgeLift = Math.round(clampNum(options.edgeLift, EDGE_DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.edgeLift));
     // The debris toggles (2026-09-07): five booleans and a clamped amount.
     // v2 (same day): the slider's 100% became the old 200% (debris.mjs
     // BASELINE), so a setting saved on the old scale is halved ONCE — the
@@ -389,7 +398,7 @@ function syncOptionsUI() {
   $('btnLadderReset').disabled = !options.godLadder;
   $('optGodsDebug').checked = options.godsDebug;
   $('optScaling').value = scalingFor();
-  $('optTheme').value = options.theme;
+  $('optTheme').value = options.art;
   $('optPieces').value = options.pieces;
   $('optDoors').value = options.doors;
   const fit = pieceFitFor();
@@ -398,6 +407,11 @@ function syncOptionsUI() {
   $('optTileLiftV').textContent = pxv(fit.tileLift);
   $('optTileShift').value = String(fit.tileShift);
   $('optTileShiftV').textContent = pxv(fit.tileShift);
+  const df = doorFitFor();
+  $('optDoorLift').value = String(df.doorLift);
+  $('optDoorLiftV').textContent = pxv(df.doorLift);
+  $('optEdgeLift').value = String(df.edgeLift);
+  $('optEdgeLiftV').textContent = pxv(df.edgeLift);
   const ar = arrowStyleFor();
   $('optArrowWidth').value = String(ar.width);
   $('optArrowWidthV').textContent = `${ar.width} px`;
@@ -420,6 +434,18 @@ function pieceFitFor() {
   return {
     tileLift: Math.round(clampNum(params.get('tilelift') ?? options.tileLift, TILE_LIFT_RANGE, DEFAULT_PIECE_FIT.tileLift)),
     tileShift: Math.round(clampNum(params.get('tileshift') ?? options.tileShift, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift)),
+  };
+}
+
+/** THE DOOR LIFTS (2026-09-15, with the shorter wall face — a sixteen-row
+ *  leaf in a twenty-row wall is the designer's to place): the face-on
+ *  leaf's and the edge-on leaf's lift off their square's seam, whole
+ *  pixels (canvas-board setDoorFit): `?doorlift=` / `?edgelift=` (unsaved)
+ *  > the Options. */
+function doorFitFor() {
+  return {
+    doorLift: Math.round(clampNum(params.get('doorlift') ?? options.doorLift, DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.doorLift)),
+    edgeLift: Math.round(clampNum(params.get('edgelift') ?? options.edgeLift, EDGE_DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.edgeLift)),
   };
 }
 
@@ -597,22 +623,212 @@ function piecesFor() {
 
 /** The art theme the board wears right now (stage.mjs THEMES; the atlas's
  *  rows): `?theme=` (a feel-check override, never saved) > the Art-set
- *  option > the stage's own `theme`. 'classic' — or a stage with no theme —
- *  is the in-house drawn set (no data-theme; the atlas's classic row). */
+ *  option (`options.art` — CRYPT BY DEFAULT since 2026-09-17, the
+ *  designer: "make crypt the default look everywhere for now. Hall and
+ *  Castle look like shit but I'm just tired of messing with the
+ *  aesthetics for a while"; 'auto' is the stage's own `theme`, an
+ *  explicit choice now) > the stage's own `theme`. 'classic' — or a
+ *  stage with no theme — is the in-house drawn set (no data-theme; the
+ *  atlas's classic row). */
 function themeFor(stage) {
-  const pick = params.get('theme') ?? options.theme;
+  const pick = params.get('theme') ?? options.art;
   if (pick && pick !== 'auto') return THEMES.includes(pick) ? pick : null;
   return stage?.theme ?? null;
+}
+
+/** The theme the board wears right now, for whatever screen is up. */
+function currentTheme() {
+  return themeFor(app.phase === 'walk' && app.walk ? app.walk.world : app.session?.deal?.stage ?? currentStage());
+}
+
+// THE TONES (2026-09-12, the designer: "Can I get an in-game color
+// selector? 2 tones, for the floor and walls."): Options → Tones holds two
+// colour pickers, the floor's stone and the walls' stone of the art set the
+// board wears, recoloured live off the atlas (atlas.mjs setTones — every
+// floor, wall and ruin tile of the row by the ratio rule) and SAVED PER SET
+// (options.tones[key], key = the theme or 'classic'); the pickers open on
+// the set's own base colours (atlas baseTones), the hex beside each is the
+// number to report, reset returns the set's own. `?floor=` / `?wall=`
+// (with or without the #) override the current set for a shot, unsaved.
+const HEX6 = /^#[0-9a-f]{6}$/i;
+const toneKey = (theme) => theme ?? 'classic';
+function toneParam(name) {
+  const v = params.get(name);
+  if (!v) return null;
+  const h = v.startsWith('#') ? v : `#${v}`;
+  return HEX6.test(h) ? h.toLowerCase() : null;
+}
+/** The tones the current art set wears: the URL's, else the saved ones; null for the set's own. */
+function tonesFor(theme) {
+  const saved = options.tones?.[toneKey(theme)] ?? {};
+  const t = {};
+  const floor = toneParam('floor') ?? saved.floor, wall = toneParam('wall') ?? saved.wall, highlight = toneParam('highlight') ?? saved.highlight;
+  if (floor) t.floor = floor;
+  if (wall) t.wall = wall;
+  if (highlight) t.highlight = highlight;
+  return Object.keys(t).length ? t : null;
+}
+function applyTones(theme = currentTheme()) {
+  app.boardUI?.setTones?.(toneKey(theme), tonesFor(theme));
+  void paintLegend(theme);
+  void syncTonesUI(theme);
+}
+function setTone(which, value) {
+  if (!HEX6.test(value ?? '')) return;
+  const key = toneKey(currentTheme());
+  options.tones = { ...(options.tones ?? {}), [key]: { ...(options.tones?.[key] ?? {}), [which]: value.toLowerCase() } };
+  saveOptions();
+  // A slider drag fires many inputs a second: one apply per task, on the
+  // last value (the re-tint, the repaint and the legend ride it).
+  if (tonePicker.timer) return;
+  tonePicker.timer = setTimeout(() => { tonePicker.timer = 0; applyTones(); }, 0);
+}
+function resetTones() {
+  const key = toneKey(currentTheme());
+  if (options.tones?.[key]) { delete options.tones[key]; saveOptions(); }
+  tonePicker.hsl = null;
+  applyTones();
+}
+
+// THE TONE PICKER (2026-09-12, the designer, on the phone's native colour
+// dialog: "What the fuck are these color options? I get one usable shade
+// of brown and everything else is unusably garish… a color selector for a
+// DUNGEON not a fucking CIRCUS TENT"). Firefox for Android's
+// <input type=color> is a FIXED LIST of nine swatches, red to white, with
+// no way to enter a colour — so the picker lives in the page: the CHIPS
+// (each slot's colour and its hex — floor, walls and, since 2026-09-15,
+// THE HIGHLIGHT: the roof's lit line and the flecks in the brickwork,
+// "moss" until 2026-09-16) open it on a slot; a grid of
+// DUNGEON STONES (browns, tans, dark greys, warm and cool stone — the
+// designer's ruling), HUE / SATURATION / LIGHTNESS sliders whose tracks
+// are painted in the colours they lead to, and a HEX field. Every change
+// applies live through setTone; the picker keeps its own H/S/L while a
+// slider is dragged so the thumb is never re-rounded under the finger.
+const TONE_SWATCHES = [
+  // greys, neutral to cool
+  '#18181a', '#232326', '#2c2c2f', '#37373b', '#43434a', '#2a2d33', '#333844', '#3d4352',
+  // warm greys into browns
+  '#221e1c', '#2b2622', '#352d27', '#40342c', '#4a3629', '#563f2f', '#654a36', '#74573f',
+  // tans, umbers, olive stone
+  '#7e6446', '#8a7050', '#3b2f22', '#4d3d2a', '#5c4a30', '#2f2e25', '#3c3a2c', '#4a473a',
+];
+const tonePicker = { slot: null, hsl: null, timer: 0 };
+/** '#rrggbb' from a typed value (with or without the #), or null. */
+function normHex(v) {
+  const t = String(v ?? '').trim();
+  const h = t.startsWith('#') ? t : `#${t}`;
+  return HEX6.test(h) ? h.toLowerCase() : null;
+}
+/** [h 0–359, s 0–100, l 0–100] of '#rrggbb'. */
+function hexToHsl(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  let h = 0, sat = 0;
+  if (d > 0) {
+    sat = d / (1 - Math.abs(2 * l - 1));
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [Math.round(h) % 360, Math.round(sat * 100), Math.round(l * 100)];
+}
+/** '#rrggbb' from h 0–359, s 0–100, l 0–100. */
+function hslToHex(h, s, l) {
+  const S = s / 100, L = l / 100;
+  const c = (1 - Math.abs(2 * L - 1)) * S, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = L - c / 2;
+  const [r1, g1, b1] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const to = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+  return `#${to(r1)}${to(g1)}${to(b1)}`;
+}
+/** A chip's tap: open the picker on its slot; a second tap closes it. */
+function openTonePicker(slot) {
+  tonePicker.slot = tonePicker.slot === slot ? null : slot;
+  tonePicker.hsl = null;
+  void syncTonesUI();
+}
+/** The sliders' tracks in the colours they lead to: the hue ring at a
+ *  saturation the eye can read (a dungeon stone's own would be near grey),
+ *  saturation from grey to full at this lightness, lightness dark to light. */
+function paintToneTracks(h, s, l) {
+  const sH = Math.max(s, 45), lH = Math.min(60, Math.max(28, l)), lS = Math.max(l, 20);
+  $('toneHue').style.setProperty('--track', `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((x) => `hsl(${x} ${sH}% ${lH}%)`).join(', ')})`);
+  $('toneSat').style.setProperty('--track', `linear-gradient(to right, hsl(${h} 0% ${lS}%), hsl(${h} 100% ${lS}%))`);
+  $('toneLum').style.setProperty('--track', `linear-gradient(to right, hsl(${h} ${s}% 0%), hsl(${h} ${s}% 50%), hsl(${h} ${s}% 100%))`);
+}
+/** The picker follows the open slot's colour: sliders, labels, tracks, the
+ *  hex field (left alone while it is being typed in and still says this
+ *  colour) and the swatch ring — but a colour the picker's own sliders
+ *  produced keeps their numbers (hex → H/S/L rounds). */
+function syncTonePicker(hex) {
+  const panel = $('tone-picker');
+  if (!panel) return;
+  panel.hidden = !tonePicker.slot;
+  if (!tonePicker.slot || !hex) return;
+  const own = !!tonePicker.hsl && hslToHex(...tonePicker.hsl) === hex;
+  const [h, s, l] = own ? tonePicker.hsl : hexToHsl(hex);
+  if (!own) tonePicker.hsl = [h, s, l];
+  $('toneHue').value = String(h);
+  $('toneSat').value = String(s);
+  $('toneLum').value = String(l);
+  $('toneHueV').textContent = `${h}°`;
+  $('toneSatV').textContent = `${s}%`;
+  $('toneLumV').textContent = `${l}%`;
+  paintToneTracks(h, s, l);
+  const field = $('toneHex');
+  if (document.activeElement !== field || normHex(field.value) !== hex) field.value = hex;
+  for (const b of $('toneSwatches').children) b.setAttribute('aria-pressed', String(b.dataset.hex === hex));
+}
+/** The chips show the set's live tones, else its own base colours; reset is
+ *  live when a tone is saved; the picker follows the open slot. */
+async function syncTonesUI(theme = currentTheme()) {
+  const chips = { floor: $('toneFloor'), wall: $('toneWall'), highlight: $('toneHighlight') };
+  if (!chips.floor || !chips.wall || !chips.highlight) return;
+  const key = toneKey(theme);
+  const atlas = await loadAtlas();
+  const base = atlas.baseTones(key) ?? {};
+  const live = tonesFor(theme) ?? {};
+  const shown = {};
+  for (const k of ['floor', 'wall', 'highlight']) {
+    const v = live[k] ?? base[k] ?? '#000000';
+    shown[k] = v;
+    chips[k].dataset.hex = v;
+    chips[k].querySelector('.tone-swatch').style.background = v;
+    chips[k].setAttribute('aria-pressed', String(tonePicker.slot === k));
+    $({ floor: 'toneFloorV', wall: 'toneWallV', highlight: 'toneHighlightV' }[k]).textContent = v;
+  }
+  $('btnTonesReset').disabled = !options.tones?.[key];
+  syncTonePicker(tonePicker.slot ? shown[tonePicker.slot] : null);
+}
+/** The swatch grid, built once. */
+function buildToneSwatches() {
+  const grid = $('toneSwatches');
+  if (!grid || grid.children.length) return;
+  for (const hex of TONE_SWATCHES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.hex = hex;
+    b.title = hex;
+    b.style.background = hex;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => { if (!tonePicker.slot) return; tonePicker.hsl = null; setTone(tonePicker.slot, hex); });
+    grid.appendChild(b);
+  }
 }
 
 /** Stamp the current theme on the board and repaint the options legend
  *  (drawn off the same atlas, so it follows the art). */
 function applyTheme() {
-  const theme = themeFor(app.phase === 'walk' && app.walk ? app.walk.world : app.session?.deal?.stage ?? currentStage());
+  const theme = currentTheme();
   app.boardUI?.setTheme(theme);
   app.boardUI?.setPieces(piecesFor());
   app.boardUI?.setDoors(doorsFor());
+  app.boardUI?.setTones?.(toneKey(theme), tonesFor(theme));
+  void syncTonesUI(theme);
   app.boardUI?.setPieceFit(pieceFitFor());
+  app.boardUI?.setDoorFit?.(doorFitFor());
   app.boardUI?.setArrowStyle?.(arrowStyleFor());
   void debrisWarm(); // the debris is THIS theme's pixels (theme-keyed sampler; repaints only when it decoded something new)
   void paintLegend(theme);
@@ -632,31 +848,35 @@ async function paintLegend(theme) {
   const doors = doorsFor();
   const tile = (role) => atlas.tileOf(theme, role, { doors });
   const T = 16;
+  const wallH = () => tile('wall')?.h ?? T;
   for (const c of cells) {
     const g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
     g.clearRect(0, 0, T, T);
     const draw = (t, y = 0) => { if (t) g.drawImage(t.src, t.sx, t.sy, t.w, t.h, 0, y, t.w, t.h); };
-    // the floor under everything: the theme's common flagstone, or the classic flat colour
+    // the floor under everything: the row's first flagstone (the classic row has its own since the palette round), the flat colour beneath
     g.fillStyle = '#4a4a42';
     g.fillRect(0, 0, T, T);
-    draw(theme ? tile('floor-1') : null);
+    draw(tile('floor-1'));
     const kind = c.dataset.legend;
-    if (kind === 'wall') draw(tile('wall'));
+    // A wall is a TALL 16×20 sprite (2026-09-12; one course shorter since 2026-09-15): the swatch shows its
+    // face under the last rows of its roof.
+    const WALL_Y = T - wallH();
+    if (kind === 'wall') draw(tile('wall'), WALL_Y);
     else if (kind === 'cracked') {
-      // the wall block with the crack masked to its pixels, as the board composes it
+      // the wall with the crack masked onto its face, as the board composes it
       const wall = tile('wall'), crack = atlas.crack(1);
       const scratch = document.createElement('canvas');
       scratch.width = T;
-      scratch.height = T;
+      scratch.height = wallH();
       const sg = scratch.getContext('2d');
       sg.imageSmoothingEnabled = false;
-      if (wall) sg.drawImage(wall.src, wall.sx, wall.sy, wall.w, wall.h, 0, 0, T, T);
+      if (wall) sg.drawImage(wall.src, wall.sx, wall.sy, wall.w, wall.h, 0, 0, wall.w, wall.h);
       if (crack) {
         sg.globalCompositeOperation = 'source-atop';
-        sg.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, 0, T, T);
+        sg.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, wallH() - T, T, T);
       }
-      g.drawImage(scratch, 0, 0);
+      g.drawImage(scratch, 0, WALL_Y);
     } else if (kind === 'hole') {
       const pit = theme ? tile('hole-0') : null;
       if (pit) draw(pit);
@@ -3173,7 +3393,7 @@ $('optScaling').addEventListener('change', (e) => {
 $('btnTurnL').addEventListener('click', () => setFacing(app.view.facing - 1));
 $('btnTurnR').addEventListener('click', () => setFacing(app.view.facing + 1));
 $('optTheme').addEventListener('change', (e) => {
-  options.theme = e.target.value;
+  options.art = e.target.value;
   applyOptions();
 });
 $('optPieces').addEventListener('change', (e) => {
@@ -3184,6 +3404,31 @@ $('optDoors').addEventListener('change', (e) => {
   options.doors = e.target.value;
   applyOptions();
 });
+// THE TONES: the chips open the in-page picker on their slot; a swatch, a
+// slider (as it drags) or a typed hex sets the tone live, saved per art set.
+$('toneFloor').addEventListener('click', () => openTonePicker('floor'));
+$('toneWall').addEventListener('click', () => openTonePicker('wall'));
+$('toneHighlight').addEventListener('click', () => openTonePicker('highlight'));
+$('btnTonesReset').addEventListener('click', () => resetTones());
+for (const id of ['toneHue', 'toneSat', 'toneLum']) {
+  $(id).addEventListener('input', () => {
+    if (!tonePicker.slot) return;
+    tonePicker.hsl = [+$('toneHue').value, +$('toneSat').value, +$('toneLum').value];
+    setTone(tonePicker.slot, hslToHex(...tonePicker.hsl));
+  });
+}
+$('toneHex').addEventListener('input', (e) => {
+  const v = normHex(e.target.value);
+  if (!v || !tonePicker.slot) return;
+  tonePicker.hsl = null;
+  setTone(tonePicker.slot, v);
+});
+$('toneHex').addEventListener('change', (e) => {
+  const v = normHex(e.target.value);
+  if (v) e.target.value = v;
+  else void syncTonesUI();
+});
+buildToneSwatches();
 // The piece placement, in whole tile pixels — applied live as the dials
 // drag (input), so the designer can settle the feel on the phone and read
 // the numbers off the labels.
@@ -3193,6 +3438,16 @@ $('optTileLift').addEventListener('input', (e) => {
 });
 $('optTileShift').addEventListener('input', (e) => {
   options.tileShift = Math.round(clampNum(e.target.value, TILE_SHIFT_RANGE, DEFAULT_PIECE_FIT.tileShift));
+  applyOptions();
+});
+// THE DOOR LIFTS (2026-09-15): the face-on and the edge-on leaf, whole
+// pixels off their square's seam, live.
+$('optDoorLift').addEventListener('input', (e) => {
+  options.doorLift = Math.round(clampNum(e.target.value, DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.doorLift));
+  applyOptions();
+});
+$('optEdgeLift').addEventListener('input', (e) => {
+  options.edgeLift = Math.round(clampNum(e.target.value, EDGE_DOOR_LIFT_RANGE, DEFAULT_DOOR_FIT.edgeLift));
   applyOptions();
 });
 // The arrow dials (2026-09-07): the shaft in floor pixels and the opacity,
@@ -4582,6 +4837,20 @@ window.__DCK = {
   get app() {
     return app;
   },
+  // THE TONES (2026-09-12): the current art set's floor / wall tones, and the picker.
+  tones: {
+    get: () => tonesFor(currentTheme()),
+    set: (t) => { const key = toneKey(currentTheme()); options.tones = { ...(options.tones ?? {}), [key]: { ...(t ?? {}) } }; saveOptions(); tonePicker.hsl = null; applyTones(); },
+    reset: () => resetTones(),
+    key: () => toneKey(currentTheme()),
+    base: async () => (await loadAtlas()).baseTones(toneKey(currentTheme())),
+    open: (slot) => openTonePicker(slot),
+    picker: () => ({ slot: tonePicker.slot, hsl: tonePicker.hsl ? [...tonePicker.hsl] : null, hidden: $('tone-picker')?.hidden ?? true }),
+    swatches: TONE_SWATCHES,
+    hsl: { toHex: hslToHex, fromHex: hexToHsl },
+  },
+  // THE DOOR LIFTS (2026-09-15): the leaves' lifts as the board wears them.
+  doorFit: () => doorFitFor(),
   get record() {
     return app.duel?.record ?? null;
   },

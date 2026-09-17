@@ -8,7 +8,18 @@
 // The drawings are unchanged: every sprite is crisp-edged <rect>s on the
 // 16×16 grid, painted here in order — the same pixels a browser rasterised.
 //
-// Palette + drawings are the gen-sprites.mjs originals, verbatim.
+// Palette + drawings are the gen-sprites.mjs originals, verbatim — plus,
+// since 2026-09-11, THE EDGE-ON DOOR (designer: "can we finally get a
+// proper vertical door asset? The placeholder looks like ass"; then, on two
+// cuts and a sheet of alternatives, their own drawing — "Use this one"):
+// the leaf a door shows when its wall line runs up the screen is THE
+// DESIGNER'S SPRITE, `inhouse/door-profile.png`, a 5×16 side-view door in
+// pixel-poem's face-on leaf's exact colours (so the repack tool's per-theme
+// hue recolour lands on the castle's walnut and the crypt's dark oak byte
+// for byte), placed in the wall band's middle; the classic set wears the
+// same sprite in its own wood and iron.
+import { readFileSync } from 'node:fs';
+import { decodePng, blank } from './png.mjs';
 const T = 16;
 
 // Palette (shared so the set reads as one hand).
@@ -135,6 +146,48 @@ const SPRITES = {
   ),
 };
 
+// THE EDGE-ON LEAF every pack theme wears (2026-09-11): the designer's
+// own sprite, `inhouse/door-profile.png` — a 5×16 side-view door, one
+// tile tall: the lit body (pixel-poem's lintel timber) crossed by board
+// rows in the plank timber, an outline down its left and along its foot,
+// the hinges' two irons down the leftmost column — placed at column
+// EDGE_LEAF_X of a 16×16 tile so it stands in the middle of the wall
+// band (columns 2–13), which the canvas board paints under it. The repack
+// tool recolours it per theme as it does the face-on leaf, scaled against
+// the PLANK timber as the dominant wood (the lit body dominates this
+// sprite, so the tool is told the base — else the castle's and the
+// crypt's leaves would drift from their face-on doors).
+const EDGE_LEAF_X = 5;
+export { EDGE_LEAF_X };
+const EDGE_LEAF_FILE = new URL('./inhouse/door-profile.png', import.meta.url);
+/** The classic set's colours for the sprite's pixel-poem ones. */
+const CLASSIC_LEAF = { '#25131a': P.ink, '#895a45': P.woodLo, '#bf704d': P.wood, '#adc1cf': P.iron, '#90919e': P.ironLo };
+
+/** The designer's profile door placed in a 16×16 tile — a door is a door
+ *  seen edge-on: the same sixteen rows as the face-on leaf, standing at
+ *  its own square's depth at the same lift (2026-09-12, the designer on a
+ *  27-row leaf reaching the far wall's face top: "they look like they
+ *  connect all the way at the top of the wall, unlike the forward facing
+ *  doors"). `map` (a colour → colour table, #rrggbb) recolours it for the
+ *  classic set. */
+function profileDoor(map = null) {
+  const src = decodePng(readFileSync(EDGE_LEAF_FILE));
+  if (src.width + EDGE_LEAF_X > T || src.height !== T) throw new Error(`inhouse: door-profile.png is ${src.width}×${src.height}; expected ≤ ${T - EDGE_LEAF_X}×${T}`);
+  const tile = blank(T, T);
+  for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) {
+    const i = (y * src.width + x) * 4, o = (y * T + x + EDGE_LEAF_X) * 4;
+    if (!src.data[i + 3]) continue;
+    let rgb = [src.data[i], src.data[i + 1], src.data[i + 2]];
+    if (map) {
+      const key = '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+      const to = map[key];
+      if (to) rgb = [parseInt(to.slice(1, 3), 16), parseInt(to.slice(3, 5), 16), parseInt(to.slice(5, 7), 16)];
+    }
+    tile.data[o] = rgb[0]; tile.data[o + 1] = rgb[1]; tile.data[o + 2] = rgb[2]; tile.data[o + 3] = src.data[i + 3];
+  }
+  return tile;
+}
+
 /** Paint an SVG of axis-aligned <rect>s (integer x / y / width / height,
  *  an opaque #rrggbb fill) into a 16×16 RGBA buffer, in document order. */
 export function rasterize(svgText) {
@@ -155,13 +208,22 @@ export function rasterize(svgText) {
   return { width: T, height: T, data };
 }
 
+/** The edge-on LEAF the pack themes wear: the designer's profile door in
+ *  pixel-poem's timber, placed in the band; the repack tool recolours it
+ *  per theme as it does the face-on leaf, against the plank timber. */
+export function edgeLeafTile() {
+  return profileDoor();
+}
+
 /** Every in-house tile by ATLAS ROLE: the classic row's wall / crate / door
- *  / barrel / chest / rubble and crack-1…4 (the same crack every theme wears). */
+ *  / barrel / chest / rubble, the designer's profile door in the set's own
+ *  colours (door-edge) and crack-1…4 (the same crack every theme wears). */
 export function inhouseTiles() {
   const out = {};
   for (const [name, s] of Object.entries(SPRITES)) {
     const role = name === 'tile-wall' ? 'wall' : name.startsWith('tile-crack-') ? `crack-${name.slice('tile-crack-'.length)}` : name;
     out[role] = rasterize(s);
   }
+  out['door-edge'] = profileDoor(CLASSIC_LEAF);
   return out;
 }

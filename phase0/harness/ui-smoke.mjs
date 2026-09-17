@@ -35,7 +35,7 @@ const STAGE = arg('stage', 's59-hall-corner');
 const PLIES = parseInt(arg('plies', '60'), 10);
 const SEED = arg('seed', '3');
 const SHOTS = argv.includes('--shots');
-const THEME = arg('theme', null); // ?theme= override for the run (default: the stage's own)
+const THEME = arg('theme', null); // ?theme= override for the run (default: the Art set's default, crypt — THE CRYPT EVERYWHERE, 2026-09-17)
 const GO = arg('go', 'depth 8 movetime 120');
 
 const server = http.createServer((req, res) => {
@@ -165,20 +165,22 @@ const themeState = () =>
       sig: (() => { const S = window.__smoke; const cells = S.cells(); const wall = Object.keys(cells).find((sq) => cells[sq].includes('wall')); const floor = Object.keys(cells).find((sq) => !cells[sq].some((c) => ['wall', 'hole', 'furniture'].includes(c))); const fen = window.__DCK.app.duel.fen(); const kingSq = (fen.match(/K/) && (() => { const grid = fen.split(' ')[0].split('/'); for (let r = 0; r < grid.length; r++) { let f = 0; for (const ch of grid[r].replace(/\d+/g, (d) => '.'.repeat(+d))) { if (ch === 'K') return String.fromCharCode(97 + f) + (grid.length - r); f++; } } return null; })()); window.__DCK.renderer.paintNow(); return { wall: wall ? S.sig(wall) : null, floor: floor ? S.sig(floor) : null, king: kingSq ? S.sig(kingSq) : null }; })(),
     };
   });
-const stageTheme = THEME ?? (await page.evaluate(() => window.__DCK.app.session.deal.stage.theme));
+const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage.theme);
+const DEFAULT_ART = 'crypt'; // THE CRYPT EVERYWHERE (2026-09-17): the Art set's default, whatever the stage says
+const wornTheme = THEME ?? DEFAULT_ART;
 const themeSigs = {}; // per theme, the signatures
 const legendSigs = {}; // per theme, the legend's five tiles
 {
   const t = await themeState();
-  expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend.length === 5 && t.legend.every((h) => h !== 0), `board wears the stage's theme "${stageTheme}" (${t.theme}/${t.attr}) and the legend's 5 tiles are painted`);
-  themeSigs[stageTheme] = t.sig;
-  legendSigs[stageTheme] = t.legend.join(',');
+  expect(!!stageTheme && t.theme === wornTheme && t.attr === wornTheme && t.legend.length === 5 && t.legend.every((h) => h !== 0), `board wears the default art set "${wornTheme}" over the stage's own "${stageTheme}" (${t.theme}/${t.attr}) and the legend's 5 tiles are painted`);
+  themeSigs[wornTheme] = t.sig;
+  legendSigs[wornTheme] = t.legend.join(',');
   expect(t.sig.floor !== null && t.sig.wall !== undefined, `the canvas board paints the stage (floor sig ${t.sig.floor}, wall sig ${t.sig.wall}, king sig ${t.sig.king})`);
   expect(t.masksBad.n > 0 && t.masksBad.bad.length === 0, `wall autotile masks match the standing-neighbour rule on all ${t.masksBad.n} walls${t.masksBad.bad.length ? ` — ${t.masksBad.bad.join(' ')}` : ''}`);
 }
 const setTheme = (name) =>
   page.evaluate((n) => {
-    window.__DCK.options.theme = n;
+    window.__DCK.options.art = n;
     window.__DCK.applyOptions();
   }, name);
 for (const name of THEME ? [] : ['hall', 'castle', 'crypt']) {
@@ -201,12 +203,92 @@ if (!THEME) {
   await shot('00-theme-classic');
 }
 await setTheme('auto');
-expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
+expect((await themeState()).theme === stageTheme && stageTheme !== wornTheme, `Art set "auto" returns to the stage's own theme (${stageTheme}, over the default ${wornTheme})`);
 // Doors: the option overrides the theme's door; auto returns it.
 await page.evaluate(() => { window.__DCK.options.doors = 'castle'; window.__DCK.applyOptions(); });
 expect((await page.evaluate(() => window.__DCK.doors)) === 'castle', 'Doors option stamps the door set');
 await page.evaluate(() => { window.__DCK.options.doors = 'auto'; window.__DCK.applyOptions(); });
 expect((await page.evaluate(() => window.__DCK.doors)) === null, 'Doors "auto" is the theme\'s own');
+// THE TONES (2026-09-12): the floor and wall base colours per art set —
+// live, the legend following, saved per set, reset restoring the set's own.
+// The hint arrows are OFF for these three signatures: the option change just
+// above kicked a STREAMING probe whose arrows land over the floor square at
+// every depth for its movetime, and a moving arrow is not a tone (the first
+// run of this block measured "before" and "after reset" under two different
+// depths' arrows). Hints return after the block, so the probe checks below
+// get a fresh stream.
+{
+  await page.evaluate(() => { window.__DCK.options.hints = false; window.__DCK.applyOptions(); });
+  const before = await themeState();
+  const base = await page.evaluate(() => window.__DCK.tones.base());
+  expect(!!base?.floor && !!base?.wall && !!base?.highlight && /^#[0-9a-f]{6}$/.test(base.floor) && /^#[0-9a-f]{6}$/.test(base.wall) && /^#[0-9a-f]{6}$/.test(base.highlight), `the art set's own base colours read off the atlas's recorded palette (floor ${base?.floor}, wall ${base?.wall}, highlight ${base?.highlight})`);
+  await page.evaluate(() => window.__DCK.tones.set({ floor: '#804020', wall: '#206080' }));
+  await page.waitForTimeout(200);
+  const toned = await themeState();
+  expect(toned.sig.floor !== before.sig.floor && toned.sig.wall !== before.sig.wall, `Tones recolour the floor and the walls live (floor ${before.sig.floor} → ${toned.sig.floor}, wall ${before.sig.wall} → ${toned.sig.wall})`);
+  expect(toned.legend.join() !== before.legend.join(), 'the options legend follows the tones');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones);
+  const key = await page.evaluate(() => window.__DCK.tones.key());
+  expect(saved?.[key]?.floor === '#804020' && saved?.[key]?.wall === '#206080', `the tones are saved for the set "${key}"`);
+  const ui = await page.evaluate(() => ({ floor: document.getElementById('toneFloor').dataset.hex, wall: document.getElementById('toneWall').dataset.hex, label: document.getElementById('toneFloorV').textContent, swatch: document.querySelector('#toneFloor .tone-swatch').style.background, reset: document.getElementById('btnTonesReset').disabled, hidden: document.getElementById('tone-picker').hidden }));
+  expect(ui.floor === '#804020' && ui.wall === '#206080' && ui.label === '#804020' && /128, 64, 32/.test(ui.swatch) && ui.reset === false && ui.hidden, `the chips show the live tones with the hex beside them (${ui.floor} / ${ui.wall}), the picker closed`);
+  // THE TONE PICKER (the phone's native colour dialog was nine swatches, red
+  // to white): the floor chip opens it in the page — the sliders read the
+  // tone's H/S/L, a swatch sets the tone, a slider drag moves it and keeps
+  // its own number, the hex field takes a number with or without the #.
+  // Real taps, so the Options panel is opened for the block and closed after.
+  await page.evaluate(() => document.getElementById('btnOptions').click());
+  await page.click('#toneFloor');
+  const pk = await page.evaluate(() => ({ ...window.__DCK.tones.picker(), pressed: document.getElementById('toneFloor').getAttribute('aria-pressed'), hue: +document.getElementById('toneHue').value, sat: +document.getElementById('toneSat').value, lum: +document.getElementById('toneLum').value, hex: document.getElementById('toneHex').value, swatches: document.querySelectorAll('#toneSwatches button').length, track: document.getElementById('toneHue').style.getPropertyValue('--track').includes('linear-gradient') }));
+  expect(pk.slot === 'floor' && !pk.hidden && pk.pressed === 'true' && pk.hue === 20 && pk.sat === 60 && pk.lum === 31 && pk.hex === '#804020' && pk.swatches >= 16 && pk.track, `the floor chip opens the in-page picker on #804020: hue ${pk.hue}° sat ${pk.sat}% lum ${pk.lum}%, ${pk.swatches} dungeon stones, painted tracks`);
+  const sw = await page.evaluate(() => document.querySelector('#toneSwatches button:nth-child(13)').dataset.hex);
+  await page.click('#toneSwatches button:nth-child(13)');
+  await page.waitForTimeout(200);
+  const afterSw = await page.evaluate(() => ({ live: window.__DCK.tones.get()?.floor, chip: document.getElementById('toneFloorV').textContent, ring: document.querySelector('#toneSwatches button[aria-pressed="true"]')?.dataset.hex, hex: document.getElementById('toneHex').value }));
+  expect(afterSw.live === sw && afterSw.chip === sw && afterSw.ring === sw && afterSw.hex === sw, `a swatch sets the floor tone (${sw}); the chip, the ring and the hex follow`);
+  const swSig = (await themeState()).sig.floor;
+  await page.evaluate(() => { const r = document.getElementById('toneLum'); r.value = String(Math.min(100, +r.value + 20)); r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(200);
+  const afterSl = await page.evaluate(() => ({ live: window.__DCK.tones.get()?.floor, lum: +document.getElementById('toneLum').value, hsl: window.__DCK.tones.picker().hsl, hex: document.getElementById('toneHex').value }));
+  const slSig = (await themeState()).sig.floor;
+  expect(afterSl.live !== sw && afterSl.hsl?.[2] === afterSl.lum && afterSl.hex === afterSl.live && slSig !== swSig, `the lightness slider moves the tone (${sw} → ${afterSl.live} at ${afterSl.lum}%), the floor repaints, the slider keeps its own number`);
+  await page.fill('#toneHex', '5a4634');
+  await page.waitForTimeout(200);
+  const afterHex = await page.evaluate(() => ({ live: window.__DCK.tones.get()?.floor, chip: document.getElementById('toneFloorV').textContent, hue: +document.getElementById('toneHue').value, sat: +document.getElementById('toneSat').value, lum: +document.getElementById('toneLum').value }));
+  expect(afterHex.live === '#5a4634' && afterHex.chip === '#5a4634' && afterHex.hue === 28 && afterHex.sat === 27 && afterHex.lum === 28, `the hex field takes a number without the # (${afterHex.live}); the sliders follow (${afterHex.hue}° ${afterHex.sat}% ${afterHex.lum}%)`);
+  await page.evaluate(() => window.__DCK.tones.reset());
+  await page.waitForTimeout(200);
+  const back = await themeState();
+  expect(back.sig.floor === before.sig.floor && back.sig.wall === before.sig.wall, `reset restores the set's own colours (floor ${before.sig.floor} → ${back.sig.floor}, wall ${before.sig.wall} → ${back.sig.wall})`);
+  const ui2 = await page.evaluate(() => ({ floor: document.getElementById('toneFloor').dataset.hex, hex: document.getElementById('toneHex').value, reset: document.getElementById('btnTonesReset').disabled }));
+  expect(ui2.floor === base.floor && ui2.hex === base.floor && ui2.reset === true, `the chips and the open picker return to the base colours (${ui2.floor}) and reset goes quiet`);
+  await page.click('#toneFloor');
+  const closed = await page.evaluate(() => ({ hidden: document.getElementById('tone-picker').hidden, pressed: document.getElementById('toneFloor').getAttribute('aria-pressed') }));
+  expect(closed.hidden && closed.pressed === 'false', 'a second tap on the chip closes the picker');
+  // THE WALL HIGHLIGHT (2026-09-15, the designer: "a color selector for the
+  // green 'moss' highlights in the brick work of the walls"; 2026-09-16:
+  // "rename 'moss' to 'wall highlight'… make it effect the highlights on
+  // the roof bricks as well"): the third slot — the roof's lit line and the
+  // flecks in the brickwork take the highlight colour exactly, the floor is
+  // untouched by it, the chip and the save carry it, reset clears it. (The
+  // flecks turned green under the first cut's per-channel ratio rule
+  // whenever the wall tone's hue differed from the base's; the rule is
+  // hue-true now, so with no highlight tone they follow the wall.)
+  await page.evaluate(() => window.__DCK.tones.set({ highlight: '#4a6a3a' }));
+  await page.waitForTimeout(200);
+  const hlCount = () => page.evaluate(() => { const K = window.__DCK; const cells = window.__smoke.cells(); K.renderer.paintNow(); let n = 0, roof = 0; for (const sq of Object.keys(cells)) { if (!cells[sq].includes('wall')) continue; const px = K.renderer.square(sq); if (!px) continue; for (let i = 0; i < px.length; i += 4) if (px[i] === 0x4a && px[i + 1] === 0x6a && px[i + 2] === 0x3a && px[i + 3] === 255) { n++; if (i / 4 < 16 * 4) roof++; } } return { n, roof }; });
+  const lit = await themeState();
+  const hl = await hlCount();
+  const hlUi = await page.evaluate(() => ({ chip: document.getElementById('toneHighlightV').textContent, saved: JSON.parse(localStorage.getItem('dck.options.v1') ?? '{}').tones?.[window.__DCK.tones.key()]?.highlight, live: window.__DCK.tones.get() }));
+  expect(hl.n > 0 && hl.roof > 0 && lit.sig.floor === before.sig.floor && lit.sig.wall !== before.sig.wall, `the highlight tone paints the brickwork's flecks and the roof's lit line in its colour (${hl.n} pixels on the walls, ${hl.roof} of them in a square's top four rows), the walls repaint, the floor is untouched`);
+  expect(hlUi.chip === '#4a6a3a' && hlUi.saved === '#4a6a3a' && !hlUi.live?.wall && !hlUi.live?.floor, `the highlight chip shows the tone, the save carries it alone (${JSON.stringify(hlUi.live)})`);
+  await page.evaluate(() => window.__DCK.tones.reset());
+  await page.waitForTimeout(200);
+  const unlit = await themeState();
+  expect((await hlCount()).n === 0 && unlit.sig.wall === before.sig.wall, 'reset clears the highlight and the walls return to the set\'s own');
+  await page.evaluate(() => document.getElementById('btnOptionsClose').click());
+  await page.evaluate(() => { window.__DCK.options.hints = true; window.__DCK.applyOptions(); });
+}
 // Piece sprites: the default set paints the king; an unknown set (the
 // retired 'classic' glyphs, say) falls back to it.
 {
@@ -246,6 +328,11 @@ if (STAGE === 's59-hall-corner') {
   expect(door.d8?.includes('furniture') && door.d8?.includes('skin-door') && door.d8?.includes('door-edge') && !door.d8?.includes('weak') && door.d8?.some((c) => c.startsWith('wm-')), `d8, the door in the north–south line, stands edge-on with its wall case, not a weak spot (${door.d8})`);
   const edge = await page.evaluate(() => { const S = window.__smoke; return { d8: S.sig('d8'), g5: S.sig('g5'), wallInk: (() => { const px = window.__DCK.renderer.square('d8'); let n = 0; for (let i = 3; i < px.length; i += 4) if (px[i]) n++; return n; })() }; });
   expect(edge.d8 !== edge.g5 && edge.wallInk === 256, `the edge-on door paints its own tile, fully opaque (sig ${edge.d8} vs the leaf's ${edge.g5}, ${edge.wallInk}/256 px)`);
+  // THE DOOR LIFTS (2026-09-15, with the shorter wall face): the edge-on
+  // leaf's lift is a live dial — three pixels higher repaints d8, the
+  // board wears the number, back at the default the paint returns.
+  const lifts = await page.evaluate(() => { const K = window.__DCK; const S = window.__smoke; const sig = () => { K.renderer.paintNow(); return S.sig('d8'); }; const d0 = K.doorFit(); const s0 = sig(); K.options.edgeLift = d0.edgeLift + 3; K.applyOptions(); const s1 = sig(); const fit = { ...K.app.boardUI.doorFit }; K.options.edgeLift = d0.edgeLift; K.applyOptions(); const s2 = sig(); return { d0, s0, s1, s2, fit }; });
+  expect(lifts.s1 !== lifts.s0 && lifts.s2 === lifts.s0 && lifts.fit.edgeLift === lifts.d0.edgeLift + 3, `the edge door lift dial moves the leaf (d8 sig ${lifts.s0} → ${lifts.s1} at ${lifts.d0.edgeLift + 3}, back at the default ${lifts.d0.edgeLift}; the board wears ${JSON.stringify(lifts.fit)})`);
 }
 
 // --- masonry (2026-09-04): an authored 'R' is a WEAK SPOT — the wall block
@@ -781,7 +868,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     // every painted square wears a 16×16 debris buffer in the canvas with painted pixels
     const urlsOk = painted.every((sq) => K.debris.cell(sq).pixels > 0);
     const paintedOnFloor = painted.every((sq) => { const cl = K.marks.cell(sq); return !cl.includes('wall') && !cl.includes('hole') && !cl.includes('furniture'); });
-    const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square));
+    // A breached square wears the wall's own stone — unless the gods crumbled
+    // the bare floor the breach left into a PIT since (debris paints on
+    // floor only; seen on a run whose one breach, f9, collapsed two quakes
+    // later), so a square that is a hole now is not counted.
+    const breachSquares = d.record.quakes.flatMap((q) => (q.terrain ?? []).filter((t) => t.kind === 'breach').map((t) => t.square)).filter((sq) => !K.marks.cell(sq)?.includes('hole'));
     const breachPainted = breachSquares.filter((sq) => !!K.debris.cell(sq)?.painted);
     // One canvas is the board: no piece elements, no overlay layers.
     const layerOrder = { canvases: document.querySelectorAll('#board canvas').length, piece: document.querySelectorAll('#board .piece').length, overlays: document.querySelectorAll('#board svg, #board .fx-layer').length };

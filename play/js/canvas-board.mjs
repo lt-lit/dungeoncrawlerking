@@ -37,17 +37,27 @@
 //               top row's tall pieces — repainted from scratch on every
 //               change in painter's order: floor (+ the dark square's
 //               shade), the cell's DEBRIS (debris.mjs paintCell's 16×16
-//               buffer, put straight in — no PNG, no <img>), terrain by
-//               kind (board-ui classifyCell — the one terrain rule, run
-//               lazily per world cell, shared with the replay analyzer),
-//               the marks under the pieces, then row by row from the far
-//               row to the near one the TALL things — furniture props
-//               (16×32) and pieces (their sprite at its native size,
-//               lifted and shifted by whole tile pixels) — so a nearer head
-//               paints over the piece behind it, the dim over the world
-//               outside the crop, then the marks over the pieces, the
-//               crop's edge coordinates in a 3×5 pixel font, the debris
-//               FLIGHT's pixels (particles.mjs, through drawFlight). A
+//               buffer, put straight in — no PNG, no <img>), the flat
+//               terrain by kind (board-ui classifyCell — the one terrain
+//               rule, run lazily per world cell, shared with the replay
+//               analyzer: the pits), the marks under the pieces, then row
+//               by row from the far row to the near one the TALL things —
+//               THE WALLS (2026-09-12: a wall, a cracked wall, a weak spot
+//               or a ruin's stub is a 16×20 sprite (16×24 until 2026-09-15) standing at its square's
+//               y − WALL_DY (7; 11 until the shorter face), the roof's far half over the square north, the
+//               face on the square with three pixels of floor under it —
+//               board-ui WALL_LIFT / WALL_RAISE), furniture props (16×32),
+//               the door leaves (a face-on leaf lifted DOOR_LIFT, the
+//               edge-on leaf EDGE_DOOR_LIFT — from the far wall's face to
+//               one row under the near wall's roof; both dials since
+//               2026-09-15) and pieces (their sprite at its native
+//               size, lifted and shifted by whole tile pixels) — so a
+//               nearer head paints over the piece behind it and a wall's
+//               roof over the feet of the piece north of it, the dim over
+//               the world outside the crop, then the marks over the
+//               pieces, the crop's edge coordinates in a 3×5 pixel font,
+//               the debris FLIGHT's pixels (particles.mjs, through
+//               drawFlight). A
 //               piece in mid-slide paints in the tall pass by where its
 //               feet are that frame (it painted last, over everything,
 //               until 2026-09-10). Nothing in it has a fractional
@@ -99,10 +109,16 @@
 //               hashes and the checker key on the WORLD CELL (so a crop or
 //               a turn never reshuffles the floor; `hashCoords` overrides
 //               them — the facing-walk gate's inverse map); a DOOR whose
-//               wall line runs up the screen stands EDGE-ON (a generated
-//               placeholder: the wall's band with the leaf as a thin slab
-//               and a post above and below — brief §11 — until per-theme
-//               art exists) and a double door's halves are dealt on the
+//               wall line runs up the screen stands EDGE-ON (the door set's
+//               edge-on LEAF — the designer's own 5×16 profile door,
+//               lib/inhouse/door-profile.png — standing in the GAP it is:
+//               the walls above and below end with their own autotile end
+//               cases, the brick face on a south end (#wallMask treats a
+//               door or an opened doorway whose line runs up the screen as
+//               not solid), floor either side, the leaf drawn in the tall
+//               pass as furniture; 2026-09-11, brief §11; a generated slab
+//               stood in from the camera milestone until then, then a
+//               generated cap) and a double door's halves are dealt on the
 //               screen. FIT: 'width' (the phone — k from the container's
 //               width, the canvas as tall as the crop) or 'box' (the camera
 //               owns the screen: the container's device box is the canvas,
@@ -117,7 +133,7 @@
 // mode here: the art's own scale, lift and shift in whole tile pixels).
 // The atlas is play/js/atlas.mjs.
 import { WALL } from './fen.mjs';
-import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE } from './board-ui.mjs';
+import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_RAISE, WALL_SPRITE_H, WALL_DY, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, wallFaceCols } from './board-ui.mjs';
 import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
@@ -979,6 +995,30 @@ export class CanvasBoard {
   get doors() {
     return this.container.dataset.doors ?? null;
   }
+  /** THE TONES (2026-09-12): a row's floor and wall base colours
+   *  ({ floor?, wall? } #rrggbb, or null for the row's own), recoloured
+   *  live in the atlas (atlas.mjs setTones); the cracked-wall composites
+   *  are rebuilt on the next paint. Waits for the atlas. */
+  setTones(key, tones) {
+    void this.ready.then((atlas) => {
+      atlas.setTones(key, tones);
+      this.composites.clear();
+      this.invalidate();
+    });
+  }
+  /** THE DOOR LIFTS (2026-09-15, with the shorter face): the face-on
+   *  leaf's and the edge-on leaf's lift off their square's seam, in whole
+   *  pixels (board-ui DEFAULT_DOOR_FIT; Options → Look dials them). */
+  setDoorFit({ doorLift, edgeLift } = {}) {
+    this.doorLiftSet = {
+      doorLift: Number.isFinite(Number(doorLift)) ? clampInt(doorLift, DOOR_LIFT_RANGE) : DEFAULT_DOOR_FIT.doorLift,
+      edgeLift: Number.isFinite(Number(edgeLift)) ? clampInt(edgeLift, EDGE_DOOR_LIFT_RANGE) : DEFAULT_DOOR_FIT.edgeLift,
+    };
+    this.invalidate();
+  }
+  get doorFit() {
+    return this.doorLiftSet ?? DEFAULT_DOOR_FIT;
+  }
   /** The tile grid is the only mode here: `tileLift` / `tileShift` apply
    *  (whole tile pixels, clamped); the % dials and modes are ignored. */
   setPieceFit({ tileLift, tileShift } = {}) {
@@ -1040,12 +1080,13 @@ export class CanvasBoard {
   decorOf(sq) {
     const c = this.cells.get(sq);
     if (!c || !c.cell) return null;
-    return this.#decorOfCell(this.#kindAt(c.cell.f, c.cell.r), this.#hc(c.cell, sq));
+    const k = this.#kindAt(c.cell.f, c.cell.r);
+    return this.#decorOfCell(k, this.#hc(c.cell, sq), k ? this.#wallMask(c.cell, k) : 0);
   }
 
-  #decorOfCell(k, [hf, hr]) {
+  #decorOfCell(k, [hf, hr], mask) {
     if (!k) return null;
-    return decorFor({ wallTile: k.wallTile, cracked: k.cracked, mask: rotMask8(k.mask, this.facing), f: hf, rank: hr, earned: k.doorway ? 'doorway' : null });
+    return decorFor({ wallTile: k.wallTile, cracked: k.cracked, mask, f: hf, rank: hr, earned: k.doorway ? 'doorway' : null });
   }
 
   setInteractive(enabled) {
@@ -1330,13 +1371,18 @@ export class CanvasBoard {
     return this.atlas?.tileOf(this.theme, role, { doors: this.doors }) ?? null;
   }
 
-  /** The wall case a square's stone wears (classic: the one block). */
+  /** The wall case a square's stone wears: the TALL 16×WALL_SPRITE_H sprite (the
+   *  classic set has every case in its own palette since 2026-09-12). */
   #wallTile(mask) {
-    return this.#tile(this.theme ? `wall-${mask}` : 'wall');
+    return this.#tile(`wall-${mask}`);
   }
 
-  /** A cracked wall: the wall case with the crack drawing masked to the
-   *  wall's own pixels (style.css masks the crack with the wall tile). Cached. */
+  /** A cracked wall: the tall wall case with the crack drawing masked onto
+   *  the surface the square SHOWS — the crack's 16×16 laid over the
+   *  sprite's face rows in the columns that carry a face (board-ui
+   *  wallFaceCols) and over its roof rows in the columns where the roof
+   *  runs on (a band mid-run has no face, and the crack is the tell that
+   *  the wall is weakened, so it goes on the top there). Cached. */
   #crackedTile(mask, ck) {
     const key = `crack|${this.theme ?? ''}|${mask}|${ck}`;
     let c = this.composites.get(key);
@@ -1346,16 +1392,24 @@ export class CanvasBoard {
     if (!wall) return null;
     const cv = document.createElement('canvas');
     cv.width = T;
-    cv.height = T;
+    cv.height = WALL_SPRITE_H;
     const g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
-    g.drawImage(wall.src, wall.sx, wall.sy, T, T, 0, 0, T, T);
+    g.drawImage(wall.src, wall.sx, wall.sy, T, WALL_SPRITE_H, 0, 0, T, WALL_SPRITE_H);
     if (crack) {
-      g.globalCompositeOperation = 'source-atop';
-      g.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, 0, T, T);
-      g.globalCompositeOperation = 'source-over';
+      const faced = wallFaceCols(mask);
+      for (const onFace of [true, false]) {
+        const dy = onFace ? WALL_SPRITE_H - T : 0;
+        g.save();
+        g.beginPath();
+        faced.forEach((on, x) => { if (on === onFace) g.rect(x, dy, 1, T); });
+        g.clip();
+        g.globalCompositeOperation = 'source-atop';
+        g.drawImage(crack.src, crack.sx, crack.sy, crack.w, crack.h, 0, dy, T, T);
+        g.restore();
+      }
     }
-    c = { src: cv, sx: 0, sy: 0, w: T, h: T };
+    c = { src: cv, sx: 0, sy: 0, w: T, h: WALL_SPRITE_H };
     this.composites.set(key, c);
     return c;
   }
@@ -1380,19 +1434,32 @@ export class CanvasBoard {
   }
 
   /** The furniture sprite a cell shows: the door leaf / its half of a
-   *  double ON THE SCREEN (the camera deals the halves), a prop (crate /
+   *  double ON THE SCREEN (the camera deals the halves), the EDGE-ON leaf
+   *  when the door's wall line runs up the screen (the designer's profile
+   *  door, standing in the gap between the walls' own end cases), a prop (crate /
    *  chest / barrel / wreckage, by the cell's variant), or the crate for
-   *  an unskinned '^'. { tile, prop } — a prop is 16×32. An edge-on door
-   *  has no sprite here: it is flat terrain (#edgeDoorTile). */
+   *  an unskinned '^'. { tile, prop } — a prop is 16×32. */
+  /** A furniture square's sprite and where it stands: `dy` its buffer
+   *  offset from the square's top, `h` its height — a prop box (16×32)
+   *  rises into the square north; a face-on door LEAF stands
+   *  `doorFit.doorLift` off its own square's seam (DOOR_LIFT by default:
+   *  its foot on the wall's foot line, no roof over it); the EDGE-ON leaf
+   *  stands `doorFit.edgeLift` off it — by default one row under the near
+   *  wall's roof (board-ui WALL_DY − 1: its head three rows up the far
+   *  wall's face, its foot row covered by the near wall painted after it —
+   *  DEFAULT_DOOR_FIT's note); both lifts are dials since 2026-09-15
+   *  (`setDoorFit`). */
   #furnitureSprite(k, [hf, hr]) {
     if (k.skin === 'door') {
+      if (this.#edgeOn(k)) return { tile: this.#tile('door-edge'), dy: -this.doorFit.edgeLift, h: T };
       const half = doorHalf(k.door2, this.facing);
-      return { tile: this.#tile(half ? `door2-${half}` : 'door'), prop: false };
+      return { tile: this.#tile(half ? `door2-${half}` : 'door'), dy: -this.doorFit.doorLift, h: T };
     }
     const role = k.skin && k.skin !== 'masonry' ? k.skin : 'crate';
     const v = skinVariantIndex(hf, hr);
     const tile = this.#tile(v > 1 ? `${role}-${v}` : role) ?? this.#tile(role) ?? this.#tile('crate');
-    return { tile, prop: !!tile && tile.h === 2 * T };
+    const prop = !!tile && tile.h === 2 * T;
+    return { tile, dy: prop ? -T : 0, h: prop ? 2 * T : T };
   }
 
   /** Is this door edge-on under the camera's facing? */
@@ -1413,114 +1480,40 @@ export class CanvasBoard {
     return !!k && this.#edgeOn(k);
   }
 
-  /** The pixels of an atlas tile (for the composites), or null. */
-  #pixelsOf(tile) {
-    return tile ? Atlas.pixelsOf(tile) : null;
-  }
-
-  /** The two colours a leaf / a post is made of: the brightest and the
-   *  darkest opaque pixel of a tile's middle. */
-  static #tones(px, x0 = 4, y0 = 4, w = 8, h = 8) {
-    if (!px) return null;
-    let lit = null, dark = null, hi = -1, lo = 1e9;
-    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
-      const o = (y * px.w + x) * 4;
-      if (px.data[o + 3] < 200) continue;
-      const l = px.data[o] * 3 + px.data[o + 1] * 6 + px.data[o + 2];
-      if (l > hi) { hi = l; lit = `rgb(${px.data[o]},${px.data[o + 1]},${px.data[o + 2]})`; }
-      if (l < lo) { lo = l; dark = `rgb(${px.data[o]},${px.data[o + 1]},${px.data[o + 2]})`; }
-    }
-    return lit && dark ? { lit, dark } : null;
+  /** Is this cell a GAP in the wall line — a door standing edge-on, or an
+   *  opened doorway (any, since the tall walls: a doorway paints nothing of
+   *  its own, the walls beside it end with their own cases)? The walls it
+   *  interrupts end at it. */
+  #gapUp(n) {
+    if (!n) return false;
+    if (n.skin === 'door') return edgeOn(n.doorLine, this.facing);
+    return !!n.doorway;
   }
 
   /**
-   * THE EDGE-ON DOOR (brief §11, a GENERATED placeholder until per-theme
-   * art exists): the wall case the door stands in (its band, as the wall
-   * line runs up the screen), a gap cut through its middle holding the
-   * leaf as a thin vertical slab in the leaf's own two tones (the door
-   * set's leaf, so the option follows), and a POST above and below in the
-   * doorway's post tones (the theme's doorway tile; the leaf's tones when
-   * a set has no doorway — the classic row). `mask` is the SCREEN mask.
-   * Cached per theme / door set / mask.
+   * A wall's SCREEN autotile mask. classifyTerrain's world mask counts a
+   * door and an opened doorway as solid so a line runs through a break —
+   * right across the screen, where a leaf fills its tile — with ONE
+   * exception in screen space (designer 2026-09-11, on a generated cap:
+   * "these lazy ass door frames completely abandon the wall autotiling.
+   * Shouldn't we be seeing the bricks?"): a door or a doorway whose line
+   * runs UP the screen is the gap it is, so the walls above and below end
+   * with their own end cases — the brick face on a south end, the
+   * bevelled top on a north end — as any wall ends at floor. Recomputed
+   * from the neighbours' kinds only for a wall with such a gap beside it.
    */
-  #edgeDoorTile(mask) {
-    const key = `edge|${this.theme ?? ''}|${this.doors ?? ''}|${mask}`;
-    let c = this.composites.get(key);
-    if (c) return c;
-    const wall = this.#wallTile(mask);
-    if (!wall) return null;
-    const cv = document.createElement('canvas');
-    cv.width = T;
-    cv.height = T;
-    const g = cv.getContext('2d');
-    g.imageSmoothingEnabled = false;
-    g.drawImage(wall.src, wall.sx, wall.sy, T, T, 0, 0, T, T);
-    const leaf = CanvasBoard.#tones(this.#pixelsOf(this.#tile('door'))) ?? { lit: '#bf704d', dark: '#895a45' };
-    const post = CanvasBoard.#tones(this.#pixelsOf(this.#tile('doorway')), 0, 0, 2, 16) ?? leaf;
-    // The slab: four columns through the band, dark edges, lit planks.
-    g.fillStyle = leaf.dark;
-    g.fillRect(6, 1, 1, 14);
-    g.fillRect(9, 1, 1, 14);
-    g.fillStyle = leaf.lit;
-    g.fillRect(7, 1, 2, 14);
-    // A plank seam every fourth row, so it reads as a leaf, not a bar.
-    g.fillStyle = leaf.dark;
-    for (let y = 4; y < 15; y += 4) g.fillRect(7, y, 2, 1);
-    // The posts: a cap above and below, two rows each, lit over dark.
-    g.fillStyle = post.lit;
-    g.fillRect(5, 0, 6, 1);
-    g.fillRect(5, 14, 6, 1);
-    g.fillStyle = post.dark;
-    g.fillRect(5, 1, 6, 1);
-    g.fillRect(5, 15, 6, 1);
-    c = { src: cv, sx: 0, sy: 0, w: T, h: T };
-    this.composites.set(key, c);
-    return c;
-  }
-
-  /**
-   * The OPEN DOORWAY's posts for a SCREEN mask of standing walls (N=1 E=2
-   * S=4 W=8): the theme's east / west post tiles as they are, and for a
-   * wall standing north or south the same tiles TURNED a quarter (the
-   * doorway tile is flat generated art — two full-height posts — so its
-   * quarter turn is the north–south post pair, brief §11). Mixed cases
-   * overlay both. Cached per theme / mask; null when the theme has no
-   * doorway (the classic row).
-   */
-  #doorwayTile(mask) {
-    if (!this.theme) return null;
-    const key = `doorway|${this.theme}|${mask}`;
-    let c = this.composites.get(key);
-    if (c !== undefined) return c;
-    const ew = mask & 10, ns = mask & 5;
-    const ewTile = ew === 10 ? this.#tile('doorway') : ew === 8 ? this.#tile('doorway-8') : ew === 2 ? this.#tile('doorway-2') : null;
-    // A quarter turn (camera facing 1) sends the west post to the south
-    // edge and the east post to the north edge.
-    const nsSrc = ns === 5 ? this.#tile('doorway') : ns === 4 ? this.#tile('doorway-8') : ns === 1 ? this.#tile('doorway-2') : null;
-    if (!ewTile && !nsSrc) {
-      this.composites.set(key, null);
-      return null;
-    }
-    const cv = document.createElement('canvas');
-    cv.width = T;
-    cv.height = T;
-    const g = cv.getContext('2d');
-    g.imageSmoothingEnabled = false;
-    if (ewTile) g.drawImage(ewTile.src, ewTile.sx, ewTile.sy, T, T, 0, 0, T, T);
-    if (nsSrc) {
-      const px = this.#pixelsOf(nsSrc);
-      if (px) {
-        const turned = rotTile(px.data, 1, T);
-        const tmp = document.createElement('canvas');
-        tmp.width = T;
-        tmp.height = T;
-        tmp.getContext('2d').putImageData(new ImageData(turned, T, T), 0, 0);
-        g.drawImage(tmp, 0, 0);
-      }
-    }
-    c = { src: cv, sx: 0, sy: 0, w: T, h: T };
-    this.composites.set(key, c);
-    return c;
+  #wallMask(cell, k) {
+    const facing = this.facing;
+    if (!cell || !(k.wallTile || k.cracked || k.weak)) return rotMask8(k.mask, facing);
+    const { f, r } = cell;
+    let gap = false;
+    for (let dr = -1; dr <= 1 && !gap; dr++) for (let df = -1; df <= 1; df++) if ((df || dr) && this.#gapUp(this.#kindAt(f + df, r + dr))) { gap = true; break; }
+    if (!gap) return rotMask8(k.mask, facing);
+    // classifyCell's `solid`: a standing wall, a cracked wall, masonry, a
+    // door, a ruin's rubble or an opened doorway — less the gaps.
+    const solid = (ff, rr) => { const n = this.#kindAt(ff, rr); return !!n && (n.wallTile || n.cracked || n.weak || n.skin === 'door' || n.ruin || n.doorway) && !this.#gapUp(n); };
+    const m = canonicalMask((solid(f, r + 1) ? 1 : 0) | (solid(f + 1, r) ? 2 : 0) | (solid(f, r - 1) ? 4 : 0) | (solid(f - 1, r) ? 8 : 0) | (solid(f + 1, r + 1) ? 16 : 0) | (solid(f + 1, r - 1) ? 32 : 0) | (solid(f - 1, r - 1) ? 64 : 0) | (solid(f - 1, r + 1) ? 128 : 0));
+    return rotMask8(m, facing);
   }
 
   #frame1(x, y, fill, inset = 0) {
@@ -1565,7 +1558,7 @@ export class CanvasBoard {
       }
       byRow.push(list);
     }
-    // 1. floor + shade + debris + flat terrain + marks under the pieces —
+    // 1. floor + shade + debris + flat terrain (the pits) + marks under the pieces —
     // and the world beyond the crop DIMMED here, under the tall pass, so
     // the heads of the crop's top rank (the enemy's back rank on a barrier
     // duel) rise into the dungeon undimmed.
@@ -1577,8 +1570,8 @@ export class CanvasBoard {
         g.fillRect(s.x, s.y, T, T);
       }
     }
-    // 2. the tall things, far row first: props and pieces interleaved by
-    //    screen row (the dungeon's, faded) — and the pieces IN MID-SLIDE
+    // 2. the tall things, far row first: walls, props and pieces interleaved
+    //    by screen row (the dungeon's, faded) — and the pieces IN MID-SLIDE
     //    among them, each by where its feet are this frame (a slider used
     //    to paint last, over everything, and the walk's arrivals in their
     //    plan's order, the king first: a tall king sliding beside the piece
@@ -1661,16 +1654,17 @@ export class CanvasBoard {
     return { x: p.x - this.win.col0 * T, y: this.headroom + p.y - this.win.row0 * T };
   }
 
-  #paintFlat({ sq, idx, x, y, k, h }, theme, t) {
+  #paintFlat({ sq, idx, x, y, k, h, cell }, theme, t) {
     const g = this.bctx;
     const [hf, hr] = h;
     const dark = (hf + hr - 1) % 2 === 0;
     const fx = sq ? this.fx.get(sq) : null;
     const u = fx ? (fx.done ? 1 : Math.min(1, (t - fx.t0) / fx.ms)) : 0;
     const facing = this.facing;
-    // Floor: the theme's flagstone variant over the flat colour, the dark
-    // square's shade over it; the classic set is the flat colours alone.
-    const floor = theme ? this.#tile(`floor-${floorVariantIndex(hf, hr)}`) : null;
+    // Floor: the row's flagstone variant over the flat colour, the dark
+    // square's shade over it (the classic row has flagstones too since the
+    // palette round; the flat colours remain the fallback).
+    const floor = this.#tile(`floor-${floorVariantIndex(hf, hr)}`);
     g.fillStyle = dark ? CLASSIC.dark : CLASSIC.light;
     g.fillRect(x, y, T, T);
     if (floor) {
@@ -1688,12 +1682,10 @@ export class CanvasBoard {
       if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
       return;
     }
-    const ck = crackVariantIndex(hf, hr);
-    // The autotile cases as the SCREEN sees them (the camera): the wall's
-    // 8-neighbour mask and the 4-bit ruin / pit / doorway masks permuted
-    // to the facing before the tile lookup.
-    const sm = rotMask8(k.mask, facing);
+    // The pit's autotile case as the SCREEN sees it (the camera): the
+    // 4-bit hole mask permuted to the facing before the tile lookup.
     const sm4 = rotMask4(k.mask, facing);
+    void cell;
     if (fx?.kind === 'crumbling') {
       // The floor gives way: the lone-pit tile fades in over the floor, then stays.
       const hole = theme ? this.#tile('hole-0') : null;
@@ -1725,36 +1717,26 @@ export class CanvasBoard {
         g.fillStyle = CLASSIC.pitLip;
         g.fillRect(x, y, T, 3);
       }
-    } else if (k.wallTile) {
-      const [jx, jy] = fx?.kind === 'cracking' ? JITTER[Math.min(JITTER.length - 1, Math.floor(u * JITTER.length))] : [0, 0];
-      this.#draw(this.#wallTile(sm), x + jx, y + jy);
-      if (fx?.kind === 'cracking') {
-        // The crack appears under a flash of light; the end frame is the cracked tile.
-        this.#draw(this.#crackedTile(sm, ck), x + jx, y + jy);
-        if (u < 1) {
-          g.fillStyle = `rgba(255,255,255,${(0.5 * (1 - u)).toFixed(3)})`;
-          g.fillRect(x, y, T, T);
-        }
-      }
-    } else if (k.ruin) {
-      this.#draw(this.#tile(theme ? `ruin-${sm4}` : 'rubble'), x, y);
-    } else if (k.furniture && (k.cracked || k.weak)) {
-      this.#draw(this.#crackedTile(sm, ck), x, y);
-    } else if (this.#edgeOn(k)) {
-      // A door whose wall line runs up the screen: the edge-on placeholder,
-      // flat terrain like the wall band it stands in.
-      this.#draw(this.#edgeDoorTile(sm), x, y);
     }
+    // (TALL WALLS, 2026-09-12: a standing wall, a cracked wall or a weak
+    // spot, and a ruin's stub are TALL things now — #paintTall paints them
+    // over the square north; here they are floor. A door whose wall line
+    // runs up the screen is floor here too: the gap in the wall, whose
+    // ends #wallMask lets the neighbours draw; the leaf stands in it in the
+    // tall pass. An opened doorway is floor and nothing else.)
     if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
-    // Decor: a prop on a standing wall's face (never on a cracked wall), or
-    // the OPEN DOORWAY a door left — both above the debris, as the DOM's
-    // decor span is above its debris image (the posts stand on the rubble).
-    const decor = this.#decorOfCell(k, h);
-    if (decor === 'doorway') {
-      const tile = this.#doorwayTile(sm4);
-      if (tile) this.#draw(tile, x, y);
-    } else if (decor && theme) this.#draw(this.#tile(decor), x, y);
-    // Marks under the pieces: the gods' residue and the debug heat.
+    // Marks under the pieces (the gods' residue and the debug heat) — a
+    // tall square's are painted over its sprite in #paintTall.
+    if (!this.#isTall(k)) this.#paintUnderMarks(sq, x, y);
+  }
+
+  /** Is this square's terrain painted in the tall pass (over the square north)? */
+  #isTall(k) {
+    return !!k && (k.wallTile || k.ruin || (k.furniture && (k.cracked || k.weak)));
+  }
+
+  /** The marks under the pieces: the debug heat frame, the gods' residue ring. */
+  #paintUnderMarks(sq, x, y) {
     if (!sq) return;
     const m = this.marks;
     const heat = m.heat[sq];
@@ -1762,36 +1744,55 @@ export class CanvasBoard {
     if (m.pits.has(sq) || m.cracked.has(sq) || m.breached.has(sq)) this.#frame1(x, y, GODS);
   }
 
-  #paintTall({ sq, idx, x, y, k, h }, t) {
+  #paintTall({ sq, idx, x, y, k, h, cell }, t) {
     if (!k || (sq && this.hidden.has(sq)) || this.hiddenCells.has(idx)) return;
     const g = this.bctx;
     const fx = sq ? this.fx.get(sq) : null;
     const u = fx ? (fx.done ? 1 : Math.min(1, (t - fx.t0) / fx.ms)) : 0;
     const v = k.v;
-    if (k.furniture) {
-      if (k.cracked || k.weak) {
-        if (fx?.kind === 'breaching' && u < 1) {
-          // The crack bursts away from the broken wall.
-          const [hf, hr] = h;
-          const ck = crackVariantIndex(hf, hr);
-          const crack = this.atlas.crack(ck);
-          if (crack) this.#burst(crack, x, y, T, T, u);
-        }
-        return; // the crack itself is drawn with the wall in #paintFlat
-      }
-      if (this.#edgeOn(k)) {
-        // An edge-on door is flat terrain (#paintFlat); when it breaks, the
-        // slab bursts away like a crack does.
-        if (fx?.kind === 'breaching' && u < 1) {
-          const tile = this.#edgeDoorTile(rotMask8(k.mask, this.facing));
-          if (tile) this.#burst(tile, x, y, T, T, u);
-        }
+    // TALL WALLS (2026-09-12): a wall is a 16×WALL_SPRITE_H sprite (20
+    // rows since the shorter face of 2026-09-15) standing at the square's
+    // y − WALL_DY — its roof's far half in the square north (over the feet
+    // of whatever stands there, as a nearer piece's head covers the piece
+    // behind it), its face on the square, WALL_RAISE pixels of floor
+    // showing under it. A cracked wall or a weak
+    // spot is the same sprite wearing the crack on its face; the crack
+    // appears under a flash of light, and the whole sprite bursts on a
+    // breach. A wall prop (torch / banner / chain) hangs on the face.
+    if (k.wallTile || (k.furniture && (k.cracked || k.weak))) {
+      const [hf, hr] = h;
+      const ck = crackVariantIndex(hf, hr);
+      const sm = this.#wallMask(cell, k);
+      const wy = y - WALL_DY;
+      if (fx?.kind === 'breaching') {
+        if (u < 1) this.#burst(this.#crackedTile(sm, ck), x, wy, T, WALL_SPRITE_H, u);
         return;
       }
-      const { tile, prop } = this.#furnitureSprite(k, h);
+      const [jx, jy] = fx?.kind === 'cracking' ? JITTER[Math.min(JITTER.length - 1, Math.floor(u * JITTER.length))] : [0, 0];
+      const tile = k.furniture || fx?.kind === 'cracking' ? this.#crackedTile(sm, ck) : this.#wallTile(sm);
+      this.#draw(tile, x + jx, wy + jy);
+      if (fx?.kind === 'cracking' && u < 1) {
+        g.fillStyle = `rgba(255,255,255,${(0.5 * (1 - u)).toFixed(3)})`;
+        g.fillRect(x, wy, T, WALL_SPRITE_H);
+      }
+      const decor = this.#decorOfCell(k, h, sm);
+      if (decor && decor !== 'doorway') this.#draw(this.#tile(decor), x, y - WALL_RAISE);
+      this.#paintUnderMarks(sq, x, y);
+      return;
+    }
+    if (k.ruin) {
+      // The broken wall's stub, then the square's debris again over its
+      // foot — the rubble lies on the floor in front of the stump, as the
+      // DOM's debris image lay over the flat stub.
+      this.#draw(this.#tile(`ruin-${rotMask4(k.mask, this.facing)}`), x, y - WALL_DY);
+      const dz = this.debrisCanvas.get(idx);
+      if (dz) g.drawImage(dz, 0, 0, T, T, x, y, T, T);
+      this.#paintUnderMarks(sq, x, y);
+    }
+    if (k.furniture) {
+      const { tile, dy, h: ph } = this.#furnitureSprite(k, h);
       if (!tile) return;
-      const py = prop ? y - T : y;
-      const ph = prop ? 2 * T : T;
+      const py = y + dy;
       if (fx?.kind === 'breaching') {
         if (u < 1) this.#burst(tile, x, py, T, ph, u);
         return;
@@ -1865,14 +1866,9 @@ export class CanvasBoard {
   #paintSlideAt(s, x, y) {
     const k = this.#kindOfSq(s.from);
     if (k?.furniture) {
-      if (this.#edgeOn(k)) {
-        const tile = this.#edgeDoorTile(rotMask8(k.mask, this.facing));
-        if (tile) this.#draw(tile, x, y);
-        return;
-      }
       const c = this.cells.get(s.from);
-      const { tile, prop } = this.#furnitureSprite(k, this.#hc(c.cell, s.from));
-      if (tile) this.#draw(tile, x, prop ? y - T : y);
+      const { tile, dy } = this.#furnitureSprite(k, this.#hc(c.cell, s.from));
+      if (tile) this.#draw(tile, x, y + dy);
       return;
     }
     this.#paintPiece(s.letter, x, y);

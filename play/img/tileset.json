@@ -18,9 +18,6 @@
   "skull",
   "chain",
   "banner",
-  "doorway",
-  "doorway-8",
-  "doorway-2",
   "floor-1",
   "floor-2",
   "floor-3",
@@ -133,12 +130,37 @@
   "crack-1",
   "crack-2",
   "crack-3",
-  "crack-4"
+  "crack-4",
+  "door-edge"
  ],
  "themes": {
   "hall": {
    "row": 0,
    "title": "The hall — pixel-poem’s keep: purple-grey flagstones, salmon stone, timber doors",
+   "palette": {
+    "floor": "#4a3629",
+    "wall": "#543740",
+    "highlight": "#6f575f"
+   },
+   "swap": {
+    "outline": "#3a232b",
+    "lit": "#6f575f",
+    "fill": "#543740",
+    "dark": "#422c3b",
+    "mid": "#62474f",
+    "black": "#150b10",
+    "mortarDark": "#3a232b",
+    "mortar": "#472d3d",
+    "brickDark": "#422c3b",
+    "brick": "#543740",
+    "brickLight": "#6f575f",
+    "shade1": "#341f27",
+    "shade2": "#2e1b22",
+    "shade3": "#28171e",
+    "shade4": "#211319",
+    "shade5": "#1b0f15",
+    "shade6": "#150b10"
+   },
    "tiles": {
     "door": {
      "col": 1,
@@ -156,7 +178,7 @@
      "recoloured": "wood to #bf704d"
     },
     "crate-2": {
-     "col": 104,
+     "col": 101,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 0,
@@ -164,7 +186,7 @@
      "recoloured": "wood to #bf704d"
     },
     "crate-3": {
-     "col": 105,
+     "col": 102,
      "pack": "pixel-poem",
      "sheet": "box_2_4.png",
      "x": 0,
@@ -172,7 +194,7 @@
      "recoloured": "wood to #bf704d"
     },
     "crate-4": {
-     "col": 106,
+     "col": 103,
      "pack": "pixel-poem",
      "sheet": "mini_box_2_4.png",
      "x": 0,
@@ -180,7 +202,7 @@
      "recoloured": "wood to #bf704d"
     },
     "crate-5": {
-     "col": 107,
+     "col": 104,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 8,
@@ -188,7 +210,7 @@
      "recoloured": "wood to #bf704d"
     },
     "crate-6": {
-     "col": 108,
+     "col": 105,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -196,7 +218,7 @@
      "recoloured": "wood to #bf704d"
     },
     "crate-7": {
-     "col": 109,
+     "col": 106,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -211,21 +233,21 @@
      "y": 8
     },
     "chest-2": {
-     "col": 110,
+     "col": 107,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 5,
      "y": 8
     },
     "chest-3": {
-     "col": 111,
+     "col": 108,
      "pack": "pixel-poem",
      "sheet": "chest_2.png",
      "x": 0,
      "y": 0
     },
     "chest-4": {
-     "col": 112,
+     "col": 109,
      "pack": "pixel-poem",
      "sheet": "mini_chest_2.png",
      "x": 0,
@@ -240,7 +262,7 @@
      "recoloured": "all to #bf704d"
     },
     "barrel-2": {
-     "col": 113,
+     "col": 110,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -248,7 +270,7 @@
      "recoloured": "all to #bf704d"
     },
     "barrel-3": {
-     "col": 114,
+     "col": 111,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
@@ -256,7 +278,7 @@
      "recoloured": "all to #bf704d"
     },
     "barrel-4": {
-     "col": 115,
+     "col": 112,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 12,
@@ -264,7 +286,7 @@
      "recoloured": "all to #bf704d"
     },
     "barrel-5": {
-     "col": 116,
+     "col": 113,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 13,
@@ -280,7 +302,7 @@
      "recoloured": "all to #bf704d"
     },
     "wreckage-2": {
-     "col": 122,
+     "col": 119,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -288,7 +310,7 @@
      "recoloured": "all to #bf704d"
     },
     "wreckage-3": {
-     "col": 123,
+     "col": 120,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -296,7 +318,7 @@
      "recoloured": "all to #bf704d"
     },
     "wreckage-4": {
-     "col": 124,
+     "col": 121,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
@@ -304,7 +326,7 @@
      "recoloured": "all to #bf704d"
     },
     "wreckage-5": {
-     "col": 125,
+     "col": 122,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
@@ -312,7 +334,7 @@
      "recoloured": "all to #bf704d"
     },
     "wreckage-6": {
-     "col": 126,
+     "col": 123,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -320,7 +342,7 @@
      "recoloured": "all to #bf704d"
     },
     "wreckage-7": {
-     "col": 127,
+     "col": 124,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
@@ -397,466 +419,455 @@
      "x": 7,
      "y": 6
     },
-    "doorway": {
-     "col": 16,
-     "composed": "posts in the door material at both edges, floor between",
-     "mask": 10
-    },
-    "doorway-8": {
-     "col": 17,
-     "composed": "one post in the door material at the west edge, floor between",
-     "mask": 8
-    },
-    "doorway-2": {
-     "col": 18,
-     "composed": "one post in the door material at the east edge, floor between",
-     "mask": 2
+    "door-edge": {
+     "col": 129,
+     "composed": "the designer's profile door (lib/inhouse/door-profile.png) in the band"
     },
     "floor-1": {
+     "col": 16,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to #4a3629"
+    },
+    "floor-2": {
+     "col": 17,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to #4a3629"
+    },
+    "floor-3": {
+     "col": 18,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to #4a3629"
+    },
+    "floor-4": {
      "col": 19,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 47,
+     "x": 46,
      "y": 14,
-     "recoloured": "to pixel-poem floor (8,1)"
+     "recoloured": "to #4a3629"
     },
-    "floor-2": {
+    "floor-5": {
      "col": 20,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 46,
+     "x": 47,
      "y": 13,
-     "recoloured": "to pixel-poem floor (8,1)"
+     "recoloured": "to #4a3629"
     },
-    "floor-3": {
+    "floor-6": {
      "col": 21,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 15,
-     "recoloured": "to pixel-poem floor (8,1)"
-    },
-    "floor-4": {
-     "col": 22,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 46,
-     "y": 14,
-     "recoloured": "to pixel-poem floor (8,1)"
-    },
-    "floor-5": {
-     "col": 23,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 13,
-     "recoloured": "to pixel-poem floor (8,1)"
-    },
-    "floor-6": {
-     "col": 24,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
      "x": 46,
      "y": 15,
-     "recoloured": "to pixel-poem floor (8,1)"
+     "recoloured": "to #4a3629"
     },
     "wall": {
      "col": 0,
-     "composed": "blob case 10 (east–west run)",
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone) — case 10, the east–west run",
      "mask": 10
     },
     "wall-0": {
-     "col": 25,
-     "composed": "blob in the pack palette + its face",
+     "col": 22,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 0
     },
     "wall-1": {
-     "col": 26,
-     "composed": "blob in the pack palette + its face",
+     "col": 23,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 1
     },
     "wall-2": {
-     "col": 27,
-     "composed": "blob in the pack palette + its face",
+     "col": 24,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 2
     },
     "wall-3": {
-     "col": 28,
-     "composed": "blob in the pack palette + its face",
+     "col": 25,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 3
     },
     "wall-4": {
-     "col": 29,
-     "composed": "blob in the pack palette + its face",
+     "col": 26,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 4
     },
     "wall-5": {
-     "col": 30,
-     "composed": "blob in the pack palette + its face",
+     "col": 27,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 5
     },
     "wall-6": {
-     "col": 31,
-     "composed": "blob in the pack palette + its face",
+     "col": 28,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 6
     },
     "wall-7": {
-     "col": 32,
-     "composed": "blob in the pack palette + its face",
+     "col": 29,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 7
     },
     "wall-8": {
-     "col": 33,
-     "composed": "blob in the pack palette + its face",
+     "col": 30,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 8
     },
     "wall-9": {
-     "col": 34,
-     "composed": "blob in the pack palette + its face",
+     "col": 31,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 9
     },
     "wall-10": {
-     "col": 35,
-     "composed": "blob in the pack palette + its face",
+     "col": 32,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 10
     },
     "wall-11": {
-     "col": 36,
-     "composed": "blob in the pack palette + its face",
+     "col": 33,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 11
     },
     "wall-12": {
-     "col": 37,
-     "composed": "blob in the pack palette + its face",
+     "col": 34,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 12
     },
     "wall-13": {
-     "col": 38,
-     "composed": "blob in the pack palette + its face",
+     "col": 35,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 13
     },
     "wall-14": {
-     "col": 39,
-     "composed": "blob in the pack palette + its face",
+     "col": 36,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 14
     },
     "wall-15": {
-     "col": 40,
-     "composed": "blob in the pack palette + its face",
+     "col": 37,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 15
     },
     "wall-19": {
-     "col": 41,
-     "composed": "blob in the pack palette + its face",
+     "col": 38,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 19
     },
     "wall-23": {
-     "col": 42,
-     "composed": "blob in the pack palette + its face",
+     "col": 39,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 23
     },
     "wall-27": {
-     "col": 43,
-     "composed": "blob in the pack palette + its face",
+     "col": 40,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 27
     },
     "wall-31": {
-     "col": 44,
-     "composed": "blob in the pack palette + its face",
+     "col": 41,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 31
     },
     "wall-38": {
-     "col": 45,
-     "composed": "blob in the pack palette + its face",
+     "col": 42,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 38
     },
     "wall-39": {
-     "col": 46,
-     "composed": "blob in the pack palette + its face",
+     "col": 43,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 39
     },
     "wall-46": {
-     "col": 47,
-     "composed": "blob in the pack palette + its face",
+     "col": 44,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 46
     },
     "wall-47": {
-     "col": 48,
-     "composed": "blob in the pack palette + its face",
+     "col": 45,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 47
     },
     "wall-55": {
-     "col": 49,
-     "composed": "blob in the pack palette + its face",
+     "col": 46,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 55
     },
     "wall-63": {
-     "col": 50,
-     "composed": "blob in the pack palette + its face",
+     "col": 47,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 63
     },
     "wall-76": {
-     "col": 51,
-     "composed": "blob in the pack palette + its face",
+     "col": 48,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 76
     },
     "wall-77": {
-     "col": 52,
-     "composed": "blob in the pack palette + its face",
+     "col": 49,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 77
     },
     "wall-78": {
-     "col": 53,
-     "composed": "blob in the pack palette + its face",
+     "col": 50,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 78
     },
     "wall-79": {
-     "col": 54,
-     "composed": "blob in the pack palette + its face",
+     "col": 51,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 79
     },
     "wall-95": {
-     "col": 55,
-     "composed": "blob in the pack palette + its face",
+     "col": 52,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 95
     },
     "wall-110": {
-     "col": 56,
-     "composed": "blob in the pack palette + its face",
+     "col": 53,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 110
     },
     "wall-111": {
-     "col": 57,
-     "composed": "blob in the pack palette + its face",
+     "col": 54,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 111
     },
     "wall-127": {
-     "col": 58,
-     "composed": "blob in the pack palette + its face",
+     "col": 55,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 127
     },
     "wall-137": {
-     "col": 59,
-     "composed": "blob in the pack palette + its face",
+     "col": 56,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 137
     },
     "wall-139": {
-     "col": 60,
-     "composed": "blob in the pack palette + its face",
+     "col": 57,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 139
     },
     "wall-141": {
-     "col": 61,
-     "composed": "blob in the pack palette + its face",
+     "col": 58,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 141
     },
     "wall-143": {
-     "col": 62,
-     "composed": "blob in the pack palette + its face",
+     "col": 59,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 143
     },
     "wall-155": {
-     "col": 63,
-     "composed": "blob in the pack palette + its face",
+     "col": 60,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 155
     },
     "wall-159": {
-     "col": 64,
-     "composed": "blob in the pack palette + its face",
+     "col": 61,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 159
     },
     "wall-175": {
-     "col": 65,
-     "composed": "blob in the pack palette + its face",
+     "col": 62,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 175
     },
     "wall-191": {
-     "col": 66,
-     "composed": "blob in the pack palette + its face",
+     "col": 63,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 191
     },
     "wall-205": {
-     "col": 67,
-     "composed": "blob in the pack palette + its face",
+     "col": 64,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 205
     },
     "wall-207": {
-     "col": 68,
-     "composed": "blob in the pack palette + its face",
+     "col": 65,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 207
     },
     "wall-223": {
-     "col": 69,
-     "composed": "blob in the pack palette + its face",
+     "col": 66,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 223
     },
     "wall-239": {
-     "col": 70,
-     "composed": "blob in the pack palette + its face",
+     "col": 67,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 239
     },
     "wall-255": {
-     "col": 71,
-     "composed": "blob in the pack palette + its face",
+     "col": 68,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone)",
      "mask": 255
     },
     "ruin-0": {
-     "col": 72,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 69,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 0
     },
     "ruin-1": {
-     "col": 73,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 70,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 1
     },
     "ruin-2": {
-     "col": 74,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 71,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 2
     },
     "ruin-3": {
-     "col": 75,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 72,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 3
     },
     "ruin-4": {
-     "col": 76,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 73,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 4
     },
     "ruin-5": {
-     "col": 77,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 74,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 5
     },
     "ruin-6": {
-     "col": 78,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 75,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 6
     },
     "ruin-7": {
-     "col": 79,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 76,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 7
     },
     "ruin-8": {
-     "col": 80,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 77,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 8
     },
     "ruin-9": {
-     "col": 81,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 78,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 9
     },
     "ruin-10": {
-     "col": 82,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 79,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 10
     },
     "ruin-11": {
-     "col": 83,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 80,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 11
     },
     "ruin-12": {
-     "col": 84,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 81,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 12
     },
     "ruin-13": {
-     "col": 85,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 82,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 13
     },
     "ruin-14": {
-     "col": 86,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 83,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 14
     },
     "ruin-15": {
-     "col": 87,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 84,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the hall palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 15
     },
     "hole-0": {
-     "col": 88,
+     "col": 85,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 0
     },
     "hole-1": {
-     "col": 89,
+     "col": 86,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 1
     },
     "hole-2": {
-     "col": 90,
+     "col": 87,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 2
     },
     "hole-3": {
-     "col": 91,
+     "col": 88,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 3
     },
     "hole-4": {
-     "col": 92,
+     "col": 89,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 4
     },
     "hole-5": {
-     "col": 93,
+     "col": 90,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 5
     },
     "hole-6": {
-     "col": 94,
+     "col": 91,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 6
     },
     "hole-7": {
-     "col": 95,
+     "col": 92,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 7
     },
     "hole-8": {
-     "col": 96,
+     "col": 93,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 8
     },
     "hole-9": {
-     "col": 97,
+     "col": 94,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 9
     },
     "hole-10": {
-     "col": 98,
+     "col": 95,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 10
     },
     "hole-11": {
-     "col": 99,
+     "col": 96,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 11
     },
     "hole-12": {
-     "col": 100,
+     "col": 97,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 12
     },
     "hole-13": {
-     "col": 101,
+     "col": 98,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 13
     },
     "hole-14": {
-     "col": 102,
+     "col": 99,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 14
     },
     "hole-15": {
-     "col": 103,
+     "col": 100,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
     }
@@ -865,6 +876,30 @@
   "castle": {
    "row": 1,
    "title": "The castle — Dungeon Gathering’s cold blue-grey stone",
+   "palette": {
+    "floor": "#2e2f33",
+    "wall": "#657392",
+    "highlight": "#7e89a3"
+   },
+   "swap": {
+    "outline": "#3b3f56",
+    "lit": "#7e89a3",
+    "fill": "#657392",
+    "dark": "#424c6e",
+    "mid": "#717e9b",
+    "black": "#0c0b15",
+    "mortarDark": "#3b3f56",
+    "mortar": "#454e6d",
+    "brickDark": "#424c6e",
+    "brick": "#657392",
+    "brickLight": "#7e89a3",
+    "shade1": "#33364b",
+    "shade2": "#2b2e40",
+    "shade3": "#242536",
+    "shade4": "#1c1c2b",
+    "shade5": "#141420",
+    "shade6": "#0c0b15"
+   },
    "tiles": {
     "door": {
      "col": 1,
@@ -883,7 +918,7 @@
      "recoloured": "wood to #7d6455"
     },
     "crate-2": {
-     "col": 104,
+     "col": 101,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -891,7 +926,7 @@
      "recoloured": "wood to #7d6455"
     },
     "crate-3": {
-     "col": 105,
+     "col": 102,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -899,7 +934,7 @@
      "recoloured": "wood to #7d6455"
     },
     "crate-4": {
-     "col": 106,
+     "col": 103,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 3,
@@ -907,7 +942,7 @@
      "recoloured": "wood to #7d6455"
     },
     "crate-5": {
-     "col": 107,
+     "col": 104,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 0,
@@ -915,7 +950,7 @@
      "recoloured": "wood to #7d6455"
     },
     "crate-6": {
-     "col": 108,
+     "col": 105,
      "pack": "pixel-poem",
      "sheet": "box_2_4.png",
      "x": 0,
@@ -923,7 +958,7 @@
      "recoloured": "wood to #7d6455"
     },
     "crate-7": {
-     "col": 109,
+     "col": 106,
      "pack": "pixel-poem",
      "sheet": "mini_box_2_4.png",
      "x": 0,
@@ -938,21 +973,21 @@
      "y": 8
     },
     "chest-2": {
-     "col": 110,
+     "col": 107,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 5,
      "y": 8
     },
     "chest-3": {
-     "col": 111,
+     "col": 108,
      "pack": "pixel-poem",
      "sheet": "chest_2.png",
      "x": 0,
      "y": 0
     },
     "chest-4": {
-     "col": 112,
+     "col": 109,
      "pack": "pixel-poem",
      "sheet": "mini_chest_2.png",
      "x": 0,
@@ -966,21 +1001,21 @@
      "y": 12
     },
     "barrel-2": {
-     "col": 113,
+     "col": 110,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 12,
      "y": 8
     },
     "barrel-3": {
-     "col": 114,
+     "col": 111,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 13,
      "y": 8
     },
     "barrel-4": {
-     "col": 115,
+     "col": 112,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
@@ -995,7 +1030,7 @@
      "recoloured": "all to #7d6455"
     },
     "wreckage-2": {
-     "col": 122,
+     "col": 119,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -1003,7 +1038,7 @@
      "recoloured": "all to #7d6455"
     },
     "wreckage-3": {
-     "col": 123,
+     "col": 120,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -1011,7 +1046,7 @@
      "recoloured": "all to #7d6455"
     },
     "wreckage-4": {
-     "col": 124,
+     "col": 121,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
@@ -1019,7 +1054,7 @@
      "recoloured": "all to #7d6455"
     },
     "wreckage-5": {
-     "col": 125,
+     "col": 122,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
@@ -1027,7 +1062,7 @@
      "recoloured": "all to #7d6455"
     },
     "wreckage-6": {
-     "col": 126,
+     "col": 123,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -1035,7 +1070,7 @@
      "recoloured": "all to #7d6455"
     },
     "wreckage-7": {
-     "col": 127,
+     "col": 124,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
@@ -1114,466 +1149,455 @@
      "y": 6,
      "recoloured": "wood to #7d6455"
     },
-    "doorway": {
-     "col": 16,
-     "composed": "posts in the door material at both edges, floor between",
-     "mask": 10
-    },
-    "doorway-8": {
-     "col": 17,
-     "composed": "one post in the door material at the west edge, floor between",
-     "mask": 8
-    },
-    "doorway-2": {
-     "col": 18,
-     "composed": "one post in the door material at the east edge, floor between",
-     "mask": 2
+    "door-edge": {
+     "col": 129,
+     "composed": "the designer's profile door (lib/inhouse/door-profile.png) in the band, wood to #7d6455"
     },
     "floor-1": {
+     "col": 16,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to #2e2f33"
+    },
+    "floor-2": {
+     "col": 17,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to #2e2f33"
+    },
+    "floor-3": {
+     "col": 18,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to #2e2f33"
+    },
+    "floor-4": {
      "col": 19,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 47,
+     "x": 46,
      "y": 14,
-     "recoloured": "to dungeon-gathering floor (10,3)"
+     "recoloured": "to #2e2f33"
     },
-    "floor-2": {
+    "floor-5": {
      "col": 20,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 46,
+     "x": 47,
      "y": 13,
-     "recoloured": "to dungeon-gathering floor (10,3)"
+     "recoloured": "to #2e2f33"
     },
-    "floor-3": {
+    "floor-6": {
      "col": 21,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 15,
-     "recoloured": "to dungeon-gathering floor (10,3)"
-    },
-    "floor-4": {
-     "col": 22,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 46,
-     "y": 14,
-     "recoloured": "to dungeon-gathering floor (10,3)"
-    },
-    "floor-5": {
-     "col": 23,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 13,
-     "recoloured": "to dungeon-gathering floor (10,3)"
-    },
-    "floor-6": {
-     "col": 24,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
      "x": 46,
      "y": 15,
-     "recoloured": "to dungeon-gathering floor (10,3)"
+     "recoloured": "to #2e2f33"
     },
     "wall": {
      "col": 0,
-     "composed": "blob case 10 (east–west run)",
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone) — case 10, the east–west run",
      "mask": 10
     },
     "wall-0": {
-     "col": 25,
-     "composed": "blob in the pack palette + its face",
+     "col": 22,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 0
     },
     "wall-1": {
-     "col": 26,
-     "composed": "blob in the pack palette + its face",
+     "col": 23,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 1
     },
     "wall-2": {
-     "col": 27,
-     "composed": "blob in the pack palette + its face",
+     "col": 24,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 2
     },
     "wall-3": {
-     "col": 28,
-     "composed": "blob in the pack palette + its face",
+     "col": 25,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 3
     },
     "wall-4": {
-     "col": 29,
-     "composed": "blob in the pack palette + its face",
+     "col": 26,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 4
     },
     "wall-5": {
-     "col": 30,
-     "composed": "blob in the pack palette + its face",
+     "col": 27,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 5
     },
     "wall-6": {
-     "col": 31,
-     "composed": "blob in the pack palette + its face",
+     "col": 28,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 6
     },
     "wall-7": {
-     "col": 32,
-     "composed": "blob in the pack palette + its face",
+     "col": 29,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 7
     },
     "wall-8": {
-     "col": 33,
-     "composed": "blob in the pack palette + its face",
+     "col": 30,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 8
     },
     "wall-9": {
-     "col": 34,
-     "composed": "blob in the pack palette + its face",
+     "col": 31,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 9
     },
     "wall-10": {
-     "col": 35,
-     "composed": "blob in the pack palette + its face",
+     "col": 32,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 10
     },
     "wall-11": {
-     "col": 36,
-     "composed": "blob in the pack palette + its face",
+     "col": 33,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 11
     },
     "wall-12": {
-     "col": 37,
-     "composed": "blob in the pack palette + its face",
+     "col": 34,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 12
     },
     "wall-13": {
-     "col": 38,
-     "composed": "blob in the pack palette + its face",
+     "col": 35,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 13
     },
     "wall-14": {
-     "col": 39,
-     "composed": "blob in the pack palette + its face",
+     "col": 36,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 14
     },
     "wall-15": {
-     "col": 40,
-     "composed": "blob in the pack palette + its face",
+     "col": 37,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 15
     },
     "wall-19": {
-     "col": 41,
-     "composed": "blob in the pack palette + its face",
+     "col": 38,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 19
     },
     "wall-23": {
-     "col": 42,
-     "composed": "blob in the pack palette + its face",
+     "col": 39,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 23
     },
     "wall-27": {
-     "col": 43,
-     "composed": "blob in the pack palette + its face",
+     "col": 40,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 27
     },
     "wall-31": {
-     "col": 44,
-     "composed": "blob in the pack palette + its face",
+     "col": 41,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 31
     },
     "wall-38": {
-     "col": 45,
-     "composed": "blob in the pack palette + its face",
+     "col": 42,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 38
     },
     "wall-39": {
-     "col": 46,
-     "composed": "blob in the pack palette + its face",
+     "col": 43,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 39
     },
     "wall-46": {
-     "col": 47,
-     "composed": "blob in the pack palette + its face",
+     "col": 44,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 46
     },
     "wall-47": {
-     "col": 48,
-     "composed": "blob in the pack palette + its face",
+     "col": 45,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 47
     },
     "wall-55": {
-     "col": 49,
-     "composed": "blob in the pack palette + its face",
+     "col": 46,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 55
     },
     "wall-63": {
-     "col": 50,
-     "composed": "blob in the pack palette + its face",
+     "col": 47,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 63
     },
     "wall-76": {
-     "col": 51,
-     "composed": "blob in the pack palette + its face",
+     "col": 48,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 76
     },
     "wall-77": {
-     "col": 52,
-     "composed": "blob in the pack palette + its face",
+     "col": 49,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 77
     },
     "wall-78": {
-     "col": 53,
-     "composed": "blob in the pack palette + its face",
+     "col": 50,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 78
     },
     "wall-79": {
-     "col": 54,
-     "composed": "blob in the pack palette + its face",
+     "col": 51,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 79
     },
     "wall-95": {
-     "col": 55,
-     "composed": "blob in the pack palette + its face",
+     "col": 52,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 95
     },
     "wall-110": {
-     "col": 56,
-     "composed": "blob in the pack palette + its face",
+     "col": 53,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 110
     },
     "wall-111": {
-     "col": 57,
-     "composed": "blob in the pack palette + its face",
+     "col": 54,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 111
     },
     "wall-127": {
-     "col": 58,
-     "composed": "blob in the pack palette + its face",
+     "col": 55,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 127
     },
     "wall-137": {
-     "col": 59,
-     "composed": "blob in the pack palette + its face",
+     "col": 56,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 137
     },
     "wall-139": {
-     "col": 60,
-     "composed": "blob in the pack palette + its face",
+     "col": 57,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 139
     },
     "wall-141": {
-     "col": 61,
-     "composed": "blob in the pack palette + its face",
+     "col": 58,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 141
     },
     "wall-143": {
-     "col": 62,
-     "composed": "blob in the pack palette + its face",
+     "col": 59,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 143
     },
     "wall-155": {
-     "col": 63,
-     "composed": "blob in the pack palette + its face",
+     "col": 60,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 155
     },
     "wall-159": {
-     "col": 64,
-     "composed": "blob in the pack palette + its face",
+     "col": 61,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 159
     },
     "wall-175": {
-     "col": 65,
-     "composed": "blob in the pack palette + its face",
+     "col": 62,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 175
     },
     "wall-191": {
-     "col": 66,
-     "composed": "blob in the pack palette + its face",
+     "col": 63,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 191
     },
     "wall-205": {
-     "col": 67,
-     "composed": "blob in the pack palette + its face",
+     "col": 64,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 205
     },
     "wall-207": {
-     "col": 68,
-     "composed": "blob in the pack palette + its face",
+     "col": 65,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 207
     },
     "wall-223": {
-     "col": 69,
-     "composed": "blob in the pack palette + its face",
+     "col": 66,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 223
     },
     "wall-239": {
-     "col": 70,
-     "composed": "blob in the pack palette + its face",
+     "col": 67,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 239
     },
     "wall-255": {
-     "col": 71,
-     "composed": "blob in the pack palette + its face",
+     "col": 68,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone)",
      "mask": 255
     },
     "ruin-0": {
-     "col": 72,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 69,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 0
     },
     "ruin-1": {
-     "col": 73,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 70,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 1
     },
     "ruin-2": {
-     "col": 74,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 71,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 2
     },
     "ruin-3": {
-     "col": 75,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 72,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 3
     },
     "ruin-4": {
-     "col": 76,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 73,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 4
     },
     "ruin-5": {
-     "col": 77,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 74,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 5
     },
     "ruin-6": {
-     "col": 78,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 75,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 6
     },
     "ruin-7": {
-     "col": 79,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 76,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 7
     },
     "ruin-8": {
-     "col": 80,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 77,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 8
     },
     "ruin-9": {
-     "col": 81,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 78,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 9
     },
     "ruin-10": {
-     "col": 82,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 79,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 10
     },
     "ruin-11": {
-     "col": 83,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 80,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 11
     },
     "ruin-12": {
-     "col": 84,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 81,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 12
     },
     "ruin-13": {
-     "col": 85,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 82,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 13
     },
     "ruin-14": {
-     "col": 86,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 83,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 14
     },
     "ruin-15": {
-     "col": 87,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 84,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the castle palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 15
     },
     "hole-0": {
-     "col": 88,
+     "col": 85,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 0
     },
     "hole-1": {
-     "col": 89,
+     "col": 86,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 1
     },
     "hole-2": {
-     "col": 90,
+     "col": 87,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 2
     },
     "hole-3": {
-     "col": 91,
+     "col": 88,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 3
     },
     "hole-4": {
-     "col": 92,
+     "col": 89,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 4
     },
     "hole-5": {
-     "col": 93,
+     "col": 90,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 5
     },
     "hole-6": {
-     "col": 94,
+     "col": 91,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 6
     },
     "hole-7": {
-     "col": 95,
+     "col": 92,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 7
     },
     "hole-8": {
-     "col": 96,
+     "col": 93,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 8
     },
     "hole-9": {
-     "col": 97,
+     "col": 94,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 9
     },
     "hole-10": {
-     "col": 98,
+     "col": 95,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 10
     },
     "hole-11": {
-     "col": 99,
+     "col": 96,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 11
     },
     "hole-12": {
-     "col": 100,
+     "col": 97,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 12
     },
     "hole-13": {
-     "col": 101,
+     "col": 98,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 13
     },
     "hole-14": {
-     "col": 102,
+     "col": 99,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 14
     },
     "hole-15": {
-     "col": 103,
+     "col": 100,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
     }
@@ -1582,6 +1606,30 @@
   "crypt": {
    "row": 2,
    "title": "The crypt — Szadi art’s catacombs: dark brown flagstones, low brick walls",
+   "palette": {
+    "floor": "#5b5b62",
+    "wall": "#333844",
+    "highlight": "#3f4555"
+   },
+   "swap": {
+    "outline": "#23262e",
+    "lit": "#3f4555",
+    "fill": "#333844",
+    "dark": "#272a31",
+    "mid": "#4d515c",
+    "black": "#0a0a0a",
+    "mortarDark": "#23262e",
+    "mortar": "#262a32",
+    "brickDark": "#272a31",
+    "brick": "#333844",
+    "brickLight": "#3f4555",
+    "shade1": "#1f2128",
+    "shade2": "#1b1d22",
+    "shade3": "#17181c",
+    "shade4": "#121316",
+    "shade5": "#0e0f10",
+    "shade6": "#0a0a0a"
+   },
    "tiles": {
     "door": {
      "col": 1,
@@ -1600,7 +1648,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "crate-2": {
-     "col": 104,
+     "col": 101,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -1608,7 +1656,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "crate-3": {
-     "col": 105,
+     "col": 102,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
@@ -1616,7 +1664,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "crate-4": {
-     "col": 106,
+     "col": 103,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 3,
@@ -1624,7 +1672,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "crate-5": {
-     "col": 107,
+     "col": 104,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 0,
@@ -1632,7 +1680,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "crate-6": {
-     "col": 108,
+     "col": 105,
      "pack": "pixel-poem",
      "sheet": "box_2_4.png",
      "x": 0,
@@ -1640,7 +1688,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "crate-7": {
-     "col": 109,
+     "col": 106,
      "pack": "pixel-poem",
      "sheet": "mini_box_2_4.png",
      "x": 0,
@@ -1656,7 +1704,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "chest-2": {
-     "col": 110,
+     "col": 107,
      "pack": "pixel-poem",
      "sheet": "Dungeon_Tileset.png",
      "x": 5,
@@ -1664,7 +1712,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "chest-3": {
-     "col": 111,
+     "col": 108,
      "pack": "pixel-poem",
      "sheet": "chest_2.png",
      "x": 0,
@@ -1672,7 +1720,7 @@
      "recoloured": "wood to #5c4a3c"
     },
     "chest-4": {
-     "col": 112,
+     "col": 109,
      "pack": "pixel-poem",
      "sheet": "mini_chest_2.png",
      "x": 0,
@@ -1687,63 +1735,63 @@
      "y": 7
     },
     "barrel-2": {
-     "col": 113,
+     "col": 110,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
      "y": 8
     },
     "barrel-3": {
-     "col": 114,
+     "col": 111,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
      "y": 8
     },
     "barrel-4": {
-     "col": 115,
+     "col": 112,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 12,
      "y": 8
     },
     "barrel-5": {
-     "col": 116,
+     "col": 113,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 13,
      "y": 8
     },
     "barrel-6": {
-     "col": 117,
+     "col": 114,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
      "y": 10
     },
     "barrel-7": {
-     "col": 118,
+     "col": 115,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
      "y": 11
     },
     "barrel-8": {
-     "col": 119,
+     "col": 116,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
      "y": 11
     },
     "barrel-9": {
-     "col": 120,
+     "col": 117,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 12,
      "y": 11
     },
     "barrel-10": {
-     "col": 121,
+     "col": 118,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 13,
@@ -1757,42 +1805,42 @@
      "y": 6
     },
     "wreckage-2": {
-     "col": 122,
+     "col": 119,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
      "y": 6
     },
     "wreckage-3": {
-     "col": 123,
+     "col": 120,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
      "y": 9
     },
     "wreckage-4": {
-     "col": 124,
+     "col": 121,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
      "y": 9
     },
     "wreckage-5": {
-     "col": 125,
+     "col": 122,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 11,
      "y": 9
     },
     "wreckage-6": {
-     "col": 126,
+     "col": 123,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 9,
      "y": 12
     },
     "wreckage-7": {
-     "col": 127,
+     "col": 124,
      "pack": "catacombs",
      "sheet": "decorative.png",
      "x": 10,
@@ -1863,460 +1911,455 @@
      "y": 6,
      "recoloured": "wood to #5c4a3c"
     },
-    "doorway": {
-     "col": 16,
-     "composed": "posts in the door material at both edges, floor between",
-     "mask": 10
-    },
-    "doorway-8": {
-     "col": 17,
-     "composed": "one post in the door material at the west edge, floor between",
-     "mask": 8
-    },
-    "doorway-2": {
-     "col": 18,
-     "composed": "one post in the door material at the east edge, floor between",
-     "mask": 2
+    "door-edge": {
+     "col": 129,
+     "composed": "the designer's profile door (lib/inhouse/door-profile.png) in the band, wood to #5c4a3c"
     },
     "floor-1": {
+     "col": 16,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 14,
+     "recoloured": "to #5b5b62"
+    },
+    "floor-2": {
+     "col": 17,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 46,
+     "y": 13,
+     "recoloured": "to #5b5b62"
+    },
+    "floor-3": {
+     "col": 18,
+     "pack": "catacombs",
+     "sheet": "mainlevbuild.png",
+     "x": 47,
+     "y": 15,
+     "recoloured": "to #5b5b62"
+    },
+    "floor-4": {
      "col": 19,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 14
+     "x": 46,
+     "y": 14,
+     "recoloured": "to #5b5b62"
     },
-    "floor-2": {
+    "floor-5": {
      "col": 20,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 46,
-     "y": 13
+     "x": 47,
+     "y": 13,
+     "recoloured": "to #5b5b62"
     },
-    "floor-3": {
+    "floor-6": {
      "col": 21,
      "pack": "catacombs",
      "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 15
-    },
-    "floor-4": {
-     "col": 22,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
      "x": 46,
-     "y": 14
-    },
-    "floor-5": {
-     "col": 23,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 47,
-     "y": 13
-    },
-    "floor-6": {
-     "col": 24,
-     "pack": "catacombs",
-     "sheet": "mainlevbuild.png",
-     "x": 46,
-     "y": 15
+     "y": 15,
+     "recoloured": "to #5b5b62"
     },
     "wall": {
      "col": 0,
-     "composed": "blob case 10 (east–west run)",
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone) — case 10, the east–west run",
      "mask": 10
     },
     "wall-0": {
-     "col": 25,
-     "composed": "blob in the pack palette + its face",
+     "col": 22,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 0
     },
     "wall-1": {
-     "col": 26,
-     "composed": "blob in the pack palette + its face",
+     "col": 23,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 1
     },
     "wall-2": {
-     "col": 27,
-     "composed": "blob in the pack palette + its face",
+     "col": 24,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 2
     },
     "wall-3": {
-     "col": 28,
-     "composed": "blob in the pack palette + its face",
+     "col": 25,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 3
     },
     "wall-4": {
-     "col": 29,
-     "composed": "blob in the pack palette + its face",
+     "col": 26,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 4
     },
     "wall-5": {
-     "col": 30,
-     "composed": "blob in the pack palette + its face",
+     "col": 27,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 5
     },
     "wall-6": {
-     "col": 31,
-     "composed": "blob in the pack palette + its face",
+     "col": 28,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 6
     },
     "wall-7": {
-     "col": 32,
-     "composed": "blob in the pack palette + its face",
+     "col": 29,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 7
     },
     "wall-8": {
-     "col": 33,
-     "composed": "blob in the pack palette + its face",
+     "col": 30,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 8
     },
     "wall-9": {
-     "col": 34,
-     "composed": "blob in the pack palette + its face",
+     "col": 31,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 9
     },
     "wall-10": {
-     "col": 35,
-     "composed": "blob in the pack palette + its face",
+     "col": 32,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 10
     },
     "wall-11": {
-     "col": 36,
-     "composed": "blob in the pack palette + its face",
+     "col": 33,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 11
     },
     "wall-12": {
-     "col": 37,
-     "composed": "blob in the pack palette + its face",
+     "col": 34,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 12
     },
     "wall-13": {
-     "col": 38,
-     "composed": "blob in the pack palette + its face",
+     "col": 35,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 13
     },
     "wall-14": {
-     "col": 39,
-     "composed": "blob in the pack palette + its face",
+     "col": 36,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 14
     },
     "wall-15": {
-     "col": 40,
-     "composed": "blob in the pack palette + its face",
+     "col": 37,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 15
     },
     "wall-19": {
-     "col": 41,
-     "composed": "blob in the pack palette + its face",
+     "col": 38,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 19
     },
     "wall-23": {
-     "col": 42,
-     "composed": "blob in the pack palette + its face",
+     "col": 39,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 23
     },
     "wall-27": {
-     "col": 43,
-     "composed": "blob in the pack palette + its face",
+     "col": 40,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 27
     },
     "wall-31": {
-     "col": 44,
-     "composed": "blob in the pack palette + its face",
+     "col": 41,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 31
     },
     "wall-38": {
-     "col": 45,
-     "composed": "blob in the pack palette + its face",
+     "col": 42,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 38
     },
     "wall-39": {
-     "col": 46,
-     "composed": "blob in the pack palette + its face",
+     "col": 43,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 39
     },
     "wall-46": {
-     "col": 47,
-     "composed": "blob in the pack palette + its face",
+     "col": 44,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 46
     },
     "wall-47": {
-     "col": 48,
-     "composed": "blob in the pack palette + its face",
+     "col": 45,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 47
     },
     "wall-55": {
-     "col": 49,
-     "composed": "blob in the pack palette + its face",
+     "col": 46,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 55
     },
     "wall-63": {
-     "col": 50,
-     "composed": "blob in the pack palette + its face",
+     "col": 47,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 63
     },
     "wall-76": {
-     "col": 51,
-     "composed": "blob in the pack palette + its face",
+     "col": 48,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 76
     },
     "wall-77": {
-     "col": 52,
-     "composed": "blob in the pack palette + its face",
+     "col": 49,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 77
     },
     "wall-78": {
-     "col": 53,
-     "composed": "blob in the pack palette + its face",
+     "col": 50,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 78
     },
     "wall-79": {
-     "col": 54,
-     "composed": "blob in the pack palette + its face",
+     "col": 51,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 79
     },
     "wall-95": {
-     "col": 55,
-     "composed": "blob in the pack palette + its face",
+     "col": 52,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 95
     },
     "wall-110": {
-     "col": 56,
-     "composed": "blob in the pack palette + its face",
+     "col": 53,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 110
     },
     "wall-111": {
-     "col": 57,
-     "composed": "blob in the pack palette + its face",
+     "col": 54,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 111
     },
     "wall-127": {
-     "col": 58,
-     "composed": "blob in the pack palette + its face",
+     "col": 55,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 127
     },
     "wall-137": {
-     "col": 59,
-     "composed": "blob in the pack palette + its face",
+     "col": 56,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 137
     },
     "wall-139": {
-     "col": 60,
-     "composed": "blob in the pack palette + its face",
+     "col": 57,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 139
     },
     "wall-141": {
-     "col": 61,
-     "composed": "blob in the pack palette + its face",
+     "col": 58,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 141
     },
     "wall-143": {
-     "col": 62,
-     "composed": "blob in the pack palette + its face",
+     "col": 59,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 143
     },
     "wall-155": {
-     "col": 63,
-     "composed": "blob in the pack palette + its face",
+     "col": 60,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 155
     },
     "wall-159": {
-     "col": 64,
-     "composed": "blob in the pack palette + its face",
+     "col": 61,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 159
     },
     "wall-175": {
-     "col": 65,
-     "composed": "blob in the pack palette + its face",
+     "col": 62,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 175
     },
     "wall-191": {
-     "col": 66,
-     "composed": "blob in the pack palette + its face",
+     "col": 63,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 191
     },
     "wall-205": {
-     "col": 67,
-     "composed": "blob in the pack palette + its face",
+     "col": 64,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 205
     },
     "wall-207": {
-     "col": 68,
-     "composed": "blob in the pack palette + its face",
+     "col": 65,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 207
     },
     "wall-223": {
-     "col": 69,
-     "composed": "blob in the pack palette + its face",
+     "col": 66,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 223
     },
     "wall-239": {
-     "col": 70,
-     "composed": "blob in the pack palette + its face",
+     "col": 67,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 239
     },
     "wall-255": {
-     "col": 71,
-     "composed": "blob in the pack palette + its face",
+     "col": 68,
+     "composed": "the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone)",
      "mask": 255
     },
     "ruin-0": {
-     "col": 72,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 69,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 0
     },
     "ruin-1": {
-     "col": 73,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 70,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 1
     },
     "ruin-2": {
-     "col": 74,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 71,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 2
     },
     "ruin-3": {
-     "col": 75,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 72,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 3
     },
     "ruin-4": {
-     "col": 76,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 73,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 4
     },
     "ruin-5": {
-     "col": 77,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 74,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 5
     },
     "ruin-6": {
-     "col": 78,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 75,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 6
     },
     "ruin-7": {
-     "col": 79,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 76,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 7
     },
     "ruin-8": {
-     "col": 80,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 77,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 8
     },
     "ruin-9": {
-     "col": 81,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 78,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 9
     },
     "ruin-10": {
-     "col": 82,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 79,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 10
     },
     "ruin-11": {
-     "col": 83,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 80,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 11
     },
     "ruin-12": {
-     "col": 84,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 81,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 12
     },
     "ruin-13": {
-     "col": 85,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 82,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 13
     },
     "ruin-14": {
-     "col": 86,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 83,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 14
     },
     "ruin-15": {
-     "col": 87,
-     "composed": "ruin blob: the broken wall stub in the pack palette + its face",
+     "col": 84,
+     "composed": "ruin: the Catacombs north band (5,3) over its brick face (5,9), drawn by depth, in the crypt palette (the roof in the face's own stone), the joining walls' ragged tongues",
      "mask": 15
     },
     "hole-0": {
-     "col": 88,
+     "col": 85,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 0
     },
     "hole-1": {
-     "col": 89,
+     "col": 86,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 1
     },
     "hole-2": {
-     "col": 90,
+     "col": 87,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 2
     },
     "hole-3": {
-     "col": 91,
+     "col": 88,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 3
     },
     "hole-4": {
-     "col": 92,
+     "col": 89,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 4
     },
     "hole-5": {
-     "col": 93,
+     "col": 90,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 5
     },
     "hole-6": {
-     "col": 94,
+     "col": 91,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 6
     },
     "hole-7": {
-     "col": 95,
+     "col": 92,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 7
     },
     "hole-8": {
-     "col": 96,
+     "col": 93,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 8
     },
     "hole-9": {
-     "col": 97,
+     "col": 94,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 9
     },
     "hole-10": {
-     "col": 98,
+     "col": 95,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 10
     },
     "hole-11": {
-     "col": 99,
+     "col": 96,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 11
     },
     "hole-12": {
-     "col": 100,
+     "col": 97,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 12
     },
     "hole-13": {
-     "col": 101,
+     "col": 98,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 13
     },
     "hole-14": {
-     "col": 102,
+     "col": 99,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 14
     },
     "hole-15": {
-     "col": 103,
+     "col": 100,
      "composed": "hole blob: the pit in the pack palette, rimmed where floor meets it",
      "mask": 15
     }
@@ -2326,25 +2369,45 @@
    "row": 3,
    "title": "The classic set — drawn in-house (a stage without a theme; the crack every theme wears)",
    "inhouse": true,
+   "palette": {
+    "floor": "#2a2a2e",
+    "wall": "#52506a",
+    "highlight": "#6e6c82"
+   },
+   "swap": {
+    "outline": "#312f41",
+    "lit": "#6e6c82",
+    "fill": "#52506a",
+    "dark": "#403e55",
+    "mid": "#605e76",
+    "black": "#0c0b12",
+    "mortarDark": "#312f41",
+    "mortar": "#3a384c",
+    "brickDark": "#403e55",
+    "brick": "#52506a",
+    "brickLight": "#6e6c82",
+    "shade1": "#2b2939",
+    "shade2": "#252331",
+    "shade3": "#1f1d2a",
+    "shade4": "#181722",
+    "shade5": "#12111a",
+    "shade6": "#0c0b12"
+   },
    "tiles": {
-    "wall": {
-     "col": 0,
-     "composed": "drawn in-house (lib/inhouse.mjs)"
-    },
     "crack-1": {
-     "col": 128,
+     "col": 125,
      "composed": "drawn in-house (lib/inhouse.mjs)"
     },
     "crack-2": {
-     "col": 129,
+     "col": 126,
      "composed": "drawn in-house (lib/inhouse.mjs)"
     },
     "crack-3": {
-     "col": 130,
+     "col": 127,
      "composed": "drawn in-house (lib/inhouse.mjs)"
     },
     "crack-4": {
-     "col": 131,
+     "col": 128,
      "composed": "drawn in-house (lib/inhouse.mjs)"
     },
     "crate": {
@@ -2366,6 +2429,354 @@
     "rubble": {
      "col": 8,
      "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "door-edge": {
+     "col": 129,
+     "composed": "drawn in-house (lib/inhouse.mjs)"
+    },
+    "wall": {
+     "col": 0,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 10
+    },
+    "wall-0": {
+     "col": 22,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 0
+    },
+    "wall-1": {
+     "col": 23,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 1
+    },
+    "wall-2": {
+     "col": 24,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 2
+    },
+    "wall-3": {
+     "col": 25,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 3
+    },
+    "wall-4": {
+     "col": 26,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 4
+    },
+    "wall-5": {
+     "col": 27,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 5
+    },
+    "wall-6": {
+     "col": 28,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 6
+    },
+    "wall-7": {
+     "col": 29,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 7
+    },
+    "wall-8": {
+     "col": 30,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 8
+    },
+    "wall-9": {
+     "col": 31,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 9
+    },
+    "wall-10": {
+     "col": 32,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 10
+    },
+    "wall-11": {
+     "col": 33,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 11
+    },
+    "wall-12": {
+     "col": 34,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 12
+    },
+    "wall-13": {
+     "col": 35,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 13
+    },
+    "wall-14": {
+     "col": 36,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 14
+    },
+    "wall-15": {
+     "col": 37,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 15
+    },
+    "wall-19": {
+     "col": 38,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 19
+    },
+    "wall-23": {
+     "col": 39,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 23
+    },
+    "wall-27": {
+     "col": 40,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 27
+    },
+    "wall-31": {
+     "col": 41,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 31
+    },
+    "wall-38": {
+     "col": 42,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 38
+    },
+    "wall-39": {
+     "col": 43,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 39
+    },
+    "wall-46": {
+     "col": 44,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 46
+    },
+    "wall-47": {
+     "col": 45,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 47
+    },
+    "wall-55": {
+     "col": 46,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 55
+    },
+    "wall-63": {
+     "col": 47,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 63
+    },
+    "wall-76": {
+     "col": 48,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 76
+    },
+    "wall-77": {
+     "col": 49,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 77
+    },
+    "wall-78": {
+     "col": 50,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 78
+    },
+    "wall-79": {
+     "col": 51,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 79
+    },
+    "wall-95": {
+     "col": 52,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 95
+    },
+    "wall-110": {
+     "col": 53,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 110
+    },
+    "wall-111": {
+     "col": 54,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 111
+    },
+    "wall-127": {
+     "col": 55,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 127
+    },
+    "wall-137": {
+     "col": 56,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 137
+    },
+    "wall-139": {
+     "col": 57,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 139
+    },
+    "wall-141": {
+     "col": 58,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 141
+    },
+    "wall-143": {
+     "col": 59,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 143
+    },
+    "wall-155": {
+     "col": 60,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 155
+    },
+    "wall-159": {
+     "col": 61,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 159
+    },
+    "wall-175": {
+     "col": 62,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 175
+    },
+    "wall-191": {
+     "col": 63,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 191
+    },
+    "wall-205": {
+     "col": 64,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 205
+    },
+    "wall-207": {
+     "col": 65,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 207
+    },
+    "wall-223": {
+     "col": 66,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 223
+    },
+    "wall-239": {
+     "col": 67,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 239
+    },
+    "wall-255": {
+     "col": 68,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 255
+    },
+    "ruin-0": {
+     "col": 69,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 0
+    },
+    "ruin-1": {
+     "col": 70,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 1
+    },
+    "ruin-2": {
+     "col": 71,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 2
+    },
+    "ruin-3": {
+     "col": 72,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 3
+    },
+    "ruin-4": {
+     "col": 73,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 4
+    },
+    "ruin-5": {
+     "col": 74,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 5
+    },
+    "ruin-6": {
+     "col": 75,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 6
+    },
+    "ruin-7": {
+     "col": 76,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 7
+    },
+    "ruin-8": {
+     "col": 77,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 8
+    },
+    "ruin-9": {
+     "col": 78,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 9
+    },
+    "ruin-10": {
+     "col": 79,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 10
+    },
+    "ruin-11": {
+     "col": 80,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 11
+    },
+    "ruin-12": {
+     "col": 81,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 12
+    },
+    "ruin-13": {
+     "col": 82,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 13
+    },
+    "ruin-14": {
+     "col": 83,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 14
+    },
+    "ruin-15": {
+     "col": 84,
+     "composed": "the crypt's tall wall in the classic palette",
+     "mask": 15
+    },
+    "floor-1": {
+     "col": 16,
+     "composed": "the Catacombs flagstones recoloured to #2a2a2e"
+    },
+    "floor-2": {
+     "col": 17,
+     "composed": "the Catacombs flagstones recoloured to #2a2a2e"
+    },
+    "floor-3": {
+     "col": 18,
+     "composed": "the Catacombs flagstones recoloured to #2a2a2e"
+    },
+    "floor-4": {
+     "col": 19,
+     "composed": "the Catacombs flagstones recoloured to #2a2a2e"
+    },
+    "floor-5": {
+     "col": 20,
+     "composed": "the Catacombs flagstones recoloured to #2a2a2e"
+    },
+    "floor-6": {
+     "col": 21,
+     "composed": "the Catacombs flagstones recoloured to #2a2a2e"
     }
    }
   }

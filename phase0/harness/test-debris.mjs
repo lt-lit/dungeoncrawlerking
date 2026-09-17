@@ -184,6 +184,72 @@ const T = D.T;
   expect(/const RUIN = \{[^}]*chips: 0/.test(repack), 'the repack tool generates chip-free ruins');
 }
 
+// ---- THE ATLAS'S BOXES (2026-09-11; TALL WALLS 2026-09-12): a prop role is
+// a 16×32 box on every theme, a wall or ruin case a 16×WALL_SPRITE_H sprite
+// (the roof's far half over the face — 20 rows since THE SHORTER FACE of
+// 2026-09-15 took the face's top course) on every theme INCLUDING the classic row
+// (its own palette of the crypt's wall), and BOTH leaves 16×16 tiles — the
+// edge-on one the designer's 5×16 profile door as drawn, one tile tall, in
+// the band's middle (a 27-row stretch went before it and read as a door
+// hung from the roof; the leaf stands at DOOR_LIFT like the face-on one,
+// so its head meets the face and a broken double's upper half keeps its
+// own foot); reporting the wrong box floats a sprite, which the pixel
+// guard's mirror rows caught on an earlier cut. The leaf routes through
+// the door set; the hall's leaf is the designer's file byte for byte and
+// every theme's has its exact shape. The doorway posts are gone.
+{
+  const { Atlas } = await import('../../play/js/atlas.mjs');
+  const { EDGE_LEAF_X } = await import('../lib/inhouse.mjs');
+  const { WALL_SPRITE_H, WALL_MASK_CODES } = await import('../../play/js/board-ui.mjs');
+  const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'play/img/tileset.json'), 'utf8'));
+  const atlas = new Atlas(index, null, null);
+  const themed = ['crate', 'chest', 'barrel', 'wreckage'].every((r) => index.themes.hall.tiles[r] && atlas.tileOf('hall', r).h === 2 * T);
+  expect(themed, 'the themed crate / chest / barrel / wreckage are 16×32 boxes');
+  expect(atlas.tileOf('hall', 'door').h === T && atlas.tileOf('hall', 'door-edge').h === T, 'the face-on and the edge-on leaf are both 16×16 tiles');
+  expect(['hall', 'castle', 'crypt'].every((th) => atlas.tileOf(th, 'wall').h === WALL_SPRITE_H && WALL_MASK_CODES.every((c) => atlas.tileOf(th, `wall-${c}`)?.h === WALL_SPRITE_H) && Array.from({ length: 16 }, (_, m) => atlas.tileOf(th, `ruin-${m}`)?.h === WALL_SPRITE_H).every(Boolean)), `every theme has the 47 wall cases and 16 ruin cases as ${WALL_SPRITE_H}-tall sprites`);
+  expect(WALL_MASK_CODES.every((c) => atlas.classicTile(`wall-${c}`)?.h === WALL_SPRITE_H && atlas.tileOf(null, `wall-${c}`)?.h === WALL_SPRITE_H) && Array.from({ length: 16 }, (_, m) => atlas.classicTile(`ruin-${m}`)?.h === WALL_SPRITE_H).every(Boolean), 'the classic row has every wall and ruin case as a tall sprite of its own');
+  expect(['crate', 'chest', 'barrel', 'door-edge'].every((r) => atlas.classicTile(r).h === T), 'the classic row\'s drawn props and its edge-on leaf are 16 tall');
+  expect(atlas.tileOf('hall', 'door-edge', { doors: 'crypt' }).theme === 'crypt' && atlas.tileOf('hall', 'wall-10', { doors: 'crypt' }).theme === 'hall', 'the door set swaps the edge-on leaf and leaves the walls to the theme');
+  expect(!Object.values(index.themes).some((t) => Object.keys(t.tiles).some((r) => r.startsWith('doorway'))), 'no doorway role remains in the atlas');
+  expect(Object.keys(index.themes).every((th) => Array.from({ length: 6 }, (_, i) => index.themes[th].tiles[`floor-${i + 1}`]).every(Boolean)) && Array.from({ length: 6 }, (_, i) => atlas.classicTile(`floor-${i + 1}`)?.h === T).every(Boolean), 'every row has the six flagstones, the classic row included (the palette round)');
+  const png = decodePng(fs.readFileSync(path.join(ROOT, 'play/img/tileset.png')));
+  // THE SHORTER FACE (2026-09-15) + THE WALL HIGHLIGHT (2026-09-16): every
+  // row records its palette (floor / wall / highlight), the east–west
+  // wall's face — sprite rows 8 to WALL_SPRITE_H − 1 — is opaque, brick in
+  // the palette's wall colour with the flecks in its highlight colour (the
+  // roof's lit line the same colour), nothing is drawn under the sprite's
+  // foot, and a north–south band runs the roof plane's sixteen rows only.
+  {
+    const hexAt = (theme, role, x, y) => { const t = index.themes[theme], c = t.tiles[role]; const o = ((t.row * index.row + y) * png.width + c.col * T + x) * 4; return png.data[o + 3] ? '#' + [0, 1, 2].map((i) => png.data[o + i].toString(16).padStart(2, '0')).join('') : null; };
+    const rows = Object.keys(index.themes);
+    expect(rows.every((th) => { const p = index.themes[th].palette; return !!p && [p.floor, p.wall, p.highlight].every((h) => /^#[0-9a-f]{6}$/.test(h ?? '')) && p.highlight !== p.wall; }), `every row records its palette — floor, wall and highlight as hex, the highlight its own colour (${rows.map((th) => `${th} ${index.themes[th].palette?.highlight}`).join(', ')})`);
+    // THE WALL HIGHLIGHT (2026-09-16): one colour per set for the roof's lit line (the band's second row) and the brick flecks on the face
+    const faces = rows.map((th) => { let opaque = true, flecks = 0, brick = 0, below = 0, roofLit = 0; for (let y = 8; y < WALL_SPRITE_H; y++) for (let x = 0; x < T; x++) { const h = hexAt(th, 'wall-10', x, y); if (!h) opaque = false; else if (h === index.themes[th].palette.highlight) flecks++; else if (h === index.themes[th].palette.wall) brick++; } for (let x = 0; x < T; x++) if (hexAt(th, 'wall-10', x, 1) === index.themes[th].palette.highlight) roofLit++; for (let y = WALL_SPRITE_H; y < 2 * T; y++) for (let x = 0; x < T; x++) if (hexAt(th, 'wall-10', x, y)) below++; return { th, opaque, flecks, brick, below, roofLit }; });
+    expect(faces.every((f) => f.opaque && f.flecks > 0 && f.brick > f.flecks && f.below === 0 && f.roofLit >= 12), `every row's east–west wall: an opaque face of ${WALL_SPRITE_H - 8} rows under the roof, brick in the palette's wall colour with the flecks in its highlight colour, the roof's lit line in the same colour, nothing under the sprite's foot (${faces.map((f) => `${f.th} ${f.flecks} flecks / ${f.roofLit} lit / ${f.brick} brick / ${f.below} below`).join(', ')})`);
+    expect(index.themes.crypt.palette.floor === '#5b5b62' && index.themes.crypt.palette.wall === '#333844' && index.themes.crypt.palette.highlight === '#3f4555', "the crypt's defaults are the designer's slate: floor #5b5b62, walls #333844, highlight #3f4555 (2026-09-16)");
+    expect(rows.every((th) => hexAt(th, 'wall-10', 0, 8) !== index.themes[th].palette.wall && hexAt(th, 'wall-10', 0, WALL_SPRITE_H - 1) === index.themes[th].palette.wall), "the face starts with a mortar line under the roof and ends on brick (the crop took a whole course)");
+    expect(rows.every((th) => { let on = 0, off = 0; for (let y = 0; y < 2 * T; y++) { const h = hexAt(th, 'wall-5', 8, y); if (y < T) { if (h) on++; } else if (h) off++; } return on === T && off === 0; }), "a north–south band runs the roof plane's sixteen rows and nothing below (the next square's roof covers the rest)");
+  }
+  const file = decodePng(fs.readFileSync(path.join(ROOT, 'phase0/lib/inhouse/door-profile.png')));
+  const X0 = EDGE_LEAF_X;
+  expect(file.width === 5 && file.height === 16, `the designer's profile door is 5×16 (${file.width}×${file.height})`);
+  const at = (theme) => { const t = index.themes[theme], c = t.tiles['door-edge']; return (x, y) => ((t.row * index.row + y) * png.width + c.col * T + x) * 4; };
+  const shapeOk = Object.keys(index.themes).every((theme) => {
+    const o = at(theme);
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const inLeaf = x >= X0 && x < X0 + file.width;
+      const want = inLeaf ? file.data[(y * file.width + x - X0) * 4 + 3] : 0;
+      if (png.data[o(x, y) + 3] !== want) return false;
+    }
+    return true;
+  });
+  expect(shapeOk, `every edge-on leaf is the file's exact shape at columns ${X0}–${X0 + 4}, one tile tall, and nothing else (hall, castle, crypt, classic)`);
+  const o = at('hall');
+  let same = true;
+  for (let y = 0; y < T; y++) for (let x = 0; x < file.width; x++) for (let c = 0; c < 4; c++) if (png.data[o(x + X0, y) + c] !== file.data[(y * file.width + x) * 4 + c]) same = false;
+  expect(same, "the hall's edge-on leaf is the designer's file byte for byte");
+}
+
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(`\n${notes.length} ok, ${failures.length} failed`);
