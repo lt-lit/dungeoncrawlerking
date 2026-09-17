@@ -289,7 +289,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, theme: 'auto', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 } };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -324,7 +324,8 @@ function loadOptions() {
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
     options.arrowAlpha = clampNum(options.arrowAlpha, ARROW_ALPHA_RANGE, ARROW_STYLE_DEFAULT.alpha);
-    if (!['auto', 'classic', ...THEMES].includes(options.theme)) options.theme = 'auto';
+    // THE CRYPT EVERYWHERE (2026-09-17): the Art set defaults to crypt; saved under `art`, so a phone's saved `theme` ('auto', the stage's own) from before is forgotten.
+    if (!['auto', 'classic', ...THEMES].includes(options.art)) options.art = 'crypt';
     if (!PIECE_SETS.includes(options.pieces)) options.pieces = 'nulltale'; // (a saved 'classic' — the glyph set, retired with the DOM board — lands here)
     if (!['auto', ...DOOR_SETS].includes(options.doors)) options.doors = 'auto';
     // THE TONES (2026-09-12): per art set, a floor and a wall base colour, #rrggbb or nothing.
@@ -397,7 +398,7 @@ function syncOptionsUI() {
   $('btnLadderReset').disabled = !options.godLadder;
   $('optGodsDebug').checked = options.godsDebug;
   $('optScaling').value = scalingFor();
-  $('optTheme').value = options.theme;
+  $('optTheme').value = options.art;
   $('optPieces').value = options.pieces;
   $('optDoors').value = options.doors;
   const fit = pieceFitFor();
@@ -622,10 +623,15 @@ function piecesFor() {
 
 /** The art theme the board wears right now (stage.mjs THEMES; the atlas's
  *  rows): `?theme=` (a feel-check override, never saved) > the Art-set
- *  option > the stage's own `theme`. 'classic' — or a stage with no theme —
- *  is the in-house drawn set (no data-theme; the atlas's classic row). */
+ *  option (`options.art` — CRYPT BY DEFAULT since 2026-09-17, the
+ *  designer: "make crypt the default look everywhere for now. Hall and
+ *  Castle look like shit but I'm just tired of messing with the
+ *  aesthetics for a while"; 'auto' is the stage's own `theme`, an
+ *  explicit choice now) > the stage's own `theme`. 'classic' — or a
+ *  stage with no theme — is the in-house drawn set (no data-theme; the
+ *  atlas's classic row). */
 function themeFor(stage) {
-  const pick = params.get('theme') ?? options.theme;
+  const pick = params.get('theme') ?? options.art;
   if (pick && pick !== 'auto') return THEMES.includes(pick) ? pick : null;
   return stage?.theme ?? null;
 }
@@ -3387,7 +3393,7 @@ $('optScaling').addEventListener('change', (e) => {
 $('btnTurnL').addEventListener('click', () => setFacing(app.view.facing - 1));
 $('btnTurnR').addEventListener('click', () => setFacing(app.view.facing + 1));
 $('optTheme').addEventListener('change', (e) => {
-  options.theme = e.target.value;
+  options.art = e.target.value;
   applyOptions();
 });
 $('optPieces').addEventListener('change', (e) => {

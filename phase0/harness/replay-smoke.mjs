@@ -88,7 +88,7 @@ let v = await view();
 expect(v.line === 'main' && v.ply === 0 && v.plies === L.plies, `sample loads on the line of record (${v.plies} plies)`);
 expect(v.fen === L.states[0].fen, 'ply 0 paints the start position');
 expect(v.stage === L.stage && v.skinCount > 0 && !v.stageNote, `stage ${v.stage} resolved with ${v.skinCount} skinned squares${v.stageNote ? ` — ${v.stageNote}` : ''}`);
-expect(!!v.theme, `the board wears the stage's theme (${v.theme})`);
+expect(!!v.theme, `the board wears an art set (${v.theme}; the game's Art set option, crypt by default)`);
 expect(await page.evaluate(() => document.getElementById('load-panel').hidden && !document.getElementById('screen-replay').hidden), 'the load panel folds away, the replay screen shows');
 await shot('00-loaded');
 

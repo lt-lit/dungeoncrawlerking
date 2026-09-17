@@ -2533,6 +2533,23 @@ returning), selftest 46/46, facing-walk 108/108, replay-smoke 63,
 test-camera 80, test-world 125, test-logreport 47, canvas-grid `none`
 / `margin` 4/4 in Chromium; the gallery re-rendered.
 
+THE CRYPT EVERYWHERE (2026-09-17; designer, after the one-pixel door:
+"Actually make crypt the default look everywhere for now. Hall and
+Castle look like shit but I'm just tired of messing with the aesthetics
+for a while"). Options → Art set defaults to Crypt: `options.art`
+(renamed from `theme`, so a phone's saved 'auto' from before is
+forgotten) is 'crypt' unless changed; "The stage's own" is the explicit
+'auto' choice; `?theme=` overrides either for a shot; the replay page
+reads the same option (crypt when unset); the stages keep their
+authored `theme` in the files, the generator's floors were crypt
+already, and the hall and castle sets stay in the atlas and the picker.
+ui-smoke's themes block asserts the default (crypt over s59's hall, the
+legend with it) and 'auto' returning the stage's own; gates ui-smoke
+325 ok, selftest 46/46, replay-smoke 63, and a direct check that a
+saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
+now holds across a reload and that the replay page wears crypt on the
+sample log.
+
 ## The debris layer (2026-09-07)
 
 The floor remembers. Designer brief: "a universal debris system, so traces

@@ -35,7 +35,7 @@ const STAGE = arg('stage', 's59-hall-corner');
 const PLIES = parseInt(arg('plies', '60'), 10);
 const SEED = arg('seed', '3');
 const SHOTS = argv.includes('--shots');
-const THEME = arg('theme', null); // ?theme= override for the run (default: the stage's own)
+const THEME = arg('theme', null); // ?theme= override for the run (default: the Art set's default, crypt — THE CRYPT EVERYWHERE, 2026-09-17)
 const GO = arg('go', 'depth 8 movetime 120');
 
 const server = http.createServer((req, res) => {
@@ -165,20 +165,22 @@ const themeState = () =>
       sig: (() => { const S = window.__smoke; const cells = S.cells(); const wall = Object.keys(cells).find((sq) => cells[sq].includes('wall')); const floor = Object.keys(cells).find((sq) => !cells[sq].some((c) => ['wall', 'hole', 'furniture'].includes(c))); const fen = window.__DCK.app.duel.fen(); const kingSq = (fen.match(/K/) && (() => { const grid = fen.split(' ')[0].split('/'); for (let r = 0; r < grid.length; r++) { let f = 0; for (const ch of grid[r].replace(/\d+/g, (d) => '.'.repeat(+d))) { if (ch === 'K') return String.fromCharCode(97 + f) + (grid.length - r); f++; } } return null; })()); window.__DCK.renderer.paintNow(); return { wall: wall ? S.sig(wall) : null, floor: floor ? S.sig(floor) : null, king: kingSq ? S.sig(kingSq) : null }; })(),
     };
   });
-const stageTheme = THEME ?? (await page.evaluate(() => window.__DCK.app.session.deal.stage.theme));
+const stageTheme = await page.evaluate(() => window.__DCK.app.session.deal.stage.theme);
+const DEFAULT_ART = 'crypt'; // THE CRYPT EVERYWHERE (2026-09-17): the Art set's default, whatever the stage says
+const wornTheme = THEME ?? DEFAULT_ART;
 const themeSigs = {}; // per theme, the signatures
 const legendSigs = {}; // per theme, the legend's five tiles
 {
   const t = await themeState();
-  expect(!!stageTheme && t.theme === stageTheme && t.attr === stageTheme && t.legend.length === 5 && t.legend.every((h) => h !== 0), `board wears the stage's theme "${stageTheme}" (${t.theme}/${t.attr}) and the legend's 5 tiles are painted`);
-  themeSigs[stageTheme] = t.sig;
-  legendSigs[stageTheme] = t.legend.join(',');
+  expect(!!stageTheme && t.theme === wornTheme && t.attr === wornTheme && t.legend.length === 5 && t.legend.every((h) => h !== 0), `board wears the default art set "${wornTheme}" over the stage's own "${stageTheme}" (${t.theme}/${t.attr}) and the legend's 5 tiles are painted`);
+  themeSigs[wornTheme] = t.sig;
+  legendSigs[wornTheme] = t.legend.join(',');
   expect(t.sig.floor !== null && t.sig.wall !== undefined, `the canvas board paints the stage (floor sig ${t.sig.floor}, wall sig ${t.sig.wall}, king sig ${t.sig.king})`);
   expect(t.masksBad.n > 0 && t.masksBad.bad.length === 0, `wall autotile masks match the standing-neighbour rule on all ${t.masksBad.n} walls${t.masksBad.bad.length ? ` — ${t.masksBad.bad.join(' ')}` : ''}`);
 }
 const setTheme = (name) =>
   page.evaluate((n) => {
-    window.__DCK.options.theme = n;
+    window.__DCK.options.art = n;
     window.__DCK.applyOptions();
   }, name);
 for (const name of THEME ? [] : ['hall', 'castle', 'crypt']) {
@@ -201,7 +203,7 @@ if (!THEME) {
   await shot('00-theme-classic');
 }
 await setTheme('auto');
-expect((await themeState()).theme === stageTheme, 'Art set "auto" returns to the stage\'s own theme');
+expect((await themeState()).theme === stageTheme && stageTheme !== wornTheme, `Art set "auto" returns to the stage's own theme (${stageTheme}, over the default ${wornTheme})`);
 // Doors: the option overrides the theme's door; auto returns it.
 await page.evaluate(() => { window.__DCK.options.doors = 'castle'; window.__DCK.applyOptions(); });
 expect((await page.evaluate(() => window.__DCK.doors)) === 'castle', 'Doors option stamps the door set');

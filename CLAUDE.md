@@ -57,8 +57,13 @@ without the packs; `play/CREDITS.md` is generated). Three THEMES —
 classic row: its crate / door / barrel / chest, the rubble heap, THE
 CRACK ×4 that every theme masks onto a weakened wall, and since
 2026-09-12 every wall and ruin case in its own palette). Every stage
-carries a `theme` (wave 6 hand-authored, 12/12/12), overridden by
-Options → Art set or `?theme=`. The renderer classes every wall by its
+carries a `theme` (wave 6 hand-authored, 12/12/12) — but THE CRYPT IS
+THE DEFAULT LOOK EVERYWHERE since 2026-09-17 (designer: "make crypt the
+default look everywhere for now. Hall and Castle look like shit but I'm
+just tired of messing with the aesthetics for a while"): Options → Art
+set defaults to Crypt (`options.art`; "The stage's own" is the explicit
+'auto' choice; a phone's saved `theme` key from before is not read),
+and `?theme=` overrides either. The renderer classes every wall by its
 solid-neighbour mask (the 47-case blob, `canonicalMask`; holes are not
 solid, doors and masonry are; ruins count as solid so a line runs through
 a break; an opened DOORWAY is a GAP the walls beside it end at, since the
@@ -1455,6 +1460,24 @@ the colour on the roof's rows too; the edge door lift dial), selftest
 46/46, facing-walk 108/108, replay-smoke 63, test-camera 80, test-world
 125, test-logreport 47, canvas-grid `none` / `margin` 4/4 in Chromium;
 the gallery re-rendered (the walk on the slate).**
+
+**THE CRYPT EVERYWHERE ✅ 2026-09-17 (designer, after the one-pixel
+door: "Actually make crypt the default look everywhere for now. Hall and
+Castle look like shit but I'm just tired of messing with the aesthetics
+for a while").** Options → Art set DEFAULTS TO CRYPT: `options.art`
+(renamed from `theme`, so a phone's saved 'auto' from before is
+forgotten — no backward compatibility, as ever) is 'crypt' unless
+changed; "The stage's own" stays as the explicit 'auto' choice and
+`?theme=` still overrides for a shot; the replay page reads the same
+option (crypt when unset); the stages keep their authored `theme` in
+the files and the generator's floors were crypt already. The hall and
+the castle sets stay in the atlas and the picker for whenever the
+aesthetics come back around. ui-smoke's themes block asserts the
+default (crypt over s59's hall, the legend with it) and 'auto'
+returning the stage's own; gates ui-smoke 325 ok, selftest 46/46,
+replay-smoke 63, and a direct check that a saved `theme: 'auto'` from
+the old build is ignored, that 'auto' picked now holds across a reload
+and that the replay page wears crypt on the sample log.**
 
 **HANDOFF (end of 2026-09-08, after milestone 3 — HISTORY, kept for the
 reasoning; 4a, 4b and 4c are built above): NEXT WAS THE WORLD +
