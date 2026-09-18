@@ -27,7 +27,16 @@ order) gives the engine the portal spell of brief §4.7: a PORTAL move type,
 the scroll cast as a drop, the trailing FEN field for the pairs, and the
 strip rule that never counts a spell. Both artifacts rebuilt from the same
 pins and toolchains; the rule-16 gate ran green end to end (see "The
-portals patch" below). Not yet played by the designer.
+portals patch" below). Played the same day (the first portal duel).
+
+**Status 2026-09-17, later: THE WALL-KINDS AND HAMMER PATCHES shipped.**
+`patches/wall-kinds.patch` (131 lines) and `patches/hammer.patch` (265),
+applied on top of the three above in that order, give the engine brief
+§4.8: `#`, the indestructible wall, hashed apart from the breakable `*`;
+and the HAMMER move type — a piece of a `hammerPieceTypes` type spends its
+move turning an adjacent breakable wall into a dead square. One forge
+session, one build, one gate (see "The wall-kinds patch and the hammer
+patch" below). Not yet played by the designer.
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
@@ -366,6 +375,115 @@ default net pre-downloaded next to the engine Makefile. `stockfish.js`,
 `stockfish.worker.js` and `ffish.js` came out the vendored sizes; the wasms
 grew 16 KB (ffish) and 18 KB (engine) for the portal code.
 
+## The wall-kinds patch and the hammer patch (`patches/wall-kinds.patch`, `patches/hammer.patch`) — 2026-09-17
+
+Canon: brief §4.8 (the designer's four rules, 2026-09-17: a piece with the
+sledgehammer spends its move turning an adjacent wall into `^`; a property
+of a piece, not a spell; designed for the kings; a second kind of wall in
+the engine — `*` breakable, `#` any indestructible obstacle). Authored on
+the pinned trees on top of the three patches above (apply in this order:
+dead-squares, thread-stack, portals, wall-kinds, hammer); one forge
+session, one build, one gate. wall-kinds: `position.h`, `position.cpp`,
+`apiutil.h`; hammer: `types.h`, `variant.h`, `parser.cpp`, `position.h`,
+`position.cpp`, `movegen.cpp`, `apiutil.h`.
+
+Design, in the engine's own shapes:
+
+- **`#`, the hard wall** (wall-kinds): parsed into `wallSquares` like `*`
+  AND into a new `StateInfo::hardSquares` subset (copied with the state);
+  `breakable_walls()` = `wallSquares & ~hardSquares`. A `#` is a wall to
+  everything — `board_bb()` excludes it, sliders stop at it — and hashes
+  with `Zobrist::hard[]`, drawn from its own PRNG so the stock key
+  sequence is untouched (the portal patch's idiom): a `*` and a `#` on the
+  same square are different positions, since a hammer side's legal moves
+  differ. `fen()` emits `#`, the `d` display shows it, `validate_fen`
+  accepts it. With no `#` on the board every changed expression reduces to
+  the stock one.
+- **The HAMMER move type** (`9 << (2 * SQUARE_BITS)`, the free value after
+  PORTAL), encoded `from` + the wall square, so the notation is the plain
+  `e1d1` (every move onto a breakable wall IS a hammer; `UCI::to_move`
+  matches it off the legal list). `generate_hammers<Us>`: for every piece
+  of a `hammerPieceTypes[Us]` type, `PseudoAttacks[KING][from] &
+  breakable_walls()` — the eight king steps — in QUIETS and NON_EVASIONS
+  only (never CAPTURES, QUIET_CHECKS or EVASIONS).
+- **Legality, check, the TT**: nothing moves and the square stays blocked
+  (a dead square is occupancy exactly as a wall is), so a hammer neither
+  gives nor resolves check. `gives_check` answers false explicitly (stock
+  would test the moved piece's attacks from the wall square — wrong for any
+  hammer piece); `legal()` returns `!checkers()` (stock's king-move test
+  asks whether the destination is attacked; its `board_bb() & to` assert is
+  relaxed for the type, since `board_bb` excludes wall squares); the
+  variant's quiet-move rules (mustCapture, mustDrop) still have their say
+  first; `pseudo_legal` validates a TT hammer by regeneration, before the
+  `board_bb() & to` check that would reject it. A pinned piece may hammer.
+- **do / undo**: do = the wall bit off, the dead bit on, `Zobrist::wall ^
+  Zobrist::dead` on the key, rule50 reset (irreversible), no piece moves
+  (the castling-rights, flip-enclosed and pawn sections are skipped for
+  the type; NNUE's dirty-piece count is zeroed — classical eval only, rule
+  1). undo = the state pointer: the stock wall XOR at the top of
+  `undo_move` and the dead-squares XOR at its bottom both touch the
+  hammered square and cancel, so only the piece move is skipped, as a
+  drop's is. `key_after` performs the same swap. SEE is zero by type
+  (stock's simple SEE for every special move).
+- **SAN**: the piece letter, `*`, the square — `K*d1`, `R*d1`; never `x`
+  (not a capture), never `+` (never a check). The variant key
+  `hammerPieceTypes` (a PieceSet) with `hammerPieceTypesWhite` /
+  `hammerPieceTypesBlack` overrides; NO_PIECE_SET (the default) generates
+  nothing.
+
+Known gaps, on record: SAN disambiguation is skipped for a hammer (two
+same-type hammer pieces beside one wall would both print `R*d1`; only
+kings hammer today); a hammering pawn would print `*d1`; the cuckoo cycle
+tables never hold a hammer (irreversible, correctly); the extinction count
+is untouched (a hammer changes no count).
+
+### Validation (2026-09-17, this container)
+
+Native first: a debug largeboard build (asserts on, `pos_is_ok` after every
+undo) driven over UCI (scratch `forge/native-test.py`): 28 checks — a king
+beside a `*` and a `#` (5 moves, the hammer offered, the hard wall never),
+the FEN and the display round-tripping `#` and `*` apart, the crate after
+the hammer with the king in place and rule50 reset, no check given, the
+crate captured next move, in check no hammer, a PINNED rook hammering
+without leaving its file (7 moves), `#` ≡ `*` without the key at perft 3,
+an all-`#` board offering no hammer, per-colour keys, a 10×10 duel-shaped
+board with both kings hammering searched to depth 10 with the instance
+alive, a boxed king whose quiet moves are hammers, perft 3–4 on every
+fixture under the asserts (5/30/182/1338 · 7/59/508/6521 ·
+6/36/241/1853).
+
+Then the rule-16 gate on the wasm pair:
+
+- [x] `test-hammer-ffish.cjs` **27/27** — the fixtures through the JS API,
+  SAN (`K*f2`, `R*f2`, `Kxf2` for the capture after), push/pop round
+  trips, `validateFen` on `#`, perft 1–4 equal to the native counts, the
+  strip rule untouched, and a 1,505-move check-flag sweep on hammer boards:
+  0 mismatches
+- [x] `test-hammer-engine.cjs` **25/25** — the same fixtures over UCI,
+  `d`, the twins at perft 3, the depth-10 and depth-8 searches
+- [x] `test-ffish.cjs` 19/19 · `regress-ffish.cjs` PASS (crate-free /
+  wall boards identical to the vendored 0.7.9) · `test-portals-ffish.cjs`
+  42/42
+- [x] `test-engine.cjs` 7/7 · `regress.cjs` PASS · `xcheck.cjs` PASS ·
+  `search-identity.cjs` node-for-node identical to the vendored 1.1.11 at
+  d12 (19459/26462/35136) · `stack-regress.cjs` 5/5 ·
+  `test-portals-engine.cjs` 55/55
+- [x] depth-cap re-measure (`depthcap.cjs`): d22 110/110 clean (slowest
+  1613 ms), d60 30/30 clean (slowest 10022 ms) — the cap STAYS at d22
+  (rule 11 unchanged)
+- [x] `play/selftest.html` in headless Chromium: **48/48** (the new
+  sledgehammer check on the game's own deal variant, both binaries)
+- [x] the game's Node and browser gates on the vendored pair (CLAUDE.md,
+  the sledgehammer paragraph)
+
+Build notes: the three toolchains were reinstalled from scratch again (the
+container keeps nothing; the two emsdk installs, the two trees and the net
+took about twenty minutes wall-clock, scripted in the session's scratch);
+`ffish.js`, `stockfish.js` and the worker came out the vendored sizes; the
+wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
+`#` board ("Invalid piece character"), so a phase0 run that forgot the
+overlay dies at once instead of misplaying.
+
 ## Provenance (pin these)
 
 - ffish tree: `fairy-stockfish/Fairy-Stockfish` master @ `6d9d0f5` (2026-08-23), emsdk **1.39.16**, `make -f src/Makefile_js build` → `tests/js/ffish.{js,wasm}`
@@ -436,6 +554,10 @@ FFISH_JS=... node engine/tests/regress-ffish.cjs                         # ffish
 PILOT=1 node engine/tests/search-identity.cjs                            # determinism pilot (vendored vs itself)
 ENGINE_JS=... node engine/tests/search-identity.cjs                      # fixed-depth transcript identity vs vendored
 ENGINE_JS=... node engine/tests/depthcap.cjs                             # rule-11 re-measure (110 d22 + 30 d60)
+FFISH_JS=... node engine/tests/test-portals-ffish.cjs                   # the portal spell, ffish half (42)
+ENGINE_JS=... node engine/tests/test-portals-engine.cjs                 # the portal spell, engine half (55)
+FFISH_JS=... node engine/tests/test-hammer-ffish.cjs                    # the hard wall + the sledgehammer, ffish half (27)
+ENGINE_JS=... node engine/tests/test-hammer-engine.cjs                  # the hard wall + the sledgehammer, engine half (25)
 node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
 ```
 
