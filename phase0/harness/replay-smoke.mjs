@@ -392,6 +392,9 @@ const sl = await page.evaluate(async () => {
   out.e4before = { fen: v.fen, cls: v.cell('e4'), line: v.plyLine };
   v = at(16);
   out.e4after = { fen: v.fen, cls: v.cell('e4'), line: v.plyLine, arrows: v.marks?.arrows ?? null };
+  // THE SLEDGEHAMMER'S GLYPH (2026-09-18): the hammered ply's arrow ends in the hammer on e4 — gold, its handle the shade, the halo black (the arrow's own opacity blends them over the cracked wall).
+  const px = (sq, c, r) => { const p = Rp.pixels(sq); if (!p) return null; const i = (r * 16 + c) * 4; return [p[i], p[i + 1], p[i + 2]]; };
+  out.e4after.glyph = { head: px('e4', 7, 4), handle: px('e4', 8, 10), halo: px('e4', 3, 3) };
   v = at(out.plies);
   const holes = (Rp.log.states[out.plies].holes ?? []);
   out.last = { fen: v.fen, holes: holes.length, hole0: holes[0], cls0: v.cell(holes[0]), bedrock: 0, pits: 0 };
@@ -403,6 +406,15 @@ expect(/^vaults-4/.test(sl.stage) && sl.plies === 148, `?sample=3 opens the firs
 expect(sl.e4before.cls?.includes('wall') && !sl.e4before.cls?.includes('cracked') && !sl.e4before.cls?.includes('furniture'), `ply 15: e4 is a standing wall (${(sl.e4before.cls ?? []).filter((c) => !/^(cell|dark|light|f\d|ck\d|sv\d+|wm-\d+)$/.test(c)).join(' ')})`);
 expect(sl.e4after.cls?.includes('cracked') && sl.e4after.cls?.includes('furniture') && !sl.e4after.cls?.includes('wall'), `ply 16: K*e4 leaves e4 a cracked wall — a crate in the gods' ledger (${(sl.e4after.cls ?? []).filter((c) => !/^(cell|dark|light|f\d|ck\d|sv\d+|wm-\d+)$/.test(c)).join(' ')})`);
 expect(/K\*e4/.test(sl.e4after.line ?? ''), `the ply line reads the hammer's SAN (${sl.e4after.line})`);
+{
+  const a = (sl.e4after.arrows ?? []).find((x) => x.to === 'e4');
+  const g = sl.e4after.glyph;
+  const gold = (p) => !!p && p[0] > 150 && p[1] > 110 && p[2] < 110 && p[0] > p[2] + 60;
+  const shade = (p) => !!p && p[0] >= 80 && p[0] <= 170 && p[1] >= 60 && p[1] <= 135 && p[2] < 80;
+  const dark = (p) => !!p && p[0] < 45 && p[1] < 45 && p[2] < 45;
+  expect(!!a && a.from === 'd3' && a.hammer === true, `the ply's arrow is a hammer (${JSON.stringify(a)})`);
+  expect(gold(g.head) && shade(g.handle) && dark(g.halo), `e4 wears the hammer glyph at the arrow's head — head ${g.head}, handle ${g.handle}, halo ${g.halo}`);
+}
 expect(sl.last.holes === 20 && sl.last.pits === 20 && sl.last.bedrock === 0 && sl.last.cls0?.includes('hole'), `the final board: every # is a pit the ledger names — ${sl.last.pits} holes painted, ${sl.last.bedrock} bedrock (${sl.last.hole0}: ${(sl.last.cls0 ?? []).filter((c) => /hole|bedrock|wall/.test(c)).join(' ')})`);
 await shot('10-sledge', true);
 

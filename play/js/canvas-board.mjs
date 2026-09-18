@@ -2064,7 +2064,8 @@ export class CanvasBoard {
       }
       const p = this.#origin(a.from), q = this.#origin(a.to);
       const s = Math.max(0, Math.min(1, a.strength ?? 1));
-      drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg });
+      // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammer arrow ends in the hammer stamped on its wall.
+      drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg, hammer: !!a.hammer });
     }
   }
 

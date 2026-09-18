@@ -40,6 +40,65 @@ export const ARROW_COLOURS = { 'hint-1': '#f2c14e', 'hint-2': '#c9ced8', 'hint-3
 const INK = '#14151a';
 const HALO = '#000000';
 
+// THE SLEDGEHAMMER'S GLYPH (2026-09-18 — designer: "Let's go ahead and get
+// a hammer glyph hint"): an arrow onto a breakable wall — a hint, the
+// enemy's own hammer, the analyzer's ply — ends in a HAMMER stamped
+// upright on the wall's square: a sledge, its head in the arrow's colour,
+// its handle in that colour's shade, the same one-pixel halo, centred on
+// the square (rows 3–12 of the 16, on the wall's face; the arrow's head
+// lies under it). Upright at every angle — a sprite turned to a diagonal
+// is mush at this size, and the arrow already says where it came from.
+// The hint list wears the same drawing (main.mjs hammerIcon), so the
+// list's icon and the board's stamp are one bitmap.
+export const HAMMER_GLYPH = Object.freeze([
+  'HHHHHHHH',
+  'HHHHHHHH',
+  'HHHHHHHH',
+  'HHHHHHHH',
+  '...SS...',
+  '...SS...',
+  '...SS...',
+  '...SS...',
+  '...SS...',
+  '...SS...',
+]);
+export const HAMMER_W = HAMMER_GLYPH[0].length;
+export const HAMMER_H = HAMMER_GLYPH.length;
+export const HAMMER_SHADE = 0.55; // the handle: the head's colour at this brightness
+
+/** A `#rrggbb` colour scaled toward black by `f`. */
+export function shadeHex(hex, f) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  const ch = (v) => Math.round(v * f).toString(16).padStart(2, '0');
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+
+/** The glyph's top-left for a square whose centre is (cx, cy): centred
+ *  across, its head's top five rows above the centre — rows 3–12 and
+ *  columns 4–11 of a 16-px square. */
+export function hammerOrigin(cx, cy) {
+  return { x: Math.round(cx) - HAMMER_W / 2, y: Math.round(cy) - 5 };
+}
+
+/** Stamp the hammer with its halo, its top-left at (x, y), whole pixels:
+ *  the halo first (every glyph pixel's empty neighbours), then the head in
+ *  `colour` and the handle in its shade. */
+export function drawHammer(ctx, x, y, colour) {
+  const at = (r, c) => HAMMER_GLYPH[r]?.[c] ?? '.';
+  ctx.fillStyle = HALO;
+  for (let r = 0; r < HAMMER_H; r++) for (let c = 0; c < HAMMER_W; c++) {
+    if (at(r, c) === '.') continue;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && at(r + dy, c + dx) === '.') ctx.fillRect(x + c + dx, y + r + dy, 1, 1);
+  }
+  const shade = shadeHex(colour, HAMMER_SHADE);
+  for (let r = 0; r < HAMMER_H; r++) for (let c = 0; c < HAMMER_W; c++) {
+    const ch = at(r, c);
+    if (ch === '.') continue;
+    ctx.fillStyle = ch === 'H' ? colour : shade;
+    ctx.fillRect(x + c, y + r, 1, 1);
+  }
+}
+
 /** The arrow style dials: the shaft's width in floor pixels and the
  *  opacity at full strength. Both boards take a style through
  *  `setArrowStyle`; main.mjs keeps it in the Options. */
@@ -178,8 +237,10 @@ export function arrowShape(x1, y1, x2, y2, { label = null, width = ARROW_STYLE_D
  * dark ink. `width` is the style's shaft (floor pixels); `alpha` is applied
  * to the whole arrow through a scratch canvas so the halo never shows
  * through a translucent fill (the caller scales it by strength — arrowAlpha).
+ * `hammer` stamps THE SLEDGEHAMMER'S GLYPH on the destination square, over
+ * the head, on the same scratch (one composite: nothing double-blends).
  */
-export function drawArrow(ctx, x1, y1, x2, y2, { colour = ARROW_COLOURS['hint-1'], label = null, width = ARROW_STYLE_DEFAULT.width, alpha = 1, scratch = null } = {}) {
+export function drawArrow(ctx, x1, y1, x2, y2, { colour = ARROW_COLOURS['hint-1'], label = null, width = ARROW_STYLE_DEFAULT.width, alpha = 1, scratch = null, hammer = false } = {}) {
   const s = arrowShape(x1, y1, x2, y2, { label, width });
   if (!s) return;
   const g = scratch ?? ctx;
@@ -197,6 +258,10 @@ export function drawArrow(ctx, x1, y1, x2, y2, { colour = ARROW_COLOURS['hint-1'
   paint(1, HALO);
   paint(0, colour);
   if (s.label) for (const gl of s.label.glyphs) drawText(g, gl.ch, gl.x, gl.y, INK); // the digits inside the shaft, stepping along the arrow
+  if (hammer) {
+    const o = hammerOrigin(x2, y2);
+    drawHammer(g, o.x, o.y, colour);
+  }
   if (scratch) {
     ctx.globalAlpha = alpha;
     ctx.drawImage(scratch.canvas, 0, 0);

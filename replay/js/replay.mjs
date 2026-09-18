@@ -50,7 +50,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -367,7 +367,9 @@ function moveArrow(st) {
     return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: true };
   }
   // Gold is the player's colour, red the enemy's last move (style.css roles).
-  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last' } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint' };
+  // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
+  const hammer = st.hammer ? { hammer: true } : {};
+  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last', ...hammer } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint', ...hammer };
 }
 
 const idx = () => R.indexLine(app.line);
@@ -507,10 +509,14 @@ function protectedHeat(t) {
  *  best line's colour fading with distance. */
 function pvArrows(pv, fen) {
   const out = [];
+  const cracked = new Set(); // THE SLEDGEHAMMER'S GLYPH: a line's first move onto a wall hammers it; a later move onto that square takes the crate
   (pv ?? []).slice(0, 6).forEach((m, j) => {
     const p = String(m).match(R.UCI_MOVE_RE);
     if (!p) return;
-    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1) });
+    const hm = hammerOf(fen, `${p[1]}${p[2]}`);
+    const hammer = !!hm && !cracked.has(hm);
+    if (hammer) cracked.add(hm);
+    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
   });
   return out;
 }

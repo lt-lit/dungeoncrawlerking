@@ -37,7 +37,7 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, CAST_RE, HARD, isWall } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, CAST_RE, HARD, isWall, hammerOf } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -47,7 +47,7 @@ import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANG
 import { CanvasBoard, loadAtlas } from './canvas-board.mjs';
 import { normFacing, facingName } from './camera.mjs'; // THE CAMERA's facing (2026-09-08)
 import { Atlas } from './atlas.mjs';
-import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE } from './pixelarrow.mjs'; // the arrows' width / opacity dials
+import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE, arrowColour, drawHammer, HAMMER_W, HAMMER_H } from './pixelarrow.mjs'; // the arrows' width / opacity dials; THE HAMMER GLYPH for the hint list
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
 import { makePattern, spawnArmy, walkOutArmy, planTurn, applyTurn, manualMoves, boxOf, facingOfStep, formationFocus, bagOfPattern, Army, OPENING_KIT } from './army.mjs';
@@ -1094,19 +1094,23 @@ function applyHintLines(pvs, n, duel, partial) {
   const best = cpOf(sorted[0].score);
   const arrows = [];
   const items = [];
+  const fenNow = duel.fen();
   for (const pv of sorted) {
     const m = pv.move.match(UCI_MOVE_RE);
     const c = m ? null : pv.move.match(CAST_RE); // THE PORTAL SPELL: a cast hint is a ring on its square
     if (!m && !c) continue;
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
-    arrows.push(m ? { from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint' } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
+    // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a breakable wall is a
+    // hammer — the arrow ends in the hammer on the wall, the list shows it.
+    const hammer = !!m && !!hammerOf(fenNow, pv.move);
+    arrows.push(m ? { from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
     } catch {
       /* keep uci */
     }
-    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null });
+    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer });
   }
   app.cheatArrows = arrows;
   renderPlayMarks();
@@ -1115,9 +1119,24 @@ function applyHintLines(pvs, n, duel, partial) {
   setHintList(items, depth ? `d${depth}${partial ? '…' : ''}` : '');
 }
 
+/** THE SLEDGEHAMMER'S GLYPH in the hint list (2026-09-18): the board's own
+ *  hammer (pixelarrow.mjs drawHammer) on a small canvas in the rank's arrow
+ *  colour, before the SAN of a hint that cracks a wall. No text of its own,
+ *  so the line's textContent reads as it always did. */
+function hammerIcon(rank) {
+  const c = document.createElement('canvas');
+  c.width = HAMMER_W + 2;
+  c.height = HAMMER_H + 2;
+  c.className = 'hint-hammer';
+  c.title = 'the sledgehammer: this move cracks the wall';
+  drawHammer(c.getContext('2d'), 1, 1, arrowColour({ kind: 'hint', rank }));
+  return c;
+}
+
 /** The hint list in the player's bar: one entry per rank — a swatch in the
  *  rank's arrow colour (CSS, by class), the move and its eval — then the
- *  depth readout. Its textContent reads "1 Nf3 +0.8 · 2 e4 +0.6 · d14". */
+ *  depth readout. Its textContent reads "1 Nf3 +0.8 · 2 e4 +0.6 · d14"; a
+ *  hammer hint wears the hammer icon between its rank and its SAN. */
 function setHintList(items, depthText) {
   const el = $('hint-line');
   el.textContent = '';
@@ -1126,7 +1145,9 @@ function setHintList(items, depthText) {
     const span = document.createElement('span');
     span.className = `hint-item rank-${it.rank}`;
     span.dataset.rank = String(it.rank);
-    span.append(`${it.rank} ${it.san}`);
+    span.append(`${it.rank} `);
+    if (it.hammer) span.appendChild(hammerIcon(it.rank));
+    span.append(it.san);
     if (it.score) {
       const b = document.createElement('b');
       b.textContent = ` ${it.score}`;
@@ -3092,7 +3113,9 @@ function lastMoveArrow() {
   if (!moves || !moves.length) return null;
   if (duel.turnColor() !== app.session.playerColor) return null; // the player moved last
   const p = moves[moves.length - 1].match(UCI_MOVE_RE);
-  if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last' };
+  // THE SLEDGEHAMMER'S GLYPH (2026-09-18): the enemy's hammer ends in the red hammer on the wall it cracked.
+  const hammer = !!duel.lastMove?.hammer && duel.lastMove.move === moves[moves.length - 1];
+  if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last', ...(hammer ? { hammer: true } : {}) };
   const c = moves[moves.length - 1].match(CAST_RE); // THE PORTAL SPELL: the enemy's cast, a red ring on the square
   return c ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : null;
 }
@@ -5226,6 +5249,11 @@ window.__DCK = {
   },
   get cheat() {
     return { seq: cheat.seq, active: !!cheat.active, depth: cheat.depth, arrows: app.cheatArrows, hintLine: $('hint-line').textContent, go: probeGo() };
+  },
+  /** THE SLEDGEHAMMER'S GLYPH (2026-09-18) — the smoke's hook: paint these
+   *  MultiPV lines exactly as the probe's own paint would (hints must be on). */
+  paintHints(pvs, n = pvs.length) {
+    if (app.duel) applyHintLines(pvs, n, app.duel, false);
   },
   /** The arrows' style as the board wears it (the dials, or the URL's override). */
   get arrowStyle() {

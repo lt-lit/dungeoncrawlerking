@@ -1607,10 +1607,49 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
-  const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`;
+  const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
   await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?${q9}`);
   await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
+  // in the list (a canvas per hammer hint, in the rank's colour, between the
+  // rank and the SAN; the line's text unchanged) and on the board (the glyph
+  // stamped on the wall's square over the arrow's head: rows 3–12, cols 4–11,
+  // the head in the rank's colour, the handle its shade, a black halo). Lines
+  // injected through the probe's own paint path; the arrows at full opacity so
+  // every pixel is exact.
+  const gl = await page9.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const plain = K.app.duel.legalMoves().find((m) => UCI.test(m) && !/^e1d[12]$/.test(m)); // any ordinary move of the position: the control
+    const plainTo = plain.match(UCI)[2];
+    K.paintHints([{ rank: 1, move: 'e1d2', score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: 'e1d1', score: { type: 'cp', value: 20 }, depth: 9 }, { rank: 3, move: plain, score: { type: 'cp', value: 10 }, depth: 9 }], 3);
+    const out = { line: document.getElementById('hint-line').textContent, plain, plainTo, plainSan: K.app.duel.board.sanMove(plain) };
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => `${s.dataset.rank}:${s.querySelector('canvas.hint-hammer') ? 'hammer' : '-'}`);
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.hammer ? '*' : ''}`);
+    const px = (sq, c, r) => { const p = K.app.boardUI.squarePixels(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    out.d2 = { head: px('d2', 7, 4), handle: px('d2', 8, 10), halo: px('d2', 3, 3) };
+    out.d1 = { head: px('d1', 7, 4), handle: px('d1', 8, 10) };
+    out.plainShade = (() => { const p = K.app.boardUI.squarePixels(plainTo); let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] === 110 && p[i + 1] === 71 && p[i + 2] === 35) n++; return n; })(); // the rank-3 handle's shade: only the glyph paints it
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  expect(gl.line === `1 K*d2 +0.4 · 2 K*d1 +0.2 · 3 ${gl.plainSan} +0.1 · d9`, `the hint list reads as ever, the hammers by their SAN ("${gl.line}")`);
+  expect(gl.icons.join(' ') === '1:hammer 2:hammer 3:-', `the hammer icon sits on the hammer hints alone (${gl.icons.join(' ')})`);
+  expect(gl.arrows.join(' ') === `${gl.plain} e1d1* e1d2*`, `the board's hint arrows carry the hammer flag, worst to best (${gl.arrows.join(' ')})`);
+  expect(gl.d2.head === '242,193,78,255' && gl.d2.handle === '133,106,43,255' && gl.d2.halo === '0,0,0,255', `d2 wears the rank-1 hammer: head gold, handle its shade, a black halo (${gl.d2.head} / ${gl.d2.handle} / ${gl.d2.halo})`);
+  const near = (got, want) => { const g = String(got).split(',').map(Number), w = want.split(',').map(Number); return g.length === 4 && g.every((v, i) => Math.abs(v - w[i]) <= 8); }; // a rank-2 arrow is a shade translucent by its strength (arrowAlpha), so its glyph blends a little with the wall
+  expect(near(gl.d1.head, '201,206,216,255') && near(gl.d1.handle, '111,113,119,255'), `d1 wears the rank-2 hammer in its own colour, at its strength's opacity (${gl.d1.head} / ${gl.d1.handle})`);
+  expect(gl.plainShade === 0, `a plain hint carries no hammer (${gl.plain}: ${gl.plainShade} pixels of the rank-3 handle's shade on ${gl.plainTo})`);
+  expect(gl.cleared === 0, 'hints off clears the hammers with the arrows');
   const hm = await page9.evaluate(async () => {
     const K = window.__DCK;
     K.options.cheat = false;

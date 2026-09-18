@@ -21,22 +21,13 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, getSquare, WALL } from './fen.mjs';
+import { findSquares, splitFen, hammerOf } from './fen.mjs';
 import { flipTurn, evalSoftens } from './tactics.mjs';
 
-/** THE SLEDGEHAMMER (2026-09-17, engine/patches/hammer.patch): the square a
- *  move hammers — its destination when that was a breakable wall on the board
- *  before the move (every move onto a '*' IS a hammer) — else null. */
-const HAMMER_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
-export function hammerOf(fenBefore, uci) {
-  const m = uci.match(HAMMER_RE);
-  if (!m) return null;
-  try {
-    return getSquare(fenBefore, m[2]) === WALL ? m[2] : null;
-  } catch {
-    return null;
-  }
-}
+// THE SLEDGEHAMMER (2026-09-17): `hammerOf(fenBefore, uci)` — the square a
+// move hammers — lives in fen.mjs since the glyph (2026-09-18), read by the
+// hint painter and the analyzer too; re-exported here for the record's callers.
+export { hammerOf };
 
 /** The principal variation of a search result's last "info … pv …" line,
  *  as UCI moves. Parsed here rather than on the engine wrapper because the

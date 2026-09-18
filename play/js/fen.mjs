@@ -302,3 +302,19 @@ export function findSquares(fen, pred) {
   }
   return out;
 }
+
+/** THE SLEDGEHAMMER (2026-09-17, engine/patches/hammer.patch): the square a
+ *  move hammers — its destination when that was a breakable wall on the board
+ *  before the move (every move onto a '*' IS a hammer) — else null. Read by
+ *  the duel (the state's `hammer`), the hint painter and the analyzer's
+ *  arrows (THE HAMMER GLYPH, 2026-09-18). */
+const HAMMER_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+export function hammerOf(fenBefore, uci) {
+  const m = String(uci ?? '').match(HAMMER_RE);
+  if (!m) return null;
+  try {
+    return getSquare(fenBefore, m[2]) === WALL ? m[2] : null;
+  } catch {
+    return null;
+  }
+}

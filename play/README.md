@@ -2730,10 +2730,45 @@ paints them as pits and never as bedrock. test-logreport (61) and
 replay-smoke (74 ok) read the sample: the hammer's state and SAN, the crate from
 that ply on, the pits through the ledger.
 
-Held over: the sledge-king sprite, a hammer glyph on the hint row, enemies
-hammering on the walk, the hammer as an upgrade (a per-colour deal
-setting — no new letter for a king; a non-royal hammer piece would be a
-custom type), then ice.
+### The hammer glyph (2026-09-18)
+
+Designer, on the verdict: "Let's go ahead and get a hammer glyph hint. No to enemies using it while walking, that's a ridiculous idea". An arrow onto a breakable wall — a hint, the enemy's
+own hammer (the red last-move arrow), the analyzer's ply arrow and its
+numbered PV arrows — now ends in a SLEDGEHAMMER stamped upright on the
+wall's square: `pixelarrow.mjs HAMMER_GLYPH`, an 8×4 head in the arrow's
+colour over a 2×6 handle in that colour's shade (`shadeHex`,
+`HAMMER_SHADE` 0.55), the arrows' own one-pixel black halo, rows 3–12 and
+columns 4–11 of the square (on the wall's face); `drawArrow`'s `hammer`
+option paints it after the arrow on the same scratch canvas, so the
+arrow's head under it never double-blends; upright at every angle, since
+a sprite turned to a diagonal is mush at this size and the arrow already
+says where it came from. The hint list wears the same drawing — main.mjs
+`hammerIcon`, a small canvas per hammer hint in the rank's arrow colour
+between the rank and the SAN, so the line's text reads as it always did
+("1 K*d2 +0.4 · 2 K*d1 +0.2 · …"). Who knows a move is a hammer:
+`fen.mjs hammerOf` (moved from duel.mjs, which re-exports it — the
+destination was a `*` before the move), read by `applyHintLines` on the
+live board, by `lastMoveArrow` from the record's `hammer`, by the
+analyzer's `moveArrow` from the state's `hammer` and by its `pvArrows`
+walking a line's walls (a later move onto a cracked square takes the
+crate — no glyph); canvas-board passes the flag through;
+`__DCK.paintHints(pvs, n)` is the smoke's hook into the probe's own paint
+path. ENEMIES NEVER HAMMER ON THE WALK — ruled out the same day, not held
+over (a hunter's path treats a wall as a wall, as built). Gates: ui-smoke
+336 ok (the sledgehammer block grew the glyph: three lines injected
+through the probe's path with the arrows at full opacity — the list's
+text unchanged with the icon on the two hammers alone, the board's arrows
+flagged worst to best, d2's head gold / handle its shade / halo black to
+the pixel, d1's rank-2 hammer in its own colour at its strength's
+opacity, the plain hint's square without one pixel of the handle's shade,
+hints off clearing them), replay-smoke 76 ok (sample 3 at ply 16: the
+ply's arrow flagged, e4 wearing the gold hammer over the cracked wall),
+selftest 48/48, test-logreport 61, the other Node gates unchanged; crops
+at k 6 (the board, the hint list, the analyzer's e4) went to the designer.
+
+Held over: the sledge-king sprite, the hammer as an upgrade (a per-colour
+deal setting — no new letter for a king; a non-royal hammer piece would
+be a custom type), then ice.
 
 ## The debris layer (2026-09-07)
 
