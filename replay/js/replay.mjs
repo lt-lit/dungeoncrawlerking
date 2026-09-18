@@ -59,8 +59,11 @@ const params = new URLSearchParams(location.search);
 // The committed samples (`?sample=N`, the load panel's button opens the first):
 // 1 — the designer's third log, s77 The Smithy (2026-09-06); 2 — THE FIRST
 // PORTAL DUEL (2026-09-17, vaults-4 at walk turn 75): both pairs cast in the
-// first three moves, a pawn through the player's portal to the promotion row.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json'];
+// first three moves, a pawn through the player's portal to the promotion row;
+// 3 — THE FIRST SLEDGE DUEL (2026-09-17, vaults-4 at walk turn 109, the
+// phone): the player's K*e4 at ply 16 (the hammered wall a crate in the
+// gods' ledger from that state on), twenty crumbles written as `#` pits.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json'];
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;

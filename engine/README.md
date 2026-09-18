@@ -36,7 +36,12 @@ applied on top of the three above in that order, give the engine brief
 and the HAMMER move type — a piece of a `hammerPieceTypes` type spends its
 move turning an adjacent breakable wall into a dead square. One forge
 session, one build, one gate (see "The wall-kinds patch and the hammer
-patch" below). Not yet played by the designer.
+patch" below). Played the same day — the first sledge duel, on the phone
+(designer: "Seems to work pretty good on mobile… I definitely saw the engine
+go for at least one sledge move, so it definitely evaluates the option"; the
+log is the analyzer's third sample, `replay/samples/dck-log_vaults-4-t109_
+s3010228489.json` — one K*e4 played, the reply the engine's own depth-22
+search had predicted, and four more hammers in its lines).
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference

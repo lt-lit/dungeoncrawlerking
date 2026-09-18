@@ -412,7 +412,7 @@ pairs the same way once the generator places them — an authored entry on
 a king row is dropped at load by the engine's parse (the ban, never a
 scoot); no floor authors one yet.
 
-### 4.8 The sledgehammer and the indestructible obstacle `#` `[BUILT 2026-09-17 — designer-specified rules; engine substrate is engine/patches/wall-kinds.patch + hammer.patch; every king is a sledge-king for the stress test]`
+### 4.8 The sledgehammer and the indestructible obstacle `#` `[BUILT 2026-09-17 — designer-specified rules; engine substrate is engine/patches/wall-kinds.patch + hammer.patch; every king is a sledge-king for the stress test; PLAYED on the phone the same day — the verdict below]`
 
 **The ability `[designer, 2026-09-17]`:**
 
@@ -466,6 +466,8 @@ that one does not" is a deal-variant setting when the hammer becomes an
 upgrade — no new piece letter for a king; a non-royal hammer piece would
 be a custom piece type. Old logs keep loading: a hole is whatever the
 ledger names, either glyph.
+
+**Played `[designer, 2026-09-17, the phone, with the log]`:** "Seems to work pretty good on mobile. I did a few sledge king moves but portals are naturally a lot more powerful. About what I expected. I definitely saw the engine go for at least one sledge move, so it definitely evaluates the option." The record (the analyzer's third sample, `replay/samples/dck-log_vaults-4-t109_s3010228489.json`, `?sample=3`; vaults-4 at walk turn 109, 148 plies, 25 quakes, no anomaly, 1-0): one hammer played, the player's K*e4 at ply 16 — the reply the enemy's own depth-22 search had predicted, its line going on to take the crate and hammer again; two more hammers in its line at ply 115; the enemy king itself never hammered. The hammer is a weaker tool than the portal by design and by the designer's expectation; nothing to tune until more spells exist.
 
 ## 5. Exploration Layer
 

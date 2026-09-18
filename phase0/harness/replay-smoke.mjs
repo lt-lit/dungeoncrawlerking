@@ -380,6 +380,32 @@ expect(por.p5.b6 >= 20 && por.p5.h8 >= 20 && por.p5.b6 <= 36 && por.p5.h8 <= 36 
 expect(/\/\^\^1\*\*3P1\//.test(por.f6) && por.p6.i9 < por.p5.i9, `ply 6: the pawn stepped onto f5 and came out on i9, over its ring (${por.p6.i9} blue pixels left of ${por.p5.i9})`);
 await shot('09-portals', true);
 
+// ------------------------------------------------------------- THE SLEDGEHAMMER (2026-09-17): the third sample — the first sledge duel, the designer's phone log — paints the hammered wall as a cracked wall and every `#` the ledger names as a pit
+await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=3&fx=0`);
+await page.evaluate(() => window.__DCK.ready);
+const sl = await page.evaluate(async () => {
+  const Rp = window.__DCK.replay;
+  await Rp.boardReady();
+  const at = (ply) => { Rp.goto(ply); return Rp.view; };
+  const out = { stage: Rp.view.stage, plies: Rp.view.plies };
+  let v = at(15);
+  out.e4before = { fen: v.fen, cls: v.cell('e4'), line: v.plyLine };
+  v = at(16);
+  out.e4after = { fen: v.fen, cls: v.cell('e4'), line: v.plyLine, arrows: v.marks?.arrows ?? null };
+  v = at(out.plies);
+  const holes = (Rp.log.states[out.plies].holes ?? []);
+  out.last = { fen: v.fen, holes: holes.length, hole0: holes[0], cls0: v.cell(holes[0]), bedrock: 0, pits: 0 };
+  const files = 'abcdefghij';
+  for (let f = 0; f < 10; f++) for (let r = 1; r <= 10; r++) { const c = v.cell(`${files[f]}${r}`) ?? []; if (c.includes('bedrock')) out.last.bedrock++; if (c.includes('hole')) out.last.pits++; }
+  return out;
+});
+expect(/^vaults-4/.test(sl.stage) && sl.plies === 148, `?sample=3 opens the first sledge duel (${sl.stage}, ${sl.plies} plies)`);
+expect(sl.e4before.cls?.includes('wall') && !sl.e4before.cls?.includes('cracked') && !sl.e4before.cls?.includes('furniture'), `ply 15: e4 is a standing wall (${(sl.e4before.cls ?? []).filter((c) => !/^(cell|dark|light|f\d|ck\d|sv\d+|wm-\d+)$/.test(c)).join(' ')})`);
+expect(sl.e4after.cls?.includes('cracked') && sl.e4after.cls?.includes('furniture') && !sl.e4after.cls?.includes('wall'), `ply 16: K*e4 leaves e4 a cracked wall — a crate in the gods' ledger (${(sl.e4after.cls ?? []).filter((c) => !/^(cell|dark|light|f\d|ck\d|sv\d+|wm-\d+)$/.test(c)).join(' ')})`);
+expect(/K\*e4/.test(sl.e4after.line ?? ''), `the ply line reads the hammer's SAN (${sl.e4after.line})`);
+expect(sl.last.holes === 20 && sl.last.pits === 20 && sl.last.bedrock === 0 && sl.last.cls0?.includes('hole'), `the final board: every # is a pit the ledger names — ${sl.last.pits} holes painted, ${sl.last.bedrock} bedrock (${sl.last.hole0}: ${(sl.last.cls0 ?? []).filter((c) => /hole|bedrock|wall/.test(c)).join(' ')})`);
+await shot('10-sledge', true);
+
 expect(pageErrors.length === 0, `no page errors${pageErrors.length ? ` — ${pageErrors.join(' | ')}` : ''}`);
 
 await browser.close();

@@ -145,6 +145,30 @@ if (!process.argv[2]) {
   expect(portalInfo(L2.states[5].fen).owner.get('f5')?.side === 'x', 'a bare FEN with no history paints every pair as nobody\'s');
 }
 
+// THE SLEDGEHAMMER (2026-09-17): the third sample — the first sledge duel,
+// the designer's phone log (vaults-4 at walk turn 109) — renders with the
+// hammer on its timeline (SAN `K*e4`, the state marked `hammer`, the wall a
+// crate in the gods' ledger from that ply on) and every crumble of the
+// wall-kinds build written as a `#` the holes ledger names, so the report's
+// board prints it as a pit (`O`) and never as bedrock.
+if (!process.argv[2]) {
+  const L3 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-4-t109_s3010228489.json'), 'utf8'));
+  const full3 = R.renderReport(L3, { sections: R.SECTION_NAMES });
+  const tl3 = R.timelineSection(L3);
+  expect(full3.length > 10000 && tl3.some((l) => /K\*e4/.test(l)) && !tl3.some((l) => /[KQRBNP]\*[a-j]\d+/.test(l) && !/K\*e4/.test(l)), 'the sledge duel sample renders with its one hammer, K*e4, on the timeline');
+  expect(full3.includes('world vaults-4') && /RESULT 1-0/.test(full3) && /anomalies 0|0 anomal/.test(full3), 'its header carries the world line, the result and no anomaly');
+  const s16 = L3.states[16];
+  expect(s16.san === 'K*e4' && s16.move === 'd3e4' && s16.hammer === 'e4' && s16.mover === 'player' && (s16.godCrates ?? []).includes('e4') && !(L3.states[15].godCrates ?? []).includes('e4'), 'the hammer\'s state carries `hammer: e4`, and e4 joins the gods\' crate ledger on that ply');
+  expect(/\^/.test(s16.fen.split('/')[6]) && !L3.states.some((s, i) => i !== 16 && s.hammer), 'the hammered wall is a crate in the FEN, and no other state is marked');
+  expect(s16.predicted === 'd3e4' && s16.followed === true, 'the enemy\'s own search had predicted the hammer (the followed line)');
+  const last = L3.states[L3.states.length - 1];
+  const hard = (last.fen.split('[')[0].match(/#/g) ?? []).length;
+  expect(hard === 20 && last.holes.length === 20 && (L3.startFen.split('[')[0].match(/#/g) ?? []).length === 0, `every # on the final board is a pit the ledger names (${hard} of ${last.holes.length}), none at the start`);
+  const rows = R.boardRows(last.fen, last, L3.files ?? 10);
+  expect(rows.some((r) => /O/.test(r)) && !rows.some((r) => /#/.test(r)), 'the report prints those pits as O and never as a # wall');
+  expect((L3.quakes?.length ?? 0) === 25 && (L3.quakeTraces?.length ?? 0) > 25 && (L3.branches?.length ?? 0) === 0, `twenty-five quakes fired of ${L3.quakeTraces?.length} rolls, no undo`);
+}
+
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(failures.length ? `\n${failures.length} FAILED` : `\nPASS (${notes.length} checks)`);
