@@ -37,7 +37,7 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, CAST_RE } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, CAST_RE, HARD, isWall } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -248,6 +248,7 @@ function computeDeal() {
       seed: setup.seed | 0 || 1,
       turn: setup.turn === 'b' ? 'b' : 'w',
       portals: portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns
+      hammer: hammerOn(), // THE SLEDGEHAMMER: every king may crack an adjacent wall
       ffish: app.ffish,
     });
   } catch (e) {
@@ -290,7 +291,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, hammer: true };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -322,6 +323,7 @@ function loadOptions() {
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
     options.portals = options.portals !== false; // THE PORTAL SPELL (2026-09-17): everyone has it unless switched off
+    options.hammer = options.hammer !== false; // THE SLEDGEHAMMER (2026-09-17): every king a sledge-king unless switched off
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
@@ -373,6 +375,9 @@ const cheatHints = () => options.cheat && options.hints;
 // THE PORTAL SPELL (2026-09-17): on for every duel and every side — the
 // stress test; an upgrade later. `?portals=off` for a plain duel.
 const portalsOn = () => params.get('portals') !== 'off' && options.portals !== false;
+// THE SLEDGEHAMMER (2026-09-17): every king a sledge-king, both sides — the
+// stress test; an upgrade later. `?hammer=off` for plain kings.
+const hammerOn = () => params.get('hammer') !== 'off' && options.hammer !== false;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
 // The Gods debug overlay (Phase 1.2) is a tuning instrument, not a cheat —
@@ -382,6 +387,7 @@ const godsDebug = () => options.godsDebug;
 function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
   $('optPortals').checked = options.portals !== false;
+  $('optHammer').checked = options.hammer !== false;
   $('optHints').checked = options.hints;
   $('optHintN').value = String(options.hintN);
   $('optHintCont').checked = !!options.hintCont;
@@ -2102,7 +2108,7 @@ function applySetupParams() {
 function stageMiniMap(stage) {
   const rows = [];
   for (let r = stage.ranks - 1; r >= 0; r--) {
-    rows.push(stage.grid[r].map((c) => (c === WALL ? '█' : c === FURNITURE ? '▦' : '·')).join(''));
+    rows.push(stage.grid[r].map((c) => (c === WALL ? '█' : c === HARD ? '▓' : c === FURNITURE ? '▦' : '·')).join(''));
   }
   return rows.join('\n');
 }
@@ -2866,12 +2872,12 @@ async function debrisFly(ev, { shatter = null, inward = false, sq = null, ms = 3
 function debrisCaptureOf(prevFen, nextFen, from, to) {
   if (!prevFen || !nextFen) return null;
   const before = getSquare(prevFen, to);
-  if (before && before !== WALL) return { sq: to, victim: before === FURNITURE ? 'terrain' : 'piece', char: before };
+  if (before && !isWall(before)) return { sq: to, victim: before === FURNITURE ? 'terrain' : 'piece', char: before };
   // En passant: the mover is a pawn, the victim stands beside the from-rank on the to-file.
   const ep = to[0] + from.slice(1);
   if (ep !== from && ep !== to) {
     const b = getSquare(prevFen, ep);
-    if (b && b !== WALL && b !== FURNITURE && !getSquare(nextFen, ep)) return { sq: ep, victim: 'piece', char: b };
+    if (b && !isTerrain(b) && !getSquare(nextFen, ep)) return { sq: ep, victim: 'piece', char: b };
   }
   return null;
 }
@@ -3136,8 +3142,12 @@ async function onMove({ uci, san, mover, ply }) {
   // taken en passant. A piece leaves BLOOD away from the blow; terrain
   // leaves ITS OWN pixels (a crate's planks, a wall's stone) and the sprite
   // SHATTERS on impact instead of dissolving. Traffic wears the path.
+  // THE SLEDGEHAMMER (2026-09-17): a move onto a breakable wall cracks it
+  // where it stands — nothing slides; the wall wears the gods' weaken beat
+  // and drops its chips (duel.mjs marked the move; the ledger has the square).
+  const hammered = parts ? duel.lastMove?.hammer ?? null : null;
   let hit = null, dz = null, hitSrc = null;
-  if (parts) {
+  if (parts && !hammered) {
     hit = debrisCaptureOf(app.residue.lastFen, duel.fen(), parts[1], parts[2]);
     debrisTraffic(parts[1], parts[2]);
     if (hit) {
@@ -3148,7 +3158,13 @@ async function onMove({ uci, san, mover, ply }) {
       dz = await debrisEvent({ k: hit.victim === 'terrain' ? 'smash' : 'kill', sq: hit.sq, ...dir, src: hitSrc, ply });
     }
   }
-  if (parts) {
+  if (hammered) {
+    const src = debrisSrcOf(hammered, app.debris.kinds?.get(hammered));
+    const dzEv = await debrisEvent({ k: 'weaken', sq: hammered, src, ply });
+    const anim = app.boardUI.animateTerrain(hammered, 'weaken', FX(300));
+    await Promise.all([anim, dzEv ? debrisFly(dzEv, { sq: hammered, ms: 300, after: anim }) : null]);
+    if (app.duel !== duel || !duel.board) return; // abandoned mid-crack
+  } else if (parts) {
     // A shattering crate holds until the piece arrives; a piece still dissolves under the blow.
     const shatters = !!(dz && hit?.victim === 'terrain' && debrisOpts().fx && FX(1));
     await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: !shatters });
@@ -3177,6 +3193,7 @@ async function onMove({ uci, san, mover, ply }) {
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
     } else if (parts && P.twin.has(parts[2])) note = ` — through the portal to ${P.twin.get(parts[2])}`;
   }
+  if (hammered) note = ` — the sledgehammer cracks the wall at ${hammered}`; // THE SLEDGEHAMMER
   log($('duel-log'), `${n}${isWhiteMove ? '.' : '…'} ${san}${note}${mover === 'engine' && lastEngineInfo ? `  (${lastEngineInfo})` : ''}`);
   if (mover === 'engine') lastEngineInfo = null;
 }
@@ -3449,7 +3466,7 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optPortals', 'portals'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
@@ -3814,6 +3831,7 @@ function beginRun(worldJson, { resume = null } = {}) {
     setStatus('the run could not begin');
     return null;
   }
+  army.hammer = hammerOn(); // THE SLEDGEHAMMER: the walk's king may crack a wall (ruling 11 — a manual move)
   if (app.boardUI) { app.boardUI.destroy(); app.boardUI = null; }
   app.walk = { run, world, army, enemies, threats: [], candidates: null, enemyMs: 0, enemyNote: null, zoom: zoomFor() ?? null, selected: null, targets: [], busy: false, turn: run.turn | 0, note: '', duel: null, snapshot: null, look: null, pending: null, held: null };
   app.phase = 'walk';
@@ -3916,6 +3934,7 @@ async function walkInput(input) {
     // What a smash breaks, read BEFORE the crate is gone (the debris layer
     // records the sprite the broken thing wore).
     const smashes = plan.moves.filter((m) => m.capture === 'furniture').map((m) => ({ m, k: app.boardUI?.kindAtCell?.(m.to.f, m.to.r) ?? null }));
+    const cracked = plan.hammer ? { m: plan.hammer, k: app.boardUI?.kindAtCell?.(plan.hammer.f, plan.hammer.r) ?? null } : null; // THE SLEDGEHAMMER: the wall's sprite, read before it cracks
     applyTurn(W.world, W.army, plan);
     W.turn += 1;
     recordTurn(W.run, input, W.turn);
@@ -3929,7 +3948,7 @@ async function walkInput(input) {
     const enemyArrivals = [];
     const enemyPlans = [];
     const cands = walkEnemies(W, enemyArrivals, enemyPlans);
-    await debrisWalkTurn(plan, smashes, enemyPlans);
+    await debrisWalkTurn(plan, smashes, enemyPlans, cracked);
     const ui = app.boardUI;
     ui.refresh();
     const ms = FX(plan.teleports?.length ? WALK_TELEPORT_MS : plan.pivot ? WALK_PIVOT_MS : WALK_STEP_MS);
@@ -3937,7 +3956,7 @@ async function walkInput(input) {
     await Promise.all([ui.animateArrivals(arrivals, { ms }), walkLookAt(ms)]);
     const smashed = plan.moves.find((m) => m.capture === 'furniture');
     const mover = plan.individual || (input.kind === 'move') ? walkPieceName(before.get(input.id) ?? 'p') : null;
-    const own = mover ? `${mover} ${smashed ? 'smashes it' : 'moves'}${plan.teleports?.length ? ' · a straggler rejoins' : ''}` : plan.teleports?.length ? 'a straggler rejoins' : plan.regroup ? 'regrouping' : input.kind === 'face' ? `faces ${['north', 'east', 'south', 'west'][plan.facing]}` : '';
+    const own = mover ? `${mover} ${smashed ? 'smashes it' : plan.hammer ? 'cracks the wall' : 'moves'}${plan.teleports?.length ? ' · a straggler rejoins' : ''}` : plan.teleports?.length ? 'a straggler rejoins' : plan.regroup ? 'regrouping' : input.kind === 'face' ? `faces ${['north', 'east', 'south', 'west'][plan.facing]}` : '';
     walkStatus(W.enemyNote ? (own ? `${own} · ${W.enemyNote}` : W.enemyNote) : own);
     W.enemyNote = null;
     walkMarks();
@@ -4268,7 +4287,7 @@ function debrisWearMoves(moves) {
   }
 }
 
-async function debrisWalkTurn(plan, smashes, others = []) {
+async function debrisWalkTurn(plan, smashes, others = [], cracked = null) {
   const D = app.debris;
   const W = app.walk;
   if (!D.ledger || !W || !plan?.ok) return;
@@ -4277,6 +4296,7 @@ async function debrisWalkTurn(plan, smashes, others = []) {
   for (const { m, k } of smashes) {
     await debrisEventCell({ k: 'smash', f: m.to.f, r: m.to.r, df: m.to.f - m.from.f, dr: m.to.r - m.from.r, src: debrisSrcOfCell(m.to.f, m.to.r, k) });
   }
+  if (cracked) await debrisEventCell({ k: 'weaken', f: cracked.m.f, r: cracked.m.r, src: debrisSrcOfCell(cracked.m.f, cracked.m.r, cracked.k) }); // THE SLEDGEHAMMER: the wall's chips
   debrisSave();
 }
 
@@ -4433,12 +4453,13 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
       pivoted = true;
     }
     const plan = enemyFile !== null && enemyFile !== undefined
-      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn() })
-      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn() });
+      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn() })
+      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn() });
     if (!plan.ok) {
       if (pivoted) {
         W.world = World.load(snapshot.world);
         W.army = Army.load(snapshot.army);
+        W.army.hammer = hammerOn();
         app.boardUI?.setWorld?.(W.world);
         app.boardUI?.refresh();
       }
@@ -4544,6 +4565,7 @@ async function walkOut() {
     if (snap) {
       W.world = World.load(snap.world);
       W.army = Army.load(snap.army);
+      W.army.hammer = hammerOn();
       W.enemies = (snap.enemies ?? []).map(loadEnemy);
       app.debris.ledger = null; // rebound below from the run's saved ledger
       app.debris.envId = null;
@@ -4554,10 +4576,11 @@ async function walkOut() {
   } else if (playerWon) {
     const world = W.world;
     // The survivors, in world cells, off the final board through the crop.
-    const survivors = findSquares(finalFen, (c) => !!c && c !== '*' && c !== '^' && c === c.toUpperCase()).map((s) => ({ ch: s.cell, ...arenaToWorld(session.crop, s.file, s.rankFromBottom) }));
+    const survivors = findSquares(finalFen, (c) => !!c && !isTerrain(c) && c === c.toUpperCase()).map((s) => ({ ch: s.cell, ...arenaToWorld(session.crop, s.file, s.rankFromBottom) }));
     const kingCell = survivors.find((s) => s.ch === 'K') ?? { f: W.army.king.f, r: W.army.king.r };
     for (const p of world.cropPieces(session.crop)) world.pieces[world.idx(p.f, p.r)] = null;
     W.army = walkOutArmy(world, W.army.pattern, { f: kingCell.f, r: kingCell.r }, W.army.facing, survivors, 'w');
+    W.army.hammer = hammerOn();
     // A WIN REMOVES THE WHOLE ENEMY ARMY (its letters inside the crop went
     // with the crop's, the rest were lifted at the drop); the bystanders
     // lifted out of the box are set back on the nearest floor.
@@ -4630,7 +4653,7 @@ function renderWorldList() {
     json.map.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
         const ch = row[x];
-        g.fillStyle = ch === '#' || ch === '*' ? '#6d6a63' : ch === '^' ? '#9a6a3a' : ch === '@' ? '#f2c14e' : '#26262c';
+        g.fillStyle = ch === '*' ? '#6d6a63' : ch === '#' ? '#44424a' : ch === '^' ? '#9a6a3a' : ch === '@' ? '#f2c14e' : '#26262c';
         g.fillRect(x, y, 1, 1);
       }
     });

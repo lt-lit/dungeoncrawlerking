@@ -50,7 +50,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, WALL, FURNITURE, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -185,8 +185,8 @@ function terrainMatches(stage, fen) {
     for (let f = 0; f < stage.files; f++) {
       const a = stage.grid[r][f];
       const b = grid[stage.ranks - 1 - r][f];
-      const ta = a === WALL || a === FURNITURE ? a : null;
-      const tb = b === WALL || b === FURNITURE ? b : null;
+      const ta = isTerrain(a) ? a : null;
+      const tb = isTerrain(b) ? b : null;
       if (ta !== tb) return false;
     }
   }

@@ -14,7 +14,7 @@
 // until the army pivots, a crop hanging off the map walled, the run's duel
 // entry, and THE WALK-OUT: survivors where they stood, the captured back
 // beside the body, promotions reverted, a sealed king's whole army moved.
-import { loadWorld, arenaToWorld, worldToArena, cropTransform, HOLE, FLOOR, WALL } from '../../play/js/world.mjs';
+import { loadWorld, arenaToWorld, worldToArena, cropTransform, HOLE, FLOOR, WALL, BEDROCK } from '../../play/js/world.mjs';
 import { makePattern, spawnArmy, walkOutArmy, nearestHold, rotateBody, bagOfPattern, patternOf, planTurn, applyTurn, boxOf, OPENING_KIT } from '../../play/js/army.mjs';
 import { planBarrier, planBox, boxPlacement, boxAt, reachOf, standingCells, farRowTargets, BOX, GAP_MIN, FAR_HALF } from '../../play/js/barrier.mjs';
 import { layoutArmy, buildMatchup } from '../../play/js/armygen.mjs';
@@ -44,7 +44,7 @@ const gapOf = (fen) => {
   const ranks = b.length;
   let wTop = -1, bBottom = ranks;
   for (let r = 0; r < ranks; r++) for (const c of b[r]) {
-    if (!c || c === '*' || c === '^') continue;
+    if (!c || c === '*' || c === '^' || c === '#') continue;
     const rank = ranks - 1 - r;
     if (c === c.toUpperCase()) wTop = Math.max(wTop, rank);
     else bBottom = Math.min(bBottom, rank);
@@ -56,14 +56,14 @@ const whitesOf = (fen) => {
   const b = boardOf(fen);
   const ranks = b.length;
   const out = [];
-  for (let r = 0; r < ranks; r++) for (let f = 0; f < b[r].length; f++) { const c = b[r][f]; if (c && c !== '*' && c !== '^' && c === c.toUpperCase()) out.push({ f, r: ranks - 1 - r, ch: c }); }
+  for (let r = 0; r < ranks; r++) for (let f = 0; f < b[r].length; f++) { const c = b[r][f]; if (c && c !== '*' && c !== '^' && c !== '#' && c === c.toUpperCase()) out.push({ f, r: ranks - 1 - r, ch: c }); }
   return out;
 };
 const blacksOf = (fen) => {
   const b = boardOf(fen);
   const ranks = b.length;
   const out = [];
-  for (let r = 0; r < ranks; r++) for (let f = 0; f < b[r].length; f++) { const c = b[r][f]; if (c && c !== '*' && c !== '^' && c === c.toLowerCase()) out.push({ f, r: ranks - 1 - r, ch: c }); }
+  for (let r = 0; r < ranks; r++) for (let f = 0; f < b[r].length; f++) { const c = b[r][f]; if (c && c !== '*' && c !== '^' && c !== '#' && c === c.toLowerCase()) out.push({ f, r: ranks - 1 - r, ch: c }); }
   return out;
 };
 /** Does the deal read every piece of the army where it stands (the same letter on the same world cell)? */
@@ -147,8 +147,10 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
       const ch = b[BOX - 1 - r][f];
       const c = arenaToWorld(plan.crop, f, r);
       const t = c && w.inBounds(c.f, c.r) ? w.at(c.f, c.r) : undefined;
-      const wantWall = t === undefined || t === WALL || t === HOLE;
-      if ((ch === '*') !== wantWall) terrainOk = false;
+      // WALL KINDS (2026-09-17): a breakable wall is '*'; a hole, bedrock (the ring) or an off-map square is '#'.
+      const wantHard = t === undefined || t === HOLE || t === BEDROCK;
+      if ((ch === '*') !== (t === WALL)) terrainOk = false;
+      if ((ch === '#') !== wantHard) terrainOk = false;
       if ((ch === '^') !== (t === '^')) terrainOk = false;
     }
     check(terrainOk, `facing ${facing}: the dealt FEN's terrain is the world's through the crop`);
@@ -307,15 +309,15 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
     for (let r = 0; r < tx.ranks; r++) for (let f = 0; f < tx.files; f++) {
       const c = arenaToWorld(tx, f, r);
       const off = !c || !edge.inBounds(c.f, c.r);
-      if (off) { offMapTotal++; if (b[tx.ranks - 1 - r][f] === '*') offMapWalls++; }
-      else if (b[tx.ranks - 1 - r][f] === '*') onMapWalls++;
+      if (off) { offMapTotal++; if (b[tx.ranks - 1 - r][f] === '#') offMapWalls++; }
+      else if (b[tx.ranks - 1 - r][f] === '#') onMapWalls++;
     }
-    check(offMapTotal === 2 * 8 + 4 * 2 && offMapWalls === offMapTotal, `off-map squares read as walls in the crop's FEN (${offMapWalls}/${offMapTotal})`);
-    check(onMapWalls === 1, `on the map only the pit is a wall (${onMapWalls})`);
+    check(offMapTotal === 2 * 8 + 4 * 2 && offMapWalls === offMapTotal, `off-map squares read as indestructible walls (#) in the crop's FEN (${offMapWalls}/${offMapTotal})`);
+    check(onMapWalls === 1, `on the map only the pit is a # (${onMapWalls})`);
     const layers = edge.cropLayers(tx);
     check(layers.holes.length === offMapTotal + 1, `every off-map square and the pit are the crop's holes (${layers.holes.length})`);
     const stage = edge.arenaStage(tx);
-    check(stage.grid[0][0] === '*' && stage.grid[0][2] === null, 'arenaStage: an off-map square is a wall, floor is floor');
+    check(stage.grid[0][0] === '#' && stage.grid[0][2] === null, 'arenaStage: an off-map square is an indestructible wall (#), floor is floor');
   }
   // A box on an 8×8 map hangs off it on three sides: the off-map squares are walls and the deal still stands.
   const army = spawnArmy(edge, makePattern(KIT, { seed: 1 }), { f: 3, r: 0 }, 0, 'w');
@@ -337,7 +339,7 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
     check(!crateSq || layers.godCrates.includes(`${String.fromCharCode(97 + crateSq.f)}${crateSq.r + 1}`), `the floor's god crate is in the crop's godCrates`);
     check(layers.holes.length > 1, `the off-map files are holes to the gods (${layers.holes.length})`);
     const stage = tall.arenaStage(tx);
-    check(stage.files === BOX && stage.ranks === BOX && stage.id.startsWith('lab@') && stage.grid[holeSq.r][holeSq.f] === '*', `arenaStage: a 10×10 stage named ${stage.id}, the pit a wall to the deal`);
+    check(stage.files === BOX && stage.ranks === BOX && stage.id.startsWith('lab@') && stage.grid[holeSq.r][holeSq.f] === '#', `arenaStage: a 10×10 stage named ${stage.id}, the pit a # to the deal`);
   }
 }
 
@@ -424,6 +426,16 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
   check(new Set(out4.pieces.map((p) => `${p.f},${p.r}`)).size === 8, 'no two pieces share a cell');
   const lenientOut = spawnArmy(sealed, pattern, { f: 3, r: 4 }, 0, 'w', { lenient: true, stamp: false });
   check(lenientOut.pieces.length === 8 && lenientOut.king.f === 3 && lenientOut.king.r === 4, `the lenient spawn still exists for a floor with no region that holds the army (the king in his pocket)`);
+}
+
+// ---- THE SLEDGEHAMMER (2026-09-17): the deal's variant names the hammer types when asked, under its own name
+{
+  const w = openFloor(30, 30);
+  const army = spawnArmy(w, makePattern(KIT, { seed: 1 }), { f: 14, r: 14 }, 0, 'w');
+  const plan = planBox(w, army, { enemy: KIT_ENEMY, seed: 1, hammer: true });
+  check(plan.ok && plan.deal.variantName.endsWith('__sledge') && /hammerPieceTypes = k/.test(plan.deal.variantIni), `a sledge deal: ${plan.ok ? plan.deal.variantName : plan.error}`);
+  const plain = planBox(w, army, { enemy: KIT_ENEMY, seed: 1 });
+  check(plain.ok && !plain.deal.variantName.includes('sledge') && !/hammerPieceTypes/.test(plain.deal.variantIni), 'a plain deal carries no hammer key');
 }
 
 console.log(`test-barrier: ${ok}/${ok + bad} checks passed`);

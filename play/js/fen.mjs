@@ -4,13 +4,18 @@
 // (`*` stone wall, `^` furniture), pockets `[...]`, and per-square editing.
 // The board is represented as a 2D array indexed [rankFromTop][file] where
 // rankFromTop 0 is the highest rank (first FEN rank). Cell values: piece
-// char ('K', 'p', ...), '*' wall, '^' furniture, or null for empty.
+// char ('K', 'p', ...), '*' wall, '#' hard wall, '^' furniture, or null for empty.
 
-// The two terrain glyphs (brief §4.6). '*' is stone. It means two different
-// things that FSF cannot tell apart and the Director can: an authored WALL,
-// which the gods may crack into '^', and a HOLE that a crumble wrote, which
-// is permanent — never weakened, never reopened (that permanence is the
-// termination guarantee, §4.5). Hole-ness lives in Director state, not here.
+// THE THREE TERRAIN GLYPHS (brief §4.6, §4.8). '*' is the BREAKABLE wall:
+// the gods' weaken rung and the sledgehammer turn it into '^'. '#' is ANY
+// INDESTRUCTIBLE OBSTACLE (wall-kinds, 2026-09-17): bedrock, the map's edge,
+// a pit a crumble wrote — one thing to the engine, a square nothing enters
+// and nothing can crack (engine/patches/wall-kinds.patch). What a '#' LOOKS
+// like (a pit or a dark stone) is the game's own ledger's to say — the
+// Director's holes list — never the engine's; a pit is permanent, never
+// weakened, never reopened (that permanence is the termination guarantee,
+// §4.5). Before 2026-09-17 a hole was a '*' in the ledger; old logs still
+// read that way (the ledger decides, whatever the glyph).
 //
 // '^' is furniture — a neutral occupant either side may capture (an ordinary
 // capture, priced natively by the patched engine pair). Since v3 the gods
@@ -22,6 +27,7 @@
 // toUpperCase() landmine class).
 export const WALL = '*';
 export const FURNITURE = '^';
+export const HARD = '#';
 
 // THE PORTALS (2026-09-17, engine/patches/portals.patch): a cast is a DROP of
 // the portal scroll, `O@e4` for either side (FSF prints the piece letter
@@ -32,8 +38,10 @@ export const FURNITURE = '^';
 export const CAST_RE = /^([A-Za-z])@([a-l](?:10|[1-9]))$/;
 export const isCast = (uci) => CAST_RE.test(uci);
 
-/** Is this cell terrain (stone wall or furniture)? Safe on null/undefined. */
-export const isTerrain = (c) => c === WALL || c === FURNITURE;
+/** Is this cell terrain (a wall of either kind or furniture)? Safe on null/undefined. */
+export const isTerrain = (c) => c === WALL || c === FURNITURE || c === HARD;
+/** Is this cell a wall of either kind (breakable or hard) — stone, not a crate? */
+export const isWall = (c) => c === WALL || c === HARD;
 
 /** Split a full FEN into its fields. Returns { board, pocket, turn, castling, ep, halfmove, fullmove, rest } */
 export function splitFen(fen) {
@@ -70,8 +78,8 @@ export function parseBoard(boardField) {
         const n = parseInt(rankStr.slice(i, j), 10);
         for (let k = 0; k < n; k++) cells.push(null);
         i = j;
-      } else if (ch === '*' || ch === '^') {
-        cells.push(ch); // terrain: stone wall / furniture (§4.6)
+      } else if (ch === '*' || ch === '^' || ch === '#') {
+        cells.push(ch); // terrain: a breakable wall / furniture / an indestructible obstacle (§4.6, §4.8)
         i++;
       } else if (ch === '+') {
         // promoted-piece prefix (shogi-style); keep attached to next char

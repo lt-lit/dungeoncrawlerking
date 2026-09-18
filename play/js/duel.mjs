@@ -21,8 +21,22 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen } from './fen.mjs';
+import { findSquares, splitFen, getSquare, WALL } from './fen.mjs';
 import { flipTurn, evalSoftens } from './tactics.mjs';
+
+/** THE SLEDGEHAMMER (2026-09-17, engine/patches/hammer.patch): the square a
+ *  move hammers — its destination when that was a breakable wall on the board
+ *  before the move (every move onto a '*' IS a hammer) — else null. */
+const HAMMER_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+export function hammerOf(fenBefore, uci) {
+  const m = uci.match(HAMMER_RE);
+  if (!m) return null;
+  try {
+    return getSquare(fenBefore, m[2]) === WALL ? m[2] : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The principal variation of a search result's last "info … pv …" line,
  *  as UCI moves. Parsed here rather than on the engine wrapper because the
@@ -467,8 +481,15 @@ export class DuelController {
         engineSaw = last.score;
       }
     }
-    this.lastMove = { move: uci, san, mover, predicted, followed: predicted ? uci === predicted : null, engineSaw };
+    // THE SLEDGEHAMMER: a move onto a breakable wall cracks it into a crate.
+    // A cracked wall is a cracked wall, whoever cracked it (designer
+    // 2026-09-17): the square joins the god-crate ledger, so the art, the
+    // crate brake and the breach rung see one kind; the state carries
+    // `hammer` so the log and the analyzer can say what the move did.
+    const hammered = hammerOf(fenBefore, uci);
+    this.lastMove = { move: uci, san, mover, predicted, followed: predicted ? uci === predicted : null, engineSaw, ...(hammered ? { hammer: hammered } : {}) };
     this.board.push(uci);
+    if (hammered) this.director.godCrates.add(hammered);
     this.movesSinceBase.push(uci);
     this.ply++;
     this.record.moves.push(uci);

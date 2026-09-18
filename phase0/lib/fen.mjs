@@ -16,9 +16,11 @@
 // (the '^'-as-white-piece toUpperCase() landmine class).
 export const WALL = '*';
 export const FURNITURE = '^';
+export const HARD = '#'; // an indestructible obstacle (wall-kinds, 2026-09-17; play/js/fen.mjs is the canon copy)
 
-/** Is this cell terrain (stone wall or furniture)? Safe on null/undefined. */
-export const isTerrain = (c) => c === WALL || c === FURNITURE;
+/** Is this cell terrain (a wall of either kind or furniture)? Safe on null/undefined. */
+export const isTerrain = (c) => c === WALL || c === FURNITURE || c === HARD;
+export const isWall = (c) => c === WALL || c === HARD;
 
 /** Split a full FEN into its fields. Returns { board, pocket, turn, castling, ep, halfmove, fullmove, rest } */
 export function splitFen(fen) {
@@ -55,7 +57,7 @@ export function parseBoard(boardField) {
         const n = parseInt(rankStr.slice(i, j), 10);
         for (let k = 0; k < n; k++) cells.push(null);
         i = j;
-      } else if (ch === '*' || ch === '^') {
+      } else if (ch === '*' || ch === '^' || ch === '#') {
         cells.push(ch); // terrain: stone wall / furniture (§4.6)
         i++;
       } else if (ch === '+') {

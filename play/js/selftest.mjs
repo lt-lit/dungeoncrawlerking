@@ -419,6 +419,52 @@ async function main() {
     return '46 casts, two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
   });
 
+  // --- THE SLEDGEHAMMER + THE HARD WALL (2026-09-17, engine/patches/
+  // wall-kinds.patch + hammer.patch): a sledge-king cracks an adjacent
+  // breakable wall into a crate (K*f2), never a hard one (#), never in check;
+  // the engine agrees and searches; without the key there is no hammer and a
+  // # board is its * twin — on the game's own deal variant, both binaries. ---
+  await check('sledgehammer: K*f2 cracks a * wall, # is hard, never in check (ffish + engine, the deal variant)', async () => {
+    const hv = dealVariant(8, 8, 2, 7, { hammer: true });
+    ffish.loadVariantConfig(hv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + hv.ini);
+    const h1 = '4k3/3p4/8/8/8/8/3P1*2/4K#2 w - - 0 1';
+    if (ffish.validateFen(h1, hv.name) !== 1) throw new Error(`validateFen rejected ${h1}`);
+    const b = new ffish.Board(hv.name, h1);
+    const legal = b.legalMoves().trim().split(/\s+/).filter(Boolean);
+    if (legal.length !== 5 || !legal.includes('e1f2') || legal.includes('e1f1')) throw new Error(`H1 legal moves: ${legal.join(' ')}`);
+    if (b.sanMove('e1f2') !== 'K*f2') throw new Error(`SAN ${b.sanMove('e1f2')}`);
+    b.push('e1f2');
+    if (b.fen() !== '4k3/3p4/8/8/8/8/3P1^2/4K#2 b - - 0 1' || b.isCheck()) throw new Error(`after the hammer: ${b.fen()}`);
+    b.pop();
+    if (b.fen() !== h1) throw new Error(`pop: ${b.fen()}`);
+    b.delete();
+    const c = new ffish.Board(hv.name, '4k3/8/8/8/8/8/3P1*2/r3K3 w - - 0 1');
+    const inCheck = c.legalMoves().trim().split(/\s+/).filter(Boolean);
+    c.delete();
+    if (inCheck.length !== 1 || inCheck[0] !== 'e1e2') throw new Error(`in check: ${inCheck.join(' ')}`);
+    engine.setoption('UCI_Variant', hv.name);
+    engine.position({ fen: h1 });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== 5) throw new Error(`engine perft 1 = ${n1}`);
+    const res = await engine.go('depth 6 movetime 2000');
+    if (!legal.includes(res.bestmove)) throw new Error(`bestmove ${res.bestmove}`);
+    const pv = dealVariant(8, 8, 2, 7);
+    ffish.loadVariantConfig(pv.ini);
+    const plain = new ffish.Board(pv.name, h1);
+    const lp = plain.legalMoves().trim().split(/\s+/).filter(Boolean);
+    plain.delete();
+    if (lp.length !== 4 || lp.includes('e1f2')) throw new Error(`plain kings: ${lp.join(' ')}`);
+    const twinS = new ffish.Board(pv.name, '4k3/3p4/8/8/8/8/3P1*2/4K*2 w - - 0 1');
+    const twinH = new ffish.Board(pv.name, '4k3/3p4/8/8/8/8/3P1#2/4K#2 w - - 0 1');
+    const same = twinS.legalMoves() === twinH.legalMoves() && twinH.fen().startsWith('4k3/3p4/8/8/8/8/3P1#2/4K#2');
+    twinS.delete();
+    twinH.delete();
+    if (!same) throw new Error('a # board is not its * twin without the key');
+    return 'K*f2 offered and cracks f2 (the hard f1 never), none in check, engine perft 5 + a legal bestmove, plain kings have no hammer, # ≡ * without the key';
+  });
+
   // --- Duel generation + legality cross-check (phase0 selftest, 9x8 arena) ---
   const spec = {
     files: 9,

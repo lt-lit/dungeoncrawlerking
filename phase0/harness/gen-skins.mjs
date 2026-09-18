@@ -114,14 +114,14 @@ function themeFor(json, used) {
   return { theme, why: 'least used' };
 }
 
-const wallish = (ch) => ch === '#' || ch === '^';
+const wallish = (ch) => ch === '#' || ch === '*' || ch === '^';
 
 /** Rule 1 — is the '^' at map[i][f] embedded in a wall line? */
 function isDoor(map, i, f) {
   const ranks = map.length;
   const files = map[0].length;
   const at = (ii, ff) => (ii < 0 || ii >= ranks || ff < 0 || ff >= files ? null : map[ii][ff]);
-  const embedded = (a, b, run) => (a === null || wallish(a)) && (b === null || wallish(b)) && !(a === null && b === null) && run.includes('#');
+  const embedded = (a, b, run) => (a === null || wallish(a)) && (b === null || wallish(b)) && !(a === null && b === null) && /[#*]/.test(run);
   let l = f;
   while (l - 1 >= 0 && wallish(map[i][l - 1])) l--;
   let r = f;
@@ -137,7 +137,7 @@ function isDoor(map, i, f) {
   const row = map[i];
   const rowWall = row.split('').filter(wallish).length / files;
   const rowStone = (row.match(/#/g) ?? []).length;
-  if (rowWall >= 0.6 && rowStone >= 2 && (at(i, f - 1) === '#' || at(i, f + 1) === '#')) return true;
+  if (rowWall >= 0.6 && rowStone >= 2 && (/[#*]/.test(at(i, f - 1) ?? '') || /[#*]/.test(at(i, f + 1) ?? ''))) return true;
   const col = map.map((rw) => rw[f]).join('');
   const colWall = col.split('').filter(wallish).length / ranks;
   const colStone = (col.match(/#/g) ?? []).length;

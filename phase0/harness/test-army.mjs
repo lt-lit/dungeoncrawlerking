@@ -13,19 +13,19 @@
 // and hops home, refusals cost nothing, the save round trip. No browser,
 // no engine. Usage (from phase0/): node harness/test-army.mjs
 import * as A from '../../play/js/army.mjs';
-import { World, FLOOR, WALL, FURNITURE } from '../../play/js/world.mjs';
+import { World, FLOOR, WALL, FURNITURE, BEDROCK } from '../../play/js/world.mjs';
 
 let ok = 0;
 const bad = [];
 const expect = (cond, what) => { if (cond) ok++; else bad.push(what); };
 
-/** A world from rows (top rank first): '.' floor, '#' wall, '^' furniture. */
+/** A world from rows (top rank first): '.' floor, '#' bedrock, '*' wall (both stone to the walk), '^' furniture. */
 function worldOf(rows, id = 'w') {
   const ranks = rows.length, files = rows[0].length;
   const w = new World({ id, files, ranks });
   rows.forEach((row, i) => {
     const r = ranks - 1 - i;
-    for (let f = 0; f < files; f++) w.setTerrain(f, r, row[f] === '#' ? WALL : row[f] === '^' ? FURNITURE : FLOOR);
+    for (let f = 0; f < files; f++) w.setTerrain(f, r, row[f] === '#' ? BEDROCK : row[f] === '*' ? WALL : row[f] === '^' ? FURNITURE : FLOOR);
   });
   return w;
 }
@@ -588,6 +588,32 @@ const WAIT = { kind: 'wait' };
     while (!onSlots(a4) && t < 3) { A.advance(open2, a4, WAIT); t++; }
     expect(onSlots(a4), `and the formation is whole within ${t} more waits`);
   }
+}
+
+// THE SLEDGEHAMMER on the walk (2026-09-17, brief §4.8, ruling 11): a
+// hammer-bearing king may spend the turn cracking an ADJACENT breakable wall
+// into a crate — a manual move onto the wall's cell; he stays, nobody else
+// moves, the world's cracked-wall ledger takes the cell; bedrock never.
+{
+  const w = worldOf(['##########', '#.*......#', '#........#', '#........#', '#........#', '##########']);
+  const a = A.spawnArmy(w, A.makePattern(KIT), { f: 1, r: 3 }, 0);
+  const king = a.king;
+  expect(king.f === 1 && king.r === 3, `the king stands beside the ring and a wall (${king.f},${king.r})`);
+  expect(!A.manualMoves(w, a, king).some((m) => m.capture === 'hammer'), 'without the hammer no wall is offered');
+  a.hammer = true;
+  const hm = A.manualMoves(w, a, king).filter((m) => m.capture === 'hammer');
+  expect(hm.length === 1 && hm[0].f === 2 && hm[0].r === 4, `with the hammer the one adjacent breakable wall is offered, never the ring's bedrock (${JSON.stringify(hm)})`);
+  const before = a.pieces.map((p) => `${p.f},${p.r}`).join(' ');
+  const plan = A.planTurn(w, a, { kind: 'move', id: king.id, to: { f: 2, r: 4 } });
+  expect(plan.ok && plan.hammer && plan.hammer.f === 2 && plan.hammer.r === 4 && plan.moves.length === 0 && plan.individual, `the hammer plans as a move of nobody (${JSON.stringify(plan.hammer)})`);
+  A.applyTurn(w, a, plan);
+  expect(w.at(2, 4) === FURNITURE && w.godCrates.has(w.idx(2, 4)), 'the wall is a crate in the cracked-wall ledger');
+  expect(a.pieces.map((p) => `${p.f},${p.r}`).join(' ') === before, 'nobody moved');
+  expect(!A.manualMoves(w, a, king).some((m) => m.capture === 'hammer'), 'no wall left to crack');
+  expect(A.manualMoves(w, a, king).some((m) => m.f === 2 && m.r === 4 && m.capture === 'furniture'), 'the crate is now a capture');
+  expect(!A.planTurn(w, a, { kind: 'move', id: king.id, to: { f: 0, r: 3 } }).ok, 'bedrock is not a move');
+  const back = A.Army.load(JSON.parse(JSON.stringify(a.serialize())));
+  expect(back.hammer === true, 'the save keeps the hammer');
 }
 
 for (const b of bad) console.log(`FAIL ${b}`);

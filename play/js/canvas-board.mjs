@@ -132,7 +132,7 @@
 // default set stands in), the % piece-fit dials (the tile grid is the only
 // mode here: the art's own scale, lift and shift in whole tile pixels).
 // The atlas is play/js/atlas.mjs.
-import { WALL } from './fen.mjs';
+import { WALL, isWall } from './fen.mjs';
 import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_RAISE, WALL_SPRITE_H, WALL_DY, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, wallFaceCols } from './board-ui.mjs';
 import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
@@ -147,6 +147,13 @@ const FX_KINDS = { weaken: 'cracking', breach: 'breaching', crumble: 'crumbling'
 const CLASSIC = { light: '#4a4a42', dark: '#3a3a33', pit: '#0a0a0e', pitLip: '#000000' };
 const SHADE = 'rgba(0,0,0,0.22)'; // the dark square's checker shade under a theme (#00000038)
 const DIM = 'rgba(0,0,0,0.55)'; // the world outside a duel's crop
+// BEDROCK (wall-kinds, 2026-09-17): the indestructible wall wears the wall
+// case in a darker, deader stone — every pixel pulled toward grey by
+// BEDROCK_GREY and scaled by BEDROCK_SHADE — so a player can tell which walls
+// yield to a hammer or a god. A paint-time composite, not an atlas row: it
+// follows every theme and every live tone for free.
+const BEDROCK_SHADE = 0.6;
+const BEDROCK_GREY = 0.45;
 const GODS = '#7cc8ff'; // style.css --gods
 const GOLD = '#f2c14e'; // --gold
 const BAD = '#e5484d'; // --bad
@@ -1107,6 +1114,7 @@ export class CanvasBoard {
     const k = this.#kindAt(c.cell.f, c.cell.r);
     if (k) {
       if (k.wallTile) out.push('wall');
+      if (k.bedrock) out.push('bedrock');
       if (k.hole) out.push('hole');
       if (k.furniture) out.push('furniture');
       if (k.cracked) out.push('cracked');
@@ -1196,9 +1204,9 @@ export class CanvasBoard {
   async animateSlide(from, to, { ms = 240, fade = false } = {}) {
     if (!ms || !this.cells.has(from) || !this.cells.has(to) || !this.fen) return;
     const letter = this.#letterAt(from);
-    if (!letter || letter === WALL) return;
+    if (!letter || isWall(letter)) return;
     const victim = fade ? this.#letterAt(to) : null;
-    const s = { from, to, letter, t0: now(), ms, fade: !!victim && victim !== WALL };
+    const s = { from, to, letter, t0: now(), ms, fade: !!victim && !isWall(victim) };
     this.slides.push(s);
     this.hidden.add(from);
     this.#run();
@@ -1470,6 +1478,33 @@ export class CanvasBoard {
         g.restore();
       }
     }
+    c = { src: cv, sx: 0, sy: 0, w: T, h: WALL_SPRITE_H };
+    this.composites.set(key, c);
+    return c;
+  }
+
+  /** BEDROCK's tile for a wall case: the theme's wall sprite darkened and
+   *  greyed (BEDROCK_SHADE / BEDROCK_GREY). Cached with the cracked tiles. */
+  #bedrockTile(mask) {
+    const key = `bedrock|${this.theme ?? ''}|${mask}`;
+    let c = this.composites.get(key);
+    if (c) return c;
+    const wall = this.#wallTile(mask);
+    if (!wall) return null;
+    const cv = document.createElement('canvas');
+    cv.width = T;
+    cv.height = WALL_SPRITE_H;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(wall.src, wall.sx, wall.sy, T, WALL_SPRITE_H, 0, 0, T, WALL_SPRITE_H);
+    const img = g.getImageData(0, 0, T, WALL_SPRITE_H);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      for (let ch = 0; ch < 3; ch++) d[i + ch] = Math.round((lum + (d[i + ch] - lum) * (1 - BEDROCK_GREY)) * BEDROCK_SHADE);
+    }
+    g.putImageData(img, 0, 0);
     c = { src: cv, sx: 0, sy: 0, w: T, h: WALL_SPRITE_H };
     this.composites.set(key, c);
     return c;
@@ -1857,7 +1892,7 @@ export class CanvasBoard {
         return;
       }
       const [jx, jy] = fx?.kind === 'cracking' ? JITTER[Math.min(JITTER.length - 1, Math.floor(u * JITTER.length))] : [0, 0];
-      const tile = k.furniture || fx?.kind === 'cracking' ? this.#crackedTile(sm, ck) : this.#wallTile(sm);
+      const tile = k.furniture || fx?.kind === 'cracking' ? this.#crackedTile(sm, ck) : k.bedrock ? this.#bedrockTile(sm) : this.#wallTile(sm);
       this.#draw(tile, x + jx, wy + jy);
       if (fx?.kind === 'cracking' && u < 1) {
         g.fillStyle = `rgba(255,255,255,${(0.5 * (1 - u)).toFixed(3)})`;
@@ -1900,7 +1935,7 @@ export class CanvasBoard {
       this.#draw(tile, x, py);
       return;
     }
-    if (!v || v === WALL) return;
+    if (!v || isWall(v)) return;
     const fading = sq ? this.slides.find((s) => s.fade && s.to === sq) : null;
     this.#paintPiece(v, x, y, fading ? Math.min(1, (t - fading.t0) / fading.ms) : 0);
   }
@@ -1982,7 +2017,7 @@ export class CanvasBoard {
     if (cm.selected === idx) this.#frame1(x, y, GOLD);
     if (cm.targets.has(idx)) {
       const capture = cm.targets.get(idx);
-      if (capture || (k?.v && k.v !== WALL)) this.#frame1(x, y, capture ? BAD : TARGET, 1);
+      if (capture || (k?.v && !isWall(k.v))) this.#frame1(x, y, capture ? BAD : TARGET, 1);
       else {
         g.fillStyle = TARGET;
         g.fillRect(x + 6, y + 6, 4, 4);
@@ -1996,7 +2031,7 @@ export class CanvasBoard {
     if (m.selected === sq) this.#frame1(x, y, GOLD);
     if (m.check === sq) this.#frame1(x, y, BAD);
     if (m.targets.has(sq)) {
-      const occupied = !!k?.v && k.v !== WALL;
+      const occupied = !!k?.v && !isWall(k.v);
       if (occupied) this.#frame1(x, y, TARGET, 1);
       else {
         g.fillStyle = TARGET;

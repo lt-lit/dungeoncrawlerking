@@ -4,7 +4,7 @@
 //
 // A candidate collapse square is REJECTED when:
 //   - it is off-board, already a wall, or either king's current square;
-//   - after the collapse (square → '*', occupant removed, ep cleared) the side to
+//   - after the collapse (square → '#', occupant removed, ep cleared) the side to
 //     move could immediately capture the side-not-to-move's king ("exposes_king" —
 //     an illegal-by-exposure position; a duel must never be decided in one ply by
 //     a dice roll);
@@ -35,7 +35,7 @@
 //
 // The variant must already be registered via ffish.loadVariantConfig().
 
-import { setSquare, getSquare, clearEp, splitFen, joinFen, isTerrain } from './fen.mjs';
+import { setSquare, getSquare, clearEp, splitFen, joinFen, isTerrain, HARD } from './fen.mjs';
 
 // (ffish module) → Map(variantName → reused Board)
 const boardCache = new WeakMap();
@@ -65,9 +65,11 @@ export function resetCrumbleFilterCache(ffish) {
   }
 }
 
-/** Apply the §4.5 collapse transform: square → '*', occupant removed, ep cleared. */
+/** Apply the §4.5 collapse transform: square → '#' (a pit: indestructible,
+ *  wall-kinds 2026-09-17 — it was '*' plus the ledger before), occupant
+ *  removed, ep cleared. */
 export function collapseFen(fen, square) {
-  return clearEp(setSquare(fen, square, '*'));
+  return clearEp(setSquare(fen, square, HARD));
 }
 
 /**

@@ -5,14 +5,14 @@
  "notes": "Stone stubs in BOTH back ranks with a furniture gate-leaf beside each. Crates on the king rows are capture-promotion squares (§4.6) — march a pawn and smash in.",
  "theme": "castle",
  "map": [
-  "##^...",
+  "**^...",
   "......",
   "......",
   "......",
   "......",
   "......",
   "......",
-  "...^##"
+  "...^**"
  ],
  "skin": [
   "..D...",

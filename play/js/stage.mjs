@@ -10,7 +10,9 @@
 //     "map": ["#....",     <- top rank first (visual order, like FEN)
 //             ".^...", ...] }
 //
-// '.' floor · '#' stone wall ('*' accepted — it is the FEN wall glyph) ·
+// '.' floor · '*' BREAKABLE wall · '#' INDESTRUCTIBLE (bedrock; wall-kinds
+// 2026-09-17 — the FEN glyphs exactly, no alias: before that day every wall
+// was spelled '#' and the files were rewritten) ·
 // '^' furniture (§4.6: the neutral capturable occupant — a wall to molding
 // and crop, an ordinary capture in play; `^`→`.` derives the stone-only
 // corpus control arm from the same file). Rectangular, 3–12 files × 5–10
@@ -40,7 +42,7 @@
 // the wrong layer. A stage whose fully-terrain edge rows leave fewer than
 // 5 playable ranks can never deal; the verifier flags that as a data bug.
 import { catalogVariantName } from './variant.mjs';
-import { WALL, FURNITURE } from './fen.mjs';
+import { WALL, FURNITURE, HARD } from './fen.mjs';
 
 /** Skin letter → skin name (the renderer's `skin-<name>` cell class). */
 // ('R' reads MASONRY, not a heap: the rubble-pile sprite was retired
@@ -84,7 +86,7 @@ export function loadStageV2(json) {
   if (files < 3 || files > 12 || ranks < 5 || ranks > 10) {
     throw new Error(`stage ${json.id}: ${files}x${ranks} outside 3-12 x 5-10`);
   }
-  // grid[rankFromBottom][file] — '*' wall, '^' furniture, null floor (the
+  // grid[rankFromBottom][file] — '*' wall, '#' bedrock, '^' furniture, null floor (the
   // fenGrid convention shared with director.mjs / armygen.mjs).
   const grid = Array.from({ length: ranks }, () => Array(files).fill(null));
   json.map.forEach((row, i) => {
@@ -92,8 +94,10 @@ export function loadStageV2(json) {
     const r = ranks - 1 - i;
     for (let f = 0; f < files; f++) {
       const ch = row[f];
-      if (ch === '#' || ch === WALL) {
+      if (ch === WALL) {
         grid[r][f] = WALL;
+      } else if (ch === HARD) {
+        grid[r][f] = HARD;
       } else if (ch === FURNITURE) {
         grid[r][f] = FURNITURE;
       } else if (ch !== '.') {

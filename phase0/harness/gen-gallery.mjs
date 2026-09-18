@@ -25,7 +25,7 @@ import { loadFfish, assertFurnitureSupport } from '../lib/load.mjs';
 import { loadStageV2 } from '../../play/js/stage.mjs';
 import { dealMatchup, armiesConnected } from '../../play/js/armygen.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
-import { WALL, FURNITURE } from '../../play/js/fen.mjs';
+import { WALL, FURNITURE, HARD } from '../../play/js/fen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STAGE_DIR = path.resolve(HERE, '../../play/stages');
@@ -64,7 +64,7 @@ function boardHtml(stage, deal = null) {
     for (let f = 0; f < files; f++) {
       const cell = grid[r][f];
       const shade = (r + f) % 2 ? 'lt' : 'dk';
-      if (cell === WALL) h += '<td class="sq wall"></td>';
+      if (cell === WALL || cell === HARD) h += '<td class="sq wall"></td>';
       else if (cell === FURNITURE) h += '<td class="sq furn"><span class="fn">▦</span></td>';
       else h += `<td class="sq ${shade}">${at[`${r},${f}`] ?? ''}</td>`;
     }

@@ -28,7 +28,7 @@
 // files a wall makes uncoverable are reported in `violations`, judged by
 // eye in the stage gallery rather than enforced.
 import { mulberry32, childSeed } from './prng.mjs';
-import { emptyBoard, serializeBoard, isTerrain, WALL, withPocket } from './fen.mjs';
+import { emptyBoard, serializeBoard, isTerrain, withPocket, isWall } from './fen.mjs';
 import { catalogVariantName, dealVariant, portalPocket } from './variant.mjs';
 import { flipStageVertical, cropStage } from './stage.mjs';
 
@@ -363,7 +363,7 @@ function composeFen(grid, files, ranks, wCells, bCells, turn) {
  *  stage for the gallery eye. */
 export function armiesConnected(stage, matchup, { furnitureBlocks = false } = {}) {
   const { grid, files, ranks } = stage;
-  const blocked = (cell) => (furnitureBlocks ? isTerrain(cell) : cell === WALL);
+  const blocked = (cell) => (furnitureBlocks ? isTerrain(cell) : isWall(cell));
   const key = (r, f) => r * 16 + f;
   const targets = new Set(matchup.black.layout.cells.map((c) => key(c.r, c.f)));
   const seen = new Set(matchup.white.layout.cells.map((c) => key(c.r, c.f)));
@@ -434,6 +434,7 @@ export function dealMatchup({
   stage, flip = false, cropTop = 0, cropBottom = 0,
   white, black, seed = 1, turn = 'w', gapMin = 1, attempts = 8, ffish = null,
   portals = false, // THE PORTAL SPELL (2026-09-17): both sides carry their scrolls, the deal's variant knows the rule
+  hammer = false, // THE SLEDGEHAMMER (2026-09-17): every king may crack an adjacent wall — the deal's variant names the hammer types
 }) {
   let terrain;
   try {
@@ -486,7 +487,7 @@ export function dealMatchup({
       arena.ranks,
       campLineRank(m.white.layout.cells, 1),
       campLineRank(m.black.layout.cells, -1),
-      { portals }
+      { portals, hammer }
     );
     if (portals) m.fen = withPocket(m.fen, portalPocket()); // the scrolls in hand, both sides
     if (ffish) {

@@ -33,6 +33,10 @@ const KNOWN_INI_KEYS = new Set([
   'portalScroll',
   'pieceValueMg',
   'pieceValueEg',
+  // THE SLEDGEHAMMER (2026-09-17, engine/patches/hammer.patch)
+  'hammerPieceTypes',
+  'hammerPieceTypesWhite',
+  'hammerPieceTypesBlack',
 ]);
 
 // THE PORTAL SPELL (2026-09-17): the scroll is a piece type that only ever
@@ -48,6 +52,23 @@ export const PORTAL_SCROLL = 'o';
 export const PORTAL_SCROLLS_PER_SIDE = 2;
 export const PORTAL_SCROLL_VALUE = 0;
 export const PORTAL_VARIANT_SUFFIX = '__portals';
+
+// THE SLEDGEHAMMER (2026-09-17, engine/patches/hammer.patch + wall-kinds.patch;
+// brief §4.8): a piece of a hammer type may spend its move turning an
+// ADJACENT breakable wall ('*') into a crate ('^') — the engine's HAMMER move,
+// plain `e1d1` notation (every move onto a breakable wall IS a hammer), SAN
+// `K*d1`; never in check, never a check; '#' walls never yield. The engine's
+// `hammerPieceTypes` key names the types per colour, and for the stress
+// test EVERY KING IS A SLEDGE-KING (designer 2026-09-17). An upgrade later:
+// per colour is a deal-variant setting, so "this king hammers, that one
+// does not" costs no new piece letter.
+export const HAMMER_PIECES = 'k';
+export const HAMMER_VARIANT_SUFFIX = '__sledge';
+
+/** The variants.ini keys that arm the kings. */
+export function hammerIniKeys() {
+  return { hammerPieceTypes: HAMMER_PIECES };
+}
 
 /** The variants.ini keys that turn the portal spell on for a `ranks`-deep board. */
 export function portalIniKeys(ranks) {
@@ -156,14 +177,14 @@ export function catalogVariantName(files, ranks) {
  * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
  * cumulative variants-ini reload (main.mjs appends to app.catalog).
  */
-export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false } = {}) {
+export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false, hammer = false } = {}) {
   const w = whiteLineRank | 0;
   const b = blackLineRank | 0;
   if (w < 1 || w > ranks || b < 1 || b > ranks) {
     throw new Error(`camp lines w${w}/b${b} outside 1-${ranks}`);
   }
-  // The name encodes the config (rule 7): a portal deal is its own variant.
-  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}`;
+  // The name encodes the config (rule 7): a portal deal, a sledge deal, is its own variant.
+  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}${hammer ? HAMMER_VARIANT_SUFFIX : ''}`;
   const ini = makeDuelVariantIni({
     name,
     files,
@@ -172,9 +193,10 @@ export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portal
       doubleStepRegionWhite: Array.from({ length: w }, (_, i) => `*${i + 1}`).join(' '),
       doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
       ...(portals ? portalIniKeys(ranks) : {}),
+      ...(hammer ? hammerIniKeys() : {}),
     },
   });
-  return { name, ini, portals: !!portals };
+  return { name, ini, portals: !!portals, hammer: !!hammer };
 }
 
 /**

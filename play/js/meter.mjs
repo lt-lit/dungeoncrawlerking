@@ -103,7 +103,7 @@
 // a movetime-bounded search anywhere in the trigger would make the draw
 // sequence wall-clock dependent and every replay and corpus worthless.
 
-import { getSquare, WALL, FURNITURE } from './fen.mjs';
+import { getSquare, isTerrain } from './fen.mjs';
 
 export const METER_DEFAULTS = {
   sate: 4, // meter points refunded by one hot ply
@@ -302,7 +302,7 @@ export function moveEvents(prevFen, uci, postBoard) {
   }
   const isPawn = moverPiece === 'p' || moverPiece === 'P';
   const fileChanged = from[0] !== to[0];
-  const tookAPiece = destOcc != null && destOcc !== WALL && destOcc !== FURNITURE;
+  const tookAPiece = destOcc != null && !isTerrain(destOcc);
   return {
     capture: tookAPiece || (isPawn && fileChanged && destOcc == null),
     check: postBoard.isCheck(),

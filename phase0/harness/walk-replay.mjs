@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as A from '../../play/js/army.mjs';
-import { loadWorld, FLOOR, WALL, FURNITURE } from '../../play/js/world.mjs';
+import { loadWorld, FLOOR, WALL, FURNITURE, BEDROCK } from '../../play/js/world.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -64,7 +64,7 @@ function map(radius = 6) {
       else if (p) ch = p.ch;
       else if (f === army.at.f && r === army.at.r) ch = t === FLOOR ? '@' : '%';
       else if (f === slot.f && r === slot.r) ch = t === FLOOR ? 'k' : 'x';
-      else ch = t === FLOOR ? '.' : t === WALL ? '#' : t === FURNITURE ? '^' : 'O';
+      else ch = t === FLOOR ? '.' : t === WALL ? '*' : t === BEDROCK ? '#' : t === FURNITURE ? '^' : 'O';
       line += ch;
     }
     lines.push(line);

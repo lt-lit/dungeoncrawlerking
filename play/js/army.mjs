@@ -50,7 +50,7 @@
 // is the anchor's world cell — the formation's position — and the king is
 // a follower with a slot like everyone else.
 import { normFacing } from './camera.mjs';
-import { FLOOR, FURNITURE } from './world.mjs';
+import { FLOOR, FURNITURE, WALL } from './world.mjs';
 import { makeArmy, layoutArmy } from './armygen.mjs';
 import { mulberry32 } from './prng.mjs';
 
@@ -214,13 +214,14 @@ export function anchorCell(pattern, king, facing) {
  * world's piece grid is written from it (`stamp`), never the other way.
  */
 export class Army {
-  constructor({ side = 'w', facing = 0, pattern, pieces = [], at = null }) {
+  constructor({ side = 'w', facing = 0, pattern, pieces = [], at = null, hammer = false }) {
     this.side = side;
     this.facing = normFacing(facing);
     this.pattern = pattern;
     this.pieces = pieces;
     this.at = at ? { f: at.f, r: at.r } : pieces[0] ? anchorCell(pattern, pieces[0], this.facing) : { f: 0, r: 0 };
     this.stamped = null; // the cells its letters hold (stamp / remember)
+    this.hammer = !!hammer; // THE SLEDGEHAMMER (2026-09-17): may the king crack an adjacent wall? The walk sets it from the option (every king, for the stress test).
   }
 
   get king() {
@@ -280,11 +281,11 @@ export class Army {
 
   serialize() {
     const a = anchorOf(this.pattern);
-    return { side: this.side, facing: this.facing, at: { ...this.at }, pattern: { width: this.pattern.width, royal: this.pattern.royal, slots: this.pattern.slots.map((s) => ({ ...s })), value: this.pattern.value ?? 0, anchor: { ...a } }, pieces: this.pieces.map((p) => ({ ...p })) };
+    return { side: this.side, facing: this.facing, at: { ...this.at }, pattern: { width: this.pattern.width, royal: this.pattern.royal, slots: this.pattern.slots.map((s) => ({ ...s })), value: this.pattern.value ?? 0, anchor: { ...a } }, pieces: this.pieces.map((p) => ({ ...p })), hammer: this.hammer };
   }
 
   static load(obj) {
-    return new Army({ side: obj.side, facing: obj.facing, pattern: obj.pattern, at: obj.at ?? null, pieces: (obj.pieces ?? []).map((p) => ({ ...p })) });
+    return new Army({ side: obj.side, facing: obj.facing, pattern: obj.pattern, at: obj.at ?? null, pieces: (obj.pieces ?? []).map((p) => ({ ...p })), hammer: !!obj.hammer });
   }
 }
 
@@ -516,6 +517,11 @@ export function pieceMoves(world, army, p, { manual = false, viaComrades = false
   const isKing = type === 'k';
   // The king step: the auto move of any piece, and the king's own chess move (a capture, manually).
   if (!manual || isKing) for (const [df, dr] of KING_STEPS) land(p.f + df, p.r + dr, landing(p.f + df, p.r + dr, manual && isKing));
+  // THE SLEDGEHAMMER (2026-09-17, brief §4.8; ruling 11): a hammer-bearing
+  // king may spend his move cracking an ADJACENT breakable wall into a crate —
+  // a manual chess move offered as a 'hammer' capture onto the wall's cell
+  // (he stays; the crate is opened by whoever captures it). Bedrock never.
+  if (manual && isKing && army.hammer) for (const [df, dr] of KING_STEPS) if (world.at(p.f + df, p.r + dr) === WALL) push(p.f + df, p.r + dr, 'hammer');
   const slide = (dirs) => {
     for (const [df, dr] of dirs) {
       for (let k = 1; ; k++) {
@@ -593,6 +599,7 @@ export function manualMoves(world, army, p) {
   const all = pieceMoves(world, army, p, { manual: true });
   if (p === army.king) {
     return all.filter((m) => {
+      if (m.capture === 'hammer') return true; // the king stays: the box is what it was
       const cells = new Map(army.pieces.map((q) => [q.id, cellOf(q)]));
       cells.set(p.id, { f: m.f, r: m.r });
       return boxOf(army, cells).spread <= BOX;
@@ -904,7 +911,9 @@ function ropeSettle(world, army, cells, walked, facing, { breaker = false } = {}
  * waypoints; empty on a pivot or a teleport).
  * `input` = { kind: 'step', df, dr } (a WORLD delta) | { kind: 'face',
  * facing } | { kind: 'wait' } | { kind: 'move', id, to: { f, r } } (a
- * piece's own chess move; the king's is a step the army follows).
+ * piece's own chess move; the king's is a step the army follows — or, onto
+ * an adjacent breakable wall, THE SLEDGEHAMMER: `plan.hammer` names the
+ * cell, nobody moves).
  */
 export function planTurn(world, army, input, { trace = null } = {}) {
   const king = army.king;
@@ -918,6 +927,11 @@ export function planTurn(world, army, input, { trace = null } = {}) {
     if (!p) return fail('no such piece');
     const legal = manualMoves(world, army, p).find((m) => m.f === input.to.f && m.r === input.to.r);
     if (!legal) return fail('not a move of that piece');
+    if (legal.capture === 'hammer') {
+      // THE SLEDGEHAMMER: the wall becomes a crate, the king stays, nobody
+      // else moves — it counts as the move (the enemies get their turn).
+      return { ok: true, facing, at: { ...army.at }, individual: true, hammer: { f: legal.f, r: legal.r }, pivot: false, moves: [], targets: {}, teleports: [] };
+    }
     if (p !== king) {
       return { ok: true, facing, at: { ...army.at }, individual: true, pivot: false, moves: [{ id: p.id, from: cellOf(p), to: { f: legal.f, r: legal.r }, capture: legal.capture, teleport: false }], targets: {}, teleports: [] };
     }
@@ -1527,6 +1541,11 @@ export function applyTurn(world, army, plan) {
   army.remember(world);
   army.facing = plan.facing;
   army.at = { f: plan.at.f, r: plan.at.r };
+  if (plan.hammer) {
+    // THE SLEDGEHAMMER: the wall is a crate now, in the world's cracked-wall ledger (a cracked wall is a cracked wall, whoever cracked it).
+    world.setTerrain(plan.hammer.f, plan.hammer.r, FURNITURE);
+    world.godCrates.add(world.idx(plan.hammer.f, plan.hammer.r));
+  }
   for (const m of plan.moves) {
     const p = army.piece(m.id);
     if (m.capture === 'furniture') world.setTerrain(m.to.f, m.to.r, FLOOR);

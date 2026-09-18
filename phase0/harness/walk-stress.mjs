@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as A from '../../play/js/army.mjs';
-import { loadWorld, FLOOR, WALL, FURNITURE } from '../../play/js/world.mjs';
+import { loadWorld, FLOOR, WALL, FURNITURE, BEDROCK } from '../../play/js/world.mjs';
 import { mulberry32 } from '../../play/js/prng.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -60,7 +60,7 @@ function localMap(world, army, plan, radius = 6) {
       else if (p) ch = p.ch;
       else if (f === army.at.f && r === army.at.r) ch = t === FLOOR ? '@' : '%'; // % the anchor one cell into stone
       else if (f === slot.f && r === slot.r) ch = t === FLOOR ? 'k' : 'x'; // x the king's slot in stone
-      else ch = t === FLOOR ? '.' : t === WALL ? '#' : t === FURNITURE ? '^' : 'O';
+      else ch = t === FLOOR ? '.' : t === WALL ? '*' : t === BEDROCK ? '#' : t === FURNITURE ? '^' : 'O';
       line += ch;
     }
     lines.push(line);
