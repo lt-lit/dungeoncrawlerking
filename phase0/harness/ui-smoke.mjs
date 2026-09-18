@@ -870,6 +870,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       want.skid += (q.displacements ?? []).length;
       if (q.crumble) want.crumble++;
     }
+    // THE SLEDGEHAMMER: a hammer cracks a wall by hand and leaves the same weaken event a god's crack does (main.mjs onMove)
+    want.weaken += d.record.states.filter((x) => x.hammer).length;
     const S = window.__smoke;
     const painted = Object.keys(S.cells()).filter((sq) => K.debris.cell(sq).painted);
     // every painted square wears a 16×16 debris buffer in the canvas with painted pixels
@@ -1590,6 +1592,131 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   else expect(true, 'the enemy cast nothing in these plies (its orange is asserted on the analyzer, replay-smoke)');
   expect(errs8.length === 0, `no page errors with the portal spell${errs8.length ? ` — ${errs8.join(' | ')}` : ''}`);
   await page8.close();
+}
+// --- PORTALS v2 ON THE PAGE (2026-09-18; brief §4.7; engine/patches/
+// portals-v2.patch): a rider's line through an empty pair is drawn in PIECES
+// — the hint or last-move arrow goes into the entry and comes out of the
+// exit (canvas-board `via`), the slide follows the same legs with a cut, and
+// an EMPTY EXIT lights as the alias of the landing on its entry (a tap there
+// plays the landing). The arrows and the slide are driven straight through
+// the board (a live duel cannot be forced into a tunnel); the alias is read
+// off the live duel when a landing on the player's own pair is on offer.
+{
+  const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs9 = [];
+  page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
+  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
+  await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const v2 = await page9.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const B = K.app.boardUI;
+    const squares = [...B.cells.keys()];
+    const ranks = B.ranks;
+    const sqAt = (f, r) => squares.find((s) => s.charCodeAt(0) - 97 === f && parseInt(s.slice(1), 10) === r) ?? null;
+    // The painter: a straight arrow a1→a4 leaves the f-file untouched; the same move `via` a4→f5 paints a second piece from f5 to f7
+    const count = (sq, rgb) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] === rgb[0] && px[i + 1] === rgb[1] && px[i + 2] === rgb[2] && px[i + 3] === 255) n++; return n; };
+    const GOLD = [0xf2, 0xc1, 0x4e]; // ARROW_COLOURS['hint-1'] (pixelarrow.mjs), painted at full opacity
+    const from = sqAt(0, 1), entry = sqAt(0, 4), exit = sqAt(5, 5), mid = sqAt(5, 6), to = sqAt(5, 7);
+    const out = { squares: [from, entry, exit, mid, to] };
+    B.setArrowStyle({ width: 4, alpha: 1 });
+    B.setArrows([{ from, to: entry, strength: 1, kind: 'hint', rank: 1 }]);
+    out.plainEntry = count(entry, GOLD);
+    out.plainMid = count(mid, GOLD);
+    B.setArrows([{ from, to, via: [[entry, exit]], strength: 1, kind: 'hint', rank: 1 }]);
+    out.viaEntry = count(entry, GOLD);
+    out.viaMid = count(mid, GOLD);
+    out.viaTo = count(to, GOLD);
+    // the squares between the entry and the exit carry no shaft (the cut)
+    const between = sqAt(2, 5);
+    out.viaBetween = count(between, GOLD);
+    B.setArrows([]);
+    // The slide in legs resolves and leaves nothing hidden
+    const fen = () => K.app.duel.fen();
+    const field = () => fen().match(/\{([^}]*)\}/)?.[1] ?? '';
+    const at = (sq) => { const rows = fen().split(' ')[0].split('[')[0].split('/'); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); const row = rows[rows.length - r]; let x = 0; for (const ch of row) { if (/\d/.test(ch)) x += +ch; else { if (x === f) return ch; x++; } } return '.'; };
+    const letterSq = squares.find((s) => /[A-Z]/.test(at(s)) && s !== to);
+    out.letterSq = letterSq ?? null;
+    if (letterSq) {
+      const t0 = performance.now();
+      await B.animateSlide(letterSq, to, { ms: 120, path: [letterSq, entry, exit, to] });
+      out.slideMs = Math.round(performance.now() - t0);
+      out.slideClean = !B.hidden.has(letterSq);
+    }
+    // The alias on the live duel: after the player's pair is linked (both squares empty), a piece with a landing on one of them lights the other too
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const lit = () => [...K.app.boardUI.marks.targets];
+    const legal = () => K.app.duel.legalMoves();
+    const btn = document.getElementById('btnPortal');
+    const castable = () => lit().filter((sq) => { const r = parseInt(sq.slice(1), 10); return r > 2 && r < ranks - 1 && at(sq) === '.'; });
+    out.alias = null;
+    // Cast the player's pair DELIBERATELY: the first half on a square one of the
+    // player's riders can land on, the second on another empty square — then
+    // that rider's landing on the entry lights the twin as its alias, and a tap
+    // on the twin plays it (the enemy's replies may spoil the plan; then a note)
+    const P0 = () => { const m = new Map(); for (const [, a, b] of [...field().matchAll(/([a-l](?:10|[1-9]))-([a-l](?:10|[1-9]))/g)]) { m.set(a, b); m.set(b, a); } return m; };
+    const riders = () => legal().map((m) => m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/)).filter(Boolean).filter((m) => /[RBQ]/.test(at(m[1])) && at(m[2]) === '.');
+    const myTurn = () => K.app.duel.state === 'playing' && K.app.duel.turnColor() === K.app.session.playerColor;
+    let first = null;
+    if (myTurn() && !btn.hidden) {
+      btn.click();
+      const c = castable();
+      first = riders().map((m) => m[2]).find((t) => c.includes(t)) ?? null;
+      if (first) { K.tap(first); await settle(); } else btn.click();
+      if (first && myTurn() && !btn.hidden) {
+        btn.click();
+        const c2 = castable().filter((sq) => sq !== first);
+        const second = c2[Math.floor(c2.length / 2)];
+        if (second) { K.tap(second); await settle(); } else btn.click();
+      }
+    }
+    const P = P0();
+    out.pairs = [...P.entries()].filter(([a, b]) => a < b);
+    out.first = first;
+    if (first && myTurn() && P.has(first) && at(first) === '.' && at(P.get(first)) === '.') {
+      const landing = riders().find((m) => m[2] === first);
+      if (landing) {
+        const twin = P.get(first);
+        const direct = legal().some((m) => m.startsWith(landing[1] + twin));
+        K.tap(landing[1]);
+        const lit1 = lit();
+        out.alias = { from: landing[1], entry: first, twin, entryLit: lit1.includes(first), twinLit: lit1.includes(twin), direct };
+        const movesBefore = K.app.duel.record.moves.length;
+        K.tap(twin);
+        // the tap's move goes through the engine's quiet (cancelIdleProbes) before it lands — wait for it, then for the reply
+        for (let i = 0; i < 1200 && K.app.duel.record.moves.length <= movesBefore; i++) await new Promise((r) => setTimeout(r, 25));
+        await settle();
+        out.alias.played = K.app.duel.record.moves[movesBefore] ?? null;
+        // the board the player's ply left (the reply may take the piece on the exit and step through itself — seen: a knight from h8 taking a bishop on g6 and coming out on j3)
+        const stAfter = K.app.duel.record.states.find((x) => x.move === out.alias.played);
+        const atIn = (f, sq) => { const rows = f.split(' ')[0].split('[')[0].split('/'); const ff = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); const row = rows[rows.length - r]; let x = 0; let num = ''; for (const ch of row) { if (/\d/.test(ch)) { num += ch; continue; } if (num) { x += parseInt(num, 10); num = ''; } if (x === ff) return ch; x++; } return '.'; };
+        out.alias.landed = stAfter ? atIn(stAfter.fen, twin) : null;
+        out.alias.entryAfter = stAfter ? atIn(stAfter.fen, first) : null;
+        out.alias.fromAfter = stAfter ? atIn(stAfter.fen, landing[1]) : null;
+        out.alias.reply = K.app.duel.record.moves[movesBefore + 1] ?? null;
+        out.alias.log = [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).slice(-4);
+      }
+    }
+    out.state = K.app.duel.state;
+    return out;
+  });
+  expect(v2.plainEntry > 0 && v2.plainMid === 0, `a straight arrow paints on its destination (${v2.plainEntry} px on ${v2.squares[1]}) and nothing on ${v2.squares[3]}`);
+  expect(v2.viaEntry > 0 && v2.viaMid > 0 && v2.viaTo > 0 && v2.viaBetween === 0, `an arrow \`via\` ${v2.squares[1]}→${v2.squares[2]} paints its two pieces — the entry (${v2.viaEntry} px), the exit's leg (${v2.viaMid} px on ${v2.squares[3]}, ${v2.viaTo} on ${v2.squares[4]}) — and nothing on the cut (${v2.viaBetween} px)`);
+  if (v2.letterSq) expect(v2.slideMs >= 100 && v2.slideClean, `a slide along legs [${v2.letterSq} ${v2.squares[1]} | ${v2.squares[2]} ${v2.squares[4]}] resolves (${v2.slideMs} ms) and hides nothing after`);
+  if (v2.alias) {
+    expect(v2.alias.entryLit && v2.alias.twinLit, `a landing on the player's portal at ${v2.alias.entry} lights its empty twin ${v2.alias.twin} as the alias`);
+    expect(v2.alias.played === `${v2.alias.from}${v2.alias.entry}` || (v2.alias.direct && v2.alias.played === `${v2.alias.from}${v2.alias.twin}`), `a tap on the alias plays the landing on the entry (${v2.alias.played})`);
+    expect(/[A-Z]/.test(v2.alias.landed ?? '') && v2.alias.entryAfter === '.' && v2.alias.fromAfter === '.', `the player's ply left the piece on ${v2.alias.twin} (${v2.alias.landed}), the entry ${v2.alias.entry} and ${v2.alias.from} empty (the reply was ${v2.alias.reply})`);
+    if (!v2.alias.direct) expect(v2.alias.log.some((t) => t.includes(`through the portal to ${v2.alias.twin}`)), `the log says where it came out (${v2.alias.log.join(' | ')})`);
+    else expect(true, `${v2.alias.from}→${v2.alias.twin} was a move of its own (a tunnel exit or a plain line), so the tap played that`);
+  } else expect(true, `the alias plan was spoiled before the landing (${JSON.stringify(v2.pairs)}, first ${v2.first}, ${v2.state}) — the arrow and the slide above stand`);
+  expect(errs9.length === 0, `no page errors with portals v2 on the page${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
+  await page9.close();
 }
 // --- THE SLEDGEHAMMER (2026-09-17; brief §4.8; engine/patches/wall-kinds.patch
 // + hammer.patch): every king a sledge-king for the stress test. On

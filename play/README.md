@@ -2658,6 +2658,66 @@ then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
 
+## Portals v2 — the body and the tunnel (2026-09-18)
+
+Brief §4.7 "Portals v2"; the engine half is `engine/patches/portals-v2.patch`
+(its record in `engine/README.md` § "The portals-v2 patch"). The designer's
+two rules, and nothing else changed: a linked portal square is a BODY —
+every line stops at it, whatever stands on it (a half is not a body until
+it is linked); an EMPTY PAIR is a TUNNEL for sliders — a rook's, bishop's
+or queen's line entering an empty portal whose twin is also empty comes out
+of the twin in the same direction and runs on, through another empty pair
+too, each pair once per line. Stopping at the entry is the ordinary portal
+move (the piece ends on the twin, or swaps with whatever stands there);
+anything on either square closes the tunnel; a pawn's double step never
+crosses a portal square. The game half:
+
+- **The grid** (`play/js/rays.mjs`): ONE ray walker (`walkRay`) under the
+  rule — a grid carries its pairs as a non-enumerable `portals` property
+  (`withPortals`, set by director.mjs `fenGrid` and tactics.mjs `gridOf`,
+  kept by `copyGrid`; a grid without it walks plain lines) — and the ROUTE
+  of a move (`portalRoute(fenBefore, uci)`: null for a plain move or a plain
+  landing, else the pairs a rider's line ran through and the path
+  `[from, entry, exit, …, to]`, every second boundary a cut; a square
+  reachable plainly reads plain). tactics.mjs (`attacksFrom`, the pins and
+  skewers — the walked squares are the line — `terrainReach`) and
+  threat.mjs (`buildChains`, x-raying on from each occupant; `editExposes`)
+  walk it, so the gods' landing guard and exposure rule see through
+  tunnels and stop at bodies. Node gate `phase0/harness/test-portals-game.mjs`.
+- **The board** (canvas-board.mjs): `animateSlide(from, to, { path })`
+  slides the legs in turn, the eased progress spread over them by length,
+  with a CUT between an entry and its exit; `#paintArrows` draws an arrow
+  with `via` (the pairs) in pieces — into the entry, out of the exit, on to
+  the destination — the label and the hammer glyph on the last piece.
+- **The page** (main.mjs): `onMove` reads the route off the board before
+  the move — the slide's legs (the duration grows with the pairs), the
+  traffic worn per leg, the log "Rf8+ — via c3→f6" (and ", through the
+  portal to …" for a landing at the end of a tunnel); `applyHintLines`
+  puts `via` on the hint arrow and "via c3→f6" after the SAN in the hint
+  list (`.hint-via`); `lastMoveArrow` reads the route off `fenBeforeLast`
+  (the record's state before the last move); THE EXIT ALIAS —
+  `exitAliases`: an EMPTY twin of a lit landing square lights too, and a
+  tap on it plays the landing on the entry (`onSquareTap`), so the landing
+  squares read as going into one portal and out of the other, the
+  designer's picture.
+- **The analyzer** (replay.mjs): `moveArrow(st, prev)` and `pvArrows` carry
+  `via` (the PV's routes are read off the line's start position — a later
+  move's route may differ once earlier moves have landed).
+- **Gates**: selftest 49/49 (the v2 check: fourteen moves with Rh8+
+  through a4–h5, the landing, the plugged exit's swap, the double step
+  ending at the portal, engine perft 14 and a1g7 through a3–g5, the grid
+  walker agreeing), test-portals-game 34 (the loop included: a line that
+  comes round through two pairs to its own square ends there, unvisited —
+  the smoke's random driver found the landing guard's x-ray chain looping
+  forever on one, so `walkRay` never visits its origin and threat.mjs's
+  `buildChains` keeps a seen set), ui-smoke 366 ok (the PORTALS v2 block:
+  an arrow `via` painted in two pieces with nothing on the cut, a slide in
+  legs resolving clean, the exit alias on the live duel when a landing on
+  the player's own pair comes up, judged from the recorded state of the
+  player's ply — the enemy's reply may walk back through the same pair),
+  replay-smoke 76, the Node gates unchanged. Held over: a flash of the rings as a piece passes, the eval's
+  mobility through tunnels (engine).
+
 ## The sledgehammer and the hard wall (2026-09-17)
 
 Brief §4.8; the engine half is `engine/patches/wall-kinds.patch` +

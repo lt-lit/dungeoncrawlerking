@@ -366,7 +366,7 @@ The second terrain glyph: **`^` — furniture** (crates, weak masonry, force fie
 
 ---
 
-### 4.7 The portal spell `[NEW 2026-09-17 — designer-specified rules; engine substrate is engine/patches/portals.patch; everyone has it for the stress test]`
+### 4.7 The portal spell `[NEW 2026-09-17 — designer-specified rules; engine substrate is engine/patches/portals.patch; everyone has it for the stress test. PORTALS v2 2026-09-18 — the body and the tunnel, below; engine/patches/portals-v2.patch]`
 
 The first SPELL: instead of moving, a side casts. The engine plays it for
 and against at full strength, which is the point and the price — stock FSF
@@ -386,11 +386,51 @@ cases]`:**
   capture.
 - Portals never stand on a king row (the promotion zone). No pawn promotes
   through a portal; the easy queen is portal to the ninth rank, then push.
-- Only a MOVE teleports: a slider passing over an empty portal square is
-  passing, a swap triggers no further teleport, a displacement by the gods
-  never lands on or leaves a portal square.
+- Only a MOVE teleports: a swap triggers no further teleport, a
+  displacement by the gods never lands on or leaves a portal square. (The
+  v1 clause "a slider passing over an empty portal square is passing" is
+  RETIRED by Portals v2, below: a portal square is a body.)
 - A piece on one portal moving onto its twin ends where it stood — the
   capture at range and the pass that follows from the rule, both legal.
+
+**PORTALS v2 `[designer, 2026-09-18 — settled in one conversation and BUILT the same day; engine substrate engine/patches/portals-v2.patch, the sixth patch]`.**
+The designer's two questions — "Is it possible to make it so portals block
+sliders?" and "Is it possible to make it so sliders can go fully thru both
+portals without stopping at all?" — became two rules, the second an
+exception to the first, and nothing else changed:
+
+- **A linked portal square is a BODY.** Every line stops at it, whatever
+  stands on it. A half is not a body until it is linked.
+- **An empty pair is a TUNNEL for sliders.** A rook's, bishop's or queen's
+  line entering an empty portal whose twin is also empty comes out of the
+  twin in the same direction and runs on, through another empty pair as
+  well, each pair once per line. Stopping at the entry is the ordinary
+  portal move (the piece ends on the twin, or swaps with whatever stands
+  there — never on the entry). Anything standing on either square, of
+  either colour, closes the tunnel; a plugged pair is still entered by the
+  landing, which swaps as ever.
+- **A pawn's double step is two steps, not a slide**: a portal on the first
+  square ends it, and the single push onto that portal is the ordinary
+  portal move. A double step whose second square is a portal lands on it
+  and steps through, as any landing does (no en passant square after a
+  portal landing, as before).
+
+What follows from the two rules, and is built as such (the engine judges
+every one as a real attack): a king beyond an open pair is IN CHECK through
+it; a piece between the far end and the king is PINNED through the tunnel;
+a piece moving off either portal square can DISCOVER a check; stepping into
+an open pair BLOCKS a check through it (you come out standing in the exit);
+a linking cast is a pre-emptive INTERPOSITION (two bodies at once) though
+never an answer to a check (no cast in check stays); a linking cast whose
+new tunnel points your rook at the enemy king GIVES CHECK, and one that
+points an enemy slider at your own king is ILLEGAL; a pawn's diagonal still
+needs a piece standing on the entry. Rejected on the way, by the designer:
+capturing at the exit ("capturing two pieces is a no no… this is shaping up
+to be a lot of special cases") — landing on a portal swaps regardless of
+what stands on the exit, exactly as v1; and a tunnel for the pawn's double
+step (it would promote through a pair and break en passant). Build order as
+asked: the body rule first as its own checkpoint, the tunnel on top —
+both landed in one session.
 
 **The spell:** one pair per side per duel for now (an upgrade later), two
 scrolls in hand, cast in two turns — the first cast opens a HALF that

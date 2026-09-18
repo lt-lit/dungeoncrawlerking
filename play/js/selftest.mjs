@@ -12,12 +12,13 @@
 import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket } from './variant.mjs';
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger } from './fen.mjs';
+import { portalRoute } from './rays.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { DuelController, RECORD_ARRAYS } from './duel.mjs';
 import { buildLog, LogStore, logFileName } from './replaylog.mjs';
 import { captureLoss } from './threat.mjs';
-import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalSoftens } from './tactics.mjs';
+import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalSoftens, attacksFrom } from './tactics.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
@@ -417,6 +418,54 @@ async function main() {
       if (!over) throw new Error(`a king with only ${what} is not stripped`);
     }
     return '46 casts, two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
+  });
+
+  // --- PORTALS v2 (2026-09-18, engine/patches/portals-v2.patch; brief §4.7):
+  // a linked portal square is a BODY to every line, an EMPTY PAIR a TUNNEL for
+  // riders — on the game's own deal variant, both binaries, and the grid's own
+  // walker (rays.mjs) reading the same rule. ---
+  await check('portals v2: the body, the tunnel, the plugged exit, the double step (ffish + engine + the grid)', async () => {
+    const pv = dealVariant(8, 8, 2, 7, { portals: true });
+    ffish.loadVariantConfig(pv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + pv.ini);
+    const f1 = '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
+    const b = new ffish.Board(pv.name, f1);
+    const legal = b.legalMoves().trim().split(/\s+/).filter(Boolean).sort();
+    const want = ['a1a2', 'a1a3', 'a1a4', 'a1h6', 'a1h7', 'a1h8', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'].sort();
+    if (JSON.stringify(legal) !== JSON.stringify(want)) throw new Error(`F1 legal: ${legal.join(' ')}`);
+    if (b.sanMove('a1h8') !== 'Rh8+') throw new Error(`SAN ${b.sanMove('a1h8')}`);
+    b.push('a1a4');
+    if (!b.fen().startsWith('4k3/p7/8/7R/8/8/8/4K3')) throw new Error(`the landing: ${b.fen()}`);
+    b.pop();
+    b.push('a1h6');
+    if (!b.fen().startsWith('4k3/p7/7R/8/8/8/8/4K3')) throw new Error(`the tunnel: ${b.fen()}`);
+    b.delete();
+    const c = new ffish.Board(pv.name, '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}');
+    const lc = c.legalMoves().trim().split(/\s+/).filter(Boolean);
+    if (lc.length !== 11 || lc.includes('a1h6')) throw new Error(`the plugged exit: ${lc.join(' ')}`);
+    c.push('a1a4');
+    if (!c.fen().startsWith('4k3/p7/8/7R/n7/8/8/4K3')) throw new Error(`the swap: ${c.fen()}`);
+    c.delete();
+    const d = new ffish.Board(pv.name, '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a3-d5}');
+    const ld = d.legalMoves().trim().split(/\s+/).filter(Boolean);
+    if (!ld.includes('a2a3') || ld.includes('a2a4')) throw new Error(`the double step: ${ld.join(' ')}`);
+    d.delete();
+    // The engine agrees on the count and takes a queen through the tunnel.
+    engine.setoption('UCI_Variant', pv.name);
+    engine.position({ fen: f1 });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== 14) throw new Error(`engine perft 1 = ${n1}`);
+    engine.position({ fen: '4k3/6q1/7p/8/8/8/8/R3K3[] w - - 0 1 {a3-g5}' });
+    const res = await engine.go('depth 8 movetime 3000');
+    if (res.bestmove !== 'a1g7') throw new Error(`bestmove ${res.bestmove} (a1g7 takes the queen through a3-g5)`);
+    // The grid reads the same rule: the route of a tunnel move, a landing plain, the walker's attacks.
+    const route = portalRoute(f1, 'a1h7');
+    if (!route || route.path.join(' ') !== 'a1 a4 h5 h7') throw new Error(`route ${JSON.stringify(route)}`);
+    if (portalRoute(f1, 'a1a4') !== null) throw new Error('a landing is a plain move to the route');
+    const atk = attacksFrom(gridOf(f1, 8, 8), 0, 0, 8, 8).map((a) => 'abcdefgh'[a.f] + (a.r + 1));
+    if (!atk.includes('h7') || atk.includes('a5')) throw new Error(`attacksFrom ${atk.join(' ')}`);
+    return 'F1: 14 moves with Rh8+ through a4-h5 and nothing past a4, the landing on h5, the plugged exit swaps, the double step ends at the portal; engine perft 14 and a1g7 takes the queen through the tunnel; the grid walker agrees';
   });
 
   // --- THE SLEDGEHAMMER + THE HARD WALL (2026-09-17, engine/patches/

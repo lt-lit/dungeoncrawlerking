@@ -141,6 +141,7 @@ import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
 import { landingIsSafe, editExposes } from './threat.mjs';
+import { withPortals, portalTwins, copyGrid } from './rays.mjs'; // Portals v2: a grid carries its pairs
 import { threatLedger, newThreats, winInOne, protectedSet } from './tactics.mjs';
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
@@ -165,7 +166,7 @@ export function fenGrid(fen, files, ranks) {
       f++;
     }
   });
-  return g;
+  return withPortals(g, portalTwins(fen)); // Portals v2: the pairs ride the grid (rays.mjs)
 }
 
 /** Can this pawn reach its promotion rank by straight pushes through
@@ -298,7 +299,7 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks, blocked = n
       // hang a piece just as surely as opening a line does. Grid-only,
       // before the ffish-heavy validateCrumbleCandidate (rule 14).
       {
-        const g2 = g.map((row) => [...row]);
+        const g2 = copyGrid(g); // Portals v2: the copy keeps the pairs
         g2[r][f] = HARD;
         if (editExposes(g, g2, [{ f, r }], files, ranks)) {
           rejected.push({ sq, reason: 'hangs_piece' });
@@ -432,7 +433,7 @@ export function breachCandidates(ffish, variant, fen, files, ranks, godCrates = 
       // designer report 2026-09-01). Grid-only, so it runs BEFORE the
       // ffish probes below (rule 14).
       {
-        const g2 = g.map((row) => [...row]);
+        const g2 = copyGrid(g); // Portals v2: the copy keeps the pairs
         g2[r][f] = null;
         if (editExposes(g, g2, [{ f, r }], files, ranks)) {
           veto('hangs_piece');
@@ -546,7 +547,7 @@ export function displacementCandidates(ffish, variant, fen, files, ranks, blocke
         // blocking `to` can sever a defence. Grid-only, BEFORE the ffish
         // probes below, so unsafe candidates cost a few array walks instead
         // of four ffish Boards (rule 14).
-        const gMoved = g0.map((row) => [...row]);
+        const gMoved = copyGrid(g0); // Portals v2: the copy keeps the pairs
         gMoved[r][f] = null;
         gMoved[nr][nf] = occ;
         if (!landingIsSafe(gMoved, nf, nr, files, ranks)) {
