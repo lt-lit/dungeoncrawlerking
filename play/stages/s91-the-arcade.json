@@ -5,16 +5,16 @@
  "notes": "A hall split lengthwise by an arcade \u2014 arches at unequal spacing in a wall down file d \u2014 with a solid stair block in the nave, a screen wall across the nave's south end with one door, a pillar, and barrels in the aisle.",
  "theme": "hall",
  "map": [
-  "...#......",
-  ".......##.",
-  "...#...##.",
+  "...*......",
+  ".......**.",
+  "...*...**.",
   "..........",
-  "...#.^...^",
-  "...#......",
-  "......#...",
-  "...#......",
-  "^....##^##",
-  "^..#......"
+  "...*.^...^",
+  "...*......",
+  "......*...",
+  "...*......",
+  "^....**^**",
+  "^..*......"
  ],
  "skin": [
   "..........",

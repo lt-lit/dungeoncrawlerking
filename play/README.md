@@ -1789,8 +1789,9 @@ written as a plausible crop of a bigger dungeon with corridors leaving
 by its edges — each piece WEATHERED by seed (zero to three edits in the
 ruin vocabulary: a wall segment cracks into masonry or opens into a gap,
 a crate appears against a wall, a crate goes; never on a door, never on
-the piece's edge), and a one-cell wall ring around the whole (6×4 tiles
-is 62×42). THE DESIGNER'S FIRST VERDICT on it (2026-09-09, a Firefox
+the piece's edge), and a one-cell BEDROCK ring around the whole (`#`,
+indestructible since the wall kinds of 2026-09-17 — nothing cracks a way
+off the map; every other stone is a breakable `*`; 6×4 tiles is 62×42). THE DESIGNER'S FIRST VERDICT on it (2026-09-09, a Firefox
 log at walk turn 96): "this might work. A little incoherent, plus I'm
 sure on replays people will start to notice the repeating patterns" —
 the mirrors and the wear are the stopgap against the repeats; coherence
@@ -2652,9 +2653,122 @@ to prevent me from using mine to get an easy promotion" — the portals are
 IN. THE COLOURS' VERDICT (designer, the same day): "this is functional for
 now" — the markings for previous and recommended moves on portal squares
 wait for more spells ("we'll tackle that when we have more spells to work
-with"); next the sledgehammer, then ice. Held over: the atlas sprite, a
+with"); next the sledgehammer (✅ built the same day, the section below),
+then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
+
+## The sledgehammer and the hard wall (2026-09-17)
+
+Brief §4.8; the engine half is `engine/patches/wall-kinds.patch` +
+`hammer.patch` (their record in `engine/README.md` § "The wall-kinds patch
+and the hammer patch"); the discussion and the build are one day's work
+(designer: "Go ahead and build it. Let's make all kings into sledge-kings
+for testing"). THE RULES, the designer's: a piece with the sledgehammer
+SPENDS ITS MOVE turning an ADJACENT breakable wall into a crate; a
+property of a piece, not a spell; designed for the kings; and a second
+kind of wall in the engine — `*` the breakable wall, `#` ANY INDESTRUCTIBLE
+OBSTACLE, one thing to the engine (a pit, bedrock, the map's edge, one day
+a moving wall), told apart for the eye by the game's ledger. The
+discussion's rulings: a cracked wall is a cracked wall whoever made it
+(ONE ledger); the hammer is a pass and that is fine ("a finite number of
+walls to crack"); SAN `K*d1`; one bedrock look for every theme; `#` kept.
+
+- **Two engine patches, one gate**: `#` into the wall bitboard with a hard
+  subset hashed apart; a HAMMER move type (the eight king steps onto a
+  `*`, plain `e1d1` — every move onto a breakable wall IS a hammer, SAN
+  `K*d1`), a quiet move that is legal exactly when the mover is not in
+  check (nothing moves, the square stays blocked: it neither gives nor
+  resolves check), do = wall off / crate on / keys swapped / rule50 reset,
+  undo = the state pointer; `hammerPieceTypes` (+ `White` / `Black`) names
+  the types per colour, `k` for the stress test.
+- **The wall kinds in the game**: `fen.mjs HARD` + `isTerrain` + `isWall`
+  (the 1.2.4 landmine again — an unknown glyph read as a white piece; the
+  helper is the fix, the explicit wall tests were asked "obstacle or
+  breakable?" one by one); `world.mjs BEDROCK` (a world file's `#`; a hole
+  or bedrock is `#` to the engine, a wall `*`, off-map `#`; the ledger
+  decides what a `#` — or an old log's `*` — is, so old logs and both
+  samples load unchanged), the run stamp `dck-run/5`; the stage loader
+  drops the alias; the 36 arenas and the archive rewritten `#` → `*`, the
+  fixtures regenerated (the ring `#`, everything else `*`); a crumble
+  writes `#`; `classifyCell` gains `bedrock` (a `#` outside the holes
+  ledger), painted by the board as the theme's wall case pulled toward
+  grey and darkened (`BEDROCK_GREY` 0.45 / `BEDROCK_SHADE` 0.6 — a
+  paint-time composite, no atlas row, so it follows every theme and tone);
+  the report prints the FEN's glyphs; the meter reads a hammer as cold (a
+  crate smash already got zero credit).
+- **The hammer in play**: `variant.mjs hammerIniKeys` and
+  `dealVariant(..., { hammer })` under the suffix `__sledge`, beside
+  `portals` through `dealMatchup` / `planBox` / `planBarrier`;
+  `?hammer=off` and Options → Spells "Sledge-kings" (on by default);
+  `duel.mjs hammerOf` marks the move (`lastMove.hammer`, on every recorded
+  state) and adds the square to the god-crate ledger; `onMove` slides
+  nothing — the wall wears the gods' weaken beat and drops its chips, the
+  log reads "K*d2 — the sledgehammer cracks the wall at d2"; the tap path
+  needed nothing (the engine lists the move, the wall lights). THE WALK
+  (ruling 11): `army.hammer` from the option, the adjacent `*` cells as
+  `'hammer'` captures of the king, `plan.hammer` with no moves, the world's
+  ledger, the enemies' turn, the crate opened by whoever captures it, a
+  `weaken` debris event by cell, the status "cracks the wall".
+
+Gates (the new pair vendored, both binaries): NATIVE FIRST (`forge/native-test.py`, a debug largeboard build with the asserts on and `pos_is_ok` after every undo, over UCI: 28 checks — the king beside a `*` and a `#`, in check no hammer, a PINNED rook hammers, `#` ≡ `*` without the key at perft 3, per-colour keys, a 10×10 duel-shaped search, perft 3–4 on every fixture), then test-hammer-ffish 27 (the same through the JS API — SAN, push/pop, perft 1–4 = 5/30/182/1338 · 7/59/508/6521 · 6/36/241/1853, a 1,505-move check-flag sweep with 0 mismatches), test-hammer-engine 25, regress + regress-ffish (crate-free boards node-identical to the shipped pair), test-engine 7, test-ffish 19, xcheck, search-identity node-for-node at d12, stack-regress 5, test-portals-ffish 42, test-portals-engine 55, depthcap d22 110/110 (slowest 1613 ms) and d60 30/30 — the cap STAYS at d22; selftest 48/48 headless (the sledgehammer check: K*f2 on the game's own deal variant, the hard f1 never, none in check, the engine's perft 5 and a legal bestmove, plain kings without a hammer, `#` ≡ `*`); test-world 130, test-dungeon 96, test-barrier 162 (a sledge deal's name and key), test-army 131 (the walk's hammer: offered, planned as a move of nobody, the ledger, the crate a capture next, bedrock never, the save), test-enemy 100, test-camera 80, test-debris 76, test-logreport 53, test-armygen; ui-smoke 336 ok (THE SLEDGEHAMMER block: on s65-guard-post seed 1 the kit's king deals at e1 with walls at d1 and d2 — a tap on him lights both beside his moves, a tap on d2 cracks it: the state after the ply a crate in the ledger and marked `hammer`, SAN K*d2, the log line, the king still on e1, the board painting it cracked; `?hammer=off` lights no wall; on the walk the king's manual hammer plans as a move of nobody, the world's ledger takes the cell, the crate is a capture next, the save carries it), replay-smoke 69 (both samples unchanged: an old log's `*` holes read through the ledger), facing-walk 108/108, canvas-grid `none` / `margin` 4/4 in Chromium; the world-shots gallery re-rendered (the bedrock ring around every floor).
+
+THE PHONE VERDICT, the same day (designer, 2026-09-17, with the log): "Seems to work pretty good on mobile. I did a few sledge king moves but portals are naturally a lot more powerful. About what I expected. I definitely saw the engine go for at least one sledge move, so it definitely evaluates the option." — in. The log is THE FIRST SLEDGE DUEL, the analyzer's third
+committed sample (`replay/samples/dck-log_vaults-4-t109_s3010228489.json`,
+`?sample=3`: vaults-4 at walk turn 109, the enemy's initiative, wrathful,
+Android Firefox, 148 plies, 25 quakes of 147 rolls, no rejected draw, no
+undo, no anomaly, 1-0 by extinction at ply 148). What the record says: one
+hammer was played, the player's K*e4 at ply 16 — the very reply the enemy's
+depth-22 search had predicted (`predicted d3e4`, `followed`), its line
+running on with fxe4 taking the crate and a second K*e3; at ply 115 its line
+carried K*f6 and K*f7 — so the engine prices the hammer in its own lines,
+though the enemy king never hammered in this duel; the state after ply 16
+carries `hammer: e4`, e4 sits in the gods' crate ledger from that ply on and
+the FEN shows `^`; every crumble was written as `#` and the holes ledger
+names all twenty of them at the end (none at the start), so the analyzer
+paints them as pits and never as bedrock. test-logreport (61) and
+replay-smoke (74 ok) read the sample: the hammer's state and SAN, the crate from
+that ply on, the pits through the ledger.
+
+### The hammer glyph (2026-09-18)
+
+Designer, on the verdict: "Let's go ahead and get a hammer glyph hint. No to enemies using it while walking, that's a ridiculous idea". An arrow onto a breakable wall — a hint, the enemy's
+own hammer (the red last-move arrow), the analyzer's ply arrow and its
+numbered PV arrows — now ends in a SLEDGEHAMMER stamped upright on the
+wall's square: `pixelarrow.mjs HAMMER_GLYPH`, an 8×4 head in the arrow's
+colour over a 2×6 handle in that colour's shade (`shadeHex`,
+`HAMMER_SHADE` 0.55), the arrows' own one-pixel black halo, rows 3–12 and
+columns 4–11 of the square (on the wall's face); `drawArrow`'s `hammer`
+option paints it after the arrow on the same scratch canvas, so the
+arrow's head under it never double-blends; upright at every angle, since
+a sprite turned to a diagonal is mush at this size and the arrow already
+says where it came from. The hint list wears the same drawing — main.mjs
+`hammerIcon`, a small canvas per hammer hint in the rank's arrow colour
+between the rank and the SAN, so the line's text reads as it always did
+("1 K*d2 +0.4 · 2 K*d1 +0.2 · …"). Who knows a move is a hammer:
+`fen.mjs hammerOf` (moved from duel.mjs, which re-exports it — the
+destination was a `*` before the move), read by `applyHintLines` on the
+live board, by `lastMoveArrow` from the record's `hammer`, by the
+analyzer's `moveArrow` from the state's `hammer` and by its `pvArrows`
+walking a line's walls (a later move onto a cracked square takes the
+crate — no glyph); canvas-board passes the flag through;
+`__DCK.paintHints(pvs, n)` is the smoke's hook into the probe's own paint
+path. ENEMIES NEVER HAMMER ON THE WALK — ruled out the same day, not held
+over (a hunter's path treats a wall as a wall, as built). Gates: ui-smoke
+336 ok (the sledgehammer block grew the glyph: three lines injected
+through the probe's path with the arrows at full opacity — the list's
+text unchanged with the icon on the two hammers alone, the board's arrows
+flagged worst to best, d2's head gold / handle its shade / halo black to
+the pixel, d1's rank-2 hammer in its own colour at its strength's
+opacity, the plain hint's square without one pixel of the handle's shade,
+hints off clearing them), replay-smoke 76 ok (sample 3 at ply 16: the
+ply's arrow flagged, e4 wearing the gold hammer over the cracked wall),
+selftest 48/48, test-logreport 61, the other Node gates unchanged; crops
+at k 6 (the board, the hint list, the analyzer's e4) went to the designer.
+
+Held over: the sledge-king sprite, the hammer as an upgrade (a per-colour
+deal setting — no new letter for a king; a non-royal hammer piece would
+be a custom type), then ice.
 
 ## The debris layer (2026-09-07)
 
@@ -2796,13 +2910,14 @@ A stage is GROUND — walls and dimensions drawn as ASCII, nothing else
   "map": ["#....", ".....", "..."] }
 ```
 
-`.` floor · `#` stone wall (`*` accepted — the FEN glyph) · `^` furniture
+`.` floor · `*` BREAKABLE wall · `#` INDESTRUCTIBLE (bedrock; **WALL KINDS,
+2026-09-17, brief §4.8: the FEN glyphs exactly, one meaning in map files
+and FEN alike — `#` is ANY indestructible obstacle (bedrock, a pit, the
+map's edge, one day a moving wall) and `*` the wall the gods and the
+sledgehammer crack; before that day every wall was spelled `#`, `*` an
+alias, and every stage and world file was rewritten `#` → `*`; a world
+file's `O` stays the pit of its save**) · `^` furniture
 (§4.6: the neutral capturable occupant — terrain to molding/crop/the gods,
-**DECIDED 2026-09-17, not yet built (brief §4.8): `#` becomes ANY
-INDESTRUCTIBLE OBSTACLE — bedrock, a pit, a boundary, one day a moving
-wall — and `*` the BREAKABLE wall, one meaning in map files and FEN
-alike; the wall-kinds PR rewrites every stage and world file `#` → `*`
-and drops the alias; `O` stays the world file's pit;**
 an ordinary capture in play; `^`→`.` derives the stone-only corpus control
 arm from the same file); rectangular, top rank first; 3–12 files × 5–10
 ranks (the engine's largeboard caps). An optional **`skin`** grid, the same

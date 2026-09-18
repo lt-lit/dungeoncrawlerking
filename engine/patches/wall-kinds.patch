@@ -1,0 +1,131 @@
+diff --git a/src/apiutil.h b/src/apiutil.h
+index a3257094..91b7cf2d 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -630,7 +630,7 @@ inline Validation fill_char_board(CharBoard& board, const std::string& fenBoard,
+     {
+         if (c == ' ' || c == '[')
+             break;
+-        if (c == '*' || c == '^')
++        if (c == '*' || c == '^' || c == '#')
+             ++fileIdx;
+         else if (isdigit(c))
+         {
+@@ -980,7 +980,7 @@ inline Validation check_digit_field(const std::string& field) {
+ }
+ 
+ inline std::string get_valid_special_chars(const Variant* v) {
+-    std::string validSpecialCharactersFirstField = "/*^";
++    std::string validSpecialCharactersFirstField = "/*^#";
+     // Whether or not '-', '+', '~', '[', ']' are valid depends on the variant being played.
+     if (v->shogiStylePromotions)
+         validSpecialCharactersFirstField += '+';
+diff --git a/src/position.cpp b/src/position.cpp
+index 3da35e5a..af4c9c8f 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -46,6 +46,7 @@ namespace Zobrist {
+   Key checks[COLOR_NB][CHECKS_NB];
+   Key wall[SQUARE_NB];
+   Key dead[SQUARE_NB];
++  Key hard[SQUARE_NB];
+   Key portalPair[SQUARE_NB][SQUARE_NB];
+   Key portalHalf[COLOR_NB][SQUARE_NB];
+   Key endgame[EG_EVAL_NB];
+@@ -66,6 +67,8 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
+       for (File f = FILE_A; f <= pos.max_file(); ++f)
+           if (pos.state()->deadSquares & make_square(f, r))
+               os << " | ^";
++          else if (pos.state()->hardSquares & make_square(f, r))
++              os << " | #";
+           else if (pos.state()->wallSquares & make_square(f, r))
+               os << " | *";
+           else if (pos.unpromoted_piece_on(make_square(f, r)))
+@@ -203,6 +206,12 @@ void Position::init() {
+           Zobrist::portalHalf[c][s1] = portalRng.rand<Key>();
+   }
+ 
++  // Hard-wall keys (wall-kinds.patch) from their own generator, likewise: a '#'
++  // and a '*' on the same square must hash apart (a hammer side's legal moves differ)
++  PRNG hardRng(0xC2B2AE3D27D4EB4FULL);
++  for (Square s = SQ_A1; s <= SQ_MAX; ++s)
++      Zobrist::hard[s] = hardRng.rand<Key>();
++
+   for (int i = NO_EG_EVAL; i < EG_EVAL_NB; ++i)
+       Zobrist::endgame[i] = rng.rand<Key>();
+ 
+@@ -346,6 +355,16 @@ Position& Position::set(const Variant* v, const string& fenStr, bool isChess960,
+           ++sq;
+       }
+ 
++      // Indestructible obstacle (wall-kinds.patch): a wall nothing can crack —
++      // bedrock, a pit, the map's edge. A wall to everything but the hammer.
++      else if (token == '#')
++      {
++          st->wallSquares |= sq;
++          st->hardSquares |= sq;
++          byTypeBB[ALL_PIECES] |= sq;
++          ++sq;
++      }
++
+       else if ((idx = piece_to_char().find(token)) != string::npos || (idx = piece_to_char_synonyms().find(token)) != string::npos)
+       {
+           if (ss.peek() == '~')
+@@ -682,7 +701,7 @@ void Position::set_state(StateInfo* si) const {
+       si->key ^= Zobrist::psq[pc][s];
+ 
+       if (!pc)
+-          si->key ^= (si->deadSquares & s) ? Zobrist::dead[s] : Zobrist::wall[s];
++          si->key ^= (si->deadSquares & s) ? Zobrist::dead[s] : (si->hardSquares & s) ? Zobrist::hard[s] : Zobrist::wall[s];
+ 
+       else if (type_of(pc) == PAWN)
+           si->pawnKey ^= Zobrist::psq[pc][s];
+@@ -770,8 +789,9 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+           if (f <= max_file())
+           {
+               if (empty(make_square(f, r)) || fogArea & make_square(f, r))
+-                  // Wall or neutral dead square
+-                  ss << ((st->deadSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "^" : "*");
++                  // Wall, hard wall or neutral dead square
++                  ss << ((st->deadSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "^"
++                       : (st->hardSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "#" : "*");
+               else if (unpromoted_piece_on(make_square(f, r)))
+                   // Promoted shogi pieces, e.g., +r for dragon
+                   ss << "+" << piece_to_char()[unpromoted_piece_on(make_square(f, r))];
+diff --git a/src/position.h b/src/position.h
+index e051b9f5..53b4470b 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -56,6 +56,7 @@ struct StateInfo {
+   Square castlingKingSquare[COLOR_NB];
+   Bitboard wallSquares;
+   Bitboard deadSquares;
++  Bitboard hardSquares;   // the INDESTRUCTIBLE subset of wallSquares ('#'): bedrock, a pit, the map's edge — never cracked by anything
+   Bitboard portalSquares;
+   Square   portalHalf[COLOR_NB];
+   int8_t   portalTwin[SQUARE_NB];
+@@ -130,6 +131,8 @@ public:
+   Bitboard board_bb() const;
+   Bitboard board_bb(Color c, PieceType pt) const;
+   Bitboard dead_squares() const;
++  Bitboard hard_squares() const;
++  Bitboard breakable_walls() const;
+   Bitboard portal_squares() const;
+   Bitboard portal_taken() const;
+   Square portal_twin(Square s) const;
+@@ -451,6 +454,15 @@ inline Bitboard Position::dead_squares() const {
+   return st->deadSquares;
+ }
+ 
++inline Bitboard Position::hard_squares() const {
++  return st->hardSquares;
++}
++
++// The walls that CAN be cracked into a dead square ('*'): every wall but the hard ones
++inline Bitboard Position::breakable_walls() const {
++  return st->wallSquares & ~st->hardSquares;
++}
++
+ inline Bitboard Position::portal_squares() const {
+   return st->portalSquares;
+ }

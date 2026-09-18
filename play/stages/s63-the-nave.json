@@ -5,15 +5,15 @@
  "notes": "A chapel cut lengthwise: the nave with pews (one row broken to rubble), a colonnade of pillars to the west aisle, the altar end narrowed by a wall stub, and a sacristy passage east behind a long wall with one door and an open end at the south.",
  "theme": "crypt",
  "map": [
-  "......##.^",
-  ".#.....#..",
+  "......**.^",
+  ".*.....*..",
   ".......^..",
-  ".#.....#..",
-  "..^^.^^#..",
-  ".#.....#..",
-  "..^^..^#..",
-  ".#.....#..",
-  ".......#..",
+  ".*.....*..",
+  "..^^.^^*..",
+  ".*.....*..",
+  "..^^..^*..",
+  ".*.....*..",
+  ".......*..",
   ".........."
  ],
  "skin": [

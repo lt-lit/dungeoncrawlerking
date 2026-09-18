@@ -1022,7 +1022,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // session, 2026-09-09): `?gen=` begins a run on a generated floor; the
 // inputs are WORLD-relative and the facing follows the step (a step in a
 // new direction pivots first), a `face` input turns in place for a move, a
-// wall refuses, the run saves after every turn (schema dck-run/4) and
+// wall refuses, the run saves after every turn (schema dck-run/5) and
 // exports as one object, a tapped piece marks its chess moves WITHOUT
 // moving the camera or the zoom (no box outline since 2026-09-10), the pad's tap turns
 // and the keys face, a DRAG looks around and the next move brings the
@@ -1151,7 +1151,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.turn.ok && wk.turn.pivot && wk.turn.state.facing === (wk.start.facing + 1) % 4 && wk.turn.facing === 0 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.king.r === wk.step.state.king.r && wk.turn.state.turn === 2, `a face input pivots the army a quarter right for a move; the king stays and the board stays north-up (army facing ${wk.turn.state.facing}, board ${wk.turn.facing})`);
   expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
   expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status) && wk.refused.pivots === 1 && wk.refused.facing === 1, `stepping east pivots the army east once and walks until a wall refuses and says so (${wk.refused.reason}, turn ${wk.refused.turn}, ${wk.refused.pivots} pivot)`);
-  expect(wk.save.schema === 'dck-run/4' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
+  expect(wk.save.schema === 'dck-run/5' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
   expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === wk.tap.z0 && wk.tap.z2 === wk.tap.z0 && wk.tap.focusSame && wk.tap.cleared && wk.tap.chessOnly, `a tapped piece marks ${wk.tap.targets} chess moves with the zoom (${wk.tap.z0}) and the focus unmoved; a tap elsewhere lets go`);
   expect(wk.tap.box && wk.tap.box.ok && wk.tap.box.rect.f1 - wk.tap.box.rect.f0 === 9 && wk.tap.box.rect.r1 - wk.tap.box.rect.r0 === 9, `the box the army must fit is a 10×10 on the king's rank, nobody behind him (${JSON.stringify(wk.tap.box?.rect)}, depth ${wk.tap.box?.minDy}…${wk.tap.box?.maxDy}, span ${wk.tap.box?.spread})`);
   expect(wk.tapKing.selected !== null && wk.tapKing.targets > 0 && wk.tapKing.allAdjacent, `the king can be tapped and offers his own chess moves (${wk.tapKing.targets}, all adjacent)`);
@@ -1296,7 +1296,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await settle();
     const holes = K.app.duel ? [...K.app.duel.director.holes] : [];
     out.second = { ok: !!plan2?.ok, error: plan2?.error ?? null, files: plan2?.stage?.files, ranks: plan2?.stage?.ranks, pit, holes, authored: K.app.duel?.director.authoredTerrain ?? null, fenHasPit: null };
-    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('*');
+    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('#'); // WALL KINDS: a pit is a '#'
     out.lost = { ended: await K.walk.concede('white'), label: document.getElementById('btnWalkOut').textContent };
     document.getElementById('btnWalkOut').click();
     for (let i = 0; i < 100 && K.app.phase !== 'setup'; i++) await new Promise((r) => setTimeout(r, 30));
@@ -1378,7 +1378,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     return out;
   });
   const hd = en.hunt.duel.duel, ad = en.ambush.duel.duel;
-  expect(en.start.schema === 'dck-run/4' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
+  expect(en.start.schema === 'dck-run/5' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
   expect(!en.wait.moved && en.wait.states === 'sentry,sentry,sentry,sentry' && en.wait.threats === 0, `a wait moves no sentry, lights no threat (${en.wait.ms?.toFixed(1)} ms of enemy work)`);
   expect(en.hunt.placed && en.hunt.sight && /47,21/.test(en.hunt.goalsWest) && en.hunt.far > 0 && en.hunt.near > 0, `enemy 2 stood at (44, 21) sees the army; the west band offers (47, 21) on its far row (${en.hunt.far} far-row cells, ${en.hunt.near} nearer cells of the far half)`);
   expect(en.hunt.afterOne.state === 'hunt' && en.hunt.afterOne.threats > 0 && /sees you/.test(en.hunt.afterOne.status), `on the next input it hunts: the threat display lights ${en.hunt.afterOne.threats} cells, the strip says so (its king at ${en.hunt.afterOne.king.f}, ${en.hunt.afterOne.king.r}; ${en.hunt.afterOne.ms?.toFixed(1)} ms of enemy work)`);
@@ -1475,7 +1475,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   };
   const ra = await roamRun(30);
   const rb = await roamRun(30);
-  expect(ra.schema === 'dck-run/4' && ra.modes === 'roam,roam,roam,roam' && /roam/.test(ra.start), `four wanderers spawn on the fixture (${ra.start})`);
+  expect(ra.schema === 'dck-run/5' && ra.modes === 'roam,roam,roam,roam' && /roam/.test(ra.start), `four wanderers spawn on the fixture (${ra.start})`);
   expect(ra.trail.length >= 10 && ra.moved >= 2 && ra.draws.some((n) => n > 0), `after ${ra.trail.length} waits ${ra.moved} of four kings have left their spawns (draws ${ra.draws.join(',')}; phase ${ra.phase}${ra.phase === 'playing' ? ' — a wanderer walked into sight of the standing army and caught it' : ''})`);
   expect(ra.shared === 0 && ra.letters.every((n) => n === 24) && ra.leash.length > 0 && ra.leash.every((d) => d <= 12), `no two enemy pieces on one cell (${ra.shared} shared), 24 letters on every walk turn (min ${Math.min(...ra.letters)}), every wanderer that stayed on its beat within the leash (${ra.leash.join(',')} cells from the spawns; ${ra.hunted ? `enemy ${ra.hunted} hunted` : 'none hunted'})`);
   expect(/^(roam|hunt|search)(,(roam|hunt|search))*$/.test(ra.states), `the wanderers' states stay roam / hunt / search (${ra.states})`);
@@ -1590,6 +1590,175 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   else expect(true, 'the enemy cast nothing in these plies (its orange is asserted on the analyzer, replay-smoke)');
   expect(errs8.length === 0, `no page errors with the portal spell${errs8.length ? ` — ${errs8.join(' | ')}` : ''}`);
   await page8.close();
+}
+// --- THE SLEDGEHAMMER (2026-09-17; brief §4.8; engine/patches/wall-kinds.patch
+// + hammer.patch): every king a sledge-king for the stress test. On
+// s65-guard-post seed 1 the kit's king deals at e1 with breakable walls at d1
+// and d2: a tap on the king lights both walls beside his ordinary moves (the
+// engine's own move list — a move onto a '*' IS a hammer); a tap on a wall
+// cracks it — the state after the ply shows a crate there and the god-crate
+// ledger has the square (a cracked wall is a cracked wall, whoever cracked
+// it), the board paints it cracked, the record's SAN is K*d2 and the state
+// carries `hammer`, the log names the crack, the king stayed. With
+// `?hammer=off` the same tap lights no wall. Then THE WALK: the king cracks
+// a wall beside him by a manual move (ruling 11) — nobody moves, the world's
+// ledger takes the cell, the crate is a capture next, the save carries it.
+{
+  const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs9 = [];
+  page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
+  const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
+  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?${q9}`);
+  await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
+  // in the list (a canvas per hammer hint, in the rank's colour, between the
+  // rank and the SAN; the line's text unchanged) and on the board (the glyph
+  // stamped on the wall's square over the arrow's head: rows 3–12, cols 4–11,
+  // the head in the rank's colour, the handle its shade, a black halo). Lines
+  // injected through the probe's own paint path; the arrows at full opacity so
+  // every pixel is exact.
+  const gl = await page9.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const plain = K.app.duel.legalMoves().find((m) => UCI.test(m) && !/^e1d[12]$/.test(m)); // any ordinary move of the position: the control
+    const plainTo = plain.match(UCI)[2];
+    K.paintHints([{ rank: 1, move: 'e1d2', score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: 'e1d1', score: { type: 'cp', value: 20 }, depth: 9 }, { rank: 3, move: plain, score: { type: 'cp', value: 10 }, depth: 9 }], 3);
+    const out = { line: document.getElementById('hint-line').textContent, plain, plainTo, plainSan: K.app.duel.board.sanMove(plain) };
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => `${s.dataset.rank}:${s.querySelector('canvas.hint-hammer') ? 'hammer' : '-'}`);
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.hammer ? '*' : ''}`);
+    const px = (sq, c, r) => { const p = K.app.boardUI.squarePixels(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    out.d2 = { head: px('d2', 7, 4), handle: px('d2', 8, 10), halo: px('d2', 3, 3) };
+    out.d1 = { head: px('d1', 7, 4), handle: px('d1', 8, 10) };
+    out.plainShade = (() => { const p = K.app.boardUI.squarePixels(plainTo); let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] === 110 && p[i + 1] === 71 && p[i + 2] === 35) n++; return n; })(); // the rank-3 handle's shade: only the glyph paints it
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  expect(gl.line === `1 K*d2 +0.4 · 2 K*d1 +0.2 · 3 ${gl.plainSan} +0.1 · d9`, `the hint list reads as ever, the hammers by their SAN ("${gl.line}")`);
+  expect(gl.icons.join(' ') === '1:hammer 2:hammer 3:-', `the hammer icon sits on the hammer hints alone (${gl.icons.join(' ')})`);
+  expect(gl.arrows.join(' ') === `${gl.plain} e1d1* e1d2*`, `the board's hint arrows carry the hammer flag, worst to best (${gl.arrows.join(' ')})`);
+  expect(gl.d2.head === '242,193,78,255' && gl.d2.handle === '133,106,43,255' && gl.d2.halo === '0,0,0,255', `d2 wears the rank-1 hammer: head gold, handle its shade, a black halo (${gl.d2.head} / ${gl.d2.handle} / ${gl.d2.halo})`);
+  const near = (got, want) => { const g = String(got).split(',').map(Number), w = want.split(',').map(Number); return g.length === 4 && g.every((v, i) => Math.abs(v - w[i]) <= 8); }; // a rank-2 arrow is a shade translucent by its strength (arrowAlpha), so its glyph blends a little with the wall
+  expect(near(gl.d1.head, '201,206,216,255') && near(gl.d1.handle, '111,113,119,255'), `d1 wears the rank-2 hammer in its own colour, at its strength's opacity (${gl.d1.head} / ${gl.d1.handle})`);
+  expect(gl.plainShade === 0, `a plain hint carries no hammer (${gl.plain}: ${gl.plainShade} pixels of the rank-3 handle's shade on ${gl.plainTo})`);
+  expect(gl.cleared === 0, 'hints off clears the hammers with the arrows');
+  const hm = await page9.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const atIn = (fen, sq) => { const g = gridOf(fen); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const at = (sq) => atIn(K.app.duel.fen(), sq);
+    const kingSq = () => { const g = gridOf(K.app.duel.fen()); for (let i = 0; i < g.length; i++) for (let f = 0; f < g[i].length; f++) if (g[i][f] === 'K') return String.fromCharCode(97 + f) + (g.length - i); return null; };
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = parseInt(sq.slice(1), 10); const out = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) { if (!df && !dr) continue; if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= K.app.boardUI.ranks) out.push(String.fromCharCode(97 + f + df) + (r + dr)); } return out; };
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const out = { variant: K.app.duel.variantName, king: kingSq(), optHammer: document.getElementById('optHammer').checked };
+    out.walls = around(out.king).filter((s) => at(s) === '*');
+    K.tap(out.king);
+    const lit = [...K.app.boardUI.marks.targets];
+    out.lit = lit;
+    out.wallsLit = out.walls.filter((s) => lit.includes(s));
+    out.selected = K.app.boardUI.marks.selected;
+    out.target = out.walls.includes('d2') ? 'd2' : out.walls[0];
+    K.tap(out.target);
+    await settle();
+    const st1 = K.app.duel.record.states[1];
+    out.after = {
+      cell: st1 ? atIn(st1.fen, out.target) : null,
+      crate: !!st1 && (st1.godCrates ?? []).includes(out.target),
+      hammer: st1?.hammer ?? null,
+      san: K.app.duel.record.sans[0],
+      king: st1 ? (() => { const g = gridOf(st1.fen); for (let i = 0; i < g.length; i++) for (let f = 0; f < g[i].length; f++) if (g[i][f] === 'K') return String.fromCharCode(97 + f) + (g.length - i); return null; })() : null,
+      live: at(out.target),
+      classes: K.marks.cell(out.target),
+      log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /sledgehammer/i.test(t)),
+      state: K.app.duel.state,
+    };
+    return out;
+  });
+  expect(/__sledge$/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
+  expect(hm.king === 'e1' && hm.walls.length === 2 && hm.walls.includes('d1') && hm.walls.includes('d2'), `the kit's king at ${hm.king} with breakable walls beside him (${hm.walls.join(' ')})`);
+  expect(hm.selected === hm.king && hm.wallsLit.length === hm.walls.length, `a tap on the king lights the walls beside him with his moves (${hm.wallsLit.join(' ')} of ${hm.lit.join(' ')})`);
+  expect(hm.after.cell === '^' && hm.after.crate && hm.after.king === hm.king && hm.after.hammer === hm.target, `a tap on ${hm.target} cracks it: the state after the ply shows a crate in the ledger, the king still on ${hm.after.king}, the state marked hammer ${hm.after.hammer}`);
+  expect(hm.after.san === `K*${hm.target}` && hm.after.log.some((t) => t.includes(`cracks the wall at ${hm.target}`)), `the record and the log say what happened (${hm.after.san}; ${hm.after.log[0] ?? 'no log line'})`);
+  if (hm.after.live === '^') expect(hm.after.classes?.includes('cracked') && hm.after.classes?.includes('furniture'), `the board paints ${hm.target} as a cracked wall (${(hm.after.classes ?? []).filter((c) => /wall|crack|furn/.test(c)).join(' ')})`);
+  else expect(true, `the enemy took the crate on its reply (${hm.after.live} on ${hm.target} now) — the crack was painted for a ply`);
+  expect(errs9.length === 0, `no page errors with the sledgehammer${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
+  await page9.close();
+  // Plain kings: `?hammer=off` — the same tap lights no wall and the deal is plain.
+  const page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page9b.goto(`http://127.0.0.1:${PORT}/play/index.html?${q9}&hammer=off`);
+  await page9b.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page9b.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  // (With plain kings the king at e1 has no move at all here — the walls, his own pawns and rook box him in — so nothing lights; the engine's list is the proof.)
+  const plain = await page9b.evaluate(() => { const K = window.__DCK; K.tap('e1'); const lit = [...K.app.boardUI.marks.targets]; const legal = K.app.duel.legalMoves(); return { variant: K.app.duel.variantName, lit, walls: lit.filter((s) => ['d1', 'd2'].includes(s)), hammers: legal.filter((m) => m === 'e1d1' || m === 'e1d2'), legal: legal.length }; });
+  expect(!/sledge/.test(plain.variant) && plain.walls.length === 0 && plain.hammers.length === 0 && plain.legal > 0, `?hammer=off: plain kings — no wall lights and the engine lists no hammer (${plain.lit.join(' ') || 'nothing lit'}; ${plain.legal} legal moves; ${plain.variant})`);
+  await page9b.close();
+  // THE WALK: a manual hammer on the fixture (the enemies off; motion off).
+  const page10 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs10 = [];
+  page10.on('pageerror', (e) => errs10.push(String(e).split('\n')[0]));
+  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&fx=0&enemies=off`);
+  await page10.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
+  const hw = await page10.evaluate(async () => {
+    const K = window.__DCK;
+    await K.renderer.ready();
+    const wallsBy = (k) => { const out = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) { if (!df && !dr) continue; if (K.walk.cell(k.f + df, k.r + dr)?.v === '*') out.push({ f: k.f + df, r: k.r + dr }); } return out; };
+    const out = { steps: 0 };
+    // Walk the facing until a breakable wall stands beside the king (bounded): the vaults are full of them.
+    const fwd = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    let walls = wallsBy(K.walk.state.king);
+    for (let i = 0; i < 40 && !walls.length; i++) {
+      const d = fwd[K.walk.state.facing];
+      const p = await K.walk.input({ kind: 'step', df: d[0], dr: d[1] });
+      if (!p.ok) { const t = fwd[(K.walk.state.facing + 1) % 4]; await K.walk.input({ kind: 'step', df: t[0], dr: t[1] }); }
+      out.steps++;
+      walls = wallsBy(K.walk.state.king);
+    }
+    const s0 = K.walk.state;
+    out.king = { ...s0.king };
+    out.walls = walls;
+    if (!walls.length) return out;
+    K.walk.select(s0.king.f, s0.king.r);
+    out.targets = K.walk.state.targets.map((t) => ({ f: t.f, r: t.r, capture: t.capture ?? null }));
+    out.hammerTargets = out.targets.filter((t) => t.capture === 'hammer');
+    const w = walls[0];
+    const before = s0.pieces.map((p) => `${p.f},${p.r}`).join(' ');
+    const plan = await K.walk.input({ kind: 'move', id: s0.king.id, to: { f: w.f, r: w.r } });
+    for (let i = 0; i < 200 && K.walk.busy; i++) await new Promise((r) => setTimeout(r, 25));
+    const s1 = K.walk.state;
+    out.plan = { ok: plan?.ok, hammer: plan?.hammer ?? null, moves: plan?.moves?.length ?? -1 };
+    out.after = { cell: K.walk.cell(w.f, w.r), unmoved: s1.pieces.map((p) => `${p.f},${p.r}`).join(' ') === before, turn: s1.turn - s0.turn, status: document.getElementById('walk-status').textContent };
+    K.walk.select(s1.king.f, s1.king.r);
+    out.next = K.walk.state.targets.find((t) => t.f === w.f && t.r === w.r) ?? null;
+    K.walk.select(-1, -1);
+    const exp = K.walk.export();
+    const floor = exp.floors?.[exp.floor]?.world;
+    out.save = { lastInput: exp.turns[exp.turns.length - 1], crateSaved: !!floor && (floor.godCrates ?? []).includes(w.r * floor.files + w.f), terrain: floor?.terrain?.[floor.ranks - 1 - w.r]?.[w.f] ?? null };
+    return out;
+  });
+  if (!hw.walls.length) expect(true, `the walk's hammer: not measured — no breakable wall beside the king within ${hw.steps} steps`);
+  else {
+    expect(hw.hammerTargets.length === hw.walls.length && hw.hammerTargets.every((t) => hw.walls.some((w) => w.f === t.f && w.r === t.r)), `the king's manual moves offer every breakable wall beside him as a hammer (${hw.hammerTargets.length} of ${hw.walls.length}, after ${hw.steps} steps)`);
+    expect(hw.plan.ok && hw.plan.hammer && hw.plan.moves === 0, `the hammer input plans as a move of nobody (${JSON.stringify(hw.plan)})`);
+    expect(hw.after.cell?.v === '^' && hw.after.cell?.crate === true && hw.after.unmoved && hw.after.turn === 1, `the wall is a crate in the world's ledger, nobody moved, one turn spent (${hw.after.status})`);
+    expect(/cracks the wall/.test(hw.after.status), `the status says so (${hw.after.status})`);
+    expect(hw.next?.capture === 'furniture', `the crate is a capture next (${JSON.stringify(hw.next)})`);
+    expect(hw.save.lastInput?.kind === 'move' && hw.save.crateSaved && hw.save.terrain === '^', `the run save carries the input and the cracked cell (${JSON.stringify(hw.save)})`);
+  }
+  expect(errs10.length === 0, `no page errors on the walk's hammer${errs10.length ? ` — ${errs10.join(' | ')}` : ''}`);
+  await page10.close();
 }
 await browser.close();
 

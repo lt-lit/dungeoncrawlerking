@@ -28,8 +28,10 @@ export const sqName = (f, r) => `${fileLetter(f)}${r + 1}`;
 /** UCI "e2e4" / "f10f9" / "e9e10q" → [from, to, promo] (rank-10 squares are 3 chars — rule 8). */
 export const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/;
 
-/** One board as text rows (top rank first). Walls '#', a hole 'O', a
- *  god-cracked wall 'x', authored furniture '^', floor '·'. `files` is the
+/** One board as text rows (top rank first). A breakable wall '*', an
+ *  indestructible wall '#' (wall-kinds 2026-09-17; every wall printed '#'
+ *  before), a hole 'O' (the ledger's, either glyph), a god-cracked wall 'x',
+ *  authored furniture '^', floor '·'. `files` is the
  *  footer's width when the fen has no ranks (never, in practice). */
 export function boardRows(fen, { holes = [], godCrates = [] } = {}, files = 10) {
   const grid = parseBoard(splitFen(fen).board);
@@ -44,7 +46,7 @@ export function boardRows(fen, { holes = [], godCrates = [] } = {}, files = 10) 
       const sq = sqName(f, r);
       let ch;
       if (c === null) ch = '·';
-      else if (c === '*') ch = holeSet.has(sq) ? 'O' : '#';
+      else if (c === '*' || c === '#') ch = holeSet.has(sq) ? 'O' : c;
       else if (c === '^') ch = crateSet.has(sq) ? 'x' : '^';
       else ch = c;
       line += ch + ' ';

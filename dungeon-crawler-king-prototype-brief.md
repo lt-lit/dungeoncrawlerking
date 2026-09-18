@@ -412,7 +412,7 @@ pairs the same way once the generator places them — an authored entry on
 a king row is dropped at load by the engine's parse (the ban, never a
 scoot); no floor authors one yet.
 
-### 4.8 The sledgehammer and the indestructible obstacle `#` `[DECIDED 2026-09-17, NOT BUILT — the next session implements]`
+### 4.8 The sledgehammer and the indestructible obstacle `#` `[BUILT 2026-09-17 — designer-specified rules; engine substrate is engine/patches/wall-kinds.patch + hammer.patch; every king is a sledge-king for the stress test; PLAYED on the phone the same day — the verdict below]`
 
 **The ability `[designer, 2026-09-17]`:**
 
@@ -450,6 +450,26 @@ off-map square of a crop `#`) and retires the alias.
 eight neighbours; both kings carry it for the stress test; the hammer is a
 manual chess move on the walk as well as in the duel (§5.1 ruling 11);
 bedrock wears a darker stone so a player can tell which walls will yield.
+
+**Built `[2026-09-17, the same day]`** exactly so, plus the build
+session's rulings `[designer]`: a cracked wall is a cracked wall, whoever
+made it — a hammered wall joins the gods' cracked-wall ledger (the art, the
+crate brake and the breach rung see one kind); the hammer is a free tempo
+where every real move costs something, and that is fine ("a finite number
+of walls to crack, it's not an infinite stall"); SAN `K*d1`; one bedrock
+look for every theme (the wall case darkened at paint time); `#` kept —
+the mate suffix and the board glyph never share a string, and every
+alternative collides worse; the meter reads a hammer as cold (a crate
+smash already earned nothing); only the player hammers on the walk; every
+king a sledge-king. The engine's key is per colour, so "this king hammers,
+that one does not" is a deal-variant setting when the hammer becomes an
+upgrade — no new piece letter for a king; a non-royal hammer piece would
+be a custom piece type. Old logs keep loading: a hole is whatever the
+ledger names, either glyph.
+
+**Played `[designer, 2026-09-17, the phone, with the log]`:** "Seems to work pretty good on mobile. I did a few sledge king moves but portals are naturally a lot more powerful. About what I expected. I definitely saw the engine go for at least one sledge move, so it definitely evaluates the option." The record (the analyzer's third sample, `replay/samples/dck-log_vaults-4-t109_s3010228489.json`, `?sample=3`; vaults-4 at walk turn 109, 148 plies, 25 quakes, no anomaly, 1-0): one hammer played, the player's K*e4 at ply 16 — the reply the enemy's own depth-22 search had predicted, its line going on to take the crate and hammer again; two more hammers in its line at ply 115; the enemy king itself never hammered. The hammer is a weaker tool than the portal by design and by the designer's expectation; nothing to tune until more spells exist.
+
+**The glyph `[designer, 2026-09-18]`:** "Let's go ahead and get a hammer glyph hint. No to enemies using it while walking, that's a ridiculous idea" — built the same day: an arrow onto a breakable wall (a hint, the enemy's own hammer, the analyzer's ply) ends in a sledgehammer stamped upright on the wall's square in the arrow's colour, and the hint list carries the same icon before the move's SAN. **Enemies never hammer on the walk** — ruled out, not deferred.
 
 ## 5. Exploration Layer
 
@@ -648,7 +668,7 @@ Cheap fairyground / ffish.js checks. All load-bearing — do these before buildi
 - Reward economy sizing (post-sweep), including the checkmate/strip tier ratio and the speed-decay curve (§8).
 - Title collision / availability check before any public release (title itself is locked).
 - The portal spell (§4.7, built 2026-09-17 for everyone): when it becomes an upgrade, what the scroll's value knob (`PORTAL_SCROLL_VALUE`) should be once the designer says how eagerly the enemy casts, a sprite for the rune ring, a blink for the teleport, whether world floors author pairs, and whether the gods ever open one.
-- The sledgehammer and `#` (§4.8, decided 2026-09-17, not built): the four defaults there (eight neighbours, both kings, the walk, a darker bedrock), the SAN for a hammer, which future obstacles ride `#` (the pressure pad's moving wall), and the ice spell after it.
+- The sledgehammer and `#` (§4.8, built 2026-09-17 for every king; the hammer glyph on the hint 2026-09-18, and enemies hammering on the walk RULED OUT the same day): the sledge-king sprite (both kings look as they do; the tell is the lit walls and the hammer on the hint), the hammer as an upgrade (a per-colour deal setting), which future obstacles ride `#` (the pressure pad's moving wall), and the ice spell after it.
 
 ---
 

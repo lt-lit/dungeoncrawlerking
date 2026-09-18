@@ -118,9 +118,11 @@ for (const [files, ranks] of [[10, 10], [7, 5], [3, 10], [12, 6]]) {
   world.writeArena(tx, fen2, { holes: new Set(['d10']), godCrates: new Set(['f9']), opened: new Set(['d8']), rubble: new Set(['b6']) });
   expect(world.pieceAt(0, 9) === 'k' && world.pieceAt(0, 0) === 'K', 'pieces land on their cells');
   expect(world.at(3, 9) === W.FLOOR || world.at(3, 9) === W.HOLE, 'a hole written as a hole');
-  expect(world.arenaFen(tx, 'w') === fen2.replace('3*6', 'k2*6').replace('k2*6', 'k9') || world.arenaFen(tx, 'w').split(' ')[0] === fen2.split(' ')[0], `the crop reads back as the FEN written (${world.arenaFen(tx, 'w').split(' ')[0]})`);
+  // WALL KINDS (2026-09-17): the hole at d10 was written as a '*' in the ledger (an old log's spelling) and reads back as '#', the indestructible glyph.
+  const fen2back = fen2.replace('k2*6', 'k2#6');
+  expect(world.arenaFen(tx, 'w').split(' ')[0] === fen2back.split(' ')[0], `the crop reads back as the FEN written, the hole spelled # (${world.arenaFen(tx, 'w').split(' ')[0]})`);
   expect(world.godCrates.has(world.idx(5, 8)) && world.opened.has(world.idx(3, 7)) && world.rubble.has(world.idx(1, 5)), 'the layers land on their cells');
-  expect(world.cellView(3, 9).hole === true && world.cellView(3, 9).v === '*', 'cellView: a hole is a hole and reads as * to the engine');
+  expect(world.cellView(3, 9).hole === true && world.cellView(3, 9).v === '#', 'cellView: a hole is a hole and reads as # to the engine');
   expect(world.cellView(5, 8).crate === true && world.cellView(5, 8).v === '^', 'cellView: a god crate');
   expect(world.cellView(-1, 0) === undefined, 'cellView off the world is undefined');
   void fen;
@@ -129,7 +131,7 @@ for (const [files, ranks] of [[10, 10], [7, 5], [3, 10], [12, 6]]) {
     const big = new W.World({ id: 'big', files: 30, ranks: 25 });
     const ctx = W.cropTransform({ wf: 5, wr: 7, facing, files: 10, ranks: 10, worldFiles: 30, worldRanks: 25 });
     big.writeArena(ctx, fen2, { holes: new Set(['d10']) });
-    expect(big.arenaFen(ctx, 'w').split(' ')[0] === fen2.split(' ')[0], `f${facing}: an arena written through a turned crop reads back as the same FEN`);
+    expect(big.arenaFen(ctx, 'w').split(' ')[0] === fen2back.split(' ')[0], `f${facing}: an arena written through a turned crop reads back as the same FEN`);
     const c = W.arenaToWorld(ctx, 0, 0);
     expect(big.pieceAt(c.f, c.r) === 'K', `f${facing}: the king stands on a1's world cell`);
     // Skins for the crop come back by arena square.
@@ -174,6 +176,16 @@ for (const [files, ranks] of [[10, 10], [7, 5], [3, 10], [12, 6]]) {
   const back = W.World.load(obj);
   expect(JSON.stringify(back.rows()) === JSON.stringify(w.rows()) && back.at(1, 1) === W.HOLE && back.skinAt(9, 3) === 'door' && back.godCrates.has(w.idx(9, 3)) && back.start.facing === 1 && back.spawns.length === 2, 'serialize → load keeps terrain, pieces, holes, skins, layers, start and spawns');
   expect(back.rows({ pieces: false })[4][1] === 'O', 'rows(): a hole prints as O');
+  // WALL KINDS (2026-09-17): '#' in a world file is BEDROCK — '#' to the engine, never a wall the gods or a hammer may crack; the save keeps the kind.
+  expect(w.at(0, 0) === W.BEDROCK && w.at(0, 0) !== W.WALL && w.cellView(0, 0).v === '#' && w.cellView(0, 0).hole === false, `the ring of the file is bedrock, # to the engine and not a hole (${w.at(0, 0)})`);
+  expect(back.at(0, 0) === W.BEDROCK && back.rows({ pieces: false })[0][0] === '#', 'serialize → load keeps bedrock, printed #');
+  const bw = new W.World({ id: 'bw', files: 4, ranks: 4 });
+  bw.writeArena(W.identityTransform(4, 4), '#*^1/4/4/K3 w - - 0 1', { holes: new Set(['c4']) });
+  expect(bw.at(0, 3) === W.BEDROCK && bw.at(1, 3) === W.WALL && bw.at(2, 3) === W.FURNITURE, `writeArena: # outside the ledger is bedrock, * a wall (${bw.at(0, 3)} ${bw.at(1, 3)} ${bw.at(2, 3)})`);
+  bw.writeArena(W.identityTransform(4, 4), '#*#1/4/4/K3 w - - 0 1', { holes: new Set(['c4']) });
+  expect(bw.at(2, 3) === W.HOLE && bw.arenaFen(W.identityTransform(4, 4), 'w').startsWith('#*#1/'), `writeArena: # in the ledger is a hole, and both read back as # (${bw.arenaFen(W.identityTransform(4, 4), 'w').split(' ')[0]})`);
+  const st = bw.arenaStage(W.cropTransform({ wf: -1, wr: 0, facing: 0, files: 4, ranks: 4, worldFiles: 4, worldRanks: 4 }));
+  expect(st.grid[0][0] === '#' && st.grid[3][1] === '#' && st.grid[3][2] === '*', `arenaStage: off-map and bedrock are #, a wall is * (${st.grid[3].join('')})`);
 }
 
 for (const b of bad) console.log(`FAIL ${b}`);

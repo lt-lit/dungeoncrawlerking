@@ -1,0 +1,265 @@
+diff --git a/src/apiutil.h b/src/apiutil.h
+index 91b7cf2d..eecd9d9c 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -297,6 +297,13 @@ inline const std::string move_to_san(Position& pos, Move m, Notation n) {
+             san += square(pos, gating_square(m), n);
+         }
+     }
++    else if (type_of(m) == HAMMER)
++    {
++        // THE SLEDGEHAMMER (hammer.patch): the piece, the wall glyph, the wall's square
++        san += piece(pos, m, n);
++        san += '*';
++        san += square(pos, to, n);
++    }
+     else
+     {
+         // Piece
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index bd936660..2b8bc4ee 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -437,6 +437,28 @@ namespace {
+   }
+ 
+ 
++  // THE SLEDGEHAMMER (hammer.patch): a piece of a hammer type spends its move
++  // turning ONE ADJACENT breakable wall (the eight king steps) into a neutral
++  // dead square. Never a capture, never a check, never in check: a quiet
++  // move, so QUIETS and NON_EVASIONS carry it and nothing else does.
++  template<Color Us>
++  ExtMove* generate_hammers(const Position& pos, ExtMove* moveList) {
++
++    Bitboard walls = pos.breakable_walls();
++    for (PieceSet ps = pos.hammer_piece_types(Us); ps && walls;)
++    {
++        Bitboard b = pos.pieces(Us, pop_lsb(ps));
++        while (b)
++        {
++            Square from = pop_lsb(b);
++            Bitboard w = PseudoAttacks[WHITE][KING][from] & walls;
++            while (w)
++                *moveList++ = make<HAMMER>(from, pop_lsb(w));
++        }
++    }
++    return moveList;
++  }
++
+   template<Color Us, GenType Type>
+   ExtMove* generate_all(const Position& pos, ExtMove* moveList) {
+ 
+@@ -479,6 +501,10 @@ namespace {
+             for (PieceSet ps = pos.piece_types(); ps;)
+                 moveList = generate_drops<Us, Type>(pos, moveList, pop_lsb(ps), target & ~(pos.pieces(~Us) | pos.dead_squares()));
+ 
++        // THE SLEDGEHAMMER (hammer.patch): a quiet move, never in check
++        if (Type == QUIETS || Type == NON_EVASIONS)
++            moveList = generate_hammers<Us>(pos, moveList);
++
+         // Castling with non-king piece
+         if (!pos.count<KING>(Us) && Type != CAPTURES && pos.can_castle(Us & ANY_CASTLING))
+         {
+diff --git a/src/parser.cpp b/src/parser.cpp
+index cf88d80f..0adfd45f 100644
+--- a/src/parser.cpp
++++ b/src/parser.cpp
+@@ -445,6 +445,10 @@ Variant* VariantParser<DoCheck>::parse(Variant* v) {
+     parse_attribute("castlingKingPieceWhite", v->castlingKingPiece[WHITE], v->pieceToChar);
+     parse_attribute("castlingKingPieceBlack", v->castlingKingPiece[BLACK], v->pieceToChar);
+     parse_attribute("portalScroll", v->portalScroll, v->pieceToChar);
++    parse_attribute("hammerPieceTypes", v->hammerPieceTypes[WHITE], v->pieceToChar);
++    parse_attribute("hammerPieceTypes", v->hammerPieceTypes[BLACK], v->pieceToChar);
++    parse_attribute("hammerPieceTypesWhite", v->hammerPieceTypes[WHITE], v->pieceToChar);
++    parse_attribute("hammerPieceTypesBlack", v->hammerPieceTypes[BLACK], v->pieceToChar);
+     parse_attribute("castlingRookKingsideFile", v->castlingRookKingsideFile);
+     parse_attribute("castlingRookQueensideFile", v->castlingRookQueensideFile);
+     parse_attribute("castlingRookPieces", v->castlingRookPieces[WHITE], v->pieceToChar);
+diff --git a/src/position.cpp b/src/position.cpp
+index af4c9c8f..2101630a 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -1158,7 +1158,7 @@ bool Position::legal(Move m) const {
+ 
+   assert(color_of(moved_piece(m)) == us);
+   assert(!count<KING>(us) || piece_on(square<KING>(us)) == make_piece(us, KING));
+-  assert(board_bb() & to);
++  assert((board_bb() & to) || type_of(m) == HAMMER);
+ 
+   // Illegal checks
+   if ((!checking_permitted() || (sittuyin_promotion() && type_of(m) == PROMOTION) || (!drop_checks() && type_of(m) == DROP)) && gives_check(m))
+@@ -1190,6 +1190,13 @@ bool Position::legal(Move m) const {
+       }
+   }
+ 
++  // THE SLEDGEHAMMER (hammer.patch): nothing moves and the square stays
++  // blocked, so a hammer can neither give nor resolve check — it is legal
++  // exactly when the mover is not in check (the quiet-move rules above
++  // have had their say).
++  if (type_of(m) == HAMMER)
++      return !checkers();
++
+   // Illegal drop move
+   if (drop_opposite_colored_bishop() && type_of(m) == DROP)
+   {
+@@ -1416,6 +1423,10 @@ bool Position::pseudo_legal(const Move m) const {
+   Square to = to_sq(m);
+   Piece pc = moved_piece(m);
+ 
++  // A hammer's destination IS a wall square: validate a TT hammer by regeneration
++  if (type_of(m) == HAMMER)
++      return !checkers() && MoveList<NON_EVASIONS>(*this).contains(m);
++
+   // Illegal moves to squares outside of board or to wall squares
+   if (!(board_bb() & to))
+       return false;
+@@ -1551,6 +1562,10 @@ bool Position::gives_check(Move m) const {
+   if (type_of(m) == PORTAL)
+       return portal_attacks_king(m, ~sideToMove);
+ 
++  // A hammer moves nothing and the crate blocks what the wall blocked: never a check
++  if (type_of(m) == HAMMER)
++      return false;
++
+   // A portal scroll cast moves nothing on the board
+   if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
+       return false;
+@@ -1815,6 +1830,20 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       // Reset rule 50 counter for irreversible drops
+       st->rule50 = 0;
+   }
++  else if (type_of(m) == HAMMER)
++  {
++      // THE SLEDGEHAMMER (hammer.patch): the breakable wall on 'to' becomes a
++      // neutral dead square, a crate either side may capture. The square stays
++      // occupied, so no attack changes; the piece stays where it is; the
++      // change is irreversible.
++      assert(st->wallSquares & to);
++      assert(!(st->hardSquares & to));
++      assert(!(st->deadSquares & to));
++      st->wallSquares ^= to;
++      st->deadSquares |= to;
++      k ^= Zobrist::wall[to] ^ Zobrist::dead[to];
++      st->rule50 = 0;
++  }
+   else
+   {
+       k ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][dest];
+@@ -1834,7 +1863,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       k ^= Zobrist::enpassant[file_of(pop_lsb(st->epSquares))];
+ 
+   // Update castling rights if needed
+-  if (type_of(m) != DROP && !is_pass(m) && st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]))
++  if (type_of(m) != DROP && type_of(m) != HAMMER && !is_pass(m) && st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]))
+   {
+       k ^= Zobrist::castling[st->castlingRights];
+       st->castlingRights &= ~(castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]);
+@@ -1850,7 +1879,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+ 
+   // Flip enclosed pieces
+   st->flippedPieces = 0;
+-  if (flip_enclosed_pieces() && !is_pass(m))
++  if (flip_enclosed_pieces() && !is_pass(m) && type_of(m) != HAMMER)
+   {
+       // Find end of rows to be flipped
+       if (flip_enclosed_pieces() == REVERSI)
+@@ -1994,6 +2023,11 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+               st->pawnKey ^= Zobrist::psq[swapped][q] ^ Zobrist::psq[swapped][to];
+       }
+   }
++  else if (type_of(m) == HAMMER)
++  {
++      // THE SLEDGEHAMMER: nothing moves (the terrain changed above)
++      dp.dirty_num = 0;
++  }
+   else if (type_of(m) != CASTLING)
+   {
+       if (Eval::useNNUE)
+@@ -2007,7 +2041,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   }
+ 
+   // If the moving piece is a pawn do some special extra work
+-  if (type_of(pc) == PAWN)
++  if (type_of(pc) == PAWN && type_of(m) != HAMMER)
+   {
+       if (type_of(m) == PROMOTION || type_of(m) == PIECE_PROMOTION)
+       {
+@@ -2342,7 +2376,7 @@ void Position::undo_move(Move m) {
+   Square to = to_sq(m);
+   Piece pc = piece_on(to);
+ 
+-  assert(type_of(m) == DROP || type_of(m) == PORTAL || empty(from) || type_of(m) == CASTLING || is_gating(m)
++  assert(type_of(m) == DROP || type_of(m) == PORTAL || type_of(m) == HAMMER || empty(from) || type_of(m) == CASTLING || is_gating(m)
+          || (type_of(m) == PROMOTION && sittuyin_promotion())
+          || (is_pass(m) && (pass(us) || var->wallOrMove)));
+   assert(type_of(st->capturedPiece) != KING);
+@@ -2437,6 +2471,11 @@ void Position::undo_move(Move m) {
+           if (swapped)
+               put_piece(swapped, q, swappedPromoted, swappedUnpromoted);
+       }
++      else if (type_of(m) == HAMMER)
++      {
++          // THE SLEDGEHAMMER: nothing moved; the wall and the crate return with
++          // st->previous, and the wall / dead occupancy XORs above and below cancel
++      }
+       else
+           move_piece(to, from); // Put the piece back at the source square
+ 
+@@ -2600,6 +2639,9 @@ Key Position::key_after(Move m) const {
+             ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)] - 1];
+   }
+ 
++  if (type_of(m) == HAMMER)
++      return k ^ Zobrist::wall[to] ^ Zobrist::dead[to];
++
+   return k ^ Zobrist::psq[pc][to] ^ Zobrist::psq[pc][from];
+ }
+ 
+diff --git a/src/position.h b/src/position.h
+index 53b4470b..8051fd82 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -139,6 +139,7 @@ public:
+   Square portal_half(Color c) const;
+   PieceType portal_scroll() const;
+   bool is_portal_scroll(PieceType pt) const;
++  PieceSet hammer_piece_types(Color c) const;
+   bool portal_attacks_king(Move m, Color kingColor) const;
+   int count_with_hand_spellfree(Color c, PieceType pt) const;
+   void parse_portal_field(const std::string& field);
+@@ -463,6 +464,11 @@ inline Bitboard Position::breakable_walls() const {
+   return st->wallSquares & ~st->hardSquares;
+ }
+ 
++inline PieceSet Position::hammer_piece_types(Color c) const {
++  assert(var != nullptr);
++  return var->hammerPieceTypes[c];
++}
++
+ inline Bitboard Position::portal_squares() const {
+   return st->portalSquares;
+ }
+diff --git a/src/types.h b/src/types.h
+index 5e96399e..2301cb64 100644
+--- a/src/types.h
++++ b/src/types.h
+@@ -271,6 +271,7 @@ enum MoveType : int {
+   PIECE_DEMOTION     = 6 << (2 * SQUARE_BITS),
+   SPECIAL            = 7 << (2 * SQUARE_BITS),
+   PORTAL             = 8 << (2 * SQUARE_BITS),
++  HAMMER             = 9 << (2 * SQUARE_BITS),
+ };
+ 
+ constexpr int MOVE_TYPE_BITS = 4;
+diff --git a/src/variant.h b/src/variant.h
+index 8a5f007a..296ccf05 100644
+--- a/src/variant.h
++++ b/src/variant.h
+@@ -119,6 +119,7 @@ struct Variant {
+   EnclosingRule flipEnclosedPieces = NO_ENCLOSING;
+   bool freeDrops = false;
+   PieceType portalScroll = NO_PIECE_TYPE;
++  PieceSet hammerPieceTypes[COLOR_NB] = {NO_PIECE_SET, NO_PIECE_SET}; // THE SLEDGEHAMMER (hammer.patch): the types that may crack an adjacent wall
+ 
+   // game end
+   PieceSet nMoveRuleTypes[COLOR_NB] = {piece_set(PAWN), piece_set(PAWN)};

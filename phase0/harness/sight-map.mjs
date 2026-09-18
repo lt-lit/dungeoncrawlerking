@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as A from '../../play/js/army.mjs';
-import { loadWorld, FLOOR, HOLE, FURNITURE } from '../../play/js/world.mjs';
+import { loadWorld, FLOOR, HOLE, FURNITURE, WALL } from '../../play/js/world.mjs';
 import { spawnEnemies, lineOfSight, facingToward } from '../../play/js/enemy.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -38,7 +38,7 @@ for (let r = ek.r + RAD; r >= ek.r - RAD; r--) {
     const t = world.at(f, r);
     const pc = world.pieces[world.idx(f, r)];
     if (pc && e.army.owns(pc)) { line += f === ek.f && r === ek.r ? 'E' : pc; continue; }
-    if (t !== FLOOR) { line += t === FURNITURE ? '^' : t === HOLE ? 'O' : '#'; continue; }
+    if (t !== FLOOR) { line += t === FURNITURE ? '^' : t === HOLE ? 'O' : t === WALL ? '*' : '#'; continue; }
     floorCount++;
     const kingSees = lineOfSight(world, ek, { f, r });
     let anySees = kingSees;

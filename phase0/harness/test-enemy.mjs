@@ -87,7 +87,7 @@ const upper = (world) => world.rows().join('').replace(/[^A-Z]/g, '').length;
   check(p2.ok && lower(w) === before, `a loaded enemy's first turn clears its old cells (${lower(w)} letters)`);
   // The run save carries the enemies.
   const run = newRun({ seed: 7, worldId: w.id, world: w, army: player, enemies });
-  check(RUN_SCHEMA === 'dck-run/4' && run.floors[w.id].enemies.length === 2 && run.start.enemies.length === 2, `the run save (${RUN_SCHEMA}) carries the enemies`);
+  check(RUN_SCHEMA === 'dck-run/5' && run.floors[w.id].enemies.length === 2 && run.start.enemies.length === 2, `the run save (${RUN_SCHEMA}) carries the enemies`);
   enemies[0].state = 'hunt';
   enemies[0].lastSeen = { f: 3, r: 3 };
   updateRun(run, { world: w, army: player, enemies, turn: 1 });

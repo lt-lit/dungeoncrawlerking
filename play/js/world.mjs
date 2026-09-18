@@ -33,20 +33,23 @@
 // the army's facing; the same painter, the same ledger, the same hashes.
 //
 // A WORLD FILE is stage schema 2 (stage.mjs), any size: `map` rows of
-// '.' floor · '#' / '*' wall · '^' furniture · '@' the player's start (floor)
+// '.' floor · '*' breakable wall · '#' BEDROCK (an indestructible obstacle —
+// the ring, one day a moving wall; wall-kinds 2026-09-17) · '^' furniture ·
+// '@' the player's start (floor)
 // · '1'…'9' enemy spawns (floor; the enemy milestone reads them), a `skin`
 // grid beside it, `theme`, and optionally `facing` (the army's at the
 // start, north by default). The 3–12 × 5–10 cap is the DEAL's (an arena
 // must fit the engine), never the world's.
 import { normFacing, toScreen, toWorld, pxToScreen, screenDims } from './camera.mjs';
-import { WALL, FURNITURE, splitFen, parseBoard, serializeBoard, emptyBoard, squareName, parseSquare } from './fen.mjs';
+import { WALL, FURNITURE, splitFen, parseBoard, serializeBoard, emptyBoard, squareName, parseSquare, HARD } from './fen.mjs';
 import { SKIN_CHARS, THEMES } from './stage.mjs';
 
 export const T = 16; // the tile grid (atlas.mjs TILE; debris.mjs T)
 export const FLOOR = '.';
-export const HOLE = 'O'; // a crumbled square: '*' to the engine, a pit to the eye, permanent (§4.5)
+export const HOLE = 'O'; // a crumbled square: '#' to the engine, a pit to the eye, permanent (§4.5)
+export const BEDROCK = '#'; // an indestructible obstacle that is not a pit: '#' to the engine, a darker stone to the eye (wall-kinds, 2026-09-17)
 export const START = '@';
-export { WALL, FURNITURE };
+export { WALL, FURNITURE, HARD };
 
 // ------------------------------------------------------------ the crop
 
@@ -181,7 +184,8 @@ export function loadWorld(json) {
     for (let f = 0; f < files; f++) {
       const ch = row[f];
       if (!MAP_CHARS.has(ch)) throw new Error(`world ${json.id}: bad map char "${ch}" at row ${i} file ${f}`);
-      if (ch === '#' || ch === WALL) world.setTerrain(f, r, WALL);
+      if (ch === WALL) world.setTerrain(f, r, WALL);
+      else if (ch === BEDROCK) world.setTerrain(f, r, BEDROCK);
       else if (ch === FURNITURE) world.setTerrain(f, r, FURNITURE);
       else {
         world.setTerrain(f, r, FLOOR);
@@ -212,7 +216,7 @@ export function loadWorld(json) {
 }
 
 /**
- * The world: `terrain[i]` FLOOR / WALL / HOLE / FURNITURE, `pieces[i]` a
+ * The world: `terrain[i]` FLOOR / WALL / BEDROCK / HOLE / FURNITURE, `pieces[i]` a
  * piece letter or null, `skins[i]` the authored skin name or null (the
  * skin grid is AUTHORED and static — a double door pairs on it even after
  * a leaf is gone, board-ui classifyTerrain), and the layers as Sets of
@@ -247,7 +251,7 @@ export class World {
     for (let r = 0; r < stage.ranks; r++) {
       for (let f = 0; f < stage.files; f++) {
         const t = stage.grid[r][f];
-        w.terrain[w.idx(f, r)] = t === WALL ? WALL : t === FURNITURE ? FURNITURE : FLOOR;
+        w.terrain[w.idx(f, r)] = t === WALL ? WALL : t === HARD ? BEDROCK : t === FURNITURE ? FURNITURE : FLOOR;
         const s = stage.skin?.[r]?.[f];
         if (s && t === FURNITURE) w.skins[w.idx(f, r)] = s;
       }
@@ -272,7 +276,7 @@ export class World {
     return f >= 0 && f < this.files && r >= 0 && r < this.ranks;
   }
 
-  /** The terrain of a cell (FLOOR / WALL / HOLE / FURNITURE), undefined off the world. */
+  /** The terrain of a cell (FLOOR / WALL / BEDROCK / HOLE / FURNITURE), undefined off the world. */
   at(f, r) {
     return this.inBounds(f, r) ? this.terrain[this.idx(f, r)] : undefined;
   }
@@ -302,15 +306,16 @@ export class World {
     return this.isFloor(f, r) && !this.pieceAt(f, r);
   }
 
-  /** The FEN cell of a world cell: a piece letter, '*' (a wall OR a hole —
-   *  the engine cannot tell them apart), '^', or null for floor. */
+  /** The FEN cell of a world cell: a piece letter, '*' (a breakable wall),
+   *  '#' (a hole OR bedrock — one indestructible obstacle to the engine; the
+   *  ledger tells the eye which), '^', or null for floor. */
   v(f, r) {
     if (!this.inBounds(f, r)) return undefined;
     const i = this.idx(f, r);
     const p = this.pieces[i];
     if (p) return p;
     const t = this.terrain[i];
-    return t === FLOOR ? null : t === HOLE ? WALL : t;
+    return t === FLOOR ? null : t === HOLE || t === BEDROCK ? HARD : t;
   }
 
   /**
@@ -344,8 +349,9 @@ export class World {
         const i = this.idx(c.f, c.r);
         const sq = squareName(f, r);
         const v = grid[tx.ranks - 1 - r]?.[f] ?? null;
-        if (v === WALL) {
-          this.terrain[i] = has(holes, sq) ? HOLE : WALL;
+        if (v === WALL || v === HARD) {
+          // The ledger decides what an obstacle is (a '*' in it is an old log's hole).
+          this.terrain[i] = has(holes, sq) ? HOLE : v === HARD ? BEDROCK : WALL;
           this.pieces[i] = null;
         } else if (v === FURNITURE) {
           this.terrain[i] = FURNITURE;
@@ -362,16 +368,17 @@ export class World {
     }
   }
 
-  /** The FEN of a crop of this world (turn `w` / `b`): a hole is '*', a
-   *  piece its letter — the board the engine sees. */
+  /** The FEN of a crop of this world (turn `w` / `b`): a hole or bedrock is
+   *  '#', a wall '*', a piece its letter — the board the engine sees. */
   arenaFen(tx, turn = 'w') {
     const board = emptyBoard(tx.files, tx.ranks);
     for (let r = 0; r < tx.ranks; r++) {
       for (let f = 0; f < tx.files; f++) {
         const c = arenaToWorld(tx, f, r);
-        // A square that hangs off the map is the barrier's own wall (4c):
-        // the engine must never see open floor where the world has none.
-        board[tx.ranks - 1 - r][f] = c && this.inBounds(c.f, c.r) ? this.v(c.f, c.r) ?? null : WALL;
+        // A square that hangs off the map is the barrier's own wall (4c) —
+        // indestructible: the engine must never see open floor where the
+        // world has none, and nothing may crack a way out of the map.
+        board[tx.ranks - 1 - r][f] = c && this.inBounds(c.f, c.r) ? this.v(c.f, c.r) ?? null : HARD;
       }
     }
     return `${serializeBoard(board)} ${turn} - - 0 1`;
@@ -380,9 +387,9 @@ export class World {
   /**
    * THE BARRIER (Phase 2 milestone 4c): a crop of this world as a STAGE —
    * the shape the deal molds onto (stage.mjs: grid[rankFromBottom][file]
-   * of '*' / '^' / null, skin[r][f]) — its id naming the crop. A hole is
-   * '*' to the deal (a wall to molding), a square off the map is '*' (the
-   * barrier), and the skin grid is read off the world's skins whatever
+   * of '*' / '#' / '^' / null, skin[r][f]) — its id naming the crop. A hole
+   * and bedrock are '#' to the deal (a wall to molding), a square off the
+   * map is '#' (the barrier), and the skin grid is read off the world's skins whatever
    * stands on the cell now, so a door whose leaf fell still pairs its
    * twin. Pieces are NOT part of a stage: the deal composes them.
    */
@@ -393,11 +400,11 @@ export class World {
       for (let f = 0; f < tx.files; f++) {
         const c = arenaToWorld(tx, f, r);
         if (!c || !this.inBounds(c.f, c.r)) {
-          grid[r][f] = WALL;
+          grid[r][f] = HARD;
           continue;
         }
         const t = this.at(c.f, c.r);
-        grid[r][f] = t === FLOOR ? null : t === FURNITURE ? FURNITURE : WALL;
+        grid[r][f] = t === FLOOR ? null : t === FURNITURE ? FURNITURE : t === WALL ? WALL : HARD;
         skin[r][f] = this.skinAt(c.f, c.r);
       }
     }
@@ -530,7 +537,7 @@ export class World {
         for (let f = 0; f < w.files; f++) put(w.idx(f, r), row[f]);
       }
     };
-    read(obj.terrain ?? [], (i, ch) => { w.terrain[i] = ch === WALL || ch === '#' ? WALL : ch === HOLE ? HOLE : ch === FURNITURE ? FURNITURE : FLOOR; });
+    read(obj.terrain ?? [], (i, ch) => { w.terrain[i] = ch === WALL ? WALL : ch === BEDROCK ? BEDROCK : ch === HOLE ? HOLE : ch === FURNITURE ? FURNITURE : FLOOR; });
     read(obj.pieces ?? [], (i, ch) => { w.pieces[i] = ch && ch !== '.' ? ch : null; });
     read(obj.skins ?? [], (i, ch) => { w.skins[i] = ch && ch !== '.' ? SKIN_CHARS[ch] ?? null : null; });
     for (const i of obj.godCrates ?? []) w.godCrates.add(i);

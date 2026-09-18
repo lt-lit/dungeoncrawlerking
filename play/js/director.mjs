@@ -45,8 +45,10 @@
 //    and need no pairing at all; and pairing turned out to be the wrong
 //    answer even for displacement (below).
 //
-// HOLES vs WALLS. `*` means two different things now and FSF cannot tell them
-// apart, so the Director does: `this.holes` is the set of squares a crumble
+// HOLES vs WALLS. A hole is a `#` to the engine since the wall kinds of
+// 2026-09-17 (a `*` in an old log), one indestructible glyph with bedrock
+// and the map's edge — FSF cannot tell a pit from bedrock and need not;
+// the Director does: `this.holes` is the set of squares a crumble
 // created. A hole is permanent — never weakened, never re-opened — which is
 // what keeps termination provable. Free squares are no longer monotone (a
 // breach adds one), but the wall supply is finite, so breaches can add at
@@ -134,7 +136,7 @@
 // still terrain to molding, crop, the camp line, and to displacement, which
 // neither moves a crate nor lands on one.
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField } from './fen.mjs';
+import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField, HARD } from './fen.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
@@ -297,7 +299,7 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks, blocked = n
       // before the ffish-heavy validateCrumbleCandidate (rule 14).
       {
         const g2 = g.map((row) => [...row]);
-        g2[r][f] = WALL;
+        g2[r][f] = HARD;
         if (editExposes(g, g2, [{ f, r }], files, ranks)) {
           rejected.push({ sq, reason: 'hangs_piece' });
           continue;
@@ -328,6 +330,7 @@ export function terrainCensus(fen, files, ranks, holes, godCrates = null) {
   let crates = 0;
   let godMade = 0;
   let holeCount = 0;
+  let hard = 0; // bedrock: '#' outside the ledger — nobody's to spend
   for (let r = 0; r < ranks; r++) {
     for (let f = 0; f < files; f++) {
       const c = g[r][f];
@@ -335,9 +338,10 @@ export function terrainCensus(fen, files, ranks, holes, godCrates = null) {
         crates++;
         if (godCrates?.has(SQ(f, r))) godMade++;
       } else if (c === WALL) (holes.has(SQ(f, r)) ? holeCount++ : walls++);
+      else if (c === HARD) (holes.has(SQ(f, r)) ? holeCount++ : hard++);
     }
   }
-  return { walls, crates, godCrates: godMade, holes: holeCount };
+  return { walls, crates, godCrates: godMade, holes: holeCount, hard };
 }
 
 /**
@@ -1814,7 +1818,7 @@ export class Director {
         displacements: [],
         crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost },
         terrain: null,
-        postFen: clearEp(setSquare(fen, t.sq, WALL)),
+        postFen: clearEp(setSquare(fen, t.sq, HARD)),
         endsGame: true,
         landedOn: null,
         outcome: 'terminal',

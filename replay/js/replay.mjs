@@ -50,7 +50,7 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, WALL, FURNITURE, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf } from '../../play/js/fen.mjs';
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -59,8 +59,11 @@ const params = new URLSearchParams(location.search);
 // The committed samples (`?sample=N`, the load panel's button opens the first):
 // 1 — the designer's third log, s77 The Smithy (2026-09-06); 2 — THE FIRST
 // PORTAL DUEL (2026-09-17, vaults-4 at walk turn 75): both pairs cast in the
-// first three moves, a pawn through the player's portal to the promotion row.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json'];
+// first three moves, a pawn through the player's portal to the promotion row;
+// 3 — THE FIRST SLEDGE DUEL (2026-09-17, vaults-4 at walk turn 109, the
+// phone): the player's K*e4 at ply 16 (the hammered wall a crate in the
+// gods' ledger from that state on), twenty crumbles written as `#` pits.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json'];
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;
@@ -185,8 +188,8 @@ function terrainMatches(stage, fen) {
     for (let f = 0; f < stage.files; f++) {
       const a = stage.grid[r][f];
       const b = grid[stage.ranks - 1 - r][f];
-      const ta = a === WALL || a === FURNITURE ? a : null;
-      const tb = b === WALL || b === FURNITURE ? b : null;
+      const ta = isTerrain(a) ? a : null;
+      const tb = isTerrain(b) ? b : null;
       if (ta !== tb) return false;
     }
   }
@@ -364,7 +367,9 @@ function moveArrow(st) {
     return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: true };
   }
   // Gold is the player's colour, red the enemy's last move (style.css roles).
-  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last' } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint' };
+  // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
+  const hammer = st.hammer ? { hammer: true } : {};
+  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last', ...hammer } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint', ...hammer };
 }
 
 const idx = () => R.indexLine(app.line);
@@ -504,10 +509,14 @@ function protectedHeat(t) {
  *  best line's colour fading with distance. */
 function pvArrows(pv, fen) {
   const out = [];
+  const cracked = new Set(); // THE SLEDGEHAMMER'S GLYPH: a line's first move onto a wall hammers it; a later move onto that square takes the crate
   (pv ?? []).slice(0, 6).forEach((m, j) => {
     const p = String(m).match(R.UCI_MOVE_RE);
     if (!p) return;
-    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1) });
+    const hm = hammerOf(fen, `${p[1]}${p[2]}`);
+    const hammer = !!hm && !cracked.has(hm);
+    if (hammer) cracked.add(hm);
+    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
   });
   return out;
 }

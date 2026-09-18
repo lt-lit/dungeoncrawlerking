@@ -5,16 +5,16 @@
  "notes": "Two long wall stubs from opposite edges force a zigzag: through a door in the first or around its end, then around the second or through its rubble breach. A wall fragment from the top edge and a stub from the bottom make niches; a pillar and bones in the passage.",
  "theme": "crypt",
  "map": [
-  ".....#....",
-  ".....#...^",
+  ".....*....",
+  ".....*...^",
   "..........",
-  "##^####...",
+  "**^****...",
   "........^.",
-  "......#...",
+  "......*...",
   "..........",
-  "....###^##",
-  "^.#.......",
-  "..#......."
+  "....***^**",
+  "^.*.......",
+  "..*......."
  ],
  "skin": [
   "..........",

@@ -5,16 +5,16 @@
  "notes": "A curtain wall down file d, thick where a tower base stands at the south, breached by rubble with crates spilled from the collapse and an open doorway just below. West of it a narrow outer passage; east the ward \u2014 a well pillar, a stable stall of barrels behind a stub, a chest.",
  "theme": "castle",
  "map": [
-  "...#......",
-  "...#....#^",
-  "..^^^...#^",
+  "...*......",
+  "...*....*^",
+  "..^^^...*^",
   "...^......",
   "..........",
-  "...#...#..",
-  "...##.....",
-  "...##.....",
-  "...##.^...",
-  "...##....."
+  "...*...*..",
+  "...**.....",
+  "...**.....",
+  "...**.^...",
+  "...**....."
  ],
  "skin": [
   "..........",

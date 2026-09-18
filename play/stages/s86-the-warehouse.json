@@ -5,16 +5,16 @@
  "notes": "A goods store: crate stacks as two-by-two blocks and pairs scattered where they were left, two pillars, a corner stub, and an office partition west with one door and a clerk's table behind it.",
  "theme": "hall",
  "map": [
-  ".........#",
-  ".^^......#",
-  ".^^....#..",
-  "..#..^^...",
-  "..#..^^...",
+  ".........*",
+  ".^^......*",
+  ".^^....*..",
+  "..*..^^...",
+  "..*..^^...",
   "..^.......",
-  ".^#.....^.",
-  "..#.....^.",
+  ".^*.....^.",
+  "..*.....^.",
   "...^^.....",
-  ".......#.."
+  ".......*.."
  ],
  "skin": [
   "..........",

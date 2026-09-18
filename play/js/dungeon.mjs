@@ -56,7 +56,7 @@
 // notice the repeating patterns" — coherence is the recipe skeletons'; the
 // recipe skeletons (packed rooms, a wide maze, cellular caves) come next,
 // style by style, each a batch for the designer's eye.
-import { WALL, FURNITURE } from './fen.mjs';
+import { WALL, FURNITURE, HARD } from './fen.mjs';
 import { THEMES } from './stage.mjs';
 import { mulberry32, childSeed, randInt, shuffle } from './prng.mjs';
 import { boxPlacement, BOX, planBarrier } from './barrier.mjs';
@@ -103,7 +103,7 @@ export function pieceOf(stage) {
     const sk = [];
     for (let f = 0; f < stage.files; f++) {
       const t = stage.grid[r][f];
-      row.push(t === WALL ? '#' : t === FURNITURE ? '^' : '.');
+      row.push(t === WALL || t === HARD ? '#' : t === FURNITURE ? '^' : '.'); // the working floor knows one stone
       const name = stage.skin?.[r]?.[f] ?? null;
       sk.push(t === FURNITURE && name && NAME_TO_SKIN[name] ? NAME_TO_SKIN[name] : '.');
     }
@@ -834,7 +834,9 @@ export function generateWorld({ seed = 1, style = 'vaults', pieces, cols = null,
   const start = placeStart(F, mulberry32(childSeed(seed >>> 0, 'start')), { id: wid });
   if (!start) throw new Error(`generateWorld: no start on ${wid} (no wide cell with a legal box ahead)`);
   const spawns = placeSpawns(F, mulberry32(childSeed(seed >>> 0, 'spawns')), start, N);
-  const rowsOut = F.rows().map((r) => r.split(''));
+  // WALL KINDS (2026-09-17): the ring is bedrock ('#', nothing cracks a way
+  // off the map), every other stone a breakable wall ('*').
+  const rowsOut = F.g.map((row, y) => row.map((ch, x) => (ch === '#' ? (F.border(x, y) ? '#' : '*') : ch)));
   rowsOut[start.y][start.x] = '@';
   for (const s of spawns) rowsOut[s.y][s.x] = String(s.width);
   const map = rowsOut.map((r) => r.join(''));
