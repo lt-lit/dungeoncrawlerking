@@ -11,7 +11,7 @@
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket } from './variant.mjs';
-import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger } from './fen.mjs';
+import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger, isCast, isPass } from './fen.mjs';
 import { portalRoute } from './rays.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
@@ -374,16 +374,19 @@ async function main() {
     const casts = b.legalMoves().trim().split(/\s+/).filter((m) => m.startsWith('O@'));
     if (casts.length !== 46 || casts.some((m) => /[18]$/.test(m))) throw new Error(`${casts.length} casts (46 expected, none on a king row)`);
     const fens = [start];
-    for (const m of ['O@c3', 'O@f6', 'O@e5']) {
+    // PORTALS v3 (2026-09-19): the enemy is FROZEN between the two portals — its pass is the ply between a half and its link
+    for (const m of ['O@c3', 'e8e8', 'O@e5', 'O@f6']) {
       b.push(m);
       fens.push(b.fen());
     }
     // The casters' ledger (2026-09-17): one walk over the positions names
     // each pair's caster and its number, and a half the colour its pair gets.
     let P = portalInfo(b.fen(), portalLedger(fens));
-    if (P.twin.get('c3') !== 'e5' || P.halves.b !== 'f6' || !b.fen().includes('[o]')) throw new Error(`after three casts: ${b.fen()}`);
+    if (P.twin.get('c3') !== 'e5' || P.halves.b !== 'f6' || !b.fen().includes('[o]')) throw new Error(`after the first pair and black's half: ${b.fen()}`);
     const own = (sq) => P.owner.get(sq) ?? {};
-    if (own('c3').side !== 'w' || own('e5').side !== 'w' || own('e5').n !== 0 || own('e5').half || own('f6').side !== 'b' || own('f6').n !== 0 || !own('f6').half) throw new Error(`the ledger after three casts: ${JSON.stringify([...P.owner])}`);
+    if (own('c3').side !== 'w' || own('e5').side !== 'w' || own('e5').n !== 0 || own('e5').half || own('f6').side !== 'b' || own('f6').n !== 0 || !own('f6').half) throw new Error(`the ledger after the first pair and black's half: ${JSON.stringify([...P.owner])}`);
+    b.push('e1e1'); // white frozen while black's half stands
+    fens.push(b.fen());
     b.push('O@a4');
     fens.push(b.fen());
     P = portalInfo(b.fen(), portalLedger(fens));
@@ -466,6 +469,50 @@ async function main() {
     const atk = attacksFrom(gridOf(f1, 8, 8), 0, 0, 8, 8).map((a) => 'abcdefgh'[a.f] + (a.r + 1));
     if (!atk.includes('h7') || atk.includes('a5')) throw new Error(`attacksFrom ${atk.join(' ')}`);
     return 'F1: 14 moves with Rh8+ through a4-h5 and nothing past a4, the landing on h5, the plugged exit swaps, the double step ends at the portal; engine perft 14 and a1g7 takes the queen through the tunnel; the grid walker agrees';
+  });
+
+  // --- PORTALS v3 (2026-09-19, engine/patches/portals-v3.patch): THE ONE-TURN
+  // CAST — an open half FREEZES the other side (its one move is a pass) and
+  // binds its caster to the link; a pass fizzles a half no link can close. ---
+  await check('portals v3: the frozen ply, the link ply, the fizzle (ffish + engine, the deal variant)', async () => {
+    const pv = dealVariant(8, 8, 2, 7, { portals: true });
+    ffish.loadVariantConfig(pv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + pv.ini);
+    const moves = (bd) => bd.legalMoves().trim().split(/\s+/).filter(Boolean).sort();
+    const b = new ffish.Board(pv.name, '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1');
+    b.push('O@c4');
+    if (moves(b).join(',') !== 'e8e8') throw new Error(`frozen: ${moves(b).join(' ')}`);
+    if (b.sanMove('e8e8') !== '--') throw new Error(`SAN of the pass ${b.sanMove('e8e8')}`);
+    if (!isPass('e8e8') || isPass('e8e7') || isPass('O@c4')) throw new Error('isPass');
+    const frozenFen = b.fen();
+    b.push('e8e8');
+    const links = moves(b);
+    if (links.length !== 45 || !links.every((m) => isCast(m)) || links.includes('O@c4')) throw new Error(`the link ply: ${links.length} ${links.filter((m) => !isCast(m)).join(' ')}`);
+    const linkFen = b.fen();
+    b.push('O@f5');
+    if (b.fen() !== '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}' || moves(b).length !== 50) throw new Error(`after the link: ${b.fen()} ${moves(b).length}`);
+    b.delete();
+    const z = new ffish.Board(pv.name, '4k3/********/********/********/*r******/*1******/1*******/KN6[OO] w - - 0 1');
+    if (moves(z).join(',') !== 'O@a2,O@b3,a1a2') throw new Error(`the fizzle board: ${moves(z).join(' ')}`);
+    z.push('O@a2');
+    z.push('e8e8');
+    if (moves(z).join(',') !== 'a1a1') throw new Error(`no legal link: ${moves(z).join(' ')}`);
+    z.push('a1a1');
+    if (!z.fen().startsWith('4k3/********/********/********/*r******/*1******/1*******/KN6[O] b') || z.fen().includes('{') || z.isGameOver(true)) throw new Error(`after the fizzle: ${z.fen()} over=${z.isGameOver(true)}`);
+    if (moves(z).join(',') !== 'b4b3,e8d8,e8f8') throw new Error(`black plays on: ${moves(z).join(' ')}`);
+    z.delete();
+    // The engine: frozen → the pass; the link ply → perft 45 and a cast
+    engine.setoption('UCI_Variant', pv.name);
+    engine.position({ fen: frozenFen });
+    let res = await engine.go('depth 6 movetime 3000');
+    if (res.bestmove !== 'e8e8') throw new Error(`frozen bestmove ${res.bestmove}`);
+    engine.position({ fen: linkFen });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== 45) throw new Error(`engine perft 1 on the link ply = ${n1}`);
+    res = await engine.go('depth 6 movetime 3000');
+    if (!isCast(res.bestmove)) throw new Error(`link bestmove ${res.bestmove}`);
+    return 'after O@c4 the enemy has the pass alone (SAN --); after it 45 linking casts and nothing else; the link makes the pair with black free; a half no link can close fizzles on a pass and the game goes on; the engine passes when frozen and links when bound, perft 45';
   });
 
   // --- THE SLEDGEHAMMER + THE HARD WALL (2026-09-17, engine/patches/

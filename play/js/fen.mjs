@@ -37,6 +37,8 @@ export const HARD = '#';
 // FEN's trailing field, `{c3-h8,d1-a9,e4w}`.
 export const CAST_RE = /^([A-Za-z])@([a-l](?:10|[1-9]))$/;
 export const isCast = (uci) => CAST_RE.test(uci);
+/** PORTALS v3 (the one-turn cast): a PASS — the king's square twice (`e8e8`): the frozen side's one move, or a cast that fizzles. */
+export const isPass = (uci) => { const m = String(uci ?? '').match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/); return !!m && m[1] === m[2]; };
 
 /** Is this cell terrain (a wall of either kind or furniture)? Safe on null/undefined. */
 export const isTerrain = (c) => c === WALL || c === FURNITURE || c === HARD;

@@ -38,7 +38,7 @@
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
 import { portalRoute } from './rays.mjs'; // PORTALS v2: which pairs a rider's line ran through
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, CAST_RE, HARD, isWall, hammerOf } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -2512,10 +2512,31 @@ async function driveTurn() {
   const duel = app.duel;
   if (!duel || duel.state !== 'playing') return;
   autosaveLog(); // every completed ply lands in the autosave ring
+  // PORTALS v3 (the one-turn cast, 2026-09-19): a side bound to ONE move — the
+  // side an open half FREEZES, or a caster whose half no link can close — has
+  // its pass played by the game, no search and no tap; a beat first, so the
+  // half that froze the player is seen before the enemy's link lands on it.
+  const forced = duel.forcedMove();
+  if (forced) {
+    const mine = duel.turnColor() === app.session.playerColor;
+    const fizzle = parsePortalField(duel.fen()).halves[duel.turnColor() === 'white' ? 'w' : 'b'] != null;
+    app.busy = true;
+    app.boardUI.setInteractive(false);
+    setStatus(fizzle ? 'no square can hold the second portal — the cast fizzles' : mine ? 'the enemy casts — you are frozen while its portal opens' : 'the enemy is frozen while your portal opens');
+    refreshCheatUI();
+    await wait(FX(mine ? 600 : 250));
+    if (app.duel !== duel || duel.state !== 'playing') return;
+    const r = await duel.playForced(mine ? 'player' : 'engine');
+    if (!r.ended) await driveTurn();
+    return;
+  }
   if (duel.turnColor() === app.session.playerColor) {
     app.busy = false;
     app.boardUI.setInteractive(true);
-    setStatus('your move');
+    if (duel.mustLink()) {
+      setCastMode(true); // the link ply: the second portal is the only move there is
+      setStatus('place the second portal');
+    } else setStatus('your move');
     refreshCheatUI();
     void runIdleProbes();
   } else {
@@ -3055,7 +3076,8 @@ function scrollsLeft() {
 }
 
 function setCastMode(on) {
-  app.castMode = !!on && castTargets().length > 0;
+  const forced = !!app.duel && app.duel.state === 'playing' && app.duel.mustLink(); // PORTALS v3: the link ply cannot be left
+  app.castMode = (!!on || forced) && castTargets().length > 0;
   app.selectedSquare = null;
   $('btnPortal').classList.toggle('active', app.castMode);
   renderPlayMarks();
@@ -3096,6 +3118,7 @@ function onSquareTap(sq) {
   // THE PORTAL SPELL: a tap on a lit square casts; a tap elsewhere leaves the spell.
   if (app.castMode) {
     if (castTargets().includes(sq)) return void playPlayerMove(null, sq, [`${PORTAL_SCROLL.toUpperCase()}@${sq}`]);
+    if (app.duel.mustLink()) return; // PORTALS v3: on the link ply a tap elsewhere is nothing — the second portal is the move
     setCastMode(false);
   }
   const legal = app.duel.legalMoves();
@@ -3135,6 +3158,7 @@ function lastMoveArrow() {
   const p = moves[moves.length - 1].match(UCI_MOVE_RE);
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): the enemy's hammer ends in the red hammer on the wall it cracked.
   const hammer = !!duel.lastMove?.hammer && duel.lastMove.move === moves[moves.length - 1];
+  if (p && p[1] === p[2]) return null; // PORTALS v3: a pass draws nothing
   const route = p ? portalRoute(fenBeforeLast(duel), moves[moves.length - 1]) : null; // PORTALS v2: the red arrow in pieces through the tunnel
   if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last', ...(hammer ? { hammer: true } : {}), ...(route ? { via: route.pairs } : {}) };
   const c = moves[moves.length - 1].match(CAST_RE); // THE PORTAL SPELL: the enemy's cast, a red ring on the square
@@ -3202,6 +3226,7 @@ async function onMove({ uci, san, mover, ply }) {
   // needs to slide from. The engine's reply gets the longer slide: the player
   // did not choose it and has to read it.
   const parts = uci.match(UCI_MOVE_RE);
+  const pass = !!parts && parts[1] === parts[2]; // PORTALS v3: a pass moves nothing — no slide, no traffic, no blow
   // THE DEBRIS LAYER: what this move broke. The board before the move is
   // the last paint's fen (this hook runs before the commit); the victim is
   // the square whose occupant vanished — the landing square, or the pawn
@@ -3211,13 +3236,13 @@ async function onMove({ uci, san, mover, ply }) {
   // THE SLEDGEHAMMER (2026-09-17): a move onto a breakable wall cracks it
   // where it stands — nothing slides; the wall wears the gods' weaken beat
   // and drops its chips (duel.mjs marked the move; the ledger has the square).
-  const hammered = parts ? duel.lastMove?.hammer ?? null : null;
+  const hammered = parts && !pass ? duel.lastMove?.hammer ?? null : null;
   // PORTALS v2: did a rider's line run through a tunnel? The route names the
   // pairs — the slide goes in one ring and out of the other, the traffic wears
   // every leg, the log says which pairs.
-  const route = parts && !hammered ? portalRoute(app.residue.lastFen, uci) : null;
+  const route = parts && !hammered && !pass ? portalRoute(app.residue.lastFen, uci) : null;
   let hit = null, dz = null, hitSrc = null;
-  if (parts && !hammered) {
+  if (parts && !hammered && !pass) {
     hit = debrisCaptureOf(app.residue.lastFen, duel.fen(), parts[1], parts[2]);
     if (route) for (let i = 0; i + 1 < route.path.length; i += 2) debrisTraffic(route.path[i], route.path[i + 1]);
     else debrisTraffic(parts[1], parts[2]);
@@ -3235,7 +3260,7 @@ async function onMove({ uci, san, mover, ply }) {
     const anim = app.boardUI.animateTerrain(hammered, 'weaken', FX(300));
     await Promise.all([anim, dzEv ? debrisFly(dzEv, { sq: hammered, ms: 300, after: anim }) : null]);
     if (app.duel !== duel || !duel.board) return; // abandoned mid-crack
-  } else if (parts) {
+  } else if (parts && !pass) {
     // A shattering crate holds until the piece arrives; a piece still dissolves under the blow.
     const shatters = !!(dz && hit?.victim === 'terrain' && debrisOpts().fx && FX(1));
     await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX((mover === 'engine' ? 240 : 150) * (route ? 1 + 0.45 * route.pairs.length : 1)), fade: !shatters, path: route?.path ?? null });
@@ -3259,7 +3284,10 @@ async function onMove({ uci, san, mover, ply }) {
   let note = '';
   {
     const P = parsePortalField(duel.fen());
-    if (isCast(uci)) {
+    if (pass) {
+      // PORTALS v3: the frozen side's pass, or the caster's fizzle
+      note = duel.lastMove?.cast === 'fizzle' ? ' — no square could hold the second portal: the cast fizzles' : mover === 'player' ? " — you are frozen while the enemy's portal opens" : ' — the enemy is frozen while your portal opens';
+    } else if (isCast(uci)) {
       const half = P.halves[mover === 'player' ? 'w' : 'b'];
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
     } else if (parts) {

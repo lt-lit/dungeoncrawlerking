@@ -2658,6 +2658,59 @@ then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
 
+## Portals v3 — the one-turn cast (2026-09-19)
+
+Brief §4.7 "Portals v3 — the one-turn cast"; the engine half is
+`engine/patches/portals-v3.patch` (its record in `engine/README.md` § "The
+portals-v3 patch"). The designer, on the v2 build: "Is it possible to make
+it so both portals are placed in one turn instead of two?" — then "It
+might make portals too strong but let's go ahead and try it." Both
+portals go down before the enemy can act, as THREE PLIES the other side
+cannot use: an open half FREEZES the other side (its one legal move is a
+pass, `e8e8`, SAN `--`) and BINDS its caster to the linking casts; a half no
+link can close FIZZLES on a pass (the half's scroll spent, the other
+kept). The game half:
+
+- **The controller** (`duel.mjs`): `forcedMove()` — the one move the side
+  to move is bound to, when it is a pass (the frozen side's, or the
+  fizzle); `mustLink()` — every legal move a linking cast; `playForced
+  (mover)` plays the pass through the ordinary `#push` for whoever is to
+  move, no search. `castKind(fenBefore, uci, fenAfter)` names a ply inside
+  a cast — `half` / `link` / `pass` / `fizzle` — and every recorded state
+  carries it as `cast`. THE GODS SKIP THE INSIDE OF A CAST: on a `half` and
+  a `pass` the meters are not fed, no quake is rolled and the repetition
+  record is not written — the link (or the fizzle) is the one ply that
+  counts, so a cast is one cold ply to the meter, not three, and no quake
+  ever lands between the two portals. `fen.mjs isPass`.
+- **The page** (`main.mjs driveTurn`): a forced pass is played by the game
+  — the enemy's (`mover: 'engine'`) the moment the player's half is down,
+  the player's (`mover: 'player'`) after a beat (600 ms with motion on) so
+  the enemy's half is seen before its link lands, the status saying who is
+  frozen or that the cast fizzles. On the link ply the player is put INTO
+  CAST MODE by the game (`setCastMode` keeps it while `mustLink()`, a tap
+  elsewhere is nothing; the status "place the second portal"); the Portal
+  button's title says which half is open. Casting is two taps: the first
+  square, then — the enemy frozen in between — the second. The log: "--
+  — the enemy is frozen while your portal opens" / "you are frozen while
+  the enemy's portal opens" / "no square could hold the second portal: the
+  cast fizzles"; a pass slides nothing, wears nothing, draws no arrow
+  (`lastMoveArrow`, the analyzer's `moveArrow`).
+- **The enemy's cast** costs it two searches (the half, then the link at
+  the same `go`) around the player's automatic pass.
+- **Gates**: selftest 50/50 (the v3 check on the deal variant: after
+  `O@c4` the enemy's one move is the pass with SAN `--`; then 45 linking
+  casts and nothing else; the link `{c4-f5}` with black free on 50 moves;
+  the 8×8 fizzle board — `O@a2`, the pass, then `a1a1` alone, the half gone
+  and the game on; the engine passes when frozen and links when bound,
+  perft 45; the v1 check's four casts became six plies), ui-smoke
+  326 ok (THE PORTAL SPELL block reads the one-turn cast: after the
+  first tap the enemy's pass is in the record, the player is on the link
+  ply in cast mode with no piece move offered, the status asks for the
+  second portal, the log says the enemy is frozen; the record's kinds run
+  half, pass, link; the gods rolled on the link ply alone; the second tap
+  links), replay-smoke 76, test-logreport 61, the Node gates unchanged;
+  the engine's own record in `engine/README.md`.
+
 ## Portals v2 — the body and the tunnel (2026-09-18)
 
 Brief §4.7 "Portals v2"; the engine half is `engine/patches/portals-v2.patch`

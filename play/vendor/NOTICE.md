@@ -5,19 +5,20 @@ full license text is in `LICENSE` (GNU GPL v3); both projects are
 licensed GPL-3.0-or-later.
 
 **These are PATCHED builds (since 2026-08-26, Phase 1.2.3):** built from
-the pinned upstream commits below plus this project's six patches in
+the pinned upstream commits below plus this project's seven patches in
 `engine/patches/`, applied in order — `dead-squares.patch` (capturable
 neutral `^` squares, brief §4.6), `thread-stack.patch` (the search-thread
 stack), `portals.patch` (the portal spell, §4.7), `wall-kinds.patch` and
 `hammer.patch` (the hard wall `#` and the sledgehammer, §4.8),
-`portals-v2.patch` (the body and the tunnel, §4.7, 2026-09-18).
+`portals-v2.patch` (the body and the tunnel, §4.7, 2026-09-18),
+`portals-v3.patch` (the one-turn cast, §4.7, 2026-09-19).
 Corresponding source = the pinned upstream commit + those patches; build
 recipe and validation evidence in `engine/README.md`.
 
 ## Fairy-Stockfish (WASM engine)
 - Files: `stockfish.js`, `stockfish.wasm`, `stockfish.worker.js`
 - Built from: https://github.com/fairy-stockfish/fairy-stockfish.wasm
-  branch `nnue` @ `2e874fd` + the six patches above
+  branch `nnue` @ `2e874fd` + the seven patches above
   (emsdk 2.0.26, `ARCH=wasm embedded_nnue=no`; previously the unmodified
   npm package `fairy-stockfish-nnue.wasm` 1.1.11)
 - Derived from Stockfish, © 2004–2022 the Stockfish developers, and
@@ -26,7 +27,7 @@ recipe and validation evidence in `engine/README.md`.
 ## ffish.js (rules/legality library)
 - Files: `ffish.js`, `ffish.wasm`
 - Built from: https://github.com/fairy-stockfish/Fairy-Stockfish
-  master @ `6d9d0f5` + the six patches above
+  master @ `6d9d0f5` + the seven patches above
   (`src/ffishjs.cpp` via `src/Makefile_js`, emsdk 1.39.16; previously
   the unmodified npm package `ffish` 0.7.9)
 

@@ -757,6 +757,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       engine: L.engine.length,
       engineOk: L.engine.every((e) => e.score && Number.isInteger(e.depth) && e.ms >= 0 && Array.isArray(e.pv)),
       traces: L.quakeTraces.length,
+      inside: L.states.filter((x) => x.cast === 'half' || x.cast === 'pass').length, // PORTALS v3: the inside of a cast is never rolled on
       due: due.length,
       inputs: due.filter((t) => t.inputs && Array.isArray(t.inputs.hints) && t.inputs.probes).length,
       // the "why" layer: pools + rejects per rung on every due roll that acted, the meters' inputs on every ply
@@ -781,7 +782,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // ending move), so the count is plies + 1 either way. A game-ending MOVE
   // never reaches the quake phase, so an ended game has one trace fewer.
   expect(pre.schema === 'dck-log/1' && pre.states === pre.plies + 1 && pre.statesAligned, `export: ${pre.states} states for ${pre.plies} plies${pre.ended ? ' (the last is the final position)' : ''}, aligned`);
-  expect(pre.engine > 0 && pre.engineOk && (pre.traces === pre.plies || (pre.ended && pre.traces === pre.plies - 1)) && pre.timed, `export: ${pre.engine} engine searches with score/depth/pv/ms, ${pre.traces} timed roll traces`);
+  expect(pre.engine > 0 && pre.engineOk && (pre.traces === pre.plies - pre.inside || (pre.ended && pre.traces === pre.plies - 1 - pre.inside)) && pre.timed, `export: ${pre.engine} engine searches with score/depth/pv/ms, ${pre.traces} timed roll traces (${pre.inside} plies inside a cast, never rolled on)`);
   expect(pre.due > 0 && pre.inputs === pre.due, `export: ${pre.inputs}/${pre.due} due rolls carry the engine inputs verbatim (${pre.quakes} quakes landed, ${pre.attempts} draws rejected)`);
   expect(pre.why === pre.due && pre.whyPlies === pre.traces && pre.protectedListed === pre.due, `export: the "why" layer — pools + rejects on ${pre.why}/${pre.due} due rolls, the protected set listed on ${pre.protectedListed}, meter inputs on ${pre.whyPlies}/${pre.traces} plies`);
   expect(pre.logLines > 0 && !!pre.app && !!pre.eng && pre.ua, `export: ${pre.logLines} mirrored log lines, build "${pre.app}", engine "${pre.eng}"`);
@@ -1553,8 +1554,14 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.logA = logLines();
     out.turnA = K.app.duel.turnColor();
     out.stateA = K.app.duel.state;
+    // PORTALS v3 (the one-turn cast): the enemy's forced pass was played by the game and the player stands on the LINK PLY, cast mode already on
+    out.castModeA = K.app.castMode;
+    out.movesA = K.app.duel.record.moves.slice(-2);
+    out.kindsA = K.app.duel.record.states.slice(-2).map((s) => s.cast ?? null);
+    out.statusA = document.getElementById('status').textContent;
+    out.pieceMovesA = K.app.duel.legalMoves().filter((m) => !/^[A-Za-z]@/.test(m));
     if (K.app.duel.state === 'playing') {
-      btn.click();
+      if (!K.app.castMode) btn.click();
       const b = pick([a]);
       K.tap(b);
       await settle();
@@ -1566,6 +1573,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       out.aBlueB = count(a, BLUE);
       out.bBlueB = count(b, BLUE);
       out.logB = logLines();
+      out.kindsB = K.app.duel.record.states.map((s) => s.cast ?? null).filter(Boolean);
+      out.tracesB = K.app.duel.record.quakeTraces.map((t) => t.ply);
+      out.castPliesB = K.app.duel.record.states.filter((s) => s.cast).map((s) => [s.ply, s.cast]);
+      out.plyB = K.app.duel.ply;
     }
     const f = field();
     const enemyHalf = f.match(/(?:^|,)([a-l](?:10|[1-9]))b(?:,|$)/)?.[1] ?? null;
@@ -1580,11 +1591,20 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(ps.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
   expect(new RegExp(`(^|,)${ps.a}w(,|$)`).test(ps.fieldA) && /×1/.test(ps.textA) && /is open/.test(ps.titleA), `a tap on ${ps.a} casts: the field reads {${ps.fieldA}}, one scroll left (${ps.textA}), the title says the half is open`);
   expect(ps.logA.some((t) => t.includes(`a portal opens at ${ps.a}`)), `the log names the cast (${ps.logA.slice(-1)[0] ?? 'nothing about a portal'})`);
+  // PORTALS v3
+  if (ps.stateA === 'playing') {
+    expect(ps.turnA === 'white' && ps.castModeA && ps.pieceMovesA.length === 0, `after the half the enemy's PASS was played by the game and the player is on the link ply in cast mode, no piece move offered (turn ${ps.turnA}, castMode ${ps.castModeA}, ${ps.pieceMovesA.length} piece moves)`);
+    expect(/^([a-l](?:10|[1-9]))\1$/.test(ps.movesA[1] ?? '') && JSON.stringify(ps.kindsA) === '["half","pass"]', `the record reads half then pass (${ps.movesA.join(' ')} · ${ps.kindsA.join(',')})`);
+    expect(/second portal/.test(ps.statusA), `the status asks for the second portal (${ps.statusA})`);
+    expect(ps.logA.some((t) => /frozen/.test(t)), `the log says the enemy is frozen (${ps.logA.slice(-2).join(' | ')})`);
+  }
   if (ps.aEmpty) expect(ps.aBlue >= 9 && ps.aBlue <= 18 && ps.aOrange === 0, `the half-open portal is a dashed ring in the player's BLUE (${ps.aBlue} blue pixels of 18, ${ps.aOrange} orange)`);
   else expect(ps.aBlue > 0 && ps.aOrange === 0, `the half-open portal at ${ps.a} shows blue beside the piece over it (${ps.aBlue} pixels)`);
   if (ps.b) {
     expect(new RegExp(`(^|,)(${ps.a}-${ps.b}|${ps.b}-${ps.a})(,|$)`).test(ps.fieldB) && ps.hiddenB, `the second cast links the pair {${ps.fieldB}} and the button goes with the last scroll`);
     expect(ps.logB.some((t) => t.includes('the portals are linked')), 'the log says the portals are linked');
+    expect(JSON.stringify(ps.kindsB.slice(0, 3)) === '["half","pass","link"]', `the record's cast kinds run half, pass, link (${ps.kindsB.join(',')})`);
+    expect(ps.castPliesB.length >= 3 && ps.castPliesB.every(([ply, kind]) => (kind === 'link' || kind === 'fizzle' ? ps.tracesB.includes(ply) : !ps.tracesB.includes(ply))), `the gods rolled on the link ply and never inside the cast (kinds ${ps.castPliesB.map(([p, k]) => `${p}:${k}`).join(' ')}; traces at ${ps.tracesB.join(',')})`);
     const solid = (n, empty) => (empty ? n >= 20 && n <= 36 : n > 0);
     expect(solid(ps.aBlueB, ps.aEmptyB) && solid(ps.bBlueB, ps.bEmpty), `both squares of the pair wear the solid blue ring (${ps.aBlueB} / ${ps.bBlueB} blue pixels of 36${ps.aEmptyB && ps.bEmpty ? '' : ', a piece over one'})`);
   } else expect(ps.stateA !== 'playing', `the duel ended before the second cast (${ps.stateA})`);
@@ -1669,7 +1689,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
       first = riders().map((m) => m[2]).find((t) => c.includes(t)) ?? null;
       if (first) { K.tap(first); await settle(); } else btn.click();
       if (first && myTurn() && !btn.hidden) {
-        btn.click();
+        if (!K.app.castMode) btn.click(); // PORTALS v3: the link ply is cast mode already
         const c2 = castable().filter((sq) => sq !== first);
         const second = c2[Math.floor(c2.length / 2)];
         if (second) { K.tap(second); await settle(); } else btn.click();

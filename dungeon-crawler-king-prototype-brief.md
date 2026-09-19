@@ -433,11 +433,12 @@ asked: the body rule first as its own checkpoint, the tunnel on top —
 both landed in one session.
 
 **The spell:** one pair per side per duel for now (an upgrade later), two
-scrolls in hand, cast in two turns — the first cast opens a HALF that
-belongs to its caster, the second links it to the square the caster
-picks; a half is inert until paired and the enemy can never finish it. A
-cast is a legal move (`O@e4`), never while in check, never on a square a
-portal or a half already takes. Spells are NEVER pieces: a king with
+scrolls in hand — the first cast opens a HALF that belongs to its caster,
+the second links it to the square the caster picks; a half is inert until
+paired and the enemy can never finish it. A cast is a legal move (`O@e4`),
+never while in check, never on a square a portal or a half already takes.
+BOTH PORTALS GO DOWN IN ONE TURN since Portals v3, below (until 2026-09-19
+the two casts were two turns, and the enemy moved between them). Spells are NEVER pieces: a king with
 scrolls in hand, an open half or a pair is stripped and has lost. Nothing
 persists past the duel; the pairs and halves ride the FEN's trailing
 field, so the log and the analyzer carry them for free. On the board a
@@ -445,6 +446,53 @@ pair wears its CASTER'S colour — the player's blue, the enemy's orange,
 each further pair a hue of its own — so the links read at a glance; the
 field names no caster, so the game and the analyzer rebuild who cast what
 by a forward walk over the positions.
+
+**PORTALS v3 — THE ONE-TURN CAST `[designer, 2026-09-19: "Is it possible to make it so both portals are placed in one turn instead of two?" — the discussion the same day, then "It might make portals too strong but let's go ahead and try it"; engine substrate engine/patches/portals-v3.patch, the seventh patch]`.**
+A free pair cast as ONE engine move is a two-square move, and the engine
+would generate every legal pair at every node while the scrolls are in
+hand — on a 10×10 roughly 1,000 to 2,400 casts beside about 40 ordinary
+moves: the move array holds them (8,192 in this build) but the search
+would not, its depth halved and every node spent listing casts, so the
+engine would play the spell badly. So the one turn is THREE PLIES the
+other side cannot use:
+
+- **An open half FREEZES the other side.** While your half stands, the
+  enemy's only legal move is a PASS (its king's square twice, `e8e8`; SAN
+  `--`), played by the game itself — no search, no tap. Both portals are
+  down before the enemy can react, which is the point.
+- **An open half BINDS its caster to the link.** On your next ply the only
+  legal moves are the linking casts (the twin on any castable square, minus
+  the ones that would expose your own king through the new tunnel, as v2
+  rules). No piece move, no other cast: the second portal IS the move.
+- **A half no link can close FIZZLES.** When every twin would expose your
+  king (a rare geometry: every other castable square lies on a line an
+  enemy slider would run through the new tunnel onto your king), your
+  only legal move is a pass that removes the half; the half's scroll is
+  spent, the other stays in hand. It exists so the rule never leaves a
+  side without a legal move, and it never happens on a real board.
+- **A pass is nothing.** It gives no check, breaks no line, is no capture;
+  two passes in a row (the frozen pass, then a fizzle) end nothing — the
+  engine's double-pass draw is for other variants' passes.
+- **Nobody is in check while a half is open** — a half is cast only out of
+  check, moves nothing, and the frozen side cannot move — so the freeze
+  and the bind are never asked to answer a check; a hand-written position
+  that is in check plays its ordinary evasions, where a cast is illegal
+  anyway.
+
+What changes in play, on the record: a cast can now give check with no
+warning (a tunnel onto the king out of nowhere); a tunnel set up for a
+capture cannot be pre-empted — the enemy answers after the pair is down,
+by moving off the line or plugging an end; the first duel's counterplay
+(the enemy's own pair placed to spoil the player's) stays possible but is
+reactive, not anticipatory. To the gods the three plies are ONE action:
+the meter, the repetition record and the quake roll skip the half and the
+frozen pass and see the link (or the fizzle) once. Considered and not
+built: the free pair as one move (above); a fixed twin derived from the
+entry (one move, no cost, a different spell); the half not ending the
+turn (a true double move — surgery in a search that assumes strict
+alternation everywhere; every patch so far has stayed on the rules side).
+The designer's own note going in: "It might make portals too strong" —
+the phone decides.
 
 **Any number of pairs** is one representation (a square → twin map, hashed
 per pair); the count is the deal's, and the stage or world may author

@@ -3,7 +3,10 @@
 // PAIR is a TUNNEL for riders (through another pair too, each pair once per
 // line), landings step through and swap as before, a pawn's double step never
 // crosses a portal, a linking cast may give check through the new pair and
-// may not expose the caster. All through the JS API the game uses.
+// may not expose the caster. PORTALS v3 (portals-v3.patch, 2026-09-19): an
+// open half freezes the other side (its one move is a pass, SAN '--') and
+// binds its caster to the link; a pass fizzles a half no link can close.
+// All through the JS API the game uses.
 //   FFISH_JS=/path/to/patched/ffish.js node engine/tests/test-portals-ffish.cjs
 // Every count below was derived by hand and confirmed by an independent
 // Python model of the rules (the forge's oracle) before the engine ran it;
@@ -33,6 +36,30 @@ portalScroll = o
 pieceDrops = true
 dropRegionWhite = *2 *3 *4 *5 *6 *7
 dropRegionBlack = *2 *3 *4 *5 *6 *7
+pieceValueMg = o:0
+pieceValueEg = o:0
+
+[portal6:chess]
+maxRank = 6
+maxFile = 6
+castling = false
+stalemateValue = loss
+nMoveRule = 0
+nFoldRule = 0
+nFoldValue = loss
+extinctionValue = loss
+extinctionPieceTypes = *
+extinctionPieceCount = 1
+extinctionPseudoRoyal = false
+promotionRegionWhite = *6
+promotionRegionBlack = *1
+doubleStepRegionWhite = *2 *3 *4 *5
+doubleStepRegionBlack = *5 *4 *3 *2
+immobile = o
+portalScroll = o
+pieceDrops = true
+dropRegionWhite = *2 *3 *4 *5
+dropRegionBlack = *2 *3 *4 *5
 pieceValueMg = o:0
 pieceValueEg = o:0
 `;
@@ -159,7 +186,7 @@ function run(ffish) {
   b = new ffish.Board(V, 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}');
   const m10 = moves(b);
   ok('F10b: the casts that would open a line onto the caster\'s king are refused (h5, h6, h7), c3 is offered', !m10.includes('O@h5') && !m10.includes('O@h6') && !m10.includes('O@h7') && m10.includes('O@c3'), m10.filter((m) => m.startsWith('O@h')).join(','));
-  ok('F10b: 62 legal moves (43 casts + 5 king + 14 rook)', m10.length === 62, String(m10.length));
+  ok('F10b: 43 legal moves — the linking casts alone (v3 binds the caster to the link; v2 had 62 with the king and rook moves)', m10.length === 43, String(m10.length));
   b.delete();
 
   // The landings as before: twin to twin, the swap of a king, the capture through
@@ -213,8 +240,36 @@ function run(ffish) {
   b = new ffish.Board(V, fen7);
   const casts = moves(b).filter((x) => x.startsWith('O@'));
   ok('F17: 52 moves = 6 normal + 46 casts, none on a king row', moves(b).length === 52 && casts.length === 46 && !casts.some((x) => /[18]$/.test(x)), `${moves(b).length} ${casts.length}`);
-  for (const m of ['O@c3', 'O@f6', 'O@e5', 'O@a4']) b.push(m);
-  ok('F17: both pairs closed, hands empty', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 3 {c3-e5,a4-f6}', b.fen());
+  for (const m of ['O@c3', 'e8e8', 'O@e5', 'O@f6', 'e1e1', 'O@a4']) b.push(m); // v3: half, the frozen pass, link — twice
+  ok('F17: both pairs closed, hands empty, six plies', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 4 {c3-e5,a4-f6}', b.fen());
+  b.delete();
+
+  // V3 THE ONE-TURN CAST (2026-09-19, portals-v3.patch): the frozen ply, the link ply, the fizzle, the pass's SAN
+  b = new ffish.Board(V, '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1');
+  b.push('O@c4');
+  ok('V3: after the half the enemy is FROZEN — its one legal move is the pass', moves(b).join(',') === 'e8e8', moves(b).join(','));
+  ok("V3: the pass reads '--' in SAN", b.sanMove('e8e8') === '--', b.sanMove('e8e8'));
+  ok('V3: the half stands in the FEN, black to move, the scroll spent', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', b.fen());
+  b.push('e8e8');
+  ok('V3: nobody in check after the pass; white to move on the link ply', !b.isCheck() && b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] w - - 1 2 {c4w}', b.fen());
+  const links = moves(b);
+  ok('V3: the link ply — 45 linking casts and nothing else (no piece move; the pass is illegal while a link is)', links.length === 45 && links.every((x) => x.startsWith('O@')) && !links.includes('O@c4'), `${links.length} ${links.filter((x) => !x.startsWith('O@')).join(',')}`);
+  b.push('O@f5');
+  ok('V3: the pair stands, black to move unfrozen with 50 moves, its own casts among them', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}' && moves(b).length === 50 && moves(b).some((x) => x.startsWith('O@')) && !moves(b).includes('e8e8'), `${b.fen()} ${moves(b).length}`);
+  b.pop(); b.pop();
+  ok('V3: pop restores the frozen ply', moves(b).join(',') === 'e8e8' && b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', b.fen());
+  b.delete();
+  const V6 = 'portal6';
+  b = new ffish.Board(V6, '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1');
+  ok('V3 fizzle: Ka2 and the two casts alone (the knight is walled in)', same(moves(b), ['a1a2', 'O@a2', 'O@b3']), moves(b).join(','));
+  b.push('O@a2');
+  ok('V3 fizzle: black frozen — f6f6', moves(b).join(',') === 'f6f6', moves(b).join(','));
+  b.push('f6f6');
+  ok('V3 fizzle: no legal link (b3 would open the rook onto a1 through a2) — the fizzle a1a1 alone', moves(b).join(',') === 'a1a1', moves(b).join(','));
+  ok("V3 fizzle: its SAN is '--' too", b.sanMove('a1a1') === '--', b.sanMove('a1a1'));
+  b.push('a1a1');
+  ok('V3 fizzle: the half is gone, the other scroll kept, black to move with Ke6 and Rb3', b.fen() === '5k/******/*r****/*1****/1*****/KN4[O] b - - 2 2' && same(moves(b), ['f6e6', 'b4b3']), `${b.fen()} ${moves(b).join(',')}`);
+  ok('V3 fizzle: two passes in a row end nothing', !b.isGameOver() && !b.isGameOver(true), `${b.isGameOver()} ${b.isGameOver(true)}`);
   b.delete();
   ok('validateFen rejects a portal on a king row', ffish.validateFen('4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 1 {a1-c4}', V) < 0);
   ok('validateFen rejects a square used twice', ffish.validateFen('4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 1 {c3-c4,c4-d5}', V) < 0);
@@ -234,6 +289,7 @@ function run(ffish) {
     '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}',
     'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}', 'r2qk2r/pp1bppb1/2np1np1/8/3P4/2N2N2/PPQ1PPPP/R3KB1R[] w - - 0 1 {c4-f5,d5-g6}',
     '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1 {c3-f6}',
+    '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] w - - 0 1 {c4w}', // v3: a frozen ply, a link ply
   ];
   let checked = 0, bad = 0;
   const sweep = (bd, depth) => {

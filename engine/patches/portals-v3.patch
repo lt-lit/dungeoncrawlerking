@@ -1,0 +1,185 @@
+diff --git a/src/apiutil.h b/src/apiutil.h
+index eecd9d9c..890b432d 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -297,6 +297,11 @@ inline const std::string move_to_san(Position& pos, Move m, Notation n) {
+             san += square(pos, gating_square(m), n);
+         }
+     }
++    else if (is_pass(m) && pos.portal_scroll() != NO_PIECE_TYPE)
++    {
++        // PORTALS v3: the frozen side's pass, or a cast that fizzled - a null move
++        san += "--";
++    }
+     else if (type_of(m) == HAMMER)
+     {
+         // THE SLEDGEHAMMER (hammer.patch): the piece, the wall glyph, the wall's square
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index b59e3269..a40346b1 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -482,6 +482,26 @@ namespace {
+     const Square ksq = pos.count<KING>(Us) ? pos.square<KING>(Us) : SQ_NONE;
+     Bitboard target;
+ 
++    // PORTALS v3 (2026-09-19, the one-turn cast): an open half BINDS both
++    // sides until it is linked. Its caster's only moves are the LINKING casts
++    // (a drop of the scroll) and a pass that FIZZLES the half - legal() lets
++    // that pass through only when no link is legal; the other side's only
++    // move is a PASS, so the pair goes down before it can act. Neither side
++    // can be in check while a half is open in play (a half is cast only out
++    // of check and moves nothing, and the frozen side cannot move), so the
++    // evasions never see this; a hand-written position in check falls
++    // through to them, where a cast is illegal anyway.
++    if (Type != EVASIONS && ksq != SQ_NONE && pos.in_cast())
++    {
++        if (Type == CAPTURES)
++            return moveList;
++        if (pos.portal_half(Us) != SQ_NONE)
++            moveList = generate_drops<Us, Type>(pos, moveList, pos.portal_scroll(), ~pos.pieces() & ~pos.dead_squares() & pos.board_bb());
++        if (Type != QUIET_CHECKS)
++            *moveList++ = make<SPECIAL>(ksq, ksq);
++        return moveList;
++    }
++
+     // Portals v2: with an open pair on the board a check may come through a
+     // tunnel, and a piece may block it by stepping into the tunnel - the
+     // evasion masks cannot say where, so every move is generated and legal()
+diff --git a/src/position.cpp b/src/position.cpp
+index 030227b6..74c03ca0 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -1179,6 +1179,19 @@ bool Position::legal(Move m) const {
+   assert(!count<KING>(us) || piece_on(square<KING>(us)) == make_piece(us, KING));
+   assert((board_bb() & to) || type_of(m) == HAMMER);
+ 
++  // PORTALS v3 (the one-turn cast): the frozen side's pass is its one legal
++  // move; the caster's pass FIZZLES the open half and is legal only when no
++  // linking cast is (each cast judged by this position's own legal())
++  if (is_pass(m) && in_cast())
++  {
++      if (st->portalHalf[us] == SQ_NONE)
++          return true;
++      for (const auto& cast : MoveList<QUIETS>(*this))
++          if (type_of(cast) == DROP && legal(cast))
++              return false;
++      return true;
++  }
++
+   // Illegal checks
+   if ((!checking_permitted() || (sittuyin_promotion() && type_of(m) == PROMOTION) || (!drop_checks() && type_of(m) == DROP)) && gives_check(m))
+       return false;
+@@ -1448,10 +1461,22 @@ bool Position::pseudo_legal(const Move m) const {
+   if (type_of(m) == HAMMER)
+       return !checkers() && MoveList<NON_EVASIONS>(*this).contains(m);
+ 
++  // PORTALS v3: inside a one-turn cast the move set is a short list (the
++  // linking casts and a pass) - validate a TT or killer move by regeneration
++  if (in_cast())
++      return MoveList<NON_EVASIONS>(*this).contains(m);
++
+   // Illegal moves to squares outside of board or to wall squares
+   if (!(board_bb() & to))
+       return false;
+ 
++  // A move onto a portal square is a PORTAL move (movegen encodes it so): an
++  // ordinary move landing on one can only be a colliding transposition-table
++  // move, and the fast path below would let it through (portals.patch's gap,
++  // found by the one-turn cast's search tests, 2026-09-19)
++  if (type_of(m) == NORMAL && (st->portalSquares & to))
++      return false;
++
+   // Use a fast check for piece drops
+   if (type_of(m) == DROP)
+       return   piece_drops()
+@@ -1591,6 +1616,10 @@ bool Position::gives_check(Move m) const {
+   if (!count<KING>(~sideToMove))
+       return false;
+ 
++  // A pass moves nothing - Portals v3's frozen and fizzle passes included
++  if (is_pass(m))
++      return false;
++
+   // Portal moves relocate two pieces: judge the resulting board
+   if (type_of(m) == PORTAL)
+       return portal_attacks_king(m, ~sideToMove);
+@@ -1772,12 +1801,21 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   Piece captured = piece_on(type_of(m) == EN_PASSANT ? capture_square(to) : to);
+   if (to == from)
+   {
+-      assert((type_of(m) == PROMOTION && sittuyin_promotion()) || (is_pass(m) && (pass(us) || var->wallOrMove )));
++      assert((type_of(m) == PROMOTION && sittuyin_promotion()) || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
+       captured = NO_PIECE;
+   }
+   st->capturedpromoted = is_promoted(to);
+   st->unpromotedCapturedPiece = captured ? unpromoted_piece_on(to) : NO_PIECE;
+-  st->pass = is_pass(m);
++  // PORTALS v3: a pass inside a one-turn cast is the rule's, not the
++  // variant's - it never counts toward the double-pass game end. The caster's
++  // pass FIZZLES the half it could not link (no scroll returns).
++  const bool castPass = is_pass(m) && half_open();
++  st->pass = is_pass(m) && !castPass;
++  if (castPass && st->portalHalf[us] != SQ_NONE)
++  {
++      k ^= Zobrist::portalHalf[us][st->portalHalf[us]];
++      st->portalHalf[us] = SQ_NONE;
++  }
+ 
+   assert(color_of(pc) == us);
+   assert(captured == NO_PIECE || color_of(captured) == (type_of(m) != CASTLING ? them : us));
+@@ -2435,7 +2473,7 @@ void Position::undo_move(Move m) {
+ 
+   assert(type_of(m) == DROP || type_of(m) == PORTAL || type_of(m) == HAMMER || empty(from) || type_of(m) == CASTLING || is_gating(m)
+          || (type_of(m) == PROMOTION && sittuyin_promotion())
+-         || (is_pass(m) && (pass(us) || var->wallOrMove)));
++         || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
+   assert(type_of(st->capturedPiece) != KING);
+ 
+   // Reset wall squares
+@@ -2679,6 +2717,10 @@ Key Position::key_after(Move m) const {
+   Piece captured = piece_on(to);
+   Key k = st->key ^ Zobrist::side;
+ 
++  // A pass moves nothing; Portals v3's fizzle takes the caster's open half with it
++  if (is_pass(m))
++      return half_open() && st->portalHalf[sideToMove] != SQ_NONE ? k ^ Zobrist::portalHalf[sideToMove][st->portalHalf[sideToMove]] : k;
++
+   if (captured)
+   {
+       k ^= Zobrist::psq[captured][to];
+diff --git a/src/position.h b/src/position.h
+index 86984da5..7da7756f 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -141,6 +141,9 @@ public:
+   bool is_portal_scroll(PieceType pt) const;
+   PieceSet hammer_piece_types(Color c) const;
+   bool portal_attacks_king(Move m, Color kingColor) const;
++  // Portals v3 (the one-turn cast): a half open on either side; the same with nobody in check
++  bool half_open() const;
++  bool in_cast() const;
+   // Portals v2: bodies and tunnels
+   Bitboard open_portals(Bitboard occupied, Bitboard portals, Square xa = SQ_NONE, Square xb = SQ_NONE) const;
+   Bitboard portal_through(RiderType riders, Square s, Bitboard bodies, Bitboard open, Square xa = SQ_NONE, Square xb = SQ_NONE) const;
+@@ -504,6 +507,21 @@ inline bool Position::is_portal_scroll(PieceType pt) const {
+   return pt != NO_PIECE_TYPE && pt == var->portalScroll;
+ }
+ 
++// Portals v3 (the one-turn cast, 2026-09-19): an open half binds both sides -
++// its caster to the linking cast, the other side to a pass - until it is
++// linked or fizzles. `in_cast` is the movegen's question (never while in
++// check: a half is cast only out of check and moves nothing, so neither side
++// can be in check while one is open in play); `half_open` is the same without
++// the check test, for do_move, where the new state's checkers are not yet set.
++inline bool Position::half_open() const {
++  assert(var != nullptr);
++  return var->portalScroll != NO_PIECE_TYPE && (st->portalHalf[WHITE] != SQ_NONE || st->portalHalf[BLACK] != SQ_NONE);
++}
++
++inline bool Position::in_cast() const {
++  return half_open() && !checkers();
++}
++
+ // Spells are never pieces: the extinction (strip) count ignores scrolls in hand
+ inline int Position::count_with_hand_spellfree(Color c, PieceType pt) const {
+   int n = count_with_hand(c, pt);

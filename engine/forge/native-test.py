@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Portals v2 — the native gate: hand-verified fixtures over UCI, the engine's
+"""Portals v2 + v3 — the native gate: hand-verified fixtures over UCI, the engine's
 own consistency sweep (xsweep, scratch build), and the independent Python
-oracle on random positions (perft 1 move sets, perft 2 per-move counts).
+oracle on random positions (perft 1 move sets, perft 2 per-move counts) —
+since 2026-09-19 with scrolls in hand, open halves, the frozen pass, the
+links-only ply and the fizzle (the one-turn cast).
 
   python3 native-test.py <binary> [--random N] [--sweep] [--depth D]
 """
@@ -59,6 +61,11 @@ class Engine:
     def board_after(self, fen, move):
         f, _ = self.display(fen, [move])
         return f.split(' ')[0].split('[')[0]
+    def bestmove(self, fen, depth, moves=()):
+        self.send('position fen ' + fen + (' moves ' + ' '.join(moves) if moves else ''))
+        self.send(f'go depth {depth}')
+        out = self.wait('bestmove')
+        return out[-1].split()[1]
     def sweep(self, fen, depth):
         self.send('position fen ' + fen)
         self.send(f'xsweep {depth}')
@@ -165,7 +172,7 @@ def fixtures(E):
     fen = 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}'
     per, n = E.perft(fen, 1)
     ok('F10b self-exposing casts h5/h6/h7 refused, c3 offered', not ({'O@h5','O@h6','O@h7'} & moveset(per)) and 'O@c3' in per, sorted(m for m in per if m.startswith('O@h')))
-    ok('F10b 62 legal moves (43 casts + 5 king + 14 rook)', n == 62, n)
+    ok('F10b 43 legal moves: the linking casts alone (v3 binds the caster to the link; v2 had 62 with the king and rook moves)', n == 43, n)
     # ---- v1 regressions that v2 keeps or changes as computed by hand
     fen = '4k3/3p4/5n2/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}'
     per, n = E.perft(fen, 1)
@@ -203,6 +210,35 @@ def fixtures(E):
     per, n = E.perft(fen, 3)
     ok('F17 plain board perft 3 (recorded for the identity check)', n > 0, n)
     print('F17 perft3 =', n)
+    # ---- V3 THE ONE-TURN CAST (2026-09-19): the frozen ply, the link ply, the fizzle
+    fen = '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1'
+    per, n = E.perft(fen, 1)
+    ok('V3a both hold two scrolls: 46 opening casts beside the 6 piece moves', sum(m.startswith('O@') for m in per) == 46 and n == 52, (n, sorted(m for m in per if not m.startswith('O@'))))
+    per, n = E.perft(fen, 1, ['O@c4'])
+    ok('V3b after the half black is FROZEN: its one move is the pass e8e8', moveset(per) == {'e8e8'}, sorted(per))
+    f, chk = E.display(fen, ['O@c4', 'e8e8'])
+    ok('V3b the pass leaves the half standing, white to move, nobody in check', '{c4w}' in f and f.split(' ')[1] == 'w' and not chk, f)
+    per, n = E.perft(fen, 1, ['O@c4', 'e8e8'])
+    ok('V3c the link ply: the 45 linking casts and nothing else - no piece move, no pass while a link is legal', n == 45 and all(m.startswith('O@') for m in per) and 'O@c4' not in per, (n, sorted(m for m in per if not m.startswith('O@'))))
+    f, chk = E.display(fen, ['O@c4', 'e8e8', 'O@f5'])
+    ok('V3c the link makes the pair c4-f5 with black to move, unfrozen', '{c4-f5}' in f and f.split(' ')[1] == 'b' and not chk, f)
+    per, n = E.perft(fen, 1, ['O@c4', 'e8e8', 'O@f5'])
+    ok('V3c black then has its 6 piece moves and 44 opening casts of its own, no pass', n == 50 and 'e8e8' not in per and sum(m.startswith('O@') for m in per) == 44, n)
+    ok('V3d the frozen side searches to the pass', E.bestmove(fen, 6, ['O@c4']) == 'e8e8')
+    ok('V3d the caster searches to a link', E.bestmove(fen, 6, ['O@c4', 'e8e8']).startswith('O@'))
+    E.set_variant('portal6')
+    fen = '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1'
+    per, n = E.perft(fen, 1)
+    ok('V3e the fizzle board: Ka2 and the two casts, nothing else (the knight is walled in)', moveset(per) == {'a1a2', 'O@a2', 'O@b3'}, sorted(per))
+    per, n = E.perft(fen, 1, ['O@a2'])
+    ok('V3e black frozen: f6f6', moveset(per) == {'f6f6'}, sorted(per))
+    per, n = E.perft(fen, 1, ['O@a2', 'f6f6'])
+    ok('V3e no legal link (b3 would open the rook onto a1 through a2): the FIZZLE a1a1 is the one move', moveset(per) == {'a1a1'}, sorted(per))
+    f, chk = E.display(fen, ['O@a2', 'f6f6', 'a1a1'])
+    ok('V3e after the fizzle the half is gone, the other scroll kept, black to move', '{' not in f and '[O]' in f and f.split(' ')[1] == 'b', f)
+    per, n = E.perft(fen, 1, ['O@a2', 'f6f6', 'a1a1'])
+    ok('V3e black plays on after two passes in a row: Ke6 and Rb3', moveset(per) == {'f6e6', 'b4b3'}, sorted(per))
+    E.set_variant('portal8')
 
 def perft_deep(E, depth):
     """Perft at depth on every fixture position: the debug build's asserts do the checking."""
@@ -213,7 +249,9 @@ def perft_deep(E, depth):
             '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}',
             'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}',
             'r2qk2r/pp1bppb1/2np1np1/8/3P4/2N2N2/PPQ1PPPP/R3KB1R[] w - - 0 1 {c4-f5,d5-g6}',
-            '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1 {c3-f6}']
+            '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1 {c3-f6}',
+            '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1', '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}',
+            'r2k4/8/8/8/7K/8/8/1R6[Oo] w - - 0 1 {a5w}']
     for f in fens:
         t = time.time()
         per, n = E.perft(f, depth)
@@ -271,7 +309,8 @@ if __name__ == '__main__':
     if '--sweep' in args and not N:
         E.set_variant('portal8')
         for f in ['4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-c6,c7-f2}', '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}',
-                  '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 'r2qk2r/pp1bppb1/2np1np1/8/3P4/2N2N2/PPQ1PPPP/R3KB1R[OOoo] w - - 0 1 {c4-f5,d5-g6}']:
+                  '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 'r2qk2r/pp1bppb1/2np1np1/8/3P4/2N2N2/PPQ1PPPP/R3KB1R[OOoo] w - - 0 1 {c4-f5,d5-g6}',
+                  '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1', '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', 'r2k4/8/8/8/7K/8/8/1R6[Oo] b - - 0 1 {a5w}']:
             sb, lines = E.sweep(f, 3)
             ok(f'xsweep 3 clean on {f}', sb == 0, lines[:5])
     if N:

@@ -5,7 +5,9 @@
 // after the key moves through `d`, a cast that gives check through the new
 // tunnel and one refused as a self-check, the strip rule at the root, a
 // search that takes a queen through a portal, and a duel-shaped 10x10 search
-// that completes alive.
+// that completes alive. PORTALS v3 (portals-v3.patch, 2026-09-19): the one-turn
+// cast — an open half freezes the other side (its one move is a pass) and binds
+// its caster to the link; a pass fizzles a half no link can close.
 //   ENGINE_JS=/path/to/patched/stockfish.js node engine/tests/test-portals-engine.cjs
 const ENGINE_JS = process.env.ENGINE_JS; if (!ENGINE_JS) { console.error('set ENGINE_JS=/path/to/patched/stockfish.js'); process.exit(2); }
 const INI = `[portal8:chess]
@@ -27,6 +29,30 @@ portalScroll = o
 pieceDrops = true
 dropRegionWhite = *2 *3 *4 *5 *6 *7
 dropRegionBlack = *2 *3 *4 *5 *6 *7
+pieceValueMg = o:0
+pieceValueEg = o:0
+
+[portal6:chess]
+maxRank = 6
+maxFile = 6
+castling = false
+stalemateValue = loss
+nMoveRule = 0
+nFoldRule = 0
+nFoldValue = loss
+extinctionValue = loss
+extinctionPieceTypes = *
+extinctionPieceCount = 1
+extinctionPseudoRoyal = false
+promotionRegionWhite = *6
+promotionRegionBlack = *1
+doubleStepRegionWhite = *2 *3 *4 *5
+doubleStepRegionBlack = *5 *4 *3 *2
+immobile = o
+portalScroll = o
+pieceDrops = true
+dropRegionWhite = *2 *3 *4 *5
+dropRegionBlack = *2 *3 *4 *5
 pieceValueMg = o:0
 pieceValueEg = o:0
 
@@ -96,8 +122,8 @@ Stockfish().then(async (sf) => {
     ['F8 the cycle cap', '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}', 13, 1096, null, 'a1e5', 'a1a4'],
     ['F9a double step blocked', '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a3-d5}', 6, 321, null, 'a2a3', 'a2a4'],
     ['F9b double step onto the portal', '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a4-d5}', 7, 398, null, 'a2a4', null],
-    ['F10a cast gives check', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 60, 22390, null, 'O@h5', null],
-    ['F10b self-exposing cast refused', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 62, 47273, null, 'O@c3', 'O@h6'],
+    ['F10a cast gives check (v3: the link ply, casts alone)', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 45, 16214, null, 'O@h5', 'a1a2'],
+    ['F10b self-exposing cast refused (v3: 43 casts, the king and rook bound)', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 43, 33603, null, 'O@c3', 'O@h6'],
     ['F11 twin to twin', '4k3/3p4/5n2/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}', 13, 1929, null, 'c3f6', null],
     ['F11b the pass, g7 gone', '4k3/3p4/8/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}', 13, 1023, null, 'c3f6', 'c3g7'],
     ['F12 swap the king', 'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}', 11, 3053, null, 'c1c3', 'c1c4'],
@@ -105,8 +131,8 @@ Stockfish().then(async (sf) => {
     ['F14 king refused onto an attacked exit', '4k3/p6r/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}', 21, 6268, null, null, 'd2d3'],
     ['F14b king through onto a safe exit', '4k2r/p7/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}', 23, 6318, null, 'd2d3', null],
     ['F15 a pawn through a portal', '4k3/3p4/4P3/8/8/8/3P4/4K3[] w - - 0 1 {b3-e7}', 8, 369, null, 'e6e7', null],
-    ['F16 no cast in check', '4k3/3p4/8/8/8/8/3P4/r3K3[OOoo] w - - 0 1', 2, 6525, null, null, 'O@c3'],
-    ['F17 the casts', '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1', 52, 133729, null, 'O@c3', 'O@c1'],
+    ['F16 no cast in check', '4k3/3p4/8/8/8/8/3P4/r3K3[OOoo] w - - 0 1', 2, 2070, null, null, 'O@c3'],
+    ['F17 the casts', '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1', 52, 4248, null, 'O@c3', 'O@c1'],
   ];
   for (const [name, fen, n1, n3, exact, yes, no] of F) {
     const d = await display(fen);
@@ -138,8 +164,36 @@ Stockfish().then(async (sf) => {
   ok('F10a: O@h5 gives check, black has the 3 king steps', (await display(F[11][1], ['O@h5'])).checkers !== '' && (await perft(F[11][1], 1, ['O@h5'])).total === 3);
   ok('F12: c1c3 gives check, 8 evasions incl. d7e6', (await display(F[15][1], ['c1c3'])).checkers !== '' && (await perft(F[15][1], 1, ['c1c3'])).total === 8 && 'd7e6' in (await perft(F[15][1], 1, ['c1c3'])).moves);
   ok('F13: knight gone, rook on f6, bishop on c3', (await after(F[16][1], 'c1c3')) === '4k3/3p4/5R2/8/8/2b5/3P4/4K3');
-  const cast = (await display(F[21][1], ['O@c3', 'O@f6', 'O@e5', 'O@a4'])).fen;
-  ok('F17: the four casts close two pairs, hands empty', cast === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 3 {c3-e5,a4-f6}', cast);
+  const cast = (await display(F[21][1], ['O@c3', 'e8e8', 'O@e5', 'O@f6', 'e1e1', 'O@a4'])).fen; // v3: half, the frozen pass, link — twice
+  ok('F17: two one-turn casts close two pairs, hands empty', cast === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 4 {c3-e5,a4-f6}', cast);
+
+  // V3 THE ONE-TURN CAST (2026-09-19, portals-v3.patch): the frozen ply, the link ply, the fizzle
+  const fenV3 = '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1';
+  let pv3 = await perft(fenV3, 1, ['O@c4']);
+  ok('V3: after the half the enemy is FROZEN — perft 1 is the pass e8e8 alone', pv3.total === 1 && 'e8e8' in pv3.moves, Object.keys(pv3.moves).join(','));
+  let dv3 = await display(fenV3, ['O@c4', 'e8e8']);
+  ok('V3: the pass leaves the half, white to move, no check', canon(dv3.fen) === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] w - - 1 2 {c4w}' && dv3.checkers === '', dv3.fen);
+  pv3 = await perft(fenV3, 1, ['O@c4', 'e8e8']);
+  ok('V3: the link ply — 45 linking casts, no piece move, no pass', pv3.total === 45 && Object.keys(pv3.moves).every((m) => m.startsWith('O@')) && !('O@c4' in pv3.moves), `${pv3.total} ${Object.keys(pv3.moves).filter((m) => !m.startsWith('O@')).join(',')}`);
+  dv3 = await display(fenV3, ['O@c4', 'e8e8', 'O@f5']);
+  ok('V3: the link closes the pair, black to move unfrozen', canon(dv3.fen) === '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}', dv3.fen);
+  pv3 = await perft(fenV3, 1, ['O@c4', 'e8e8', 'O@f5']);
+  ok('V3: black then has 50 moves — 6 of its pieces and 44 opening casts, no pass', pv3.total === 50 && !('e8e8' in pv3.moves), String(pv3.total));
+  send('position fen ' + fenV3 + ' moves O@c4'); send('go depth 6'); let outV3 = await until((l) => l.startsWith('bestmove'));
+  ok('V3: the frozen side searches to the pass', outV3.find((l) => l.startsWith('bestmove')).startsWith('bestmove e8e8'), outV3.find((l) => l.startsWith('bestmove')));
+  send('position fen ' + fenV3 + ' moves O@c4 e8e8'); send('go depth 6'); outV3 = await until((l) => l.startsWith('bestmove'));
+  ok('V3: the caster searches to a link', /^bestmove O@/.test(outV3.find((l) => l.startsWith('bestmove'))), outV3.find((l) => l.startsWith('bestmove')));
+  send('setoption name UCI_Variant value portal6'); await ready();
+  const fenFz = '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1';
+  pv3 = await perft(fenFz, 1);
+  ok('V3 fizzle: Ka2 and the two casts alone', same(Object.keys(pv3.moves), ['a1a2', 'O@a2', 'O@b3']), Object.keys(pv3.moves).join(','));
+  pv3 = await perft(fenFz, 1, ['O@a2', 'f6f6']);
+  ok('V3 fizzle: no legal link (b3 would open the rook onto a1 through a2) — the fizzle a1a1 alone', same(Object.keys(pv3.moves), ['a1a1']), Object.keys(pv3.moves).join(','));
+  dv3 = await display(fenFz, ['O@a2', 'f6f6', 'a1a1']);
+  ok('V3 fizzle: the half is gone, the other scroll kept, black to move', dv3.fen === '5k/******/*r****/*1****/1*****/KN4[O] b - - 2 2', dv3.fen);
+  pv3 = await perft(fenFz, 1, ['O@a2', 'f6f6', 'a1a1']);
+  ok('V3 fizzle: black plays on after two passes in a row — Ke6 and Rb3', same(Object.keys(pv3.moves), ['f6e6', 'b4b3']), Object.keys(pv3.moves).join(','));
+  send('setoption name UCI_Variant value portal8'); await ready();
 
   // The strip rule at the root: a king with only scrolls has lost
   send('position fen 4k3/3p4/8/8/8/8/8/4K3[OOoo] w - - 0 1');
@@ -159,7 +213,7 @@ Stockfish().then(async (sf) => {
   await ready();
   const duel = '1r2k1r3/1pppppp3/10/10/10/10/10/10/1PPPPPP3/1R2K1R3[OOoo] w - - 0 1 {d4-g7}';
   const pd = await perft(duel, 2);
-  ok('10x10 duel shape: perft 2 = 7503 (the native build\'s)', pd.total === 7503, String(pd.total));
+  ok('10x10 duel shape: perft 2 = 1893 (the native build\'s)', pd.total === 1893, String(pd.total));
   send('position fen ' + duel);
   send('go depth 12 movetime 4000'); out = await until((l) => l.startsWith('bestmove'), 60000);
   const bm = out.find((l) => l.startsWith('bestmove'));

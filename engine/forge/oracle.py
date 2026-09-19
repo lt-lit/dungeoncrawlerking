@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portals v2 ORACLE — an independent model of the rules for perft-1/2 comparison
+"""Portals ORACLE — an independent model of the rules for perft-1/2 comparison
 against the engine. Deliberately written from the rule text, not from the C++:
 forward rays for every attack (the engine uses reverse rays + a tunnel term),
 make/unmake by copying the board.
@@ -17,6 +17,17 @@ extinction: a side down to one piece has lost, so the position has no moves):
     from its empty twin in the same direction, through another empty pair too,
     each pair once per line. A pawn's double step never crosses a portal
     square (it may land on one). No en passant square after a portal landing.
+  * PORTALS v3 (the one-turn cast, 2026-09-19): scrolls in hand. A cast
+    ('O@sq') opens the caster's HALF on an empty square off both king rows
+    that is neither a portal nor a half, never while in check; a half is
+    inert (no body, no tunnel). While a half is open the OTHER side is
+    FROZEN: its only move is a pass (its king's square twice, 'e8e8'); the
+    caster's only moves are the LINKING casts — the twin on any castable
+    square, minus the ones that would expose the caster's own king through
+    the new tunnel — or, when no link is legal, a pass that FIZZLES the half
+    (the half's scroll is spent, the other stays in hand). Neither side is in
+    check while a half is open in play; a hand-written position in check
+    plays its ordinary evasions (no casts, as ever in check).
 """
 import random, sys
 
@@ -31,12 +42,14 @@ def colour(ch):
     return WHITE if ch.isupper() else BLACK
 
 class Pos:
-    def __init__(self, files, ranks, board, twin, side, ep=None):
+    def __init__(self, files, ranks, board, twin, side, ep=None, hand=(0, 0), half=(None, None)):
         self.F, self.R = files, ranks
         self.board = board          # dict (f, r) -> char; absent = empty
         self.twin = twin            # dict sq -> sq for linked pairs
         self.side = side
         self.ep = ep                # ep square (f, r) or None
+        self.hand = list(hand)      # scrolls in hand, per colour
+        self.half = list(half)      # the open half per colour: a square, or None
 
     def on(self, f, r):
         return 0 <= f < self.F and 0 <= r < self.R
@@ -50,6 +63,13 @@ class Pos:
 
     def open_pair(self, sq):
         return sq in self.twin and self.piece_at(sq) is None and self.piece_at(self.twin[sq]) is None
+
+    def castable(self, sq):
+        """Empty floor off both king rows, not a portal square, not a half."""
+        return sq not in self.board and 0 < sq[1] < self.R - 1 and sq not in self.twin and sq not in self.half
+
+    def castables(self):
+        return [(f, r) for r in range(1, self.R - 1) for f in range(self.F) if self.castable((f, r))]
 
     # ---- targets: the squares a piece may move to / attacks, with the occupant found there
     def ray(self, frm, d, out):
@@ -141,8 +161,9 @@ class Pos:
     def ended(self):
         return self.count(WHITE) <= 1 or self.count(BLACK) <= 1
 
+    # ---- the positions a move leads to (copies)
     def make(self, frm, to, promo=None):
-        """Return the position after the move (a copy)."""
+        """Return the position after an ordinary move (a copy)."""
         b = dict(self.board)
         ch = b.pop(frm)
         c = colour(ch)
@@ -166,14 +187,57 @@ class Pos:
             b[to] = ch
             if ch.lower() == 'p' and abs(to[1] - frm[1]) == 2:
                 ep = (frm[0], frm[1] + up)
-        return Pos(self.F, self.R, b, self.twin, 1 - self.side, ep)
+        return Pos(self.F, self.R, b, self.twin, 1 - self.side, ep, self.hand, self.half)
+
+    def cast_half(self, sq):
+        """The opening cast: the caster's half stands on sq, a scroll leaves the hand."""
+        hand = list(self.hand); hand[self.side] -= 1
+        half = list(self.half); half[self.side] = sq
+        return Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, hand, half)
+
+    def link(self, sq):
+        """The linking cast: the caster's half and sq become a pair, a scroll leaves the hand."""
+        a = self.half[self.side]
+        twin = dict(self.twin); twin[a] = sq; twin[sq] = a
+        hand = list(self.hand); hand[self.side] -= 1
+        half = list(self.half); half[self.side] = None
+        return Pos(self.F, self.R, dict(self.board), twin, 1 - self.side, None, hand, half)
+
+    def passed(self):
+        """The frozen side's pass: nothing changes but the turn."""
+        return Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half)
+
+    def fizzle(self):
+        """The caster's pass when no link is legal: the half is gone, its scroll spent."""
+        half = list(self.half); half[self.side] = None
+        return Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, half)
 
     def legal_moves(self):
+        """Moves as (from, to, promo, next): promo is a letter for a promotion,
+        'cast' for a scroll cast (from None), 'pass' for a pass (from == to == the king's square)."""
         if self.ended():
             return []
+        us, them = self.side, 1 - self.side
+        k = self.king(us)
+        in_check = k is not None and self.attacked(k, them)
+        # Portals v3: an open half binds both sides (never in check, in play)
+        if not in_check and k is not None and (self.half[us] is not None or self.half[them] is not None):
+            if self.half[us] is not None:
+                res = []
+                if self.hand[us] > 0:
+                    for sq in self.castables():
+                        nxt = self.link(sq)
+                        kk = nxt.king(us)
+                        if kk is not None and nxt.attacked(kk, them):
+                            continue                 # the new tunnel would expose the caster's own king
+                        res.append((None, sq, 'cast', nxt))
+                if res:
+                    return res
+                return [(k, k, 'pass', self.fizzle())]
+            return [(k, k, 'pass', self.passed())]
         res = []
         for s, ch in list(self.board.items()):
-            if ch in TERRAIN or colour(ch) != self.side:
+            if ch in TERRAIN or colour(ch) != us:
                 continue
             for to in self.targets(s, ch):
                 promos = [None]
@@ -181,10 +245,14 @@ class Pos:
                     promos = list(PROMOS)
                 for pr in promos:
                     nxt = self.make(s, to, pr)
-                    k = nxt.king(self.side)
-                    if k is not None and nxt.attacked(k, 1 - self.side):
+                    kk = nxt.king(us)
+                    if kk is not None and nxt.attacked(kk, them):
                         continue
                     res.append((s, to, pr, nxt))
+        # the opening cast: a scroll in hand, not in check, any castable square
+        if not in_check and self.hand[us] > 0:
+            for sq in self.castables():
+                res.append((None, sq, 'cast', self.cast_half(sq)))
         return res
 
 def sqname(sq):
@@ -192,6 +260,10 @@ def sqname(sq):
 
 def uci(m):
     s, to, pr, _ = m
+    if pr == 'cast':
+        return 'O@' + sqname(to)
+    if pr == 'pass':
+        return sqname(s) + sqname(to)
     return sqname(s) + sqname(to) + (pr or '')
 
 def to_fen(pos):
@@ -207,12 +279,59 @@ def to_fen(pos):
                 row += ch
         if empty: row += str(empty)
         rows.append(row)
-    field = ''
-    pairs = sorted({tuple(sorted([a, b])) for a, b in pos.twin.items()})
-    if pairs:
-        field = ' {' + ','.join(f'{sqname(a)}-{sqname(b)}' for a, b in pairs) + '}'
+    pocket = '[' + 'O' * pos.hand[WHITE] + 'o' * pos.hand[BLACK] + ']'
+    entries = [f'{sqname(a)}-{sqname(b)}' for a, b in sorted({tuple(sorted([a, b])) for a, b in pos.twin.items()})]
+    for c, letter in ((WHITE, 'w'), (BLACK, 'b')):
+        if pos.half[c] is not None:
+            entries.append(sqname(pos.half[c]) + letter)
+    field = (' {' + ','.join(entries) + '}') if entries else ''
     ep = sqname(pos.ep) if pos.ep else '-'
-    return '/'.join(rows) + '[] ' + ('w' if pos.side == WHITE else 'b') + ' - ' + ep + ' 0 1' + field
+    return '/'.join(rows) + pocket + ' ' + ('w' if pos.side == WHITE else 'b') + ' - ' + ep + ' 0 1' + field
+
+def from_fen(fen):
+    """A fixture FEN (board[pocket] side - ep 0 1 {portal field}) as a Pos; the board's size is its own."""
+    parts = fen.split()
+    boardpart = parts[0]
+    pocket = ''
+    if '[' in boardpart:
+        boardpart, rest = boardpart.split('[', 1)
+        pocket = rest.split(']', 1)[0]
+    rows = boardpart.split('/')
+    R = len(rows)
+    F = 0
+    board = {}
+    for i, row in enumerate(rows):
+        r = R - 1 - i
+        f = 0
+        j = 0
+        while j < len(row):
+            ch = row[j]
+            if ch.isdigit():
+                n = ch
+                while j + 1 < len(row) and row[j + 1].isdigit():
+                    j += 1; n += row[j]
+                f += int(n)
+            else:
+                board[(f, r)] = ch
+                f += 1
+            j += 1
+        F = max(F, f)
+    side = WHITE if parts[1] == 'w' else BLACK
+    ep = None
+    if len(parts) > 3 and parts[3] != '-':
+        ep = ('abcdefghijkl'.index(parts[3][0]), int(parts[3][1:]) - 1)
+    hand = [pocket.count('O'), pocket.count('o')]
+    twin, half = {}, [None, None]
+    field = fen[fen.index('{') + 1:fen.index('}')] if '{' in fen else ''
+    def sq(s):
+        return ('abcdefghijkl'.index(s[0]), int(s[1:]) - 1)
+    for e in [x.strip() for x in field.split(',') if x.strip()]:
+        if '-' in e:
+            a, b = e.split('-')
+            twin[sq(a)] = sq(b); twin[sq(b)] = sq(a)
+        else:
+            half[WHITE if e[-1] == 'w' else BLACK] = sq(e[:-1])
+    return Pos(F, R, board, twin, side, ep, hand, half)
 
 def perft(pos, depth):
     if depth == 0:
@@ -222,8 +341,10 @@ def perft(pos, depth):
         return len(moves)
     return sum(perft(m[3], depth - 1) for m in moves)
 
-def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3):
-    """A random legal-looking position: kings apart, a few pieces, some terrain, `pairs` portal pairs."""
+def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3, scrolls=True, half_p=0.35):
+    """A random legal-looking position: kings apart, a few pieces, some terrain, `pairs`
+    portal pairs, scrolls in hand and — with probability half_p — an open half for one side
+    (so the frozen ply and the link ply are exercised)."""
     while True:
         board, twin = {}, {}
         squares = [(f, r) for f in range(F) for r in range(R)]
@@ -249,8 +370,16 @@ def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3):
             a, b = cand[0], cand[1]
             twin[a] = b; twin[b] = a
             used |= {a, b}
+        hand = [rng.choice([0, 0, 1, 2]), rng.choice([0, 0, 1, 2])] if scrolls else [0, 0]
+        half = [None, None]
+        if scrolls and rng.random() < half_p:
+            c = rng.choice([WHITE, BLACK])
+            cand = [s for s in mid if s not in used and s not in board]
+            if cand:
+                half[c] = cand[0]
+                hand[c] = rng.choice([0, 1])   # one scroll went into the half; the other may remain
         side = rng.choice([WHITE, BLACK])
-        pos = Pos(F, R, board, twin, side)
+        pos = Pos(F, R, board, twin, side, None, hand, half)
         kw, kb = pos.king(WHITE), pos.king(BLACK)
         # the side not to move may not be in check, nobody may have lost already
         if pos.attacked(kw if side == BLACK else kb, side):
