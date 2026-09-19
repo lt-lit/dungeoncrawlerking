@@ -10,8 +10,10 @@ the pinned upstream commits below plus this project's seven patches in
 neutral `^` squares, brief §4.6), `thread-stack.patch` (the search-thread
 stack), `portals.patch` (the portal spell, §4.7), `wall-kinds.patch` and
 `hammer.patch` (the hard wall `#` and the sledgehammer, §4.8),
-`portals-v2.patch` (the body and the tunnel, §4.7, 2026-09-18),
-`portals-v3.patch` (the one-turn cast, §4.7, 2026-09-19).
+`portals-body.patch` (a linked portal square ends every line, §4.7 —
+portals-v2.patch's body rule with its tunnel half retired, 2026-09-19),
+`portals-cast.patch` (the one-turn cast, §4.7, 2026-09-19 — portals-v3.patch
+rebased).
 Corresponding source = the pinned upstream commit + those patches; build
 recipe and validation evidence in `engine/README.md`.
 

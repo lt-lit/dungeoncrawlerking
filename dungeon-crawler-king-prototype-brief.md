@@ -366,7 +366,7 @@ The second terrain glyph: **`^` — furniture** (crates, weak masonry, force fie
 
 ---
 
-### 4.7 The portal spell `[NEW 2026-09-17 — designer-specified rules; engine substrate is engine/patches/portals.patch; everyone has it for the stress test. PORTALS v2 2026-09-18 — the body and the tunnel, below; engine/patches/portals-v2.patch]`
+### 4.7 The portal spell `[NEW 2026-09-17 — designer-specified rules; engine substrate is engine/patches/portals.patch; everyone has it for the stress test. PORTALS v2 2026-09-18 — the body and the tunnel; v3 2026-09-19 — the one-turn cast; v4 2026-09-19 — THE TUNNEL RETIRED, the body rule alone: engine/patches/portals-body.patch + portals-cast.patch, below]`
 
 The first SPELL: instead of moving, a side casts. The engine plays it for
 and against at full strength, which is the point and the price — stock FSF
@@ -393,7 +393,7 @@ cases]`:**
 - A piece on one portal moving onto its twin ends where it stood — the
   capture at range and the pass that follows from the rule, both legal.
 
-**PORTALS v2 `[designer, 2026-09-18 — settled in one conversation and BUILT the same day; engine substrate engine/patches/portals-v2.patch, the sixth patch; phone verdict 2026-09-19: "Seems to work fine on the phone" — IN]`.**
+**PORTALS v2 `[designer, 2026-09-18 — settled in one conversation and BUILT the same day; engine substrate engine/patches/portals-v2.patch, the sixth patch; phone verdict 2026-09-19: "Seems to work fine on the phone" — IN; THE TUNNEL RETIRED the same day by Portals v4, below — the body rule stays as engine/patches/portals-body.patch]`.**
 The designer's two questions — "Is it possible to make it so portals block
 sliders?" and "Is it possible to make it so sliders can go fully thru both
 portals without stopping at all?" — became two rules, the second an
@@ -461,15 +461,17 @@ other side cannot use:
   `--`), played by the game itself — no search, no tap. Both portals are
   down before the enemy can react, which is the point.
 - **An open half BINDS its caster to the link.** On your next ply the only
-  legal moves are the linking casts (the twin on any castable square, minus
-  the ones that would expose your own king through the new tunnel, as v2
-  rules). No piece move, no other cast: the second portal IS the move.
-- **A half no link can close FIZZLES.** When every twin would expose your
-  king (a rare geometry: every other castable square lies on a line an
-  enemy slider would run through the new tunnel onto your king), your
-  only legal move is a pass that removes the half; the half's scroll is
-  spent, the other stays in hand. It exists so the rule never leaves a
-  side without a legal move, and it never happens on a real board.
+  legal moves are the linking casts (the twin on any castable square — v2
+  also refused the ones that would expose your own king through the new
+  tunnel; since v4 there is no tunnel and bodies only close lines, so every
+  castable square is a legal link). No piece move, no other cast: the
+  second portal IS the move.
+- **A half no link can close FIZZLES.** When no castable square is left
+  (under v2 also when every twin would have exposed your king through the
+  new tunnel), your only legal move is a pass that removes the half; the
+  half's scroll is spent, the other stays in hand. It exists so the rule
+  never leaves a side without a legal move, and it never happens on a
+  real board.
 - **A pass is nothing.** It gives no check, breaks no line, is no capture;
   two passes in a row (the frozen pass, then a fizzle) end nothing — the
   engine's double-pass draw is for other variants' passes.
@@ -480,9 +482,10 @@ other side cannot use:
   anyway.
 
 What changes in play, on the record: a cast can now give check with no
-warning (a tunnel onto the king out of nowhere); a tunnel set up for a
-capture cannot be pre-empted — the enemy answers after the pair is down,
-by moving off the line or plugging an end; the first duel's counterplay
+warning (a tunnel onto the king out of nowhere — gone with the tunnel, v4);
+a tunnel set up for a capture cannot be pre-empted — the enemy answers
+after the pair is down, by moving off the line or plugging an end (v4: a
+pair set up for a LANDING, the same way); the first duel's counterplay
 (the enemy's own pair placed to spoil the player's) stays possible but is
 reactive, not anticipatory. To the gods the three plies are ONE action:
 the meter, the repetition record and the quake roll skip the half and the
@@ -493,6 +496,55 @@ turn (a true double move — surgery in a search that assumes strict
 alternation everywhere; every patch so far has stayed on the rules side).
 The designer's own note going in: "It might make portals too strong" —
 the phone decides.
+
+**PORTALS v4 — THE TUNNEL RETIRED `[designer, 2026-09-19, on the s88 log
+("Portals lead to some pretty wacky situations"): "I'm actually considering
+getting rid of the true pass thru moves for sliders, and making it so
+entering a portal always stops movement and lands on the exit portal. It's
+really cool that the pass thru moves actually works, but I'm worried it's
+not intuitive to read." — then "I like the swaps, at least they're
+consistent. Let's make v3 portals without the pass thru moves. We'll keep
+the double portal cast and the portals stopping movement. Everything going
+thru a portal simply lands on the exit portal now, swapping if there's
+something there. Nice and consistent and readable. We might bring back the
+pass thru portals later… Perhaps it'll be a late game upgrade."; engine
+substrate engine/patches/portals-body.patch (portals-v2.patch with its
+tunnel half removed) + portals-cast.patch (portals-v3.patch rebased); BUILT
+the same day]`.** The rule is one sentence now: a piece that moves onto a
+portal comes out of the other one, and if something stands there they swap.
+
+- **The body rule stays.** A linked portal square ends every line, whatever
+  stands on it; a half is not a body until it is linked; a pawn's double
+  step never crosses one.
+- **Nothing runs through a pair.** A rider's line that reaches a portal
+  square ends there, and the move onto it is the ordinary landing — the
+  piece appears on the twin, or swaps with whatever stands there. v2's
+  tunnel (an empty pair carrying the line on from the twin) is gone.
+- **What went with it**, every one an engine special case: check, pins and
+  discovered checks through a pair; a linking cast that gives check; the
+  self-exposure filter on the link (bodies only close lines, so every
+  castable square is a legal link, and the fizzle is unreachable on a real
+  board — it stays as the safety net); the loop of a line that came round
+  through two pairs to its own square.
+- **What stays:** the swap ("at least they're consistent"), the
+  capture-then-teleport, kings through portals, the one-turn cast, the exit
+  alias on the board (tap the bishop: its squares run up to the portal and
+  the twin lights).
+- **Why:** legibility. The tunnel's MOVES were readable on screen (the arrow
+  drawn in legs) but its THREATS were not — in the s88 log the enemy's rook
+  on b9 struck d3 through the player's own pair, and a check or a pin
+  through a pair has nothing on the line to read. A rule a player can hold
+  in one sentence beats a display that shows what they forgot to trace.
+- **Measured on that log:** the tunnel made 3 of its 15 portal plies; the
+  twelve teleports (four swaps, three king moves, the two-move queen off a
+  rank-8 portal) are untouched by this change and stay on the table. The
+  engine's depth at 10 s with two pairs standing was 18.4 against 21.7
+  before the first cast; v4 removes the tunnel movegen and the next log
+  measures what comes back.
+- **May return as a late-game upgrade.** The tunnel's implementation —
+  engine, oracle and grid — is in the history at the v2 and v3 commits
+  (59eaa82, 41e49e1); an upgrade would most likely be a per-deal or
+  per-side variant setting, a new build either way.
 
 **Any number of pairs** is one representation (a square → twin map, hashed
 per pair); the count is the deal's, and the stage or world may author

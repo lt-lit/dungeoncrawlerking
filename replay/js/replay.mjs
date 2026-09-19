@@ -51,7 +51,6 @@ import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
 import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf } from '../../play/js/fen.mjs';
-import { portalRoute } from '../../play/js/rays.mjs'; // PORTALS v2: a line through a tunnel is drawn in pieces
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -359,7 +358,7 @@ function quakeMarksOf(ev) {
   };
 }
 
-function moveArrow(st, prev = null) {
+function moveArrow(st) {
   const p = st?.move?.match(R.UCI_MOVE_RE);
   if (p && p[1] === p[2]) return null; // PORTALS v3: a pass (the frozen side's, or a fizzle) draws nothing
   if (!p) {
@@ -371,9 +370,7 @@ function moveArrow(st, prev = null) {
   // Gold is the player's colour, red the enemy's last move (style.css roles).
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
   const hammer = st.hammer ? { hammer: true } : {};
-  const route = prev?.fen ? portalRoute(prev.fen, st.move) : null; // PORTALS v2: read off the board the move was played on
-  const via = route ? { via: route.pairs } : {};
-  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last', ...hammer, ...via } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint', ...hammer, ...via };
+  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last', ...hammer } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint', ...hammer };
 }
 
 const idx = () => R.indexLine(app.line);
@@ -418,7 +415,7 @@ function paint() {
       portalsAt(st.fen);
       ui.setPosition(st.fen, { ...ledgers(st), skins: app.skins, ...res });
       const arrows = [];
-      const mv = moveArrow(st, stateAt(line, ply - 1));
+      const mv = moveArrow(st);
       if (mv) arrows.push(mv);
       if (q) {
         const qm = quakeMarksOf(q);
@@ -520,8 +517,7 @@ function pvArrows(pv, fen) {
     const hm = hammerOf(fen, `${p[1]}${p[2]}`);
     const hammer = !!hm && !cracked.has(hm);
     if (hammer) cracked.add(hm);
-    const route = portalRoute(fen, `${p[1]}${p[2]}`); // PORTALS v2: the line's route on the board the line starts from
-    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}), ...(route ? { via: route.pairs } : {}) });
+    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
   });
   return out;
 }

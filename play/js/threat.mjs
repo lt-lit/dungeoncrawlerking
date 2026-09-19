@@ -43,7 +43,7 @@
 //    the known composite cases — CLAUDE.md rule 13).
 
 import { isTerrain } from './fen.mjs';
-import { walkRay } from './rays.mjs'; // Portals v2: a linked portal square is a body, an empty pair a tunnel (a grid carries its pairs)
+import { walkRay } from './rays.mjs'; // the body rule: a linked portal square ends every line (a grid carries its pairs)
 
 /** Centipawn values. Only relative order matters to the swap-off. */
 export const PIECE_VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
@@ -94,14 +94,14 @@ function buildChains(grid, tf, tr, files, ranks) {
   const chains = [];
   for (const [dirs, ortho] of [[ORTHO, true], [DIAG, false]]) {
     for (const [df, dr] of dirs) {
-      // Portals v2 (rays.mjs): the line runs through open pairs and stops at
-      // a plugged one; past each occupant it goes on from that square (the
-      // x-ray), the distance counting every square walked
+      // The line (rays.mjs: a portal square is a body — an empty one ends it,
+      // an occupied one is the occupant the line stops at); past each occupant
+      // it goes on from that square (the x-ray), the distance counting every
+      // square walked
       const cells = [];
       let dist = 0;
       let from = { f: tf, r: tr };
       let stop = false;
-      const seen = new Set([tf + tr * 32]); // the occupants walked from — a line through the pairs may come round again
       while (!stop) {
         let next = null;
         walkRay(grid, files, ranks, from.f, from.r, df, dr, (f, r, ch) => {
@@ -110,8 +110,7 @@ function buildChains(grid, tf, tr, files, ranks) {
           if (ch) { cells.push({ ch, dist }); next = { f, r }; return false; }
           return true;
         });
-        if (!next || seen.has(next.f + next.r * 32)) break;
-        seen.add(next.f + next.r * 32);
+        if (!next) break;
         from = next;
       }
       if (cells.length) chains.push({ ortho, dr, cells, idx: 0 });
@@ -218,7 +217,7 @@ export function editExposes(preGrid, postGrid, edits, files, ranks) {
   const seen = new Set();
   for (const grid of [preGrid, postGrid]) {
     for (const { f, r } of edits) {
-      for (const [df, dr] of RAYS8) walkRay(grid, files, ranks, f, r, df, dr, (nf, nr, cell) => { // Portals v2: through the tunnels
+      for (const [df, dr] of RAYS8) walkRay(grid, files, ranks, f, r, df, dr, (nf, nr, cell) => { // rays.mjs: a portal square is a body that ends the ray
         if (cell) {
           if (!isTerrain(cell)) seen.add(nf + nr * 32);
           return false;

@@ -1,13 +1,13 @@
-// THE PORTAL GATE, engine half — PORTALS v2 (engine/patches/portals.patch +
-// portals-v2.patch): the wasm engine on the same hand-verified fixtures the
-// ffish gate and the native build ran — perft 1 move sets, perft 3 totals
-// pinned to the native build's (the two binaries are one patch), the boards
-// after the key moves through `d`, a cast that gives check through the new
-// tunnel and one refused as a self-check, the strip rule at the root, a
-// search that takes a queen through a portal, and a duel-shaped 10x10 search
-// that completes alive. PORTALS v3 (portals-v3.patch, 2026-09-19): the one-turn
-// cast — an open half freezes the other side (its one move is a pass) and binds
-// its caster to the link; a pass fizzles a half no link can close.
+// THE PORTAL GATE, engine half — PORTALS v4 (engine/patches/portals.patch +
+// portals-body.patch + portals-cast.patch): the wasm engine on the same
+// hand-verified fixtures the ffish gate and the native build ran — perft 1
+// move sets, perft 3 totals pinned to the native build's (the two binaries are
+// one patch set), the boards after the key moves through `d`, no check and no
+// self-check through a pair (v2's tunnel is retired), the strip rule at the
+// root, a search that takes a queen standing on a portal square, and a
+// duel-shaped 10x10 search that completes alive. PORTALS v3: the one-turn cast
+// — an open half freezes the other side (its one move is a pass) and binds its
+// caster to the link; a pass fizzles a half no link can close.
 //   ENGINE_JS=/path/to/patched/stockfish.js node engine/tests/test-portals-engine.cjs
 const ENGINE_JS = process.env.ENGINE_JS; if (!ENGINE_JS) { console.error('set ENGINE_JS=/path/to/patched/stockfish.js'); process.exit(2); }
 const INI = `[portal8:chess]
@@ -111,28 +111,29 @@ Stockfish().then(async (sf) => {
 
   // Fixtures: [name, fen, perft 1, perft 3 (the native build's), exact move set or null, must-have, must-not]
   const F = [
-    ['F1 body + tunnel', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 14, 1554, ['a1a2', 'a1a3', 'a1a4', 'a1h6', 'a1h7', 'a1h8', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'], 'a1h8', 'a1a5'],
-    ['F2 plugged exit', '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 11, 1837, null, 'a1a4', 'a1h6'],
-    ['F3 plugged entry', '4k3/p7/8/8/n7/8/8/R3K3[] w - - 0 1 {a4-h5}', 11, 1751, null, 'a1a4', 'a1h6'],
-    ['F4 check through the tunnel', '8/6bk/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', 4, 400, ['h7g6', 'h7g8', 'g7h6', 'g7a1'], 'g7h6', 'h7h6'],
-    ['F4b pinned through the tunnel', '7k/8/7b/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', 3, 301, ['h8g8', 'h8g7', 'h8h7'], 'h8h7', 'h6g5'],
-    ['F5 discovered check through the tunnel', '7k/1p6/7B/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 18, 1235, null, 'h6g5', 'a1h6'],
-    ['F6 stepping into the tunnel', 'r7/7k/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', 4, 847, ['h7g6', 'h7g7', 'h7g8', 'a8a4'], 'a8a4', 'a8a1'],
-    ['F7 the chain', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-c6,c7-f2}', 17, 1555, null, 'a1f8', 'a1c8'],
-    ['F8 the cycle cap', '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}', 13, 1096, null, 'a1e5', 'a1a4'],
+    ['F1 the body', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 11, 1155, ['a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'], 'a1a4', 'a1h6'],
+    ['F2 plugged exit', '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 11, 1762, null, 'a1a4', 'a1h6'],
+    ['F3 plugged entry', '4k3/p7/8/8/n7/8/8/R3K3[] w - - 0 1 {a4-h5}', 11, 1676, null, 'a1a4', 'a1h6'],
+    ['F4 no check through the pair', '8/6bk/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', 13, 1581, ['g7a1', 'g7b2', 'g7c3', 'g7d4', 'g7e5', 'g7f6', 'g7f8', 'g7h6', 'g7h8', 'h7g6', 'h7g8', 'h7h6', 'h7h8'], 'h7h6', null],
+    ['F4b no pin through the pair', '7k/8/7b/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', 10, 1024, ['h6c1', 'h6d2', 'h6e3', 'h6f4', 'h6f8', 'h6g5', 'h6g7', 'h8g7', 'h8g8', 'h8h7'], 'h6g5', null],
+    ['F5 no discovered check through the pair', '7k/1p6/7B/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 18, 1562, null, 'h6g5', 'a1h6'],
+    ['F6 the body stops both rooks', 'r7/7k/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', 16, 2570, null, 'a8a4', 'a8a1'],
+    ['F7 two pairs, no chain', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-c6,c7-f2}', 10, 917, ['a1a2', 'a1a3', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'], 'e1f2', 'a1f8'],
+    ['F8 two pairs on one file', '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}', 10, 720, null, 'a1a3', 'a1a4'],
     ['F9a double step blocked', '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a3-d5}', 6, 321, null, 'a2a3', 'a2a4'],
     ['F9b double step onto the portal', '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a4-d5}', 7, 398, null, 'a2a4', null],
-    ['F10a cast gives check (v3: the link ply, casts alone)', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 45, 16214, null, 'O@h5', 'a1a2'],
-    ['F10b self-exposing cast refused (v3: 43 casts, the king and rook bound)', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 43, 33603, null, 'O@c3', 'O@h6'],
-    ['F11 twin to twin', '4k3/3p4/5n2/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}', 13, 1929, null, 'c3f6', null],
-    ['F11b the pass, g7 gone', '4k3/3p4/8/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}', 13, 1023, null, 'c3f6', 'c3g7'],
-    ['F12 swap the king', 'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}', 11, 3053, null, 'c1c3', 'c1c4'],
+    ['F10a the link ply, no check through the new pair', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 45, 17173, null, 'O@h5', 'a1a2'],
+    ['F10b every link legal (no self-exposure through a pair)', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}', 46, 28018, null, 'O@h6', 'b1b2'],
+    ['F11 twin to twin', '4k3/3p4/5n2/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}', 13, 1881, null, 'c3f6', null],
+    ['F11b the pass, g7 gone', '4k3/3p4/8/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}', 13, 981, null, 'c3f6', 'c3g7'],
+    ['F12 swap the king', 'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}', 11, 3064, null, 'c1c3', 'c1c4'],
     ['F13 capture through, swap', '4k3/3p4/5b2/8/8/2n5/3P4/2R1K3[] w - - 0 1 {c3-f6}', 9, 2190, null, 'c1c3', 'c1c4'],
-    ['F14 king refused onto an attacked exit', '4k3/p6r/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}', 21, 6268, null, null, 'd2d3'],
-    ['F14b king through onto a safe exit', '4k2r/p7/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}', 23, 6318, null, 'd2d3', null],
+    ['F14 king refused onto an attacked exit, c3 fine', '4k3/p6r/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}', 22, 5517, null, 'd2c3', 'd2d3'],
+    ['F14b king through onto a safe exit', '4k2r/p7/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}', 23, 6507, null, 'd2d3', null],
     ['F15 a pawn through a portal', '4k3/3p4/4P3/8/8/8/3P4/4K3[] w - - 0 1 {b3-e7}', 8, 369, null, 'e6e7', null],
     ['F16 no cast in check', '4k3/3p4/8/8/8/8/3P4/r3K3[OOoo] w - - 0 1', 2, 2070, null, null, 'O@c3'],
     ['F17 the casts', '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1', 52, 4248, null, 'O@c3', 'O@c1'],
+    ['B1 the shield', '4k3/8/n7/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 11, 1477, null, 'a1a4', 'a1a6'],
   ];
   for (const [name, fen, n1, n3, exact, yes, no] of F) {
     const d = await display(fen);
@@ -149,25 +150,25 @@ Stockfish().then(async (sf) => {
   // The boards after the key moves, and the checks
   const after = async (fen, mv) => board((await display(fen, [mv])).fen);
   ok('F1: a1a4 lands on h5', (await after(F[0][1], 'a1a4')) === '4k3/p7/8/7R/8/8/8/4K3');
-  ok('F1: a1h6 leaves the rook on h6', (await after(F[0][1], 'a1h6')) === '4k3/p7/7R/8/8/8/8/4K3');
-  ok('F1: a1h8 gives check through the tunnel', (await display(F[0][1], ['a1h8'])).checkers !== '');
+  ok('F1: a1a4 gives no check (nothing comes out of the twin at e8)', (await display(F[0][1], ['a1a4'])).checkers === '');
   ok('F2: a1a4 swaps with the knight', (await after(F[1][1], 'a1a4')) === '4k3/p7/8/7R/n7/8/8/4K3');
   ok('F3: a1a4 takes the knight and lands on h5', (await after(F[2][1], 'a1a4')) === '4k3/p7/8/7R/8/8/8/4K3');
-  ok('F4: black stands in check', (await display(F[3][1])).checkers !== '');
-  ok('F5: h6g5 discovers the check', (await display(F[5][1], ['h6g5'])).checkers !== '');
+  ok('F4: black does NOT stand in check (v2 read a check through the tunnel)', (await display(F[3][1])).checkers === '');
+  ok('F5: h6g5 discovers nothing; h6g7 is the bishop\'s own direct check', (await display(F[5][1], ['h6g5'])).checkers === '' && (await display(F[5][1], ['h6g7'])).checkers !== '');
   ok('F5: a1a4 gives no check', (await display(F[5][1], ['a1a4'])).checkers === '');
-  ok('F6: a8a4 puts the rook on h5', (await after(F[6][1], 'a8a4')) === '8/7k/8/7r/8/8/8/R3K3');
-  ok('F7: a1a3 lands on c6, a1c7 on f2, e1f2 on c7', (await after(F[7][1], 'a1a3')) === '4k3/p7/2R5/8/8/8/8/4K3' && (await after(F[7][1], 'a1c7')) === '4k3/p7/8/8/8/8/5R2/4K3' && (await after(F[7][1], 'e1f2')) === '4k3/p1K5/8/8/8/8/8/R7');
-  ok('F8: a1e5 puts the rook on a3', (await after(F[8][1], 'a1e5')) === '7k/p7/8/8/8/R7/8/4K3');
+  ok('F6: black does not stand in check; a8a4 puts the rook on h5', (await display(F[6][1])).checkers === '' && (await after(F[6][1], 'a8a4')) === '8/7k/8/7r/8/8/8/R3K3');
+  ok('F7: a1a3 lands on c6, e1f2 on c7', (await after(F[7][1], 'a1a3')) === '4k3/p7/2R5/8/8/8/8/4K3' && (await after(F[7][1], 'e1f2')) === '4k3/p1K5/8/8/8/8/8/R7');
+  ok('F8: a1a3 puts the rook on e5', (await after(F[8][1], 'a1a3')) === '7k/p7/8/4R3/8/8/8/4K3');
   const f9 = await display(F[10][1], ['a2a4']);
   ok('F9b: a2a4 lands on d5 with no en passant square', board(f9.fen) === '4k3/7p/8/3P4/8/8/8/4K3' && f9.fen.split(' ')[3] === '-', f9.fen);
-  ok('F10a: O@h5 gives check, black has the 3 king steps', (await display(F[11][1], ['O@h5'])).checkers !== '' && (await perft(F[11][1], 1, ['O@h5'])).total === 3);
+  ok('F10a: O@h5 gives no check, black plays on with 7 moves', (await display(F[11][1], ['O@h5'])).checkers === '' && (await perft(F[11][1], 1, ['O@h5'])).total === 7);
   ok('F12: c1c3 gives check, 8 evasions incl. d7e6', (await display(F[15][1], ['c1c3'])).checkers !== '' && (await perft(F[15][1], 1, ['c1c3'])).total === 8 && 'd7e6' in (await perft(F[15][1], 1, ['c1c3'])).moves);
   ok('F13: knight gone, rook on f6, bishop on c3', (await after(F[16][1], 'c1c3')) === '4k3/3p4/5R2/8/8/2b5/3P4/4K3');
+  ok('B1: a1a4 lands on h5 with the knight on a6 untouched', (await after(F[22][1], 'a1a4')) === '4k3/8/n7/7R/8/8/8/4K3');
   const cast = (await display(F[21][1], ['O@c3', 'e8e8', 'O@e5', 'O@f6', 'e1e1', 'O@a4'])).fen; // v3: half, the frozen pass, link — twice
   ok('F17: two one-turn casts close two pairs, hands empty', cast === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 4 {c3-e5,a4-f6}', cast);
 
-  // V3 THE ONE-TURN CAST (2026-09-19, portals-v3.patch): the frozen ply, the link ply, the fizzle
+  // V3 THE ONE-TURN CAST (2026-09-19, portals-cast.patch — portals-v3.patch until the tunnel's retirement): the frozen ply, the link ply, the fizzle
   const fenV3 = '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1';
   let pv3 = await perft(fenV3, 1, ['O@c4']);
   ok('V3: after the half the enemy is FROZEN — perft 1 is the pass e8e8 alone', pv3.total === 1 && 'e8e8' in pv3.moves, Object.keys(pv3.moves).join(','));
@@ -184,15 +185,17 @@ Stockfish().then(async (sf) => {
   send('position fen ' + fenV3 + ' moves O@c4 e8e8'); send('go depth 6'); outV3 = await until((l) => l.startsWith('bestmove'));
   ok('V3: the caster searches to a link', /^bestmove O@/.test(outV3.find((l) => l.startsWith('bestmove'))), outV3.find((l) => l.startsWith('bestmove')));
   send('setoption name UCI_Variant value portal6'); await ready();
-  const fenFz = '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1';
+  const fenFz = '4rk/******/******/******/1*****/KN4[OO] w - - 0 1'; // ONE castable square on the whole board
   pv3 = await perft(fenFz, 1);
-  ok('V3 fizzle: Ka2 and the two casts alone', same(Object.keys(pv3.moves), ['a1a2', 'O@a2', 'O@b3']), Object.keys(pv3.moves).join(','));
+  ok('V3 fizzle: Ka2 and the one cast alone', same(Object.keys(pv3.moves), ['a1a2', 'O@a2']), Object.keys(pv3.moves).join(','));
   pv3 = await perft(fenFz, 1, ['O@a2', 'f6f6']);
-  ok('V3 fizzle: no legal link (b3 would open the rook onto a1 through a2) — the fizzle a1a1 alone', same(Object.keys(pv3.moves), ['a1a1']), Object.keys(pv3.moves).join(','));
+  ok('V3 fizzle: no castable square is left — the fizzle a1a1 alone', same(Object.keys(pv3.moves), ['a1a1']), Object.keys(pv3.moves).join(','));
   dv3 = await display(fenFz, ['O@a2', 'f6f6', 'a1a1']);
-  ok('V3 fizzle: the half is gone, the other scroll kept, black to move', dv3.fen === '5k/******/*r****/*1****/1*****/KN4[O] b - - 2 2', dv3.fen);
+  ok('V3 fizzle: the half is gone, the other scroll kept, black to move', dv3.fen === '4rk/******/******/******/1*****/KN4[O] b - - 2 2', dv3.fen);
   pv3 = await perft(fenFz, 1, ['O@a2', 'f6f6', 'a1a1']);
-  ok('V3 fizzle: black plays on after two passes in a row — Ke6 and Rb3', same(Object.keys(pv3.moves), ['f6e6', 'b4b3']), Object.keys(pv3.moves).join(','));
+  ok('V3 fizzle: black plays on after two passes in a row — the rook along the sixth rank', same(Object.keys(pv3.moves), ['e6a6', 'e6b6', 'e6c6', 'e6d6']), Object.keys(pv3.moves).join(','));
+  pv3 = await perft('5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1', 1, ['O@a2', 'f6f6']);
+  ok('V3: v3\'s fizzle board links freely now — O@b3 is its one legal move (no tunnel to expose a1)', same(Object.keys(pv3.moves), ['O@b3']), Object.keys(pv3.moves).join(','));
   send('setoption name UCI_Variant value portal8'); await ready();
 
   // The strip rule at the root: a king with only scrolls has lost
@@ -200,13 +203,12 @@ Stockfish().then(async (sf) => {
   send('go depth 1'); let out = await until((l) => l.startsWith('bestmove'));
   ok('strip: king + scrolls -> bestmove (none), mate 0', out.some((l) => l === 'bestmove (none)') && out.some((l) => l.includes('score mate 0')), out.slice(-2).join(' | '));
 
-  // Search: a queen on a portal entry is taken through it; a rook aimed at an open tunnel finds the check through it
+  // Search: a queen standing on a portal entry is taken there, the captor landing on the twin
   send('position fen 4k3/3p4/8/8/8/2q5/3P4/2R1K3 w - - 0 1 {c3-f6}');
   send('go depth 10'); out = await until((l) => l.startsWith('bestmove'));
-  let bml = out.find((l) => l.startsWith('bestmove')); ok('search: bestmove c1c3 takes the queen through the portal', bml.startsWith('bestmove c1c3'), bml);
-  send('position fen 4k3/6q1/7p/8/8/8/8/R3K3[] w - - 0 1 {a3-g5}');
-  send('go depth 8'); out = await until((l) => l.startsWith('bestmove'));
-  bml = out.find((l) => l.startsWith('bestmove')); ok('search: the rook takes the queen through the tunnel (a1g7 via a3-g5)', bml.startsWith('bestmove a1g7'), bml);
+  let bml = out.find((l) => l.startsWith('bestmove')); ok('search: the queen on the portal square is taken — by the rook (c1c3) or the pawn (d2c3), the captor landing on f6', /^bestmove (c1c3|d2c3)/.test(bml), bml);
+  const taken = await display('4k3/3p4/8/8/8/2q5/3P4/2R1K3 w - - 0 1 {c3-f6}', [bml.split(' ')[1]]);
+  ok('search: after it the queen is gone and the captor stands on f6', !board(taken.fen).includes('q') && ['5R2', '5P2'].includes(board(taken.fen).split('/')[2]), taken.fen);
 
   // A duel-shaped 10x10 position with scrolls in hand and one pair: perft pinned, a production-limit search completes alive
   send('setoption name UCI_Variant value portal10');

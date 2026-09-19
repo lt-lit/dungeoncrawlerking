@@ -54,7 +54,7 @@
 
 import { isTerrain, splitFen, joinFen } from './fen.mjs';
 import { captureLoss, PIECE_VALUE } from './threat.mjs';
-import { walkRay, withPortals, portalTwins } from './rays.mjs'; // Portals v2: bodies and tunnels on the grid
+import { walkRay, withPortals, portalTwins } from './rays.mjs'; // the body rule: a linked portal square ends every line (a grid carries its pairs)
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
 const ORTHO = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -99,7 +99,7 @@ export function attacksFrom(grid, f, r, files, ranks) {
   };
   const dirs = sliderDirs(ch);
   if (dirs) {
-    // Portals v2 (rays.mjs): a linked portal square is a body, an empty pair a tunnel the line runs through
+    // The body rule (rays.mjs): a linked portal square ends the line, whatever stands on it
     for (const [df, dr] of dirs) walkRay(grid, files, ranks, f, r, df, dr, (nf, nr) => push(nf, nr));
   } else if (t === 'n') {
     for (const [df, dr] of KNIGHT_HOPS) push(f + df, r + dr);
@@ -203,7 +203,7 @@ export function threatLedger(grid, files, ranks) {
     if (!dirs) continue;
     const mine = sides[sideOf(s.ch)];
     for (const [df, dr] of dirs) {
-      // Portals v2: the line to the first piece and on to the second, through tunnels (rays.mjs); the squares walked are the line's
+      // The line to the first piece and on to the second (rays.mjs: a portal square is a body that ends it); the squares walked are the line's
       let first = null;
       let second = null;
       const path1 = [];
@@ -497,7 +497,7 @@ export function terrainReach(grid, files, ranks, white) {
     const t = p.ch.toLowerCase();
     const dirs = sliderDirs(p.ch);
     if (dirs) {
-      // Portals v2: the first thing on the line, through tunnels (rays.mjs)
+      // The first thing on the line (rays.mjs: a portal square is a body that ends it)
       for (const [df, dr] of dirs) walkRay(grid, files, ranks, p.f, p.r, df, dr, (f, r, occ) => {
         if (occ) {
           if (isTerrain(occ)) out.add(SQ(f, r));

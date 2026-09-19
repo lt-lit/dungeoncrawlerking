@@ -1,12 +1,13 @@
-// THE PORTAL GATE, ffish half — PORTALS v2 (engine/patches/portals.patch +
-// portals-v2.patch): a linked portal square is a BODY to every line, an EMPTY
-// PAIR is a TUNNEL for riders (through another pair too, each pair once per
-// line), landings step through and swap as before, a pawn's double step never
-// crosses a portal, a linking cast may give check through the new pair and
-// may not expose the caster. PORTALS v3 (portals-v3.patch, 2026-09-19): an
-// open half freezes the other side (its one move is a pass, SAN '--') and
-// binds its caster to the link; a pass fizzles a half no link can close.
-// All through the JS API the game uses.
+// THE PORTAL GATE, ffish half — PORTALS v4 (engine/patches/portals.patch +
+// portals-body.patch + portals-cast.patch): a linked portal square is a BODY
+// to every line and NOTHING runs through a pair (v2's tunnel, 2026-09-18, is
+// retired 2026-09-19 — the designer: "everything going thru a portal simply
+// lands on the exit portal now"); landings step through and swap as ever, a
+// pawn's double step never crosses a portal, a linking cast never gives check
+// and never exposes its caster (bodies only close lines). PORTALS v3 (the
+// one-turn cast): an open half freezes the other side (its one move is a pass,
+// SAN '--') and binds its caster to the link; a pass fizzles a half no link can
+// close. All through the JS API the game uses.
 //   FFISH_JS=/path/to/patched/ffish.js node engine/tests/test-portals-ffish.cjs
 // Every count below was derived by hand and confirmed by an independent
 // Python model of the rules (the forge's oracle) before the engine ran it;
@@ -75,29 +76,25 @@ function run(ffish) {
   const board = (f) => f.split(' ')[0].split('[')[0];
   const after = (fen, mv) => { const b = new ffish.Board(V, fen); b.push(mv); const f = b.fen(); b.delete(); return f; };
 
-  // F1 THE BODY AND THE TUNNEL: a1's line stops at a4 (a5..a7 gone), comes out of h5 and runs on to h8
+  // F1 THE BODY: a1's line ends at a4 (a5..a7 gone) and the move there is the landing on h5; nothing comes out of the twin
   let fen = '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
   ok('validateFen accepts the portal field', ffish.validateFen(fen, V) === 1, String(ffish.validateFen(fen, V)));
   let b = new ffish.Board(V, fen);
   ok('FEN round-trips with the portal field', b.fen() === fen, b.fen());
-  let want = ['a1a2', 'a1a3', 'a1a4', 'a1h6', 'a1h7', 'a1h8', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
-  ok('F1: exactly the 14 moves — the body stops the a-file, the tunnel opens h6..h8', same(moves(b), want), diff(moves(b), want));
-  ok("F1: SAN of the tunnel check is 'Rh8+'", b.sanMove('a1h8') === 'Rh8+', b.sanMove('a1h8'));
-  ok("F1: SAN of the landing is 'Ra4' (a quiet move)", b.sanMove('a1a4') === 'Ra4', b.sanMove('a1a4'));
+  let want = ['a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F1: exactly the 11 moves — the body ends the a-file at a4, and no h6..h8 out of the twin (v2 had 14)', same(moves(b), want), diff(moves(b), want));
+  ok("F1: SAN of the landing is 'Ra4' (a quiet move, no check: the rook on h5 does not see e8)", b.sanMove('a1a4') === 'Ra4', b.sanMove('a1a4'));
   b.push('a1a4');
   ok('F1: the landing puts the rook on h5', board(b.fen()) === '4k3/p7/8/7R/8/8/8/4K3', b.fen());
+  ok('F1: black is not in check after the landing', !b.isCheck());
   b.pop();
-  b.push('a1h6');
-  ok('F1: the tunnel move puts the rook on h6, both portals empty', board(b.fen()) === '4k3/p7/7R/8/8/8/8/4K3', b.fen());
-  b.pop();
-  ok('F1: two pops restore the start', b.fen() === fen, b.fen());
+  ok('F1: pop restores the start', b.fen() === fen, b.fen());
   b.delete();
 
-  // F2 THE PLUGGED EXIT: no tunnel; the landing swaps with the plug
+  // F2 THE PLUGGED EXIT: the landing swaps with the plug
   fen = '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
   b = new ffish.Board(V, fen);
-  want = ['a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
-  ok('F2: 11 moves, the tunnel closed by the knight on the exit', same(moves(b), want), diff(moves(b), want));
+  ok('F2: the same 11 moves with the twin plugged', same(moves(b), want), diff(moves(b), want));
   b.push('a1a4');
   ok('F2: the landing swaps: rook on h5, knight on a4', board(b.fen()) === '4k3/p7/8/7R/n7/8/8/4K3', b.fen());
   b.delete();
@@ -111,54 +108,50 @@ function run(ffish) {
   ok('F3: the knight is gone, the rook on h5', board(b.fen()) === '4k3/p7/8/7R/8/8/8/4K3', b.fen());
   b.delete();
 
-  // F4 CHECK THROUGH THE TUNNEL, and the pin through it
+  // F4 NO CHECK THROUGH A PAIR (v2's check through the tunnel, inverted)
   b = new ffish.Board(V, '8/6bk/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}');
-  ok('F4: black is in check through the tunnel', b.isCheck());
-  want = ['h7g6', 'h7g8', 'g7h6', 'g7a1'];
-  ok('F4: the 4 evasions — two king steps, the bishop blocks at h6 or takes the rook', same(moves(b), want), diff(moves(b), want));
+  ok('F4: black is NOT in check — the rook\'s line ends at the body a4', !b.isCheck());
+  want = ['g7a1', 'g7b2', 'g7c3', 'g7d4', 'g7e5', 'g7f6', 'g7f8', 'g7h6', 'g7h8', 'h7g6', 'h7g8', 'h7h6', 'h7h8'];
+  ok('F4: black has its 13 free moves (the king to h6 and h8 included)', same(moves(b), want), diff(moves(b), want));
   b.delete();
   b = new ffish.Board(V, '7k/8/7b/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}');
-  want = ['h8g8', 'h8g7', 'h8h7'];
-  ok('F4b: the bishop on h6 is pinned through the tunnel — 3 king moves only', same(moves(b), want), diff(moves(b), want));
+  ok('F4b: the bishop on h6 is NOT pinned (v2 pinned it through the tunnel) — 10 moves with h6g5', moves(b).length === 10 && moves(b).includes('h6g5'), moves(b).join(','));
   b.delete();
 
-  // F5 DISCOVERED CHECK THROUGH THE TUNNEL: every bishop move off h6 gives check
+  // F5 NO DISCOVERED CHECK THROUGH A PAIR: only the bishop's own direct check h6g7 reads as one
   fen = '7k/1p6/7B/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
   b = new ffish.Board(V, fen);
   const bish = ['h6g7', 'h6f8', 'h6g5', 'h6f4', 'h6e3', 'h6d2', 'h6c1'];
   want = [...bish, 'a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
-  ok('F5: 18 moves, the tunnel closed by the bishop', same(moves(b), want), diff(moves(b), want));
-  ok('F5: every bishop move discovers the check (SAN +)', bish.every((m) => /\+$/.test(b.sanMove(m))), bish.map((m) => b.sanMove(m)).join(','));
+  ok('F5: 18 moves', same(moves(b), want), diff(moves(b), want));
+  ok('F5: only h6g7 checks (a direct check); no bishop move discovers one through the pair', same(bish.filter((m) => /\+$/.test(b.sanMove(m))), ['h6g7']), bish.map((m) => b.sanMove(m)).join(','));
   ok('F5: the landing under the bishop gives no check', !/\+$/.test(b.sanMove('a1a4')), b.sanMove('a1a4'));
   b.delete();
 
-  // F6 STEPPING INTO THE TUNNEL BLOCKS; the body stops the rook's own line short of a1
+  // F6 THE BODY STOPS BOTH ROOKS: no check, black's rook lands on h5 from a4, a8a1 is no move
   fen = 'r7/7k/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}';
   b = new ffish.Board(V, fen);
-  ok('F6: black in check', b.isCheck());
-  want = ['h7g6', 'h7g7', 'h7g8', 'a8a4'];
-  ok('F6: 4 evasions — a8a4 plugs the exit from inside; a8a1 is no move', same(moves(b), want), diff(moves(b), want));
+  ok('F6: black is not in check', !b.isCheck());
+  ok('F6: 16 moves — a8a4 the landing, a8a1..a8a3 never (the body at a4)', moves(b).length === 16 && moves(b).includes('a8a4') && !moves(b).includes('a8a1'), moves(b).join(','));
   b.push('a8a4');
   ok('F6: the rook stands on h5', board(b.fen()) === '8/7k/8/7r/8/8/8/R3K3', b.fen());
   b.delete();
 
-  // F7 THE CHAIN through two pairs
+  // F7 TWO PAIRS: each a body and a landing, never a chain
   fen = '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-c6,c7-f2}';
   b = new ffish.Board(V, fen);
-  want = ['a1a2', 'a1a3', 'a1c7', 'a1f3', 'a1f4', 'a1f5', 'a1f6', 'a1f7', 'a1f8', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
-  ok('F7: 17 moves — c8 never reached, f3..f8 through both pairs', same(moves(b), want), diff(moves(b), want));
-  ok("F7: SAN 'Rf8+' through two tunnels", b.sanMove('a1f8') === 'Rf8+', b.sanMove('a1f8'));
+  want = ['a1a2', 'a1a3', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F7: 10 moves — a1a3 the landing, nothing through to c7 or f3..f8 (v2 had 17)', same(moves(b), want), diff(moves(b), want));
   ok('F7: a1a3 lands on c6', board(after(fen, 'a1a3')) === '4k3/p7/2R5/8/8/8/8/4K3');
-  ok('F7: a1c7 (stopping in the second tunnel) lands on f2', board(after(fen, 'a1c7')) === '4k3/p7/8/8/8/8/5R2/4K3');
   ok('F7: the king steps into the second pair and lands on c7', board(after(fen, 'e1f2')) === '4k3/p1K5/8/8/8/8/8/R7');
   b.delete();
 
-  // F8 EACH PAIR ONCE PER LINE: the loop stops at the used pair
+  // F8 TWO PAIRS ON ONE FILE: the first is the body, the second is never reached
   fen = '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}';
   b = new ffish.Board(V, fen);
-  want = ['a1a2', 'a1a3', 'a1e6', 'a1e4', 'a1e5', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
-  ok('F8: 13 moves — a4..a8 and e7/e8 never reached', same(moves(b), want), diff(moves(b), want));
-  ok('F8: landing on the used pair (a1e5) puts the rook on a3', board(after(fen, 'a1e5')) === '7k/p7/8/8/8/R7/8/4K3');
+  want = ['a1a2', 'a1a3', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F8: 10 moves — a4..a8, e4 and e6 never reached', same(moves(b), want), diff(moves(b), want));
+  ok('F8: a1a3 puts the rook on e5', board(after(fen, 'a1a3')) === '7k/p7/8/4R3/8/8/8/4K3');
   b.delete();
 
   // F9 THE PAWN'S DOUBLE STEP: a portal on the first square ends it; on the second it lands and steps through
@@ -173,20 +166,28 @@ function run(ffish) {
   ok('F9b: the pawn lands on d5 and no en passant square is set', board(b.fen()) === '4k3/7p/8/3P4/8/8/8/4K3' && b.fen().split(' ')[3] === '-', b.fen());
   b.delete();
 
-  // F10 THE CASTS: a linking cast gives check through the new pair; one that exposes the caster is illegal
+  // F10 THE CASTS: a linking cast never gives check (v2 gave one through the new tunnel) and never exposes its caster
   fen = '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}';
   b = new ffish.Board(V, fen);
   ok('F10a: O@h5 is a legal cast', moves(b).includes('O@h5'));
-  ok("F10a: SAN 'O@h5+' — the cast gives check through the new tunnel", b.sanMove('O@h5') === 'O@h5+', b.sanMove('O@h5'));
+  ok("F10a: SAN 'O@h5' — no check through the new pair", b.sanMove('O@h5') === 'O@h5', b.sanMove('O@h5'));
   const checkCasts = moves(b).filter((m) => m.startsWith('O@') && /\+$/.test(b.sanMove(m)));
-  ok('F10a: exactly the h2..h6 casts give check', same(checkCasts, ['O@h2', 'O@h3', 'O@h4', 'O@h5', 'O@h6']), checkCasts.join(','));
+  ok('F10a: no cast gives check', checkCasts.length === 0, checkCasts.join(','));
+  ok('F10a: 45 linking casts and nothing else (the caster is bound to the link)', moves(b).length === 45 && moves(b).every((m) => m.startsWith('O@')), String(moves(b).length));
   b.push('O@h5');
-  ok('F10a: black is in check after the cast, with the 3 king steps', b.isCheck() && same(moves(b), ['h7g6', 'h7g7', 'h7g8']), moves(b).join(','));
+  ok('F10a: black is not in check after the link and has its 7 moves', !b.isCheck() && same(moves(b), ['b7b5', 'b7b6', 'h7g6', 'h7g7', 'h7g8', 'h7h6', 'h7h8']), moves(b).join(','));
   b.delete();
   b = new ffish.Board(V, 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}');
   const m10 = moves(b);
-  ok('F10b: the casts that would open a line onto the caster\'s king are refused (h5, h6, h7), c3 is offered', !m10.includes('O@h5') && !m10.includes('O@h6') && !m10.includes('O@h7') && m10.includes('O@c3'), m10.filter((m) => m.startsWith('O@h')).join(','));
-  ok('F10b: 43 legal moves — the linking casts alone (v3 binds the caster to the link; v2 had 62 with the king and rook moves)', m10.length === 43, String(m10.length));
+  ok('F10b: every castable square is a legal link — h5, h6, h7 included (v2 refused them as self-exposing through the tunnel)', m10.includes('O@h5') && m10.includes('O@h6') && m10.includes('O@h7') && m10.includes('O@c3'), m10.filter((m) => m.startsWith('O@h')).join(','));
+  ok('F10b: 46 legal moves — the linking casts alone', m10.length === 46 && m10.every((m) => m.startsWith('O@')), String(m10.length));
+  b.delete();
+
+  // B THE SHIELD: a piece beyond a portal square on a rider's line is out of its reach
+  b = new ffish.Board(V, '4k3/8/n7/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}');
+  ok('B1: the knight on a6 is shielded by the body at a4 — a1a6 is no move, 11 moves', moves(b).length === 11 && !moves(b).includes('a1a6') && moves(b).includes('a1a4'), moves(b).join(','));
+  b.push('a1a4');
+  ok('B1: a1a4 lands on h5 with the knight untouched', board(b.fen()) === '4k3/8/n7/7R/8/8/8/4K3', b.fen());
   b.delete();
 
   // The landings as before: twin to twin, the swap of a king, the capture through
@@ -219,7 +220,7 @@ function run(ffish) {
   ok('F13: pop restores all three squares', b.fen() === fen, b.fen());
   b.delete();
   b = new ffish.Board(V, '4k3/p6r/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}');
-  ok('F14: 21 moves — the king may not step through onto g7 (attacked), nor to c3 (h7 attacks it through g7-d3)', moves(b).length === 21 && !moves(b).includes('d2d3') && !moves(b).includes('d2c3'), moves(b).join(','));
+  ok('F14: 22 moves — the king may not step through onto g7 (attacked by the rook h7), but d2c3 is fine (nothing runs through g7-d3; v2 refused it)', moves(b).length === 22 && !moves(b).includes('d2d3') && moves(b).includes('d2c3'), moves(b).join(','));
   b.delete();
   b = new ffish.Board(V, '4k2r/p7/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}');
   ok('F14b: 23 moves with d2d3 onto a safe exit', moves(b).length === 23 && moves(b).includes('d2d3'), String(moves(b).length));
@@ -244,7 +245,7 @@ function run(ffish) {
   ok('F17: both pairs closed, hands empty, six plies', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 4 {c3-e5,a4-f6}', b.fen());
   b.delete();
 
-  // V3 THE ONE-TURN CAST (2026-09-19, portals-v3.patch): the frozen ply, the link ply, the fizzle, the pass's SAN
+  // V3 THE ONE-TURN CAST (2026-09-19, portals-cast.patch — portals-v3.patch until the tunnel's retirement): the frozen ply, the link ply, the fizzle, the pass's SAN
   b = new ffish.Board(V, '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1');
   b.push('O@c4');
   ok('V3: after the half the enemy is FROZEN — its one legal move is the pass', moves(b).join(',') === 'e8e8', moves(b).join(','));
@@ -260,16 +261,22 @@ function run(ffish) {
   ok('V3: pop restores the frozen ply', moves(b).join(',') === 'e8e8' && b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', b.fen());
   b.delete();
   const V6 = 'portal6';
-  b = new ffish.Board(V6, '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1');
-  ok('V3 fizzle: Ka2 and the two casts alone (the knight is walled in)', same(moves(b), ['a1a2', 'O@a2', 'O@b3']), moves(b).join(','));
+  // the fizzle board: ONE castable square on the whole board, so after the half nothing is left to link
+  b = new ffish.Board(V6, '4rk/******/******/******/1*****/KN4[OO] w - - 0 1');
+  ok('V3 fizzle: Ka2 and the one cast alone (the knight is walled in)', same(moves(b), ['a1a2', 'O@a2']), moves(b).join(','));
   b.push('O@a2');
   ok('V3 fizzle: black frozen — f6f6', moves(b).join(',') === 'f6f6', moves(b).join(','));
   b.push('f6f6');
-  ok('V3 fizzle: no legal link (b3 would open the rook onto a1 through a2) — the fizzle a1a1 alone', moves(b).join(',') === 'a1a1', moves(b).join(','));
+  ok('V3 fizzle: no castable square is left — the fizzle a1a1 alone', moves(b).join(',') === 'a1a1', moves(b).join(','));
   ok("V3 fizzle: its SAN is '--' too", b.sanMove('a1a1') === '--', b.sanMove('a1a1'));
   b.push('a1a1');
-  ok('V3 fizzle: the half is gone, the other scroll kept, black to move with Ke6 and Rb3', b.fen() === '5k/******/*r****/*1****/1*****/KN4[O] b - - 2 2' && same(moves(b), ['f6e6', 'b4b3']), `${b.fen()} ${moves(b).join(',')}`);
+  ok('V3 fizzle: the half is gone, the other scroll kept, black to move with its rook along the sixth rank', b.fen() === '4rk/******/******/******/1*****/KN4[O] b - - 2 2' && same(moves(b), ['e6a6', 'e6b6', 'e6c6', 'e6d6']), `${b.fen()} ${moves(b).join(',')}`);
   ok('V3 fizzle: two passes in a row end nothing', !b.isGameOver() && !b.isGameOver(true), `${b.isGameOver()} ${b.isGameOver(true)}`);
+  b.delete();
+  // v3's fizzle board links freely now: b3 exposed the king only through a tunnel
+  b = new ffish.Board(V6, '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1');
+  b.push('O@a2'); b.push('f6f6');
+  ok('V3: the old fizzle board has its one legal link O@b3 (no tunnel to expose a1)', moves(b).join(',') === 'O@b3', moves(b).join(','));
   b.delete();
   ok('validateFen rejects a portal on a king row', ffish.validateFen('4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 1 {a1-c4}', V) < 0);
   ok('validateFen rejects a square used twice', ffish.validateFen('4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 1 {c3-c4,c4-d5}', V) < 0);

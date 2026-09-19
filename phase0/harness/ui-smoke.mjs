@@ -1613,14 +1613,15 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs8.length === 0, `no page errors with the portal spell${errs8.length ? ` — ${errs8.join(' | ')}` : ''}`);
   await page8.close();
 }
-// --- PORTALS v2 ON THE PAGE (2026-09-18; brief §4.7; engine/patches/
-// portals-v2.patch): a rider's line through an empty pair is drawn in PIECES
-// — the hint or last-move arrow goes into the entry and comes out of the
-// exit (canvas-board `via`), the slide follows the same legs with a cut, and
-// an EMPTY EXIT lights as the alias of the landing on its entry (a tap there
-// plays the landing). The arrows and the slide are driven straight through
-// the board (a live duel cannot be forced into a tunnel); the alias is read
-// off the live duel when a landing on the player's own pair is on offer.
+// --- PORTALS ON THE PAGE (v2 2026-09-18, the body rule alone since v4
+// 2026-09-19; brief §4.7; engine/patches/portals-body.patch): a landing on a
+// portal square is drawn as a plain move to the ENTRY — the arrow ends there,
+// the slide runs there, the commit paints the piece on the twin (no `via`
+// pieces, no legs: nothing runs through a pair any more) — and an EMPTY EXIT
+// lights as the alias of the landing on its entry (a tap there plays the
+// landing). The arrow and the slide are driven straight through the board;
+// the alias is read off the live duel when a landing on the player's own pair
+// is on offer.
 {
   const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
@@ -1639,7 +1640,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const squares = [...B.cells.keys()];
     const ranks = B.ranks;
     const sqAt = (f, r) => squares.find((s) => s.charCodeAt(0) - 97 === f && parseInt(s.slice(1), 10) === r) ?? null;
-    // The painter: a straight arrow a1→a4 leaves the f-file untouched; the same move `via` a4→f5 paints a second piece from f5 to f7
+    // The painter: a straight arrow a1→a4 paints on its destination and leaves the f-file untouched (a landing's arrow ends on the entry)
     const count = (sq, rgb) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] === rgb[0] && px[i + 1] === rgb[1] && px[i + 2] === rgb[2] && px[i + 3] === 255) n++; return n; };
     const GOLD = [0xf2, 0xc1, 0x4e]; // ARROW_COLOURS['hint-1'] (pixelarrow.mjs), painted at full opacity
     const from = sqAt(0, 1), entry = sqAt(0, 4), exit = sqAt(5, 5), mid = sqAt(5, 6), to = sqAt(5, 7);
@@ -1648,15 +1649,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     B.setArrows([{ from, to: entry, strength: 1, kind: 'hint', rank: 1 }]);
     out.plainEntry = count(entry, GOLD);
     out.plainMid = count(mid, GOLD);
-    B.setArrows([{ from, to, via: [[entry, exit]], strength: 1, kind: 'hint', rank: 1 }]);
-    out.viaEntry = count(entry, GOLD);
-    out.viaMid = count(mid, GOLD);
-    out.viaTo = count(to, GOLD);
-    // the squares between the entry and the exit carry no shaft (the cut)
-    const between = sqAt(2, 5);
-    out.viaBetween = count(between, GOLD);
+    out.plainExit = count(exit, GOLD);
     B.setArrows([]);
-    // The slide in legs resolves and leaves nothing hidden
+    // A plain slide to the entry resolves and leaves nothing hidden (the commit paints the piece on the twin)
     const fen = () => K.app.duel.fen();
     const field = () => fen().match(/\{([^}]*)\}/)?.[1] ?? '';
     const at = (sq) => { const rows = fen().split(' ')[0].split('[')[0].split('/'); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); const row = rows[rows.length - r]; let x = 0; for (const ch of row) { if (/\d/.test(ch)) x += +ch; else { if (x === f) return ch; x++; } } return '.'; };
@@ -1664,7 +1659,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.letterSq = letterSq ?? null;
     if (letterSq) {
       const t0 = performance.now();
-      await B.animateSlide(letterSq, to, { ms: 120, path: [letterSq, entry, exit, to] });
+      await B.animateSlide(letterSq, entry, { ms: 120 });
       out.slideMs = Math.round(performance.now() - t0);
       out.slideClean = !B.hidden.has(letterSq);
     }
@@ -1725,17 +1720,16 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.state = K.app.duel.state;
     return out;
   });
-  expect(v2.plainEntry > 0 && v2.plainMid === 0, `a straight arrow paints on its destination (${v2.plainEntry} px on ${v2.squares[1]}) and nothing on ${v2.squares[3]}`);
-  expect(v2.viaEntry > 0 && v2.viaMid > 0 && v2.viaTo > 0 && v2.viaBetween === 0, `an arrow \`via\` ${v2.squares[1]}→${v2.squares[2]} paints its two pieces — the entry (${v2.viaEntry} px), the exit's leg (${v2.viaMid} px on ${v2.squares[3]}, ${v2.viaTo} on ${v2.squares[4]}) — and nothing on the cut (${v2.viaBetween} px)`);
-  if (v2.letterSq) expect(v2.slideMs >= 100 && v2.slideClean, `a slide along legs [${v2.letterSq} ${v2.squares[1]} | ${v2.squares[2]} ${v2.squares[4]}] resolves (${v2.slideMs} ms) and hides nothing after`);
+  expect(v2.plainEntry > 0 && v2.plainMid === 0 && v2.plainExit === 0, `a landing's arrow paints on the entry (${v2.plainEntry} px on ${v2.squares[1]}) and nothing on the twin ${v2.squares[2]} or beyond it (${v2.plainExit} / ${v2.plainMid} px)`);
+  if (v2.letterSq) expect(v2.slideMs >= 100 && v2.slideClean, `a slide ${v2.letterSq}→${v2.squares[1]} (a landing runs to the entry) resolves (${v2.slideMs} ms) and hides nothing after`);
   if (v2.alias) {
     expect(v2.alias.entryLit && v2.alias.twinLit, `a landing on the player's portal at ${v2.alias.entry} lights its empty twin ${v2.alias.twin} as the alias`);
     expect(v2.alias.played === `${v2.alias.from}${v2.alias.entry}` || (v2.alias.direct && v2.alias.played === `${v2.alias.from}${v2.alias.twin}`), `a tap on the alias plays the landing on the entry (${v2.alias.played})`);
     expect(/[A-Z]/.test(v2.alias.landed ?? '') && v2.alias.entryAfter === '.' && v2.alias.fromAfter === '.', `the player's ply left the piece on ${v2.alias.twin} (${v2.alias.landed}), the entry ${v2.alias.entry} and ${v2.alias.from} empty (the reply was ${v2.alias.reply})`);
     if (!v2.alias.direct) expect(v2.alias.log.some((t) => t.includes(`through the portal to ${v2.alias.twin}`)), `the log says where it came out (${v2.alias.log.join(' | ')})`);
-    else expect(true, `${v2.alias.from}→${v2.alias.twin} was a move of its own (a tunnel exit or a plain line), so the tap played that`);
+    else expect(true, `${v2.alias.from}→${v2.alias.twin} was a move of its own (a plain line), so the tap played that`);
   } else expect(true, `the alias plan was spoiled before the landing (${JSON.stringify(v2.pairs)}, first ${v2.first}, ${v2.state}) — the arrow and the slide above stand`);
-  expect(errs9.length === 0, `no page errors with portals v2 on the page${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
+  expect(errs9.length === 0, `no page errors with the portal pictures on the page${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
   await page9.close();
 }
 // --- THE SLEDGEHAMMER (2026-09-17; brief §4.8; engine/patches/wall-kinds.patch

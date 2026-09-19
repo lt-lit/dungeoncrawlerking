@@ -1,0 +1,263 @@
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index 2b8bc4ee..a58e3997 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -167,10 +167,15 @@ namespace {
+ 
+     target = Type == EVASIONS ? target : AllSquares;
+ 
++    // The body rule (portals, brief 4.7): a linked portal square is a body -
++    // a double or triple step never crosses one (the pawn may still land on
++    // it: the ordinary portal move)
++    const Bitboard passable = movable & ~pos.portal_squares();
++
+     // Define single and double push, left and right capture, as well as respective promotion moves
+     Bitboard b1 = shift<Up>(pawns) & movable & target;
+-    Bitboard b2 = shift<Up>(shift<Up>(pawns & doubleStepRegion) & movable) & movable & target;
+-    Bitboard b3 = shift<Up>(shift<Up>(shift<Up>(pawns & tripleStepRegion) & movable) & movable) & movable & target;
++    Bitboard b2 = shift<Up>(shift<Up>(pawns & doubleStepRegion) & passable) & movable & target;
++    Bitboard b3 = shift<Up>(shift<Up>(shift<Up>(pawns & tripleStepRegion) & passable) & passable) & movable & target;
+     Bitboard brc = shift<UpRight>(pawns) & capturable & target;
+     Bitboard blc = shift<UpLeft >(pawns) & capturable & target;
+ 
+diff --git a/src/position.cpp b/src/position.cpp
+index 2101630a..ae78e31c 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -653,7 +653,7 @@ void Position::set_check_info(StateInfo* si) const {
+   {
+       PieceType pt = pop_lsb(ps);
+       PieceType movePt = pt == KING ? king_type() : pt;
+-      si->checkSquares[pt] = ksq != SQ_NONE ? attacks_bb(~sideToMove, movePt, ksq, pieces()) : Bitboard(0);
++      si->checkSquares[pt] = ksq != SQ_NONE ? attacks_bb(~sideToMove, movePt, ksq, pieces() | si->portalSquares) : Bitboard(0); // the body rule: through the portal squares
+       // Collect special piece types that require slower check and evasion detection
+       if (AttackRiderTypes[movePt] & NON_SLIDING_RIDERS)
+           si->nonSlidingRiders |= pieces(pt);
+@@ -985,7 +985,7 @@ Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners
+                   }
+               }
+               else
+-                  snipers |= b & ~attacks_bb(~c, pt, s, pieces());
++                  snipers |= b & ~attacks_bb(~c, pt, s, pieces() | st->portalSquares);
+               if (AttackRiderTypes[pt] & ~HOPPING_RIDERS)
+                   slidingSnipers |= snipers & pieces(pt);
+           }
+@@ -1005,7 +1005,7 @@ Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners
+           }
+       }
+   }
+-  Bitboard occupancy = pieces() ^ slidingSnipers;
++  Bitboard occupancy = (pieces() | st->portalSquares) ^ slidingSnipers; // the body rule: portal squares are bodies
+ 
+   while (snipers)
+   {
+@@ -1013,6 +1013,11 @@ Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners
+     bool isHopper = AttackRiderTypes[type_of(piece_on(sniperSq))] & HOPPING_RIDERS;
+     Bitboard b = between_bb(s, sniperSq, type_of(piece_on(sniperSq))) & (isHopper ? (pieces() ^ sniperSq) : occupancy);
+ 
++    // The body rule: an empty portal square on the line is a body that never
++    // moves - nothing is pinned by it and nothing is discovered past it
++    if (b & st->portalSquares & ~pieces())
++        continue;
++
+     if (b && (!more_than_one(b) || (isHopper && popcount(b) == 2)))
+     {
+         // Janggi cannons block each other
+@@ -1032,6 +1037,11 @@ Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners
+ 
+ Bitboard Position::attackers_to(Square s, Bitboard occupied, Color c, Bitboard janggiCannons) const {
+ 
++  // The body rule (portals, brief 4.7): a linked portal square ends every
++  // line, whatever stands on it. `occupied` is a piece occupancy, real or
++  // virtual; the bodies are added here, so every caller reads the rule.
++  occupied |= st->portalSquares;
++
+   // Use a faster version for variants with moderate rule variations
+   if (var->fastAttacks)
+   {
+@@ -1328,7 +1338,9 @@ bool Position::legal(Move m) const {
+   if (type_of(m) == PORTAL)
+       return !portal_attacks_king(m, us);
+ 
+-  // A portal scroll cast never answers a check and never lands on a portal square
++  // A portal scroll cast never answers a check and never lands on a portal
++  // square (a linking cast adds two bodies, which can only close lines: it
++  // never exposes the caster's own king)
+   if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
+       return !checkers() && !(portal_taken() & to);
+ 
+@@ -1504,10 +1516,12 @@ bool Position::pseudo_legal(const Move m) const {
+           && !((from + pawn_push(us) == to) && !(pieces() & to)) // Not a single push
+           && !(   (from + 2 * pawn_push(us) == to)               // Not a double push
+                && (double_step_region(us) & from)
+-               && !(pieces() & (to | (to - pawn_push(us)))))
++               && !(pieces() & (to | (to - pawn_push(us))))
++               && !(st->portalSquares & (to - pawn_push(us))))   // the body rule: a portal on the first square ends the double step
+           && !(   (from + 3 * pawn_push(us) == to)               // Not a triple push
+                && (triple_step_region(us) & from)
+-               && !(pieces() & (to | (to - pawn_push(us)) | (to - 2 * pawn_push(us))))))
++               && !(pieces() & (to | (to - pawn_push(us)) | (to - 2 * pawn_push(us))))
++               && !(st->portalSquares & ((to - pawn_push(us)) | (to - 2 * pawn_push(us))))))
+           return false;
+   }
+   else if (!((capture(m) ? attacks_from(us, type_of(pc), from) : moves_from(us, type_of(pc), from)) & to))
+@@ -1566,7 +1580,8 @@ bool Position::gives_check(Move m) const {
+   if (type_of(m) == HAMMER)
+       return false;
+ 
+-  // A portal scroll cast moves nothing on the board
++  // A portal scroll cast moves nothing on the board (a linking cast adds two
++  // bodies, which can only close lines)
+   if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
+       return false;
+ 
+@@ -1577,6 +1592,12 @@ bool Position::gives_check(Move m) const {
+   else if (janggiCannons & to)
+       janggiCannons ^= to;
+ 
++  // The body rule: a linked portal square ends every line, so a plain direct
++  // check reads off the check squares (computed through the bodies) and the
++  // hopping and asymmetrical riders are judged through them here; the
++  // discovered checks below run attackers_to, which adds the bodies itself.
++  const Bitboard bodies = occupied | st->portalSquares;
++
+   // Is there a direct check?
+   if (type_of(m) != PROMOTION && type_of(m) != PIECE_PROMOTION && type_of(m) != PIECE_DEMOTION && type_of(m) != CASTLING
+       && !((var->petrifyOnCaptureTypes & type_of(moved_piece(m))) && capture(m)))
+@@ -1589,7 +1610,7 @@ bool Position::gives_check(Move m) const {
+       }
+       else if (AttackRiderTypes[pt] & (HOPPING_RIDERS | ASYMMETRICAL_RIDERS))
+       {
+-          if (attacks_bb(sideToMove, pt, to, occupied) & square<KING>(~sideToMove))
++          if (attacks_bb(sideToMove, pt, to, bodies) & square<KING>(~sideToMove))
+               return true;
+       }
+       else if (check_squares(pt) & to)
+@@ -1631,13 +1652,13 @@ bool Position::gives_check(Move m) const {
+       return false;
+ 
+   case PROMOTION:
+-      return attacks_bb(sideToMove, promotion_type(m), to, pieces() ^ from) & square<KING>(~sideToMove);
++      return attacks_bb(sideToMove, promotion_type(m), to, (pieces() ^ from) | st->portalSquares) & square<KING>(~sideToMove);
+ 
+   case PIECE_PROMOTION:
+-      return attacks_bb(sideToMove, promoted_piece_type(type_of(moved_piece(m))), to, pieces() ^ from) & square<KING>(~sideToMove);
++      return attacks_bb(sideToMove, promoted_piece_type(type_of(moved_piece(m))), to, (pieces() ^ from) | st->portalSquares) & square<KING>(~sideToMove);
+ 
+   case PIECE_DEMOTION:
+-      return attacks_bb(sideToMove, type_of(unpromoted_piece_on(from)), to, pieces() ^ from) & square<KING>(~sideToMove);
++      return attacks_bb(sideToMove, type_of(unpromoted_piece_on(from)), to, (pieces() ^ from) | st->portalSquares) & square<KING>(~sideToMove);
+ 
+   // En passant capture with check? We have already handled the case
+   // of direct checks and ordinary discovered check, so the only case we
+@@ -2819,7 +2840,7 @@ bool Position::see_ge(Move m, Value threshold) const {
+               break;
+ 
+           occupied ^= least_significant_square_bb(bb);
+-          attackers |= attacks_bb<BISHOP>(to, occupied) & pieces(BISHOP, QUEEN);
++          attackers |= attacks_bb<BISHOP>(to, occupied | st->portalSquares) & pieces(BISHOP, QUEEN);
+       }
+ 
+       else if ((bb = stmAttackers & pieces(KNIGHT)))
+@@ -2836,7 +2857,7 @@ bool Position::see_ge(Move m, Value threshold) const {
+               break;
+ 
+           occupied ^= least_significant_square_bb(bb);
+-          attackers |= attacks_bb<BISHOP>(to, occupied) & pieces(BISHOP, QUEEN);
++          attackers |= attacks_bb<BISHOP>(to, occupied | st->portalSquares) & pieces(BISHOP, QUEEN);
+       }
+ 
+       else if ((bb = stmAttackers & pieces(ROOK)))
+@@ -2845,7 +2866,7 @@ bool Position::see_ge(Move m, Value threshold) const {
+               break;
+ 
+           occupied ^= least_significant_square_bb(bb);
+-          attackers |= attacks_bb<ROOK>(to, occupied) & pieces(ROOK, QUEEN);
++          attackers |= attacks_bb<ROOK>(to, occupied | st->portalSquares) & pieces(ROOK, QUEEN);
+       }
+ 
+       else if ((bb = stmAttackers & pieces(QUEEN)))
+@@ -2854,8 +2875,8 @@ bool Position::see_ge(Move m, Value threshold) const {
+               break;
+ 
+           occupied ^= least_significant_square_bb(bb);
+-          attackers |=  (attacks_bb<BISHOP>(to, occupied) & pieces(BISHOP, QUEEN))
+-                      | (attacks_bb<ROOK  >(to, occupied) & pieces(ROOK  , QUEEN));
++          attackers |=  (attacks_bb<BISHOP>(to, occupied | st->portalSquares) & pieces(BISHOP, QUEEN))
++                      | (attacks_bb<ROOK  >(to, occupied | st->portalSquares) & pieces(ROOK  , QUEEN));
+       }
+ 
+       // fairy pieces
+@@ -3542,7 +3563,10 @@ void Position::flip() {
+ /// gone, the mover stands on the twin, and whatever stood on the twin stands on
+ /// the target. Used by legal() for the mover's own king and by gives_check() for
+ /// the enemy's. Only the three relocated squares are virtual; every other piece
+-/// attacks from where it is, through the new occupancy.
++/// attacks from where it is, through the new occupancy - and through the
++/// bodies (the body rule, brief 4.7: a linked portal square ends every line;
++/// attackers_to adds them, the two relocated attackers are judged through them
++/// here).
+ 
+ bool Position::portal_attacks_king(Move m, Color kingColor) const {
+ 
+@@ -3572,16 +3596,18 @@ bool Position::portal_attacks_king(Move m, Color kingColor) const {
+   if (swapped)
+       occupied |= p;
+ 
++  const Bitboard bodies = occupied | st->portalSquares;
++
+   // Pieces that stay where they are, through the new occupancy
+   if (attackers_to(ksq, occupied, att) & ~(square_bb(from) | q | p))
+       return true;
+ 
+   // The mover, from the twin square
+-  if (color_of(mover) == att && (attacks_bb(att, type_of(mover), q, occupied) & ksq))
++  if (color_of(mover) == att && (attacks_bb(att, type_of(mover), q, bodies) & ksq))
+       return true;
+ 
+   // The swapped piece, from the target square
+-  if (swapped && color_of(swapped) == att && (attacks_bb(att, type_of(swapped), p, occupied) & ksq))
++  if (swapped && color_of(swapped) == att && (attacks_bb(att, type_of(swapped), p, bodies) & ksq))
+       return true;
+ 
+   return false;
+diff --git a/src/position.h b/src/position.h
+index 8051fd82..48aa347b 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -1349,11 +1349,13 @@ inline Square Position::castling_rook_square(CastlingRights cr) const {
+ }
+ 
+ inline Bitboard Position::attacks_from(Color c, PieceType pt, Square s) const {
++  // The body rule (portals, brief 4.7): a linked portal square ends every line
++  const Bitboard occupied = byTypeBB[ALL_PIECES] | st->portalSquares;
+   if (var->fastAttacks || var->fastAttacks2)
+-      return attacks_bb(c, pt, s, byTypeBB[ALL_PIECES]) & board_bb();
++      return attacks_bb(c, pt, s, occupied) & board_bb();
+ 
+   PieceType movePt = pt == KING ? king_type() : pt;
+-  Bitboard b = attacks_bb(c, movePt, s, byTypeBB[ALL_PIECES]);
++  Bitboard b = attacks_bb(c, movePt, s, occupied);
+   // Xiangqi soldier
+   if (pt == SOLDIER && !(promoted_soldiers(c) & s))
+       b &= file_bb(file_of(s));
+@@ -1379,14 +1381,16 @@ inline Bitboard Position::attacks_from(Color c, PieceType pt, Square s) const {
+ }
+ 
+ inline Bitboard Position::moves_from(Color c, PieceType pt, Square s) const {
++  // The body rule (portals, brief 4.7): a linked portal square ends every line
++  const Bitboard occupied = byTypeBB[ALL_PIECES] | st->portalSquares;
+   if (var->fastAttacks || var->fastAttacks2)
+-      return moves_bb(c, pt, s, byTypeBB[ALL_PIECES]) & board_bb();
++      return moves_bb(c, pt, s, occupied) & board_bb();
+ 
+   PieceType movePt = pt == KING ? king_type() : pt;
+-  Bitboard b = moves_bb(c, movePt, s, byTypeBB[ALL_PIECES]);
++  Bitboard b = moves_bb(c, movePt, s, occupied);
+   // Add initial moves
+   if (double_step_region(c) & s)
+-      b |= moves_bb<true>(c, movePt, s, byTypeBB[ALL_PIECES]);
++      b |= moves_bb<true>(c, movePt, s, occupied);
+   // Xiangqi soldier
+   if (pt == SOLDIER && !(promoted_soldiers(c) & s))
+       b &= file_bb(file_of(s));

@@ -1201,16 +1201,12 @@ export class CanvasBoard {
   /** Slide one piece from → to in whole native pixels; `fade` dissolves
    *  the destination's occupant (a capture). The buffer still holds the
    *  PRE-move position; the caller commits with setPosition after. */
-  async animateSlide(from, to, { ms = 240, fade = false, path = null } = {}) {
+  async animateSlide(from, to, { ms = 240, fade = false } = {}) {
     if (!ms || !this.cells.has(from) || !this.cells.has(to) || !this.fen) return;
     const letter = this.#letterAt(from);
     if (!letter || isWall(letter)) return;
     const victim = fade ? this.#letterAt(to) : null;
-    // PORTALS v2: a rider's line through a tunnel slides in pieces — into the
-    // entry, out of the exit (a cut), on to the next — `path` is
-    // [from, entry, exit, …, to] (rays.mjs portalRoute); every second boundary is a cut.
-    const legs = path && path.length > 2 && path.length % 2 === 0 && path.every((sq) => this.cells.has(sq)) ? path : null;
-    const s = { from, to, letter, t0: now(), ms, fade: !!victim && !isWall(victim), path: legs };
+    const s = { from, to, letter, t0: now(), ms, fade: !!victim && !isWall(victim) };
     this.slides.push(s);
     this.hidden.add(from);
     this.#run();
@@ -1985,26 +1981,6 @@ export class CanvasBoard {
   #slideAt(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
     const e = ease(u);
-    if (s.path) {
-      // PORTALS v2: the legs in turn, the eased progress spread over them by length; between two legs the sprite cuts from the entry to the exit
-      const pts = s.path.map((sq) => this.#origin(sq));
-      const legs = [];
-      let total = 0;
-      for (let i = 0; i + 1 < pts.length; i += 2) {
-        const l = Math.max(1, Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y));
-        legs.push({ a: pts[i], b: pts[i + 1], l });
-        total += l;
-      }
-      let d = e * total;
-      for (let i = 0; i < legs.length; i++) {
-        const { a, b, l } = legs[i];
-        if (d <= l || i === legs.length - 1) {
-          const tt = Math.min(1, d / l);
-          return { x: Math.round(a.x + (b.x - a.x) * tt), y: Math.round(a.y + (b.y - a.y) * tt) };
-        }
-        d -= l;
-      }
-    }
     const a = this.#origin(s.from), b = this.#origin(s.to);
     return { x: Math.round(a.x + (b.x - a.x) * e), y: Math.round(a.y + (b.y - a.y) * e) };
   }
@@ -2087,19 +2063,6 @@ export class CanvasBoard {
         continue;
       }
       const s = Math.max(0, Math.min(1, a.strength ?? 1));
-      if (a.via && a.via.length) {
-        // PORTALS v2: a move through a tunnel is drawn in pieces — into the
-        // entry, out of the exit, on to the destination (rays.mjs portalRoute
-        // names the pairs); the label and the hammer ride the last piece.
-        const pts = [a.from, ...a.via.flat(), a.to];
-        for (let i = 0; i + 1 < pts.length; i += 2) {
-          if (!this.cells.has(pts[i]) || !this.cells.has(pts[i + 1])) continue;
-          const p = this.#origin(pts[i]), q = this.#origin(pts[i + 1]);
-          const last = i + 2 >= pts.length;
-          drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: last ? a.label ?? null : null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg, hammer: last && !!a.hammer });
-        }
-        continue;
-      }
       const p = this.#origin(a.from), q = this.#origin(a.to);
       // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammer arrow ends in the hammer stamped on its wall.
       drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg, hammer: !!a.hammer });

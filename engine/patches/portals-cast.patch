@@ -15,10 +15,10 @@ index eecd9d9c..890b432d 100644
      {
          // THE SLEDGEHAMMER (hammer.patch): the piece, the wall glyph, the wall's square
 diff --git a/src/movegen.cpp b/src/movegen.cpp
-index b59e3269..a40346b1 100644
+index a58e3997..884fb4e9 100644
 --- a/src/movegen.cpp
 +++ b/src/movegen.cpp
-@@ -482,6 +482,26 @@ namespace {
+@@ -473,6 +473,26 @@ namespace {
      const Square ksq = pos.count<KING>(Us) ? pos.square<KING>(Us) : SQ_NONE;
      Bitboard target;
  
@@ -42,14 +42,14 @@ index b59e3269..a40346b1 100644
 +        return moveList;
 +    }
 +
-     // Portals v2: with an open pair on the board a check may come through a
-     // tunnel, and a piece may block it by stepping into the tunnel - the
-     // evasion masks cannot say where, so every move is generated and legal()
+     // Skip generating non-king moves when in double check
+     if (Type != EVASIONS || !more_than_one(pos.checkers() & ~pos.non_sliding_riders()))
+     {
 diff --git a/src/position.cpp b/src/position.cpp
-index 030227b6..74c03ca0 100644
+index ae78e31c..2de2e315 100644
 --- a/src/position.cpp
 +++ b/src/position.cpp
-@@ -1179,6 +1179,19 @@ bool Position::legal(Move m) const {
+@@ -1170,6 +1170,19 @@ bool Position::legal(Move m) const {
    assert(!count<KING>(us) || piece_on(square<KING>(us)) == make_piece(us, KING));
    assert((board_bb() & to) || type_of(m) == HAMMER);
  
@@ -69,7 +69,7 @@ index 030227b6..74c03ca0 100644
    // Illegal checks
    if ((!checking_permitted() || (sittuyin_promotion() && type_of(m) == PROMOTION) || (!drop_checks() && type_of(m) == DROP)) && gives_check(m))
        return false;
-@@ -1448,10 +1461,22 @@ bool Position::pseudo_legal(const Move m) const {
+@@ -1439,10 +1452,22 @@ bool Position::pseudo_legal(const Move m) const {
    if (type_of(m) == HAMMER)
        return !checkers() && MoveList<NON_EVASIONS>(*this).contains(m);
  
@@ -92,7 +92,7 @@ index 030227b6..74c03ca0 100644
    // Use a fast check for piece drops
    if (type_of(m) == DROP)
        return   piece_drops()
-@@ -1591,6 +1616,10 @@ bool Position::gives_check(Move m) const {
+@@ -1572,6 +1597,10 @@ bool Position::gives_check(Move m) const {
    if (!count<KING>(~sideToMove))
        return false;
  
@@ -103,7 +103,7 @@ index 030227b6..74c03ca0 100644
    // Portal moves relocate two pieces: judge the resulting board
    if (type_of(m) == PORTAL)
        return portal_attacks_king(m, ~sideToMove);
-@@ -1772,12 +1801,21 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+@@ -1736,12 +1765,21 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
    Piece captured = piece_on(type_of(m) == EN_PASSANT ? capture_square(to) : to);
    if (to == from)
    {
@@ -127,7 +127,7 @@ index 030227b6..74c03ca0 100644
  
    assert(color_of(pc) == us);
    assert(captured == NO_PIECE || color_of(captured) == (type_of(m) != CASTLING ? them : us));
-@@ -2435,7 +2473,7 @@ void Position::undo_move(Move m) {
+@@ -2399,7 +2437,7 @@ void Position::undo_move(Move m) {
  
    assert(type_of(m) == DROP || type_of(m) == PORTAL || type_of(m) == HAMMER || empty(from) || type_of(m) == CASTLING || is_gating(m)
           || (type_of(m) == PROMOTION && sittuyin_promotion())
@@ -136,7 +136,7 @@ index 030227b6..74c03ca0 100644
    assert(type_of(st->capturedPiece) != KING);
  
    // Reset wall squares
-@@ -2679,6 +2717,10 @@ Key Position::key_after(Move m) const {
+@@ -2643,6 +2681,10 @@ Key Position::key_after(Move m) const {
    Piece captured = piece_on(to);
    Key k = st->key ^ Zobrist::side;
  
@@ -148,7 +148,7 @@ index 030227b6..74c03ca0 100644
    {
        k ^= Zobrist::psq[captured][to];
 diff --git a/src/position.h b/src/position.h
-index 86984da5..7da7756f 100644
+index 48aa347b..95619414 100644
 --- a/src/position.h
 +++ b/src/position.h
 @@ -141,6 +141,9 @@ public:
@@ -158,10 +158,10 @@ index 86984da5..7da7756f 100644
 +  // Portals v3 (the one-turn cast): a half open on either side; the same with nobody in check
 +  bool half_open() const;
 +  bool in_cast() const;
-   // Portals v2: bodies and tunnels
-   Bitboard open_portals(Bitboard occupied, Bitboard portals, Square xa = SQ_NONE, Square xb = SQ_NONE) const;
-   Bitboard portal_through(RiderType riders, Square s, Bitboard bodies, Bitboard open, Square xa = SQ_NONE, Square xb = SQ_NONE) const;
-@@ -504,6 +507,21 @@ inline bool Position::is_portal_scroll(PieceType pt) const {
+   int count_with_hand_spellfree(Color c, PieceType pt) const;
+   void parse_portal_field(const std::string& field);
+   PieceSet piece_types() const;
+@@ -500,6 +503,21 @@ inline bool Position::is_portal_scroll(PieceType pt) const {
    return pt != NO_PIECE_TYPE && pt == var->portalScroll;
  }
  

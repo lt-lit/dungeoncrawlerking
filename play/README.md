@@ -2658,11 +2658,67 @@ then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
 
+## Portals v4 — the tunnel retired (2026-09-19)
+
+Brief §4.7 "Portals v4 — the tunnel retired"; the engine half is
+`engine/patches/portals-body.patch` (portals-v2.patch with its tunnel half
+removed) + `portals-cast.patch` (portals-v3.patch rebased; the record in
+`engine/README.md` § "The portals-body patch"). The designer, on the s88
+log: "I'm actually considering getting rid of the true pass thru moves for
+sliders… I'm worried it's not intuitive to read" — then "Let's make v3
+portals without the pass thru moves. We'll keep the double portal cast and
+the portals stopping movement. Everything going thru a portal simply lands
+on the exit portal now, swapping if there's something there." The body
+rule stays (a linked portal square ends every line, whatever stands on
+it); nothing runs THROUGH a pair any more — a rider's line that reaches a
+portal square ends there and the move onto it is the landing. The game
+half is mostly deletion:
+
+- **The grid** (`play/js/rays.mjs`): `walkRay` walks a line under the body
+  rule — a portal square is visited (a landing, or the occupant the line
+  stops at) and ends the walk; no `through`, no origin guard (nothing comes
+  round). `portalRoute` is gone (a landing is a plain move to the entry;
+  the commit shows the piece on the twin). tactics.mjs, threat.mjs and
+  director.mjs read it as before — the landing guard, the exposure rule,
+  pins and the terrain reach now stop at every portal square and never see
+  past one; threat.mjs's `buildChains` lost its seen set (a straight walk
+  cannot revisit a square). Node gate `phase0/harness/test-portals-game.mjs`
+  27 (rewritten: the line ends at the body, a plugged twin changes nothing,
+  no chain through two pairs, no pin and no capture through a pair, the
+  shield, a plain pin and a wall coming down still read).
+- **The board** (canvas-board.mjs): `animateSlide` lost its `path` legs
+  and `#paintArrows` its `via` pieces — a landing's slide runs to the entry
+  and its arrow ends there. (The walk's own `via` waypoints in
+  `animateArrivals` are the army's catch-up paths and stay.)
+- **The page** (main.mjs): no route is read in `onMove` (the traffic wears
+  the way to the entry, the slide is the plain one, the log says "— through
+  the portal to …" for a landing), `applyHintLines` and the hint list carry
+  no `via` (`.hint-via` gone from style.css), `lastMoveArrow` reads no
+  route (`fenBeforeLast` deleted); THE EXIT ALIAS stays — it IS the picture
+  the designer wanted: tap the bishop, its squares run up to the portal,
+  the twin lights, a tap there plays the landing.
+- **The analyzer** (replay.mjs): `moveArrow(st)` and `pvArrows` draw plain
+  arrows.
+- **Gates**: selftest 50/50 (the v2 check rewritten as the v4
+  check: eleven moves on F1 with nothing past the body and nothing out of
+  the twin, no check through the pair with black's thirteen free moves, the
+  plugged exit's swap, the double step ending at the portal, engine perft
+  11 and the queen on c3 taken on its portal square, the grid walker
+  agreeing), ui-smoke 373 ok (the portal block reads a landing's
+  picture: the arrow paints on the entry and nothing on the twin or beyond,
+  a plain slide to the entry resolves clean, the exit alias on the live
+  duel), test-portals-game 27, replay-smoke 76 ok, test-logreport
+  61, the other Node gates unchanged; the engine's own record in
+  `engine/README.md`. THE DESIGNER'S NOTE going in: the tunnel "might come
+  back later… perhaps a late game upgrade" — its implementation is in the
+  history at the v2 and v3 commits.
+
 ## Portals v3 — the one-turn cast (2026-09-19)
 
 Brief §4.7 "Portals v3 — the one-turn cast"; the engine half is
-`engine/patches/portals-v3.patch` (its record in `engine/README.md` § "The
-portals-v3 patch"). The designer, on the v2 build: "Is it possible to make
+`engine/patches/portals-cast.patch` (`portals-v3.patch` until the tunnel's
+retirement the same day rebased it; its record in `engine/README.md` § "The
+portals-cast patch"). The designer, on the v2 build: "Is it possible to make
 it so both portals are placed in one turn instead of two?" — then "It
 might make portals too strong but let's go ahead and try it." Both
 portals go down before the enemy can act, as THREE PLIES the other side
@@ -2711,11 +2767,12 @@ kept). The game half:
   links), replay-smoke 76, test-logreport 61, the Node gates unchanged;
   the engine's own record in `engine/README.md`.
 
-## Portals v2 — the body and the tunnel (2026-09-18)
+## Portals v2 — the body and the tunnel (2026-09-18; the tunnel RETIRED 2026-09-19 — Portals v4, above; the body rule lives on as `engine/patches/portals-body.patch`)
 
-Brief §4.7 "Portals v2"; the engine half is `engine/patches/portals-v2.patch`
-(its record in `engine/README.md` § "The portals-v2 patch"). The designer's
-two rules, and nothing else changed: a linked portal square is a BODY —
+Brief §4.7 "Portals v2"; the engine half was `engine/patches/portals-v2.patch`
+(its record in `engine/README.md` § "The portals-body patch"). The designer's
+two rules, and nothing else changed — THIS SECTION IS THE RECORD OF THAT
+BUILD; the tunnel half of everything below is gone since v4: a linked portal square is a BODY —
 every line stops at it, whatever stands on it (a half is not a body until
 it is linked); an EMPTY PAIR is a TUNNEL for sliders — a rook's, bishop's
 or queen's line entering an empty portal whose twin is also empty comes out

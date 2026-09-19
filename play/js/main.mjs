@@ -37,7 +37,6 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
-import { portalRoute } from './rays.mjs'; // PORTALS v2: which pairs a rider's line ran through
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf } from './fen.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
@@ -1104,15 +1103,14 @@ function applyHintLines(pvs, n, duel, partial) {
     // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a breakable wall is a
     // hammer — the arrow ends in the hammer on the wall, the list shows it.
     const hammer = !!m && !!hammerOf(fenNow, pv.move);
-    const route = m ? portalRoute(fenNow, pv.move) : null; // PORTALS v2: a line through a tunnel is drawn in pieces
-    arrows.push(m ? { from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}), ...(route ? { via: route.pairs } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
+    arrows.push(m ? { from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
     } catch {
       /* keep uci */
     }
-    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer, via: route ? route.pairs.map(([p, q]) => `${p}→${q}`).join(', ') : null });
+    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer });
   }
   app.cheatArrows = arrows;
   renderPlayMarks();
@@ -1150,13 +1148,6 @@ function setHintList(items, depthText) {
     span.append(`${it.rank} `);
     if (it.hammer) span.appendChild(hammerIcon(it.rank));
     span.append(it.san);
-    if (it.via) {
-      // PORTALS v2: the pairs a line ran through, after the SAN (which names only the landing)
-      const v = document.createElement('i');
-      v.className = 'hint-via';
-      v.textContent = ` via ${it.via}`;
-      span.appendChild(v);
-    }
     if (it.score) {
       const b = document.createElement('b');
       b.textContent = ` ${it.score}`;
@@ -3159,22 +3150,12 @@ function lastMoveArrow() {
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): the enemy's hammer ends in the red hammer on the wall it cracked.
   const hammer = !!duel.lastMove?.hammer && duel.lastMove.move === moves[moves.length - 1];
   if (p && p[1] === p[2]) return null; // PORTALS v3: a pass draws nothing
-  const route = p ? portalRoute(fenBeforeLast(duel), moves[moves.length - 1]) : null; // PORTALS v2: the red arrow in pieces through the tunnel
-  if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last', ...(hammer ? { hammer: true } : {}), ...(route ? { via: route.pairs } : {}) };
+  if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last', ...(hammer ? { hammer: true } : {}) }; // a landing on a portal square: the arrow ends on the entry, the commit shows the piece on the twin
   const c = moves[moves.length - 1].match(CAST_RE); // THE PORTAL SPELL: the enemy's cast, a red ring on the square
   return c ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : null;
 }
 
-/** The board the last recorded move was played on (PORTALS v2: a rider's route is read off it). */
-function fenBeforeLast(duel) {
-  const states = duel?.record?.states ?? [];
-  const moves = duel?.record?.moves ?? [];
-  const last = moves[moves.length - 1];
-  for (let i = states.length - 1; i > 0; i--) if (states[i].move === last) return states[i - 1].fen;
-  return null;
-}
-
-/** PORTALS v2: a landing on a portal square ends on its twin, so an EMPTY twin
+/** THE EXIT ALIAS (Portals v2, kept by v4): a landing on a portal square ends on its twin, so an EMPTY twin
  *  lights as the landing's alias — the picture the designer asked for: the
  *  landing squares go into one portal and out of the other. */
 function exitAliases(fen, targets) {
@@ -3237,15 +3218,10 @@ async function onMove({ uci, san, mover, ply }) {
   // where it stands — nothing slides; the wall wears the gods' weaken beat
   // and drops its chips (duel.mjs marked the move; the ledger has the square).
   const hammered = parts && !pass ? duel.lastMove?.hammer ?? null : null;
-  // PORTALS v2: did a rider's line run through a tunnel? The route names the
-  // pairs — the slide goes in one ring and out of the other, the traffic wears
-  // every leg, the log says which pairs.
-  const route = parts && !hammered && !pass ? portalRoute(app.residue.lastFen, uci) : null;
   let hit = null, dz = null, hitSrc = null;
   if (parts && !hammered && !pass) {
     hit = debrisCaptureOf(app.residue.lastFen, duel.fen(), parts[1], parts[2]);
-    if (route) for (let i = 0; i + 1 < route.path.length; i += 2) debrisTraffic(route.path[i], route.path[i + 1]);
-    else debrisTraffic(parts[1], parts[2]);
+    debrisTraffic(parts[1], parts[2]); // a landing on a portal square wears the way to the entry; the commit paints the piece on the twin
     if (hit) {
       const a = parseSquare(parts[1]), v = parseSquare(hit.sq);
       const len = Math.hypot(v.file - a.file, v.rankFromBottom - a.rankFromBottom) || 1;
@@ -3263,7 +3239,7 @@ async function onMove({ uci, san, mover, ply }) {
   } else if (parts && !pass) {
     // A shattering crate holds until the piece arrives; a piece still dissolves under the blow.
     const shatters = !!(dz && hit?.victim === 'terrain' && debrisOpts().fx && FX(1));
-    await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX((mover === 'engine' ? 240 : 150) * (route ? 1 + 0.45 * route.pairs.length : 1)), fade: !shatters, path: route?.path ?? null });
+    await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: !shatters });
     if (app.duel !== duel || !duel.board) return; // abandoned mid-slide
   }
   // The spray flies while the engine thinks (never awaited); it lands into
@@ -3291,9 +3267,7 @@ async function onMove({ uci, san, mover, ply }) {
       const half = P.halves[mover === 'player' ? 'w' : 'b'];
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
     } else if (parts) {
-      const via = route ? ` — via ${route.pairs.map(([p, q]) => `${p}→${q}`).join(', ')}` : '';
-      const landing = P.twin.has(parts[2]) ? `${route ? ',' : ' —'} through the portal to ${P.twin.get(parts[2])}` : '';
-      note = via + landing;
+      note = P.twin.has(parts[2]) ? ` — through the portal to ${P.twin.get(parts[2])}` : '';
     }
   }
   if (hammered) note = ` — the sledgehammer cracks the wall at ${hammered}`; // THE SLEDGEHAMMER

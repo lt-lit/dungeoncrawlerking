@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Portals ORACLE — an independent model of the rules for perft-1/2 comparison
 against the engine. Deliberately written from the rule text, not from the C++:
-forward rays for every attack (the engine uses reverse rays + a tunnel term),
+forward rays for every attack (the engine uses reverse rays through the bodies),
 make/unmake by copying the board.
 
 Rules modelled (the test variants: chess pieces, no castling, king-row
@@ -9,23 +9,24 @@ promotion to n/b/r/q, double step from every non-king row, en passant,
 extinction: a side down to one piece has lost, so the position has no moves):
   * walls '*' and '#' block and cannot be entered; crates '^' are captured by
     any piece moving onto them (pawns diagonally only, never pushed onto).
-  * PORTALS v2: a linked portal square is a BODY: every line stops at it,
-    whatever stands on it. Landing on one (any piece, any move) sends the
+  * PORTALS v4 (2026-09-19, the tunnel retired): a linked portal square is a
+    BODY: every line stops at it, whatever stands on it. Landing on one (any
+    piece, any move — a rider's line included, which ends there) sends the
     mover through to the twin; whatever stands on the twin swaps back. A piece
-    standing on the entry is captured on landing as normal. An EMPTY PAIR is a
-    TUNNEL for R/B/Q lines: the line enters the empty portal and continues
-    from its empty twin in the same direction, through another empty pair too,
-    each pair once per line. A pawn's double step never crosses a portal
-    square (it may land on one). No en passant square after a portal landing.
+    standing on the entry is captured on landing as normal. Nothing passes
+    THROUGH a pair: v2's tunnel (an empty pair carrying a rider's line on from
+    the twin) is gone, so no line, check or pin runs through a portal. A pawn's
+    double step never crosses a portal square (it may land on one). No en
+    passant square after a portal landing.
   * PORTALS v3 (the one-turn cast, 2026-09-19): scrolls in hand. A cast
     ('O@sq') opens the caster's HALF on an empty square off both king rows
     that is neither a portal nor a half, never while in check; a half is
     inert (no body, no tunnel). While a half is open the OTHER side is
     FROZEN: its only move is a pass (its king's square twice, 'e8e8'); the
     caster's only moves are the LINKING casts — the twin on any castable
-    square, minus the ones that would expose the caster's own king through
-    the new tunnel — or, when no link is legal, a pass that FIZZLES the half
-    (the half's scroll is spent, the other stays in hand). Neither side is in
+    square (a body can only close a line, so no link exposes the caster) —
+    or, when no castable square is left, a pass that FIZZLES the half (the
+    half's scroll is spent, the other stays in hand). Neither side is in
     check while a half is open in play; a hand-written position in check
     plays its ordinary evasions (no casts, as ever in check).
 """
@@ -61,9 +62,6 @@ class Pos:
     def is_body(self, sq):
         return sq in self.board or sq in self.twin  # a piece, terrain, or a portal square
 
-    def open_pair(self, sq):
-        return sq in self.twin and self.piece_at(sq) is None and self.piece_at(self.twin[sq]) is None
-
     def castable(self, sq):
         """Empty floor off both king rows, not a portal square, not a half."""
         return sq not in self.board and 0 < sq[1] < self.R - 1 and sq not in self.twin and sq not in self.half
@@ -75,21 +73,13 @@ class Pos:
     def ray(self, frm, d, out):
         df, dr = d
         f, r = frm[0] + df, frm[1] + dr
-        used = set()
         while self.on(f, r):
             sq = (f, r)
             ch = self.board.get(sq)
             if ch in ('*', '#'):
                 break
-            if sq in self.twin:
-                out.append(sq)                       # a landing (empty) or a capture/friend (occupied)
-                if self.open_pair(sq) and sq not in used and self.twin[sq] not in used:
-                    used.add(sq); used.add(self.twin[sq])
-                    f, r = self.twin[sq][0] + df, self.twin[sq][1] + dr   # the tunnel: continue from the twin
-                    continue
-                break
-            out.append(sq)
-            if ch:                                   # a piece or a crate: stop
+            out.append(sq)                           # reachable: empty, a landing on a portal square, or a capture / friend
+            if ch or sq in self.twin:                # a piece, a crate or a portal square (a body): the line ends here
                 break
             f += df; r += dr
 
@@ -129,7 +119,7 @@ class Pos:
                     two = (sq[0], sq[1] + 2 * up)
                     if 0 < sq[1] < self.R - 1 and self.on(*two) and two not in self.board and one not in self.twin:
                         out.append(two)                          # the double step: from any non-king row, first square no portal
-        # drop own pieces; one entry per square (a tunnel line and a plain line may meet on one square)
+        # drop own pieces; one entry per square
         res, seen = [], set()
         for x in out:
             occ = self.board.get(x)
@@ -226,11 +216,7 @@ class Pos:
                 res = []
                 if self.hand[us] > 0:
                     for sq in self.castables():
-                        nxt = self.link(sq)
-                        kk = nxt.king(us)
-                        if kk is not None and nxt.attacked(kk, them):
-                            continue                 # the new tunnel would expose the caster's own king
-                        res.append((None, sq, 'cast', nxt))
+                        res.append((None, sq, 'cast', self.link(sq)))   # a body can only close a line: no link exposes the caster
                 if res:
                     return res
                 return [(k, k, 'pass', self.fizzle())]
