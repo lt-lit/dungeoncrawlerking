@@ -2715,7 +2715,8 @@ crosses a portal square. The game half:
   legs resolving clean, the exit alias on the live duel when a landing on
   the player's own pair comes up, judged from the recorded state of the
   player's ply — the enemy's reply may walk back through the same pair),
-  replay-smoke 76, the Node gates unchanged. Held over: a flash of the rings as a piece passes, the eval's
+  replay-smoke 76, the Node gates unchanged. THE PHONE VERDICT (designer,
+  2026-09-19): "Seems to work fine on the phone" — Portals v2 is IN. Held over: a flash of the rings as a piece passes, the eval's
   mobility through tunnels (engine).
 
 ## The sledgehammer and the hard wall (2026-09-17)

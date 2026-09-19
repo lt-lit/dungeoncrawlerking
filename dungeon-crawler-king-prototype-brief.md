@@ -393,7 +393,7 @@ cases]`:**
 - A piece on one portal moving onto its twin ends where it stood — the
   capture at range and the pass that follows from the rule, both legal.
 
-**PORTALS v2 `[designer, 2026-09-18 — settled in one conversation and BUILT the same day; engine substrate engine/patches/portals-v2.patch, the sixth patch]`.**
+**PORTALS v2 `[designer, 2026-09-18 — settled in one conversation and BUILT the same day; engine substrate engine/patches/portals-v2.patch, the sixth patch; phone verdict 2026-09-19: "Seems to work fine on the phone" — IN]`.**
 The designer's two questions — "Is it possible to make it so portals block
 sliders?" and "Is it possible to make it so sliders can go fully thru both
 portals without stopping at all?" — became two rules, the second an

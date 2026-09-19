@@ -51,7 +51,8 @@ an EMPTY PAIR a TUNNEL for riders, chained once per pair per line. Both
 artifacts rebuilt from clean pinned trees; validated natively against an
 INDEPENDENT Python oracle on 1,500 random positions before any WASM was
 built; the rule-16 gate ran green end to end (see "The portals-v2 patch"
-below). Awaiting the phone.
+below). Phone verdict 2026-09-19 (designer): "Seems to work fine on the
+phone" — IN.
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
