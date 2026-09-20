@@ -510,7 +510,7 @@ something there. Nice and consistent and readable. We might bring back the
 pass thru portals later… Perhaps it'll be a late game upgrade."; engine
 substrate engine/patches/portals-body.patch (portals-v2.patch with its
 tunnel half removed) + portals-cast.patch (portals-v3.patch rebased); BUILT
-the same day]`.** The rule is one sentence now: a piece that moves onto a
+the same day; verdict 2026-09-20: "Alright this works pretty good" — IN]`.** The rule is one sentence now: a piece that moves onto a
 portal comes out of the other one, and if something stands there they swap.
 
 - **The body rule stays.** A linked portal square ends every line, whatever

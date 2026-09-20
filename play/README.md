@@ -2711,7 +2711,8 @@ half is mostly deletion:
   61, the other Node gates unchanged; the engine's own record in
   `engine/README.md`. THE DESIGNER'S NOTE going in: the tunnel "might come
   back later… perhaps a late game upgrade" — its implementation is in the
-  history at the v2 and v3 commits.
+  history at the v2 and v3 commits. THE VERDICT (designer, 2026-09-20):
+  "Alright this works pretty good" — Portals v4 is IN.
 
 ## Portals v3 — the one-turn cast (2026-09-19)
 

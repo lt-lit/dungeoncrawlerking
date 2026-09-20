@@ -88,7 +88,8 @@ ran green end to end (see "The portals-body patch" below). Portal-free
 boards are node-identical to the seven-patch build before it; a board
 with SCROLLS IN HAND is not portal-free to a search (it casts pairs deep
 in the tree, where the rules differ), so the identity check reads boards
-with no pair and no scroll.
+with no pair and no scroll. Verdict 2026-09-20 (designer): "Alright this
+works pretty good" — IN.
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
