@@ -1747,10 +1747,13 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // slides draw their red arrow to the resting square. With `?ice=off` the
 // button never shows and no scroll is in hand.
 {
+  // The block runs on a stage whose middle is open (`--icestage`, s73 by default: the cast rows 5–6 are floor, so a pawn on
+  // rank 4 pushes onto the patch and slides); s59's cast rows are walls but for a corner, and no pawn can enter a patch there.
+  const ICE_STAGE = arg('icestage', 's73-the-tower-room');
   const page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs11 = [];
   page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
-  await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
+  await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
   await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const ic = await page11.evaluate(async () => {
@@ -1787,10 +1790,18 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     // The cast: a lit square whose 3×3 has as much bare floor as possible (the ice reads on empty flagstones).
     const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
     const floorAround = (sq) => around(sq).filter((s) => at(s) === '.').length;
-    // …and nearest the player's pieces, so a slide comes up in the plies that follow.
+    // …with the most ENTRIES — a patch square a pawn can push onto from the floor south of it (a pawn's push onto ice is always a
+    // slide; a rider runs over ice without stopping) — then the most floor, then nearest the player's pieces.
+    const sqOf = (f, r) => String.fromCharCode(97 + f) + r;
+    const south = (sq, n = 1) => sqOf(sq.charCodeAt(0) - 97, rankOf(sq) - n);
+    const inPatch = (c, sq) => Math.abs(sq.charCodeAt(0) - c.charCodeAt(0)) <= 1 && Math.abs(rankOf(sq) - rankOf(c)) <= 1;
+    const entriesOf = (c) => around(c).filter((s) => at(s) !== '?' && !/[*#^_]/.test(at(s)) && rankOf(s) >= 3 && !inPatch(c, south(s)) && at(south(s)) === '.' && at(south(s, 2)) === '.').map((s) => south(s));
     const whites = grid().flatMap((row, i) => row.map((c, f) => ({ f, r: ranks - i, c }))).filter((x) => /[A-Z]/.test(x.c));
     const nearWhite = (sq) => Math.min(...whites.map((w) => Math.max(Math.abs(w.f - (sq.charCodeAt(0) - 97)), Math.abs(w.r - rankOf(sq)))));
-    const centre = [...lit()].sort((a, b) => floorAround(b) * 10 - nearWhite(b) - (floorAround(a) * 10 - nearWhite(a)))[0];
+    const score = (c) => entriesOf(c).length * 100 + floorAround(c) * 10 - nearWhite(c);
+    const centre = [...lit()].sort((a, b) => score(b) - score(a))[0];
+    const entries = entriesOf(centre); // the squares south of the patch a pawn pushes from
+    out.entries = entries;
     out.centre = centre;
     out.patchExpected = around(centre).filter((s) => !/[*#^_]/.test(at(s))).sort();
     out.icyBefore = around(centre).filter((s) => at(s) === '.').map((s) => [s, icy(s)]);
@@ -1808,7 +1819,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     // A slide in play: the first legal move of the player's that slides, within a few plies.
     out.slide = null;
     out.enemySlide = null;
-    for (let ply = 0; ply < 24 && K.app.duel.state === 'playing' && !out.slide; ply++) {
+    for (let ply = 0; ply < 40 && K.app.duel.state === 'playing' && !out.slide; ply++) {
       await settle();
       if (K.app.duel.state !== 'playing') break;
       if (K.app.duel.turnColor() !== 'white') { await settle(); continue; }
@@ -1832,10 +1843,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
         const st = K.app.duel.record.states[before] ?? null;
         out.slide = { move: m, from, to, rest, aliasLit, useAlias, predicted: o.steps, recorded: st?.slide ?? null, san: K.app.duel.record.sans[before - 1] ?? null, played: K.app.duel.record.moves[before - 1] ?? null, pieceAtRest: st ? (() => { const g = st.fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/'); const r = parseInt(rest.slice(1), 10); const row = g[g.length - r]; let f = 0; for (const ch of row) { if (/\d/.test(ch)) f += parseInt(ch, 10); else { if (f === rest.charCodeAt(0) - 97) return ch; f++; } } return '.'; })() : null, log: logLines().filter((l) => /slides|stops on|shoves|falls into|portal/.test(l)).slice(-1)[0] ?? null, state: K.app.duel.state };
       } else {
-        // Walk toward the ice: the move whose destination lies nearest a slippery square (a king's move last).
-        const slick = K.ice.slick();
-        const dist = (sq) => Math.min(...slick.map((s) => Math.max(Math.abs(s.charCodeAt(0) - sq.charCodeAt(0)), Math.abs(rankOf(s) - rankOf(sq)))));
-        const scored = legal.map((m) => { const p = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/); return [m, dist(p[2]) + (at(p[1]) === 'K' ? 3 : 0)]; }).sort((a, b) => a[1] - b[1]);
+        // Walk toward the ice: a PAWN toward an entry square first (its push onto the patch is a slide), the king next, the rest last.
+        const goals = entries.length ? entries : K.ice.slick();
+        const dist = (sq) => Math.min(...goals.map((s) => Math.max(Math.abs(s.charCodeAt(0) - sq.charCodeAt(0)), Math.abs(rankOf(s) - rankOf(sq)))));
+        const scored = legal.map((m) => { const p = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/); const pc = at(p[1]); return [m, dist(p[2]) + (pc === 'P' ? 0 : pc === 'K' ? 4 : 8)]; }).sort((a, b) => a[1] - b[1]);
         await K.playerMove(scored[0][0]);
       }
     }
@@ -1874,7 +1885,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await page11.close();
   // ?ice=off: no scroll, no button
   const page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
+  await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
   await page12.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await page12.evaluate(() => ({ hidden: document.getElementById('btnIce').hidden, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
