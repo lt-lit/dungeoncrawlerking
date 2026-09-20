@@ -384,8 +384,11 @@ cases]`:**
 - A piece standing on a portal is captured as normal — by attacking that
   square, not the other portal — and the attacker is teleported after the
   capture.
-- Portals never stand on a king row (the promotion zone). No pawn promotes
-  through a portal; the easy queen is portal to the ninth rank, then push.
+- Portals never stand on a king row (the promotion zone), and since
+  2026-09-20 a cast lands no nearer than TWO rows off one `[designer:
+  "portals must be placed two spaces away from promotion zones instead of
+  one" — "Portals v4.1" below]`. No pawn promotes through a portal; the
+  easy queen is portal to the eighth rank, then two pushes.
 - Only a MOVE teleports: a swap triggers no further teleport, a
   displacement by the gods never lands on or leaves a portal square. (The
   v1 clause "a slider passing over an empty portal square is passing" is
@@ -545,6 +548,20 @@ portal comes out of the other one, and if something stands there they swap.
   engine, oracle and grid — is in the history at the v2 and v3 commits
   (59eaa82, 41e49e1); an upgrade would most likely be a per-deal or
   per-side variant setting, a new build either way.
+
+**PORTALS v4.1 — TWO ROWS OFF THE KING ROWS `[designer, 2026-09-20: "Let's
+make it so portals must be placed two spaces away from promotion zones
+instead of one." — BUILT the same day; an ini rule, no engine change — the
+v4 note "a portal one rank shy of a king row (an ini-only fix)" ruled on]`.**
+The cast's drop region is ranks 3 … R−2 (`variant.mjs portalIniKeys`,
+`PORTAL_ROW_MARGIN` 2; ranks 2 … R−1 until then), the same for both
+colours, so a portal exit is never one push from a promotion — the easy
+queen is portal, push, push, and the other side has two plies to answer
+it. The engine's own floor stays the king row (its FEN-field parse drops
+an entry there); the two-row rule lives in the deal, where every placement
+guarantee lives (§4.2). The deal variant's name carries the margin
+(`__portals2`, rule 7: the one-row deals were `__portals`, and the
+committed replay samples still play them under their own recorded ini).
 
 **Any number of pairs** is one representation (a square → twin map, hashed
 per pair); the count is the deal's, and the stage or world may author

@@ -44,14 +44,22 @@ const KNOWN_INI_KEYS = new Set([
 // duel — one pair, cast in two turns. The engine's `portalScroll` key names
 // it; a drop of it opens a half (`O@e4`) or, when the caster holds an open
 // half, links that half to the square. The drop region keeps every cast
-// off the two king rows (the promotion zones), so no pawn ever promotes
-// through a portal and the engine needs no promotion branch for the move.
+// PORTAL_ROW_MARGIN rows off each king row (the promotion zones): never ON
+// a king row, so no pawn ever promotes through a portal and the engine
+// needs no promotion branch for the move (the engine's own floor — its
+// parse drops a field entry on a king row), and since 2026-09-20 never on
+// the row BESIDE one either (designer: "portals must be placed two spaces
+// away from promotion zones instead of one") — an ini rule, no engine
+// change. The name suffix carries the margin, so a deal variant's name
+// encodes its region (rule 7; the one-row deals were `__portals`, and the
+// committed portal samples still carry them).
 // The scroll's value is the engine's eagerness knob: 0 leaves only FSF's
 // small in-hand bonus, so the enemy casts when the search sees a gain.
 export const PORTAL_SCROLL = 'o';
 export const PORTAL_SCROLLS_PER_SIDE = 2;
 export const PORTAL_SCROLL_VALUE = 0;
-export const PORTAL_VARIANT_SUFFIX = '__portals';
+export const PORTAL_ROW_MARGIN = 2;
+export const PORTAL_VARIANT_SUFFIX = `__portals${PORTAL_ROW_MARGIN}`;
 
 // THE SLEDGEHAMMER (2026-09-17, engine/patches/hammer.patch + wall-kinds.patch;
 // brief §4.8): a piece of a hammer type may spend its move turning an
@@ -70,9 +78,15 @@ export function hammerIniKeys() {
   return { hammerPieceTypes: HAMMER_PIECES };
 }
 
-/** The variants.ini keys that turn the portal spell on for a `ranks`-deep board. */
+/**
+ * The variants.ini keys that turn the portal spell on for a `ranks`-deep
+ * board: a cast lands on ranks 1 + PORTAL_ROW_MARGIN … ranks − PORTAL_ROW_MARGIN
+ * (3…8 on a 10-rank arena), the same region for both colours.
+ */
 export function portalIniKeys(ranks) {
-  const middle = Array.from({ length: Math.max(0, ranks - 2) }, (_, i) => `*${i + 2}`).join(' ');
+  const first = 1 + PORTAL_ROW_MARGIN;
+  const last = ranks - PORTAL_ROW_MARGIN;
+  const middle = Array.from({ length: Math.max(0, last - first + 1) }, (_, i) => `*${first + i}`).join(' ');
   return {
     immobile: PORTAL_SCROLL,
     portalScroll: PORTAL_SCROLL,

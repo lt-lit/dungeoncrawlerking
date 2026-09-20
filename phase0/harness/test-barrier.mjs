@@ -438,5 +438,19 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
   check(plain.ok && !plain.deal.variantName.includes('sledge') && !/hammerPieceTypes/.test(plain.deal.variantIni), 'a plain deal carries no hammer key');
 }
 
+// ---- THE PORTAL SPELL's placement (2026-09-20, designer: "portals must be placed two spaces away from
+// promotion zones instead of one"): the deal's drop region is ranks 3…8 of the 10×10 box — never a king row,
+// never the row beside one — under a name that carries the margin (rule 7; `__portals` named the one-row deals)
+{
+  const w = openFloor(30, 30);
+  const army = spawnArmy(w, makePattern(KIT, { seed: 1 }), { f: 14, r: 14 }, 0, 'w');
+  const spell = planBox(w, army, { enemy: KIT_ENEMY, seed: 1, portals: true });
+  const region = (side) => spell.ok ? (spell.deal.variantIni.match(new RegExp(`^dropRegion${side} = (.*)$`, 'm'))?.[1] ?? '') : '';
+  check(spell.ok && spell.deal.variantName.endsWith('__portals2') && !spell.deal.variantName.includes('__portals_'), `a portal deal names its margin: ${spell.ok ? spell.deal.variantName : spell.error}`);
+  check(region('White') === '*3 *4 *5 *6 *7 *8' && region('Black') === '*3 *4 *5 *6 *7 *8', `the cast region is ranks 3…8 for both colours (${region('White')} / ${region('Black')})`);
+  const bare = planBox(w, army, { enemy: KIT_ENEMY, seed: 1 });
+  check(bare.ok && !bare.deal.variantName.includes('portals') && !/dropRegion/.test(bare.deal.variantIni), 'a plain deal carries no drop region');
+}
+
 console.log(`test-barrier: ${ok}/${ok + bad} checks passed`);
 process.exit(bad ? 1 : 0);

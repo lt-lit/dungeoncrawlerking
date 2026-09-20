@@ -1493,8 +1493,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // designer, on the first duel: "the enemy portals should be a different
 // color… each new portal pair has a unique color so the player can see how
 // they link"): on a fresh duel the Portal button shows two scrolls; the
-// button enters CAST MODE with the legal squares lit (none on a king row,
-// all empty) and a tap on a wall leaves it; a tap on a lit square casts
+// button enters CAST MODE with the legal squares lit (none on a king row or
+// the row beside it — two rows off since 2026-09-20 — all empty) and a tap
+// on a wall leaves it; a tap on a lit square casts
 // through the piece-move path — the half-open portal a dashed ring in the
 // player's BLUE, one scroll left, the log naming the cast; the second cast
 // links the pair, solid blue on both squares, the button gone; the enemy's
@@ -1533,7 +1534,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.castMode = K.app.castMode;
     const L0 = lit();
     out.litN = L0.length;
-    out.litKingRow = L0.filter((sq) => rankOf(sq) === 1 || rankOf(sq) === ranks).length;
+    out.litKingRow = L0.filter((sq) => rankOf(sq) <= 2 || rankOf(sq) >= ranks - 1).length; // two rows off each king row (2026-09-20)
     out.litEmpty = L0.every((sq) => at(sq) === '.');
     const wall = [...K.app.boardUI.cells.keys()].find((sq) => at(sq) === '*' && !L0.includes(sq));
     K.tap(wall);
@@ -1587,7 +1588,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     return out;
   });
   expect(!ps.hidden0 && /×2/.test(ps.text0) && !ps.disabled0, `the Portal button shows on the player's turn with two scrolls (${ps.text0}${ps.hidden0 ? ', hidden' : ''}${ps.disabled0 ? ', disabled' : ''})`);
-  expect(ps.castMode && ps.litN > 0 && ps.litKingRow === 0 && ps.litEmpty, `the button enters cast mode with ${ps.litN} squares lit, none on a king row (${ps.litKingRow}), all empty`);
+  expect(ps.castMode && ps.litN > 0 && ps.litKingRow === 0 && ps.litEmpty, `the button enters cast mode with ${ps.litN} squares lit, none on a king row or the row beside it (${ps.litKingRow}), all empty`);
   expect(ps.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
   expect(new RegExp(`(^|,)${ps.a}w(,|$)`).test(ps.fieldA) && /×1/.test(ps.textA) && /is open/.test(ps.titleA), `a tap on ${ps.a} casts: the field reads {${ps.fieldA}}, one scroll left (${ps.textA}), the title says the half is open`);
   expect(ps.logA.some((t) => t.includes(`a portal opens at ${ps.a}`)), `the log names the cast (${ps.logA.slice(-1)[0] ?? 'nothing about a portal'})`);

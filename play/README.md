@@ -2559,8 +2559,9 @@ exactly as specified and with no special cases: landing on a portal always
 teleports the piece to the other portal; if the other portal is occupied
 the two swap places; a piece standing on a portal is captured as normal
 and the attacker is teleported after the capture. One placement rule —
-portals are never on a king row (the promotion zone), so no pawn promotes
-through one and the easy queen costs a move of walking.
+portals are never on a king row (the promotion zone), and since 2026-09-20
+never on the row beside one either (§ "Portals v4.1" below), so no pawn
+promotes through one and the easy queen costs two moves of walking.
 
 **Everyone has it (the stress test):** every duel on both pages deals each
 side two scrolls in the FEN's holdings (`[OOoo]`), one pair per side per
@@ -2575,10 +2576,12 @@ the duel: the pairs and halves ride the FEN's trailing field
   `portalIniKeys`, `portalPocket`; armygen's `dealMatchup` and the
   barrier's `planBox` take `portals`): the deal variant gains the engine's
   keys — the scroll piece (FSF's `immobile`, letter `o`), `portalScroll`,
-  `pieceDrops`, the drop region of every rank but the king rows, the
+  `pieceDrops`, the drop region (ranks 3…R−2 since 2026-09-20 —
+  `PORTAL_ROW_MARGIN` 2; every rank but the king rows before), the
   scroll's value (`PORTAL_SCROLL_VALUE` 0 — the engine wants portals with no
   bonus: the first log had both sides cast in the first three moves) —
-  under the name suffix `__portals` (rule 7).
+  under the name suffix `__portals2` (rule 7 — the suffix carries the
+  margin; `__portals` named the one-row deals).
   `?portals=off` deals a plain duel; Options → Spells is the same switch,
   saved (`options.portals`, on by default).
 - **The page** (main.mjs § THE PORTAL SPELL): the ⌾ Portal button in the
@@ -2657,6 +2660,30 @@ with"); next the sledgehammer (✅ built the same day, the section below),
 then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
+
+## Portals v4.1 — two rows off the king rows (2026-09-20)
+
+Brief §4.7 "Portals v4.1" (designer: "Let's make it so portals must be
+placed two spaces away from promotion zones instead of one."). An ini
+rule, no engine change — the v4 record's own note ("a portal one rank shy
+of a king row — an ini-only fix: two rows off each king row") ruled on.
+
+- **The region** (`variant.mjs portalIniKeys`): `dropRegionWhite/Black` is
+  ranks 1 + `PORTAL_ROW_MARGIN` … R − `PORTAL_ROW_MARGIN` with the margin 2
+  — ranks 3…8 on the 10×10 box, 3…6 on the selftest's 8-rank board, rank 3
+  alone on a 5-rank one — for both colours; ranks 2…R−1 until now. The
+  engine's own floor is unchanged (its FEN-field parse drops an entry on a
+  king row; the engine tests' variants keep their one-row regions, since
+  they test the engine's rules and not the game's placement).
+- **The name** (rule 7): `PORTAL_VARIANT_SUFFIX` is `__portals2` — the
+  suffix carries the margin, so a deal variant's name encodes its region.
+  `__portals` named the one-row deals; the two committed portal samples
+  carry them and load as ever under their own recorded ini (the analyzer
+  appends every log's ini to one catalog, and a same-named variant with a
+  different region would have been a silent no-op there).
+- **The page** needed nothing: cast mode lights ffish's legal casts, so
+  the two rows went dark on their own.
+- **Gates**: selftest 50/50 headless (32 casts on the 8-rank deal board — ranks 3–6, none within a row of a king row — 31 links and 36 moves after the link, the fizzle boards a rank up), ui-smoke 375 ok (cast mode lights 33 squares on s59, none within a row of a king row), replay-smoke 76 ok (both portal samples load under their recorded `__portals` ini), test-barrier 165 (a portal deal's name `__portals2` and both regions `*3 … *8` on the box), test-logreport 61, test-portals-game 27; the engine is untouched, so its gates stand as recorded.
 
 ## Portals v4 — the tunnel retired (2026-09-19)
 

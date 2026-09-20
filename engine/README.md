@@ -308,7 +308,9 @@ portal always teleports the piece to the other portal; if the other portal
 is occupied they swap places; a piece standing on a portal is captured as
 normal, and the attacker is teleported after the capture) plus one
 placement rule (portals never on a king row, which is the promotion zone,
-so no pawn ever promotes through one and the move carries no promotion).
+so no pawn ever promotes through one and the move carries no promotion —
+the engine's floor; the game's deal keeps a cast TWO rows off since
+2026-09-20, in the ini alone: `variant.mjs portalIniKeys`).
 Authored against the pinned trees on top of `dead-squares.patch` +
 `thread-stack.patch` (apply in that order); 489 insertions / 14 deletions
 across `types.h`, `variant.h`, `parser.cpp`, `position.h`, `position.cpp`,
@@ -346,8 +348,10 @@ Design, in the engine's own shapes:
   half closes into a pair with the square, or the square becomes the
   caster's open half (`portalHalf[colour]`). Never while in check, never
   on a square a portal or a half already takes (`portal_taken()`), and the
-  drop region is the variant's `dropRegionWhite/Black` (grammar: every rank
-  but the king rows). A cast gives no check and passes SEE at zero.
+  drop region is the variant's `dropRegionWhite/Black` (grammar; the game's
+  deal emits ranks 3…R−2 since 2026-09-20 — two rows off each king row, an
+  ini rule — and every rank but the king rows before, which these tests'
+  own variants keep). A cast gives no check and passes SEE at zero.
 - **The trailing FEN field** ` {c3-h8,d1-a9,e4w}` after the move counters —
   pairs as `a-b` (emitted with the lower square first), halves as the
   square plus `w`/`b` — parsed by `set()` (3check's optional trailing field

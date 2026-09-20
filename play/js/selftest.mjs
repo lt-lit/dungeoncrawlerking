@@ -371,7 +371,8 @@ async function main() {
     if (ffish.validateFen(start, pv.name) !== 1) throw new Error(`validateFen rejected ${start}`);
     const b = new ffish.Board(pv.name, start);
     const casts = b.legalMoves().trim().split(/\s+/).filter((m) => m.startsWith('O@'));
-    if (casts.length !== 46 || casts.some((m) => /[18]$/.test(m))) throw new Error(`${casts.length} casts (46 expected, none on a king row)`);
+    // two rows off each king row (2026-09-20): ranks 3–6 of the 8, 32 squares, all empty on this board
+    if (casts.length !== 32 || casts.some((m) => /[1278]$/.test(m))) throw new Error(`${casts.length} casts (32 expected, none on a king row or the row beside it)`);
     const fens = [start];
     // PORTALS v3 (2026-09-19): the enemy is FROZEN between the two portals — its pass is the ply between a half and its link
     for (const m of ['O@c3', 'e8e8', 'O@e5', 'O@f6']) {
@@ -419,7 +420,7 @@ async function main() {
       s.delete();
       if (!over) throw new Error(`a king with only ${what} is not stripped`);
     }
-    return '46 casts, two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
+    return '32 casts (ranks 3–6 alone), two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
   });
 
   // --- PORTALS v4 (2026-09-19, engine/patches/portals-body.patch; brief §4.7):
@@ -486,28 +487,29 @@ async function main() {
     const frozenFen = b.fen();
     b.push('e8e8');
     const links = moves(b);
-    if (links.length !== 45 || !links.every((m) => isCast(m)) || links.includes('O@c4')) throw new Error(`the link ply: ${links.length} ${links.filter((m) => !isCast(m)).join(' ')}`);
+    if (links.length !== 31 || !links.every((m) => isCast(m)) || links.includes('O@c4')) throw new Error(`the link ply: ${links.length} (31 = ranks 3–6 less the half) ${links.filter((m) => !isCast(m)).join(' ')}`);
     const linkFen = b.fen();
     b.push('O@f5');
-    if (b.fen() !== '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}' || moves(b).length !== 50) throw new Error(`after the link: ${b.fen()} ${moves(b).length}`);
+    if (b.fen() !== '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}' || moves(b).length !== 36) throw new Error(`after the link: ${b.fen()} ${moves(b).length} (36 = 30 casts + 6 piece moves)`);
     b.delete();
-    // the fizzle board: ONE castable square on the whole board (a2), so after the half nothing is left to link
+    // the fizzle board: ONE castable square on the whole board (a3 — rank 2 is beside a king row and never
+    // castable since 2026-09-20), so after the half nothing is left to link
     // (v3's board — a link that would have exposed the king through the new tunnel — links freely since v4: no tunnel)
-    const z = new ffish.Board(pv.name, '3rk3/********/********/********/********/********/1*******/KN6[OO] w - - 0 1');
-    if (moves(z).join(',') !== 'O@a2,a1a2') throw new Error(`the fizzle board: ${moves(z).join(' ')}`);
-    z.push('O@a2');
+    const z = new ffish.Board(pv.name, '3rk3/********/********/********/********/1*******/********/KN6[OO] w - - 0 1');
+    if (moves(z).join(',') !== 'O@a3,b1a3') throw new Error(`the fizzle board: ${moves(z).join(' ')}`);
+    z.push('O@a3');
     z.push('e8e8');
     if (moves(z).join(',') !== 'a1a1') throw new Error(`no castable square left: ${moves(z).join(' ')}`);
     z.push('a1a1');
-    if (!z.fen().startsWith('3rk3/********/********/********/********/********/1*******/KN6[O] b') || z.fen().includes('{') || z.isGameOver(true)) throw new Error(`after the fizzle: ${z.fen()} over=${z.isGameOver(true)}`);
+    if (!z.fen().startsWith('3rk3/********/********/********/********/1*******/********/KN6[O] b') || z.fen().includes('{') || z.isGameOver(true)) throw new Error(`after the fizzle: ${z.fen()} over=${z.isGameOver(true)}`);
     if (moves(z).join(',') !== 'd8a8,d8b8,d8c8,e8f8') throw new Error(`black plays on: ${moves(z).join(' ')}`);
     z.delete();
-    const z2 = new ffish.Board(pv.name, '4k3/********/********/********/*r******/*1******/1*******/KN6[OO] w - - 0 1');
-    z2.push('O@a2');
+    const z2 = new ffish.Board(pv.name, '4k3/********/********/*r******/*1******/1*******/********/KN6[OO] w - - 0 1');
+    z2.push('O@a3');
     z2.push('e8e8');
-    if (moves(z2).join(',') !== 'O@b3') throw new Error(`v3's fizzle board links freely now: ${moves(z2).join(' ')}`);
+    if (moves(z2).join(',') !== 'O@b4') throw new Error(`v3's fizzle board links freely now: ${moves(z2).join(' ')}`);
     z2.delete();
-    // The engine: frozen → the pass; the link ply → perft 45 and a cast
+    // The engine: frozen → the pass; the link ply → perft 31 and a cast
     engine.setoption('UCI_Variant', pv.name);
     engine.position({ fen: frozenFen });
     let res = await engine.go('depth 6 movetime 3000');
@@ -515,10 +517,10 @@ async function main() {
     engine.position({ fen: linkFen });
     const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
     const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
-    if (n1 !== 45) throw new Error(`engine perft 1 on the link ply = ${n1}`);
+    if (n1 !== 31) throw new Error(`engine perft 1 on the link ply = ${n1} (31 expected)`);
     res = await engine.go('depth 6 movetime 3000');
     if (!isCast(res.bestmove)) throw new Error(`link bestmove ${res.bestmove}`);
-    return 'after O@c4 the enemy has the pass alone (SAN --); after it 45 linking casts and nothing else; the link makes the pair with black free; a half with no castable square left fizzles on a pass and the game goes on (v3\'s exposure-fizzle board links freely: no tunnel); the engine passes when frozen and links when bound, perft 45';
+    return 'after O@c4 the enemy has the pass alone (SAN --); after it 31 linking casts (ranks 3–6) and nothing else; the link makes the pair with black free; a half with no castable square left fizzles on a pass and the game goes on (v3\'s exposure-fizzle board links freely: no tunnel); the engine passes when frozen and links when bound, perft 31';
   });
 
   // --- THE SLEDGEHAMMER + THE HARD WALL (2026-09-17, engine/patches/
