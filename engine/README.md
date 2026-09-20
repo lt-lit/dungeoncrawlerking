@@ -687,7 +687,7 @@ the wasms +18,109 / +19,403 bytes.
 - [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
 - [x] `search-identity.cjs` — node-for-node identical to the vendored seven-patch engine at depth 12
 - [x] `depthcap.cjs` — d22 110/110 (slowest 1,533 ms), d60 30/30 (slowest 10,023 ms, the movetime) — **the cap stays at d22**
-- [x] the game's gates on the vendored pair: `test-ice-game.mjs` 42 (the grid's physics against ffish on the fixtures and 1,142 random slides), selftest 51/51 headless (the ice check on the deal variant), ui-smoke NNN ok (THE ICE block), replay-smoke 76, test-logreport 61, test-world 132, test-barrier 170, test-portals-game 27, the other Node gates unchanged
+- [x] the game's gates on the vendored pair: `test-ice-game.mjs` 42 (the grid's physics against ffish on the fixtures and 1,142 random slides), selftest 51/51 headless (the ice check on the deal variant), ui-smoke 318 ok (THE ICE block), facing-walk 108/108, replay-smoke 76, test-logreport 61, test-world 132, test-barrier 170, test-portals-game 27, the other Node gates unchanged
 
 ## The portals-cast patch (`patches/portals-cast.patch`, was `portals-v3.patch`) — 2026-09-19
 

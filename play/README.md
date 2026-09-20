@@ -2749,13 +2749,14 @@ ice patch"); this is the game half.
   spending the scroll, no cast in check, 19 slides on eight fixtures equal
   to ffish square for square, the shove and its alias, the pit ending the
   duel and a king that may not slide into his own, engine perft 62 and
-  e1f1 found), ui-smoke NNN ok (THE ICE block: the button with one scroll,
+  e1f1 found), ui-smoke 318 ok (THE ICE block, on s73 where the cast rows are open floor: the button with one scroll,
   cast mode lighting every non-terrain square of ranks 5–6, a tap on a wall
   leaving it, the cast icing the floor of its 3×3 and spending the scroll,
   the record's `ice` cast and the log, the ice pixels on the patch and none
-  off it, a slide played in the plies that followed with the state's slide
-  equal to the grid's prediction and the piece at rest, the enemy's slide
-  arrow, `?ice=off`), replay-smoke 76, test-logreport 61, test-world 132
+  off it, a king stepping onto the patch and sliding two squares, played
+  through the lit resting square, the state's slide equal to the grid's
+  prediction, the piece at rest after the commit, the log's "Kb5 — slides
+  to b7"; `?ice=off`), facing-walk 108/108, replay-smoke 76, test-logreport 61, test-world 132
   (the pit glyph in the crop, the stage and back), test-barrier 170 (an
   ice deal's name, keys, rows and holdings), test-portals-game 27,
   test-dungeon 96, test-army 131, test-enemy 100, test-camera 80,
