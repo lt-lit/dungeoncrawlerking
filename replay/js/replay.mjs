@@ -360,6 +360,7 @@ function quakeMarksOf(ev) {
 
 function moveArrow(st) {
   const p = st?.move?.match(R.UCI_MOVE_RE);
+  if (p && p[1] === p[2]) return null; // PORTALS v3: a pass (the frozen side's, or a fizzle) draws nothing
   if (!p) {
     // THE PORTAL SPELL: a cast has no path — a ring on its square (the board's from === to case), in the mover's colour.
     const c = st?.move?.match(CAST_RE);

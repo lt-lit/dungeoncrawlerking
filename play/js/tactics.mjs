@@ -54,6 +54,7 @@
 
 import { isTerrain, splitFen, joinFen } from './fen.mjs';
 import { captureLoss, PIECE_VALUE } from './threat.mjs';
+import { walkRay, withPortals, portalTwins } from './rays.mjs'; // the body rule: a linked portal square ends every line (a grid carries its pairs)
 
 const SQ = (f, r) => `${String.fromCharCode(97 + f)}${r + 1}`;
 const ORTHO = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -98,14 +99,8 @@ export function attacksFrom(grid, f, r, files, ranks) {
   };
   const dirs = sliderDirs(ch);
   if (dirs) {
-    for (const [df, dr] of dirs) {
-      let nf = f + df;
-      let nr = r + dr;
-      while (push(nf, nr)) {
-        nf += df;
-        nr += dr;
-      }
-    }
+    // The body rule (rays.mjs): a linked portal square ends the line, whatever stands on it
+    for (const [df, dr] of dirs) walkRay(grid, files, ranks, f, r, df, dr, (nf, nr) => push(nf, nr));
   } else if (t === 'n') {
     for (const [df, dr] of KNIGHT_HOPS) push(f + df, r + dr);
   } else if (t === 'k') {
@@ -208,23 +203,23 @@ export function threatLedger(grid, files, ranks) {
     if (!dirs) continue;
     const mine = sides[sideOf(s.ch)];
     for (const [df, dr] of dirs) {
-      let f = s.f + df;
-      let r = s.r + dr;
+      // The line to the first piece and on to the second (rays.mjs: a portal square is a body that ends it); the squares walked are the line's
       let first = null;
       let second = null;
-      while (onBoard(f, r, files, ranks)) {
-        const occ = grid[r][f];
-        if (isTerrain(occ)) break;
-        if (occ) {
-          if (!first) first = { f, r, ch: occ, sq: SQ(f, r) };
-          else {
-            second = { f, r, ch: occ, sq: SQ(f, r) };
-            break;
-          }
-        }
-        f += df;
-        r += dr;
-      }
+      const path1 = [];
+      const path2 = [];
+      walkRay(grid, files, ranks, s.f, s.r, df, dr, (f, r, occ) => {
+        if (isTerrain(occ)) return false;
+        if (occ) { first = { f, r, ch: occ, sq: SQ(f, r) }; return false; }
+        path1.push(SQ(f, r));
+        return true;
+      });
+      if (first) walkRay(grid, files, ranks, first.f, first.r, df, dr, (f, r, occ) => {
+        if (isTerrain(occ)) return false;
+        if (occ) { second = { f, r, ch: occ, sq: SQ(f, r) }; return false; }
+        path2.push(SQ(f, r));
+        return true;
+      });
       if (!first || !second) continue;
       if (isWhite(first.ch) === isWhite(s.ch) || isWhite(second.ch) === isWhite(s.ch)) continue;
       const vFirst = valueOf(first.ch);
@@ -237,8 +232,8 @@ export function threatLedger(grid, files, ranks) {
       mine.pieces.add(s.sq);
       mine.pieces.add(first.sq);
       mine.pieces.add(second.sq);
-      for (const sq of between(s, first)) mine.squares.add(sq);
-      for (const sq of between(first, second)) mine.squares.add(sq);
+      for (const sq of path1) mine.squares.add(sq);
+      for (const sq of path2) mine.squares.add(sq);
     }
   }
 
@@ -306,7 +301,7 @@ export function gridOf(fen, files, ranks) {
       f++;
     }
   });
-  return g;
+  return withPortals(g, portalTwins(fen)); // Portals v2: the pairs ride the grid
 }
 
 /** Every move after which the opponent has no legal move — mate, stalemate
@@ -502,19 +497,14 @@ export function terrainReach(grid, files, ranks, white) {
     const t = p.ch.toLowerCase();
     const dirs = sliderDirs(p.ch);
     if (dirs) {
-      for (const [df, dr] of dirs) {
-        let f = p.f + df;
-        let r = p.r + dr;
-        while (onBoard(f, r, files, ranks)) {
-          const occ = grid[r][f];
-          if (occ) {
-            if (isTerrain(occ)) out.add(SQ(f, r));
-            break;
-          }
-          f += df;
-          r += dr;
+      // The first thing on the line (rays.mjs: a portal square is a body that ends it)
+      for (const [df, dr] of dirs) walkRay(grid, files, ranks, p.f, p.r, df, dr, (f, r, occ) => {
+        if (occ) {
+          if (isTerrain(occ)) out.add(SQ(f, r));
+          return false;
         }
-      }
+        return true;
+      });
       continue;
     }
     const steps = t === 'n' ? KNIGHT_HOPS : t === 'k' ? KING_STEPS : t === 'p' ? [[-1, isWhite(p.ch) ? 1 : -1], [1, isWhite(p.ch) ? 1 : -1]] : [];

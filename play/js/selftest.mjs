@@ -11,13 +11,13 @@
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket } from './variant.mjs';
-import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger } from './fen.mjs';
+import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger, isCast, isPass } from './fen.mjs';
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { DuelController, RECORD_ARRAYS } from './duel.mjs';
 import { buildLog, LogStore, logFileName } from './replaylog.mjs';
 import { captureLoss } from './threat.mjs';
-import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalSoftens } from './tactics.mjs';
+import { threatLedger, gridOf, forcedWins, winInOne, newThreats, mateNets, evalSoftens, attacksFrom } from './tactics.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { loadStageV2, flipStageVertical, cropStage, stageSkins } from './stage.mjs';
 import { dealMatchup, campLineRank } from './armygen.mjs';
@@ -371,18 +371,22 @@ async function main() {
     if (ffish.validateFen(start, pv.name) !== 1) throw new Error(`validateFen rejected ${start}`);
     const b = new ffish.Board(pv.name, start);
     const casts = b.legalMoves().trim().split(/\s+/).filter((m) => m.startsWith('O@'));
-    if (casts.length !== 46 || casts.some((m) => /[18]$/.test(m))) throw new Error(`${casts.length} casts (46 expected, none on a king row)`);
+    // two rows off each king row (2026-09-20): ranks 3–6 of the 8, 32 squares, all empty on this board
+    if (casts.length !== 32 || casts.some((m) => /[1278]$/.test(m))) throw new Error(`${casts.length} casts (32 expected, none on a king row or the row beside it)`);
     const fens = [start];
-    for (const m of ['O@c3', 'O@f6', 'O@e5']) {
+    // PORTALS v3 (2026-09-19): the enemy is FROZEN between the two portals — its pass is the ply between a half and its link
+    for (const m of ['O@c3', 'e8e8', 'O@e5', 'O@f6']) {
       b.push(m);
       fens.push(b.fen());
     }
     // The casters' ledger (2026-09-17): one walk over the positions names
     // each pair's caster and its number, and a half the colour its pair gets.
     let P = portalInfo(b.fen(), portalLedger(fens));
-    if (P.twin.get('c3') !== 'e5' || P.halves.b !== 'f6' || !b.fen().includes('[o]')) throw new Error(`after three casts: ${b.fen()}`);
+    if (P.twin.get('c3') !== 'e5' || P.halves.b !== 'f6' || !b.fen().includes('[o]')) throw new Error(`after the first pair and black's half: ${b.fen()}`);
     const own = (sq) => P.owner.get(sq) ?? {};
-    if (own('c3').side !== 'w' || own('e5').side !== 'w' || own('e5').n !== 0 || own('e5').half || own('f6').side !== 'b' || own('f6').n !== 0 || !own('f6').half) throw new Error(`the ledger after three casts: ${JSON.stringify([...P.owner])}`);
+    if (own('c3').side !== 'w' || own('e5').side !== 'w' || own('e5').n !== 0 || own('e5').half || own('f6').side !== 'b' || own('f6').n !== 0 || !own('f6').half) throw new Error(`the ledger after the first pair and black's half: ${JSON.stringify([...P.owner])}`);
+    b.push('e1e1'); // white frozen while black's half stands
+    fens.push(b.fen());
     b.push('O@a4');
     fens.push(b.fen());
     P = portalInfo(b.fen(), portalLedger(fens));
@@ -416,7 +420,107 @@ async function main() {
       s.delete();
       if (!over) throw new Error(`a king with only ${what} is not stripped`);
     }
-    return '46 casts, two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
+    return '32 casts (ranks 3–6 alone), two pairs linked and owned by their casters, Rxc3 lands on f6 with the bishop swapped to c3, engine perft 9 + bestmove c1c3, king + scrolls / a half / a pair stripped';
+  });
+
+  // --- PORTALS v4 (2026-09-19, engine/patches/portals-body.patch; brief §4.7):
+  // a linked portal square is a BODY to every line and NOTHING runs through a
+  // pair — v2's tunnel is retired — on the game's own deal variant, both
+  // binaries, and the grid's own walker (rays.mjs) reading the same rule. ---
+  await check('portals v4: the body, the landing, no line through a pair, the plugged exit, the double step (ffish + engine + the grid)', async () => {
+    const pv = dealVariant(8, 8, 2, 7, { portals: true });
+    ffish.loadVariantConfig(pv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + pv.ini);
+    const f1 = '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
+    const b = new ffish.Board(pv.name, f1);
+    const legal = b.legalMoves().trim().split(/\s+/).filter(Boolean).sort();
+    const want = ['a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'].sort();
+    if (JSON.stringify(legal) !== JSON.stringify(want)) throw new Error(`F1 legal: ${legal.join(' ')}`);
+    if (b.sanMove('a1a4') !== 'Ra4') throw new Error(`SAN ${b.sanMove('a1a4')}`);
+    b.push('a1a4');
+    if (!b.fen().startsWith('4k3/p7/8/7R/8/8/8/4K3')) throw new Error(`the landing: ${b.fen()}`);
+    b.pop();
+    b.delete();
+    // no check through a pair: the rook's line ends at a4 (v2 read this board as check through the tunnel)
+    const t = new ffish.Board(pv.name, '8/6bk/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}');
+    if (t.isCheck()) throw new Error('a check ran through the pair');
+    if (t.legalMoves().trim().split(/\s+/).filter(Boolean).length !== 13) throw new Error(`the unchecked side has ${t.legalMoves()}`);
+    t.delete();
+    const c = new ffish.Board(pv.name, '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}');
+    const lc = c.legalMoves().trim().split(/\s+/).filter(Boolean);
+    if (lc.length !== 11) throw new Error(`the plugged exit: ${lc.join(' ')}`);
+    c.push('a1a4');
+    if (!c.fen().startsWith('4k3/p7/8/7R/n7/8/8/4K3')) throw new Error(`the swap: ${c.fen()}`);
+    c.delete();
+    const d = new ffish.Board(pv.name, '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a3-d5}');
+    const ld = d.legalMoves().trim().split(/\s+/).filter(Boolean);
+    if (!ld.includes('a2a3') || ld.includes('a2a4')) throw new Error(`the double step: ${ld.join(' ')}`);
+    d.delete();
+    // The engine agrees on the count and takes a queen standing on a portal square, landing on the twin.
+    engine.setoption('UCI_Variant', pv.name);
+    engine.position({ fen: f1 });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== 11) throw new Error(`engine perft 1 = ${n1}`);
+    engine.position({ fen: '4k3/3p4/8/8/8/2q5/3P4/2R1K3[] w - - 0 1 {c3-f6}' });
+    const res = await engine.go('depth 8 movetime 3000');
+    if (res.bestmove !== 'c1c3') throw new Error(`bestmove ${res.bestmove} (c1c3 takes the queen on the portal and lands on f6)`);
+    // The grid reads the same rule: the walker's attacks end at the body, nothing comes out of the twin.
+    const atk = attacksFrom(gridOf(f1, 8, 8), 0, 0, 8, 8).map((a) => 'abcdefgh'[a.f] + (a.r + 1));
+    if (!atk.includes('a4') || atk.includes('a5') || atk.includes('h6')) throw new Error(`attacksFrom ${atk.join(' ')}`);
+    return 'F1: 11 moves, the line ends at the body a4 and the move there lands on h5; no check through the pair (13 free moves); the plugged exit swaps; the double step ends at the portal; engine perft 11 and c1c3 takes the queen on the portal; the grid walker agrees';
+  });
+
+  // --- PORTALS v3 (2026-09-19, engine/patches/portals-cast.patch — portals-v3.patch until the tunnel's retirement): THE ONE-TURN
+  // CAST — an open half FREEZES the other side (its one move is a pass) and
+  // binds its caster to the link; a pass fizzles a half no link can close. ---
+  await check('portals v3: the frozen ply, the link ply, the fizzle (ffish + engine, the deal variant)', async () => {
+    const pv = dealVariant(8, 8, 2, 7, { portals: true });
+    ffish.loadVariantConfig(pv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + pv.ini);
+    const moves = (bd) => bd.legalMoves().trim().split(/\s+/).filter(Boolean).sort();
+    const b = new ffish.Board(pv.name, '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1');
+    b.push('O@c4');
+    if (moves(b).join(',') !== 'e8e8') throw new Error(`frozen: ${moves(b).join(' ')}`);
+    if (b.sanMove('e8e8') !== '--') throw new Error(`SAN of the pass ${b.sanMove('e8e8')}`);
+    if (!isPass('e8e8') || isPass('e8e7') || isPass('O@c4')) throw new Error('isPass');
+    const frozenFen = b.fen();
+    b.push('e8e8');
+    const links = moves(b);
+    if (links.length !== 31 || !links.every((m) => isCast(m)) || links.includes('O@c4')) throw new Error(`the link ply: ${links.length} (31 = ranks 3–6 less the half) ${links.filter((m) => !isCast(m)).join(' ')}`);
+    const linkFen = b.fen();
+    b.push('O@f5');
+    if (b.fen() !== '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}' || moves(b).length !== 36) throw new Error(`after the link: ${b.fen()} ${moves(b).length} (36 = 30 casts + 6 piece moves)`);
+    b.delete();
+    // the fizzle board: ONE castable square on the whole board (a3 — rank 2 is beside a king row and never
+    // castable since 2026-09-20), so after the half nothing is left to link
+    // (v3's board — a link that would have exposed the king through the new tunnel — links freely since v4: no tunnel)
+    const z = new ffish.Board(pv.name, '3rk3/********/********/********/********/1*******/********/KN6[OO] w - - 0 1');
+    if (moves(z).join(',') !== 'O@a3,b1a3') throw new Error(`the fizzle board: ${moves(z).join(' ')}`);
+    z.push('O@a3');
+    z.push('e8e8');
+    if (moves(z).join(',') !== 'a1a1') throw new Error(`no castable square left: ${moves(z).join(' ')}`);
+    z.push('a1a1');
+    if (!z.fen().startsWith('3rk3/********/********/********/********/1*******/********/KN6[O] b') || z.fen().includes('{') || z.isGameOver(true)) throw new Error(`after the fizzle: ${z.fen()} over=${z.isGameOver(true)}`);
+    if (moves(z).join(',') !== 'd8a8,d8b8,d8c8,e8f8') throw new Error(`black plays on: ${moves(z).join(' ')}`);
+    z.delete();
+    const z2 = new ffish.Board(pv.name, '4k3/********/********/*r******/*1******/1*******/********/KN6[OO] w - - 0 1');
+    z2.push('O@a3');
+    z2.push('e8e8');
+    if (moves(z2).join(',') !== 'O@b4') throw new Error(`v3's fizzle board links freely now: ${moves(z2).join(' ')}`);
+    z2.delete();
+    // The engine: frozen → the pass; the link ply → perft 31 and a cast
+    engine.setoption('UCI_Variant', pv.name);
+    engine.position({ fen: frozenFen });
+    let res = await engine.go('depth 6 movetime 3000');
+    if (res.bestmove !== 'e8e8') throw new Error(`frozen bestmove ${res.bestmove}`);
+    engine.position({ fen: linkFen });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== 31) throw new Error(`engine perft 1 on the link ply = ${n1} (31 expected)`);
+    res = await engine.go('depth 6 movetime 3000');
+    if (!isCast(res.bestmove)) throw new Error(`link bestmove ${res.bestmove}`);
+    return 'after O@c4 the enemy has the pass alone (SAN --); after it 31 linking casts (ranks 3–6) and nothing else; the link makes the pair with black free; a half with no castable square left fizzles on a pass and the game goes on (v3\'s exposure-fizzle board links freely: no tunnel); the engine passes when frozen and links when bound, perft 31';
   });
 
   // --- THE SLEDGEHAMMER + THE HARD WALL (2026-09-17, engine/patches/

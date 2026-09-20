@@ -2559,8 +2559,9 @@ exactly as specified and with no special cases: landing on a portal always
 teleports the piece to the other portal; if the other portal is occupied
 the two swap places; a piece standing on a portal is captured as normal
 and the attacker is teleported after the capture. One placement rule —
-portals are never on a king row (the promotion zone), so no pawn promotes
-through one and the easy queen costs a move of walking.
+portals are never on a king row (the promotion zone), and since 2026-09-20
+never on the row beside one either (§ "Portals v4.1" below), so no pawn
+promotes through one and the easy queen costs two moves of walking.
 
 **Everyone has it (the stress test):** every duel on both pages deals each
 side two scrolls in the FEN's holdings (`[OOoo]`), one pair per side per
@@ -2575,10 +2576,12 @@ the duel: the pairs and halves ride the FEN's trailing field
   `portalIniKeys`, `portalPocket`; armygen's `dealMatchup` and the
   barrier's `planBox` take `portals`): the deal variant gains the engine's
   keys — the scroll piece (FSF's `immobile`, letter `o`), `portalScroll`,
-  `pieceDrops`, the drop region of every rank but the king rows, the
+  `pieceDrops`, the drop region (ranks 3…R−2 since 2026-09-20 —
+  `PORTAL_ROW_MARGIN` 2; every rank but the king rows before), the
   scroll's value (`PORTAL_SCROLL_VALUE` 0 — the engine wants portals with no
   bonus: the first log had both sides cast in the first three moves) —
-  under the name suffix `__portals` (rule 7).
+  under the name suffix `__portals2` (rule 7 — the suffix carries the
+  margin; `__portals` named the one-row deals).
   `?portals=off` deals a plain duel; Options → Spells is the same switch,
   saved (`options.portals`, on by default).
 - **The page** (main.mjs § THE PORTAL SPELL): the ⌾ Portal button in the
@@ -2657,6 +2660,202 @@ with"); next the sledgehammer (✅ built the same day, the section below),
 then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
+
+## Portals v4.1 — two rows off the king rows (2026-09-20)
+
+Brief §4.7 "Portals v4.1" (designer: "Let's make it so portals must be
+placed two spaces away from promotion zones instead of one."). An ini
+rule, no engine change — the v4 record's own note ("a portal one rank shy
+of a king row — an ini-only fix: two rows off each king row") ruled on.
+
+- **The region** (`variant.mjs portalIniKeys`): `dropRegionWhite/Black` is
+  ranks 1 + `PORTAL_ROW_MARGIN` … R − `PORTAL_ROW_MARGIN` with the margin 2
+  — ranks 3…8 on the 10×10 box, 3…6 on the selftest's 8-rank board, rank 3
+  alone on a 5-rank one — for both colours; ranks 2…R−1 until now. The
+  engine's own floor is unchanged (its FEN-field parse drops an entry on a
+  king row; the engine tests' variants keep their one-row regions, since
+  they test the engine's rules and not the game's placement).
+- **The name** (rule 7): `PORTAL_VARIANT_SUFFIX` is `__portals2` — the
+  suffix carries the margin, so a deal variant's name encodes its region.
+  `__portals` named the one-row deals; the two committed portal samples
+  carry them and load as ever under their own recorded ini (the analyzer
+  appends every log's ini to one catalog, and a same-named variant with a
+  different region would have been a silent no-op there).
+- **The page** needed nothing: cast mode lights ffish's legal casts, so
+  the two rows went dark on their own.
+- **Gates**: selftest 50/50 headless (32 casts on the 8-rank deal board — ranks 3–6, none within a row of a king row — 31 links and 36 moves after the link, the fizzle boards a rank up), ui-smoke 375 ok (cast mode lights 33 squares on s59, none within a row of a king row), replay-smoke 76 ok (both portal samples load under their recorded `__portals` ini), test-barrier 165 (a portal deal's name `__portals2` and both regions `*3 … *8` on the box), test-logreport 61, test-portals-game 27; the engine is untouched, so its gates stand as recorded.
+
+## Portals v4 — the tunnel retired (2026-09-19)
+
+Brief §4.7 "Portals v4 — the tunnel retired"; the engine half is
+`engine/patches/portals-body.patch` (portals-v2.patch with its tunnel half
+removed) + `portals-cast.patch` (portals-v3.patch rebased; the record in
+`engine/README.md` § "The portals-body patch"). The designer, on the s88
+log: "I'm actually considering getting rid of the true pass thru moves for
+sliders… I'm worried it's not intuitive to read" — then "Let's make v3
+portals without the pass thru moves. We'll keep the double portal cast and
+the portals stopping movement. Everything going thru a portal simply lands
+on the exit portal now, swapping if there's something there." The body
+rule stays (a linked portal square ends every line, whatever stands on
+it); nothing runs THROUGH a pair any more — a rider's line that reaches a
+portal square ends there and the move onto it is the landing. The game
+half is mostly deletion:
+
+- **The grid** (`play/js/rays.mjs`): `walkRay` walks a line under the body
+  rule — a portal square is visited (a landing, or the occupant the line
+  stops at) and ends the walk; no `through`, no origin guard (nothing comes
+  round). `portalRoute` is gone (a landing is a plain move to the entry;
+  the commit shows the piece on the twin). tactics.mjs, threat.mjs and
+  director.mjs read it as before — the landing guard, the exposure rule,
+  pins and the terrain reach now stop at every portal square and never see
+  past one; threat.mjs's `buildChains` lost its seen set (a straight walk
+  cannot revisit a square). Node gate `phase0/harness/test-portals-game.mjs`
+  27 (rewritten: the line ends at the body, a plugged twin changes nothing,
+  no chain through two pairs, no pin and no capture through a pair, the
+  shield, a plain pin and a wall coming down still read).
+- **The board** (canvas-board.mjs): `animateSlide` lost its `path` legs
+  and `#paintArrows` its `via` pieces — a landing's slide runs to the entry
+  and its arrow ends there. (The walk's own `via` waypoints in
+  `animateArrivals` are the army's catch-up paths and stay.)
+- **The page** (main.mjs): no route is read in `onMove` (the traffic wears
+  the way to the entry, the slide is the plain one, the log says "— through
+  the portal to …" for a landing), `applyHintLines` and the hint list carry
+  no `via` (`.hint-via` gone from style.css), `lastMoveArrow` reads no
+  route (`fenBeforeLast` deleted); THE EXIT ALIAS stays — it IS the picture
+  the designer wanted: tap the bishop, its squares run up to the portal,
+  the twin lights, a tap there plays the landing.
+- **The analyzer** (replay.mjs): `moveArrow(st)` and `pvArrows` draw plain
+  arrows.
+- **Gates**: selftest 50/50 (the v2 check rewritten as the v4
+  check: eleven moves on F1 with nothing past the body and nothing out of
+  the twin, no check through the pair with black's thirteen free moves, the
+  plugged exit's swap, the double step ending at the portal, engine perft
+  11 and the queen on c3 taken on its portal square, the grid walker
+  agreeing), ui-smoke 373 ok (the portal block reads a landing's
+  picture: the arrow paints on the entry and nothing on the twin or beyond,
+  a plain slide to the entry resolves clean, the exit alias on the live
+  duel), test-portals-game 27, replay-smoke 76 ok, test-logreport
+  61, the other Node gates unchanged; the engine's own record in
+  `engine/README.md`. THE DESIGNER'S NOTE going in: the tunnel "might come
+  back later… perhaps a late game upgrade" — its implementation is in the
+  history at the v2 and v3 commits. THE VERDICT (designer, 2026-09-20):
+  "Alright this works pretty good" — Portals v4 is IN.
+
+## Portals v3 — the one-turn cast (2026-09-19)
+
+Brief §4.7 "Portals v3 — the one-turn cast"; the engine half is
+`engine/patches/portals-cast.patch` (`portals-v3.patch` until the tunnel's
+retirement the same day rebased it; its record in `engine/README.md` § "The
+portals-cast patch"). The designer, on the v2 build: "Is it possible to make
+it so both portals are placed in one turn instead of two?" — then "It
+might make portals too strong but let's go ahead and try it." Both
+portals go down before the enemy can act, as THREE PLIES the other side
+cannot use: an open half FREEZES the other side (its one legal move is a
+pass, `e8e8`, SAN `--`) and BINDS its caster to the linking casts; a half no
+link can close FIZZLES on a pass (the half's scroll spent, the other
+kept). The game half:
+
+- **The controller** (`duel.mjs`): `forcedMove()` — the one move the side
+  to move is bound to, when it is a pass (the frozen side's, or the
+  fizzle); `mustLink()` — every legal move a linking cast; `playForced
+  (mover)` plays the pass through the ordinary `#push` for whoever is to
+  move, no search. `castKind(fenBefore, uci, fenAfter)` names a ply inside
+  a cast — `half` / `link` / `pass` / `fizzle` — and every recorded state
+  carries it as `cast`. THE GODS SKIP THE INSIDE OF A CAST: on a `half` and
+  a `pass` the meters are not fed, no quake is rolled and the repetition
+  record is not written — the link (or the fizzle) is the one ply that
+  counts, so a cast is one cold ply to the meter, not three, and no quake
+  ever lands between the two portals. `fen.mjs isPass`.
+- **The page** (`main.mjs driveTurn`): a forced pass is played by the game
+  — the enemy's (`mover: 'engine'`) the moment the player's half is down,
+  the player's (`mover: 'player'`) after a beat (600 ms with motion on) so
+  the enemy's half is seen before its link lands, the status saying who is
+  frozen or that the cast fizzles. On the link ply the player is put INTO
+  CAST MODE by the game (`setCastMode` keeps it while `mustLink()`, a tap
+  elsewhere is nothing; the status "place the second portal"); the Portal
+  button's title says which half is open. Casting is two taps: the first
+  square, then — the enemy frozen in between — the second. The log: "--
+  — the enemy is frozen while your portal opens" / "you are frozen while
+  the enemy's portal opens" / "no square could hold the second portal: the
+  cast fizzles"; a pass slides nothing, wears nothing, draws no arrow
+  (`lastMoveArrow`, the analyzer's `moveArrow`).
+- **The enemy's cast** costs it two searches (the half, then the link at
+  the same `go`) around the player's automatic pass.
+- **Gates**: selftest 50/50 (the v3 check on the deal variant: after
+  `O@c4` the enemy's one move is the pass with SAN `--`; then 45 linking
+  casts and nothing else; the link `{c4-f5}` with black free on 50 moves;
+  the 8×8 fizzle board — `O@a2`, the pass, then `a1a1` alone, the half gone
+  and the game on; the engine passes when frozen and links when bound,
+  perft 45; the v1 check's four casts became six plies), ui-smoke
+  326 ok (THE PORTAL SPELL block reads the one-turn cast: after the
+  first tap the enemy's pass is in the record, the player is on the link
+  ply in cast mode with no piece move offered, the status asks for the
+  second portal, the log says the enemy is frozen; the record's kinds run
+  half, pass, link; the gods rolled on the link ply alone; the second tap
+  links), replay-smoke 76, test-logreport 61, the Node gates unchanged;
+  the engine's own record in `engine/README.md`.
+
+## Portals v2 — the body and the tunnel (2026-09-18; the tunnel RETIRED 2026-09-19 — Portals v4, above; the body rule lives on as `engine/patches/portals-body.patch`)
+
+Brief §4.7 "Portals v2"; the engine half was `engine/patches/portals-v2.patch`
+(its record in `engine/README.md` § "The portals-body patch"). The designer's
+two rules, and nothing else changed — THIS SECTION IS THE RECORD OF THAT
+BUILD; the tunnel half of everything below is gone since v4: a linked portal square is a BODY —
+every line stops at it, whatever stands on it (a half is not a body until
+it is linked); an EMPTY PAIR is a TUNNEL for sliders — a rook's, bishop's
+or queen's line entering an empty portal whose twin is also empty comes out
+of the twin in the same direction and runs on, through another empty pair
+too, each pair once per line. Stopping at the entry is the ordinary portal
+move (the piece ends on the twin, or swaps with whatever stands there);
+anything on either square closes the tunnel; a pawn's double step never
+crosses a portal square. The game half:
+
+- **The grid** (`play/js/rays.mjs`): ONE ray walker (`walkRay`) under the
+  rule — a grid carries its pairs as a non-enumerable `portals` property
+  (`withPortals`, set by director.mjs `fenGrid` and tactics.mjs `gridOf`,
+  kept by `copyGrid`; a grid without it walks plain lines) — and the ROUTE
+  of a move (`portalRoute(fenBefore, uci)`: null for a plain move or a plain
+  landing, else the pairs a rider's line ran through and the path
+  `[from, entry, exit, …, to]`, every second boundary a cut; a square
+  reachable plainly reads plain). tactics.mjs (`attacksFrom`, the pins and
+  skewers — the walked squares are the line — `terrainReach`) and
+  threat.mjs (`buildChains`, x-raying on from each occupant; `editExposes`)
+  walk it, so the gods' landing guard and exposure rule see through
+  tunnels and stop at bodies. Node gate `phase0/harness/test-portals-game.mjs`.
+- **The board** (canvas-board.mjs): `animateSlide(from, to, { path })`
+  slides the legs in turn, the eased progress spread over them by length,
+  with a CUT between an entry and its exit; `#paintArrows` draws an arrow
+  with `via` (the pairs) in pieces — into the entry, out of the exit, on to
+  the destination — the label and the hammer glyph on the last piece.
+- **The page** (main.mjs): `onMove` reads the route off the board before
+  the move — the slide's legs (the duration grows with the pairs), the
+  traffic worn per leg, the log "Rf8+ — via c3→f6" (and ", through the
+  portal to …" for a landing at the end of a tunnel); `applyHintLines`
+  puts `via` on the hint arrow and "via c3→f6" after the SAN in the hint
+  list (`.hint-via`); `lastMoveArrow` reads the route off `fenBeforeLast`
+  (the record's state before the last move); THE EXIT ALIAS —
+  `exitAliases`: an EMPTY twin of a lit landing square lights too, and a
+  tap on it plays the landing on the entry (`onSquareTap`), so the landing
+  squares read as going into one portal and out of the other, the
+  designer's picture.
+- **The analyzer** (replay.mjs): `moveArrow(st, prev)` and `pvArrows` carry
+  `via` (the PV's routes are read off the line's start position — a later
+  move's route may differ once earlier moves have landed).
+- **Gates**: selftest 49/49 (the v2 check: fourteen moves with Rh8+
+  through a4–h5, the landing, the plugged exit's swap, the double step
+  ending at the portal, engine perft 14 and a1g7 through a3–g5, the grid
+  walker agreeing), test-portals-game 34 (the loop included: a line that
+  comes round through two pairs to its own square ends there, unvisited —
+  the smoke's random driver found the landing guard's x-ray chain looping
+  forever on one, so `walkRay` never visits its origin and threat.mjs's
+  `buildChains` keeps a seen set), ui-smoke 366 ok (the PORTALS v2 block:
+  an arrow `via` painted in two pieces with nothing on the cut, a slide in
+  legs resolving clean, the exit alias on the live duel when a landing on
+  the player's own pair comes up, judged from the recorded state of the
+  player's ply — the enemy's reply may walk back through the same pair),
+  replay-smoke 76, the Node gates unchanged. THE PHONE VERDICT (designer,
+  2026-09-19): "Seems to work fine on the phone" — Portals v2 is IN. Held over: a flash of the rings as a piece passes, the eval's
+  mobility through tunnels (engine).
 
 ## The sledgehammer and the hard wall (2026-09-17)
 

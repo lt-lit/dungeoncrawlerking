@@ -1980,8 +1980,8 @@ export class CanvasBoard {
   /** A duel slide this frame: the buffer origin of the sliding sprite between its squares. */
   #slideAt(s, t) {
     const u = Math.min(1, (t - s.t0) / s.ms);
-    const a = this.#origin(s.from), b = this.#origin(s.to);
     const e = ease(u);
+    const a = this.#origin(s.from), b = this.#origin(s.to);
     return { x: Math.round(a.x + (b.x - a.x) * e), y: Math.round(a.y + (b.y - a.y) * e) };
   }
 
@@ -2062,8 +2062,8 @@ export class CanvasBoard {
         this.bctx.globalAlpha = ga;
         continue;
       }
-      const p = this.#origin(a.from), q = this.#origin(a.to);
       const s = Math.max(0, Math.min(1, a.strength ?? 1));
+      const p = this.#origin(a.from), q = this.#origin(a.to);
       // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammer arrow ends in the hammer stamped on its wall.
       drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg, hammer: !!a.hammer });
     }

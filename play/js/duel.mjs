@@ -21,8 +21,19 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, hammerOf } from './fen.mjs';
+import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField } from './fen.mjs';
 import { flipTurn, evalSoftens } from './tactics.mjs';
+
+/** PORTALS v3 (the one-turn cast, 2026-09-19): what a ply is inside a cast —
+ *  'half' (a cast that opened the mover's half), 'link' (one that closed the
+ *  pair), 'pass' (the frozen side's one move), 'fizzle' (the caster's pass that
+ *  let a half no link could close go) — or null for an ordinary ply. */
+export function castKind(fenBefore, uci, fenAfter) {
+  const side = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
+  if (isCast(uci)) return parsePortalField(fenAfter).halves[side] ? 'half' : 'link';
+  if (isPass(uci)) return parsePortalField(fenBefore).halves[side] && !parsePortalField(fenAfter).halves[side] ? 'fizzle' : 'pass';
+  return null;
+}
 
 // THE SLEDGEHAMMER (2026-09-17): `hammerOf(fenBefore, uci)` — the square a
 // move hammers — lives in fen.mjs since the glyph (2026-09-18), read by the
@@ -255,6 +266,29 @@ export class DuelController {
     return this.board.legalMoves().trim().split(/\s+/).filter(Boolean);
   }
 
+  /** PORTALS v3 (the one-turn cast): the one move the side to move is bound
+   *  to, or null — a PASS the game plays itself, no search and no tap: the
+   *  side an open half FREEZES, or a caster whose half no legal link can
+   *  close (the fizzle). */
+  forcedMove() {
+    const ms = this.state === 'playing' ? this.legalMoves() : [];
+    return ms.length === 1 && isPass(ms[0]) ? ms[0] : null;
+  }
+
+  /** PORTALS v3: is the side to move bound to the link — its own half open, every legal move a linking cast? */
+  mustLink() {
+    const ms = this.state === 'playing' ? this.legalMoves() : [];
+    return ms.length > 0 && ms.every((m) => isCast(m));
+  }
+
+  /** Play the forced move (forcedMove) for whoever is to move; `mover` names the seat for the record. */
+  async playForced(mover) {
+    this.#assertPlaying();
+    const uci = this.forcedMove();
+    if (!uci) throw new Error('no forced move to play');
+    return this.#push(uci, mover);
+  }
+
   /** Play the human's move (full UCI incl. promotion suffix). */
   async playerMove(uci) {
     this.#assertPlaying();
@@ -480,6 +514,10 @@ export class DuelController {
     const hammered = hammerOf(fenBefore, uci);
     this.lastMove = { move: uci, san, mover, predicted, followed: predicted ? uci === predicted : null, engineSaw, ...(hammered ? { hammer: hammered } : {}) };
     this.board.push(uci);
+    // PORTALS v3 (the one-turn cast): what this ply is inside a cast — the
+    // record carries it, the page reads it, the gods skip the inside plies
+    const cast = castKind(fenBefore, uci, this.board.fen());
+    if (cast) this.lastMove.cast = cast;
     if (hammered) this.director.godCrates.add(hammered);
     this.movesSinceBase.push(uci);
     this.ply++;
@@ -503,6 +541,16 @@ export class DuelController {
     }
     if (this.ply >= MAX_PLIES) {
       return this.#fail(`max-plies backstop (${MAX_PLIES}) reached — director config failed to terminate`);
+    }
+
+    // PORTALS v3: the half and the frozen pass are the inside of ONE action.
+    // The gods neither watch nor roll on them — the link (or the fizzle) is
+    // the ply that counts, once — and the repetition record skips them too,
+    // so a cast is one cold ply to the meter, not three, and no quake lands
+    // between the two portals.
+    if (cast === 'half' || cast === 'pass') {
+      this.#takeSnapshot();
+      return { ended: false };
     }
 
     // --- the trigger (v3): feed both meters BEFORE the quake phase ---------

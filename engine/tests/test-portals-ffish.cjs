@@ -1,10 +1,18 @@
-// THE PORTAL GATE, ffish half (engine/patches/portals.patch): the portal move
-// type, the scroll cast, the trailing FEN field, the strip rule and the
-// check-flag consistency, all through the JS API the game uses.
+// THE PORTAL GATE, ffish half — PORTALS v4 (engine/patches/portals.patch +
+// portals-body.patch + portals-cast.patch): a linked portal square is a BODY
+// to every line and NOTHING runs through a pair (v2's tunnel, 2026-09-18, is
+// retired 2026-09-19 — the designer: "everything going thru a portal simply
+// lands on the exit portal now"); landings step through and swap as ever, a
+// pawn's double step never crosses a portal, a linking cast never gives check
+// and never exposes its caster (bodies only close lines). PORTALS v3 (the
+// one-turn cast): an open half freezes the other side (its one move is a pass,
+// SAN '--') and binds its caster to the link; a pass fizzles a half no link can
+// close. All through the JS API the game uses.
 //   FFISH_JS=/path/to/patched/ffish.js node engine/tests/test-portals-ffish.cjs
-// Hand-verified counts are the same fixtures the native gate ran
-// (scratch: forge/native-test.py); the consistency sweep compares the SAN
-// check suffix (gives_check) against push + isCheck on every legal move.
+// Every count below was derived by hand and confirmed by an independent
+// Python model of the rules (the forge's oracle) before the engine ran it;
+// the check-flag sweep compares the SAN check suffix (gives_check) against
+// push + isCheck on every legal move of every fixture and one ply deeper.
 const FFISH_JS = process.env.FFISH_JS; if (!FFISH_JS) { console.error('set FFISH_JS=/path/to/patched/ffish.js'); process.exit(2); }
 const realFetch = global.fetch; delete global.fetch;
 const Module = require(FFISH_JS);
@@ -31,6 +39,30 @@ dropRegionWhite = *2 *3 *4 *5 *6 *7
 dropRegionBlack = *2 *3 *4 *5 *6 *7
 pieceValueMg = o:0
 pieceValueEg = o:0
+
+[portal6:chess]
+maxRank = 6
+maxFile = 6
+castling = false
+stalemateValue = loss
+nMoveRule = 0
+nFoldRule = 0
+nFoldValue = loss
+extinctionValue = loss
+extinctionPieceTypes = *
+extinctionPieceCount = 1
+extinctionPseudoRoyal = false
+promotionRegionWhite = *6
+promotionRegionBlack = *1
+doubleStepRegionWhite = *2 *3 *4 *5
+doubleStepRegionBlack = *5 *4 *3 *2
+immobile = o
+portalScroll = o
+pieceDrops = true
+dropRegionWhite = *2 *3 *4 *5
+dropRegionBlack = *2 *3 *4 *5
+pieceValueMg = o:0
+pieceValueEg = o:0
 `;
 
 function run(ffish) {
@@ -39,129 +71,247 @@ function run(ffish) {
   ffish.loadVariantConfig(INI);
   const V = 'portal8';
   const moves = (b) => b.legalMoves().split(' ').filter(Boolean).sort();
+  const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  const diff = (a, b) => { const A = new Set(a), B = new Set(b); return [...[...A].filter((x) => !B.has(x)).map((x) => '+' + x), ...[...B].filter((x) => !A.has(x)).map((x) => '-' + x)].join(','); };
+  const board = (f) => f.split(' ')[0].split('[')[0];
+  const after = (fen, mv) => { const b = new ffish.Board(V, fen); b.push(mv); const f = b.fen(); b.delete(); return f; };
 
-  // F1 quiet teleport
-  let fen = 'r3k3/3p4/8/8/8/8/3P4/2R1K3 w - - 0 1 {c3-f6}';
+  // F1 THE BODY: a1's line ends at a4 (a5..a7 gone) and the move there is the landing on h5; nothing comes out of the twin
+  let fen = '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
   ok('validateFen accepts the portal field', ffish.validateFen(fen, V) === 1, String(ffish.validateFen(fen, V)));
   let b = new ffish.Board(V, fen);
-  ok('FEN round-trips with the portal field', b.fen() === 'r3k3/3p4/8/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-f6}', b.fen());
-  let m = moves(b);
-  ok('F1: 16 legal moves incl. c1c3', m.length === 16 && m.includes('c1c3'), m.join(','));
-  ok("F1: SAN of the teleport is 'Rc3'", b.sanMove('c1c3') === 'Rc3', b.sanMove('c1c3'));
-  b.push('c1c3');
-  ok('F1: the rook stands on f6, c3 empty', b.fen().startsWith('r3k3/3p4/5R2/8/8/8/3P4/4K3[]'), b.fen());
+  ok('FEN round-trips with the portal field', b.fen() === fen, b.fen());
+  let want = ['a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F1: exactly the 11 moves — the body ends the a-file at a4, and no h6..h8 out of the twin (v2 had 14)', same(moves(b), want), diff(moves(b), want));
+  ok("F1: SAN of the landing is 'Ra4' (a quiet move, no check: the rook on h5 does not see e8)", b.sanMove('a1a4') === 'Ra4', b.sanMove('a1a4'));
+  b.push('a1a4');
+  ok('F1: the landing puts the rook on h5', board(b.fen()) === '4k3/p7/8/7R/8/8/8/4K3', b.fen());
+  ok('F1: black is not in check after the landing', !b.isCheck());
   b.pop();
-  ok('F1: pop restores the rook on c1', b.fen() === 'r3k3/3p4/8/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-f6}', b.fen());
+  ok('F1: pop restores the start', b.fen() === fen, b.fen());
+  b.delete();
 
-  // F2 capture through a portal, the far occupant swapped back
-  fen = '4k3/3p4/5b2/8/8/2n5/3P4/2R1K3 w - - 0 1 {c3-f6}';
-  b = new ffish.Board(V, fen); m = moves(b);
-  ok('F2: 9 legal moves, c1c3 offered, c1c4 not', m.length === 9 && m.includes('c1c3') && !m.includes('c1c4'), m.join(','));
-  ok("F2: SAN is a capture 'Rxc3'", b.sanMove('c1c3') === 'Rxc3', b.sanMove('c1c3'));
+  // F2 THE PLUGGED EXIT: the landing swaps with the plug
+  fen = '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
+  b = new ffish.Board(V, fen);
+  ok('F2: the same 11 moves with the twin plugged', same(moves(b), want), diff(moves(b), want));
+  b.push('a1a4');
+  ok('F2: the landing swaps: rook on h5, knight on a4', board(b.fen()) === '4k3/p7/8/7R/n7/8/8/4K3', b.fen());
+  b.delete();
+
+  // F3 THE PLUGGED ENTRY: captured on landing, the rook steps through
+  fen = '4k3/p7/8/8/n7/8/8/R3K3[] w - - 0 1 {a4-h5}';
+  b = new ffish.Board(V, fen);
+  ok('F3: 11 moves', same(moves(b), want), diff(moves(b), want));
+  ok("F3: SAN 'Rxa4'", b.sanMove('a1a4') === 'Rxa4', b.sanMove('a1a4'));
+  b.push('a1a4');
+  ok('F3: the knight is gone, the rook on h5', board(b.fen()) === '4k3/p7/8/7R/8/8/8/4K3', b.fen());
+  b.delete();
+
+  // F4 NO CHECK THROUGH A PAIR (v2's check through the tunnel, inverted)
+  b = new ffish.Board(V, '8/6bk/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}');
+  ok('F4: black is NOT in check — the rook\'s line ends at the body a4', !b.isCheck());
+  want = ['g7a1', 'g7b2', 'g7c3', 'g7d4', 'g7e5', 'g7f6', 'g7f8', 'g7h6', 'g7h8', 'h7g6', 'h7g8', 'h7h6', 'h7h8'];
+  ok('F4: black has its 13 free moves (the king to h6 and h8 included)', same(moves(b), want), diff(moves(b), want));
+  b.delete();
+  b = new ffish.Board(V, '7k/8/7b/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}');
+  ok('F4b: the bishop on h6 is NOT pinned (v2 pinned it through the tunnel) — 10 moves with h6g5', moves(b).length === 10 && moves(b).includes('h6g5'), moves(b).join(','));
+  b.delete();
+
+  // F5 NO DISCOVERED CHECK THROUGH A PAIR: only the bishop's own direct check h6g7 reads as one
+  fen = '7k/1p6/7B/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}';
+  b = new ffish.Board(V, fen);
+  const bish = ['h6g7', 'h6f8', 'h6g5', 'h6f4', 'h6e3', 'h6d2', 'h6c1'];
+  want = [...bish, 'a1a2', 'a1a3', 'a1a4', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F5: 18 moves', same(moves(b), want), diff(moves(b), want));
+  ok('F5: only h6g7 checks (a direct check); no bishop move discovers one through the pair', same(bish.filter((m) => /\+$/.test(b.sanMove(m))), ['h6g7']), bish.map((m) => b.sanMove(m)).join(','));
+  ok('F5: the landing under the bishop gives no check', !/\+$/.test(b.sanMove('a1a4')), b.sanMove('a1a4'));
+  b.delete();
+
+  // F6 THE BODY STOPS BOTH ROOKS: no check, black's rook lands on h5 from a4, a8a1 is no move
+  fen = 'r7/7k/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}';
+  b = new ffish.Board(V, fen);
+  ok('F6: black is not in check', !b.isCheck());
+  ok('F6: 16 moves — a8a4 the landing, a8a1..a8a3 never (the body at a4)', moves(b).length === 16 && moves(b).includes('a8a4') && !moves(b).includes('a8a1'), moves(b).join(','));
+  b.push('a8a4');
+  ok('F6: the rook stands on h5', board(b.fen()) === '8/7k/8/7r/8/8/8/R3K3', b.fen());
+  b.delete();
+
+  // F7 TWO PAIRS: each a body and a landing, never a chain
+  fen = '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-c6,c7-f2}';
+  b = new ffish.Board(V, fen);
+  want = ['a1a2', 'a1a3', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F7: 10 moves — a1a3 the landing, nothing through to c7 or f3..f8 (v2 had 17)', same(moves(b), want), diff(moves(b), want));
+  ok('F7: a1a3 lands on c6', board(after(fen, 'a1a3')) === '4k3/p7/2R5/8/8/8/8/4K3');
+  ok('F7: the king steps into the second pair and lands on c7', board(after(fen, 'e1f2')) === '4k3/p1K5/8/8/8/8/8/R7');
+  b.delete();
+
+  // F8 TWO PAIRS ON ONE FILE: the first is the body, the second is never reached
+  fen = '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}';
+  b = new ffish.Board(V, fen);
+  want = ['a1a2', 'a1a3', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'];
+  ok('F8: 10 moves — a4..a8, e4 and e6 never reached', same(moves(b), want), diff(moves(b), want));
+  ok('F8: a1a3 puts the rook on e5', board(after(fen, 'a1a3')) === '7k/p7/8/4R3/8/8/8/4K3');
+  b.delete();
+
+  // F9 THE PAWN'S DOUBLE STEP: a portal on the first square ends it; on the second it lands and steps through
+  b = new ffish.Board(V, '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a3-d5}');
+  ok('F9a: a2a3 only (the double step crosses no portal)', moves(b).includes('a2a3') && !moves(b).includes('a2a4') && moves(b).length === 6, moves(b).join(','));
+  b.push('a2a3');
+  ok('F9a: the pawn lands on d5', board(b.fen()) === '4k3/7p/8/3P4/8/8/8/4K3', b.fen());
+  b.delete();
+  b = new ffish.Board(V, '4k3/7p/8/8/8/8/P7/4K3[] w - - 0 1 {a4-d5}');
+  ok('F9b: a2a3 and a2a4 (the double step lands on the portal)', moves(b).includes('a2a4') && moves(b).length === 7, moves(b).join(','));
+  b.push('a2a4');
+  ok('F9b: the pawn lands on d5 and no en passant square is set', board(b.fen()) === '4k3/7p/8/3P4/8/8/8/4K3' && b.fen().split(' ')[3] === '-', b.fen());
+  b.delete();
+
+  // F10 THE CASTS: a linking cast never gives check (v2 gave one through the new tunnel) and never exposes its caster
+  fen = '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}';
+  b = new ffish.Board(V, fen);
+  ok('F10a: O@h5 is a legal cast', moves(b).includes('O@h5'));
+  ok("F10a: SAN 'O@h5' — no check through the new pair", b.sanMove('O@h5') === 'O@h5', b.sanMove('O@h5'));
+  const checkCasts = moves(b).filter((m) => m.startsWith('O@') && /\+$/.test(b.sanMove(m)));
+  ok('F10a: no cast gives check', checkCasts.length === 0, checkCasts.join(','));
+  ok('F10a: 45 linking casts and nothing else (the caster is bound to the link)', moves(b).length === 45 && moves(b).every((m) => m.startsWith('O@')), String(moves(b).length));
+  b.push('O@h5');
+  ok('F10a: black is not in check after the link and has its 7 moves', !b.isCheck() && same(moves(b), ['b7b5', 'b7b6', 'h7g6', 'h7g7', 'h7g8', 'h7h6', 'h7h8']), moves(b).join(','));
+  b.delete();
+  b = new ffish.Board(V, 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}');
+  const m10 = moves(b);
+  ok('F10b: every castable square is a legal link — h5, h6, h7 included (v2 refused them as self-exposing through the tunnel)', m10.includes('O@h5') && m10.includes('O@h6') && m10.includes('O@h7') && m10.includes('O@c3'), m10.filter((m) => m.startsWith('O@h')).join(','));
+  ok('F10b: 46 legal moves — the linking casts alone', m10.length === 46 && m10.every((m) => m.startsWith('O@')), String(m10.length));
+  b.delete();
+
+  // B THE SHIELD: a piece beyond a portal square on a rider's line is out of its reach
+  b = new ffish.Board(V, '4k3/8/n7/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}');
+  ok('B1: the knight on a6 is shielded by the body at a4 — a1a6 is no move, 11 moves', moves(b).length === 11 && !moves(b).includes('a1a6') && moves(b).includes('a1a4'), moves(b).join(','));
+  b.push('a1a4');
+  ok('B1: a1a4 lands on h5 with the knight untouched', board(b.fen()) === '4k3/8/n7/7R/8/8/8/4K3', b.fen());
+  b.delete();
+
+  // The landings as before: twin to twin, the swap of a king, the capture through
+  fen = '4k3/3p4/5n2/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}';
+  b = new ffish.Board(V, fen);
+  ok('F11: twin to twin captures at range, 13 moves', moves(b).includes('c3f6') && moves(b).length === 13, String(moves(b).length));
+  b.push('c3f6');
+  ok('F11: the knight is gone and the bishop is back on c3', board(b.fen()) === '4k3/3p4/8/8/8/2B5/3P4/4K3', b.fen());
+  b.delete();
+  b = new ffish.Board(V, '4k3/3p4/8/8/8/2B5/3P4/4K3[] w - - 0 1 {c3-f6}');
+  ok('F11b: the quiet pass c3f6 stays, c3g7 is gone (f6 is a body): 13 moves', moves(b).includes('c3f6') && !moves(b).includes('c3g7') && moves(b).length === 13, moves(b).join(','));
+  b.push('c3f6');
+  ok('F11b: the pass changes nothing but the turn', board(b.fen()) === '4k3/3p4/8/8/8/2B5/3P4/4K3' && b.fen().includes(' b '), b.fen());
+  b.delete();
+  fen = 'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}';
+  b = new ffish.Board(V, fen);
+  ok('F12: 11 moves (c4..c8 gone), c1c3 offered', moves(b).includes('c1c3') && moves(b).length === 11, String(moves(b).length));
+  ok("F12: SAN 'Rc3+' — the king is swapped next to the pawn", b.sanMove('c1c3') === 'Rc3+', b.sanMove('c1c3'));
   b.push('c1c3');
-  ok('F2: knight gone, rook on f6, bishop swapped to c3', b.fen().startsWith('4k3/3p4/5R2/8/8/2b5/3P4/4K3[]'), b.fen());
-  b.pop();
-  ok('F2: pop restores all three squares', b.fen().startsWith('4k3/3p4/5b2/8/8/2n5/3P4/2R1K3[]'), b.fen());
-
-  // F3 a king may not teleport onto an attacked exit
-  b = new ffish.Board(V, '4k3/p6r/8/8/8/8/1P1K4/R7 w - - 0 1 {d3-g7}'); m = moves(b);
-  ok('F3: 22 moves, d2d3 refused (g7 attacked)', m.length === 22 && !m.includes('d2d3'), m.join(','));
-  b = new ffish.Board(V, '4k2r/p7/8/8/8/8/1P1K4/R7 w - - 0 1 {d3-g7}'); m = moves(b);
-  ok('F3b: 23 moves, d2d3 offered', m.length === 23 && m.includes('d2d3'), m.join(','));
-  b.push('d2d3');
-  ok('F3b: the king stands on g7', b.fen().startsWith('4k2r/p5K1/8/8/8/8/1P6/R7[]'), b.fen());
-
-  // F4 teleport onto the enemy king: he is swapped next to a pawn, in check
-  b = new ffish.Board(V, 'r7/3p4/4k3/8/8/8/3P4/2R1K3 w - - 0 1 {c3-e6}'); m = moves(b);
-  ok('F4: 16 moves incl. c1c3', m.length === 16 && m.includes('c1c3'), m.join(','));
-  ok("F4: SAN carries the check 'Rc3+'", b.sanMove('c1c3') === 'Rc3+', b.sanMove('c1c3'));
-  b.push('c1c3');
-  ok('F4: black is in check on c3', b.isCheck() && b.fen().startsWith('r7/3p4/4R3/8/8/2k5/3P4/4K3[]'), b.fen());
-  m = moves(b);
-  ok('F4: 8 evasions incl. d7e6 (the pawn swaps the king out through the portal)', m.length === 8 && m.includes('d7e6'), m.join(','));
+  ok('F12: 8 evasions incl. d7e6, the pawn swapping the king back out', b.isCheck() && moves(b).length === 8 && moves(b).includes('d7e6'), moves(b).join(','));
   b.push('d7e6');
-  ok('F4: after d7e6 the king is back on e6, the pawn on c3, the rook gone', b.fen().startsWith('r7/8/4k3/8/8/2p5/3P4/4K3[]'), b.fen());
-
-  // F5 twin to twin: capture at range, and the quiet pass
-  b = new ffish.Board(V, '4k3/3p4/5n2/8/8/2B5/3P4/4K3 w - - 0 1 {c3-f6}'); m = moves(b);
-  ok('F5: 13 moves incl. c3f6', m.length === 13 && m.includes('c3f6'), m.join(','));
-  b.push('c3f6');
-  ok('F5: the knight is gone and the bishop is back on c3', b.fen().startsWith('4k3/3p4/8/8/8/2B5/3P4/4K3[] b'), b.fen());
-  b = new ffish.Board(V, '4k3/3p4/8/8/8/2B5/3P4/4K3 w - - 0 1 {c3-f6}'); m = moves(b);
-  ok('F5b: 15 moves incl. c3f6 and c3g7', m.length === 15 && m.includes('c3f6') && m.includes('c3g7'), m.join(','));
-  b.push('c3f6');
-  ok('F5b: the quiet twin-to-twin move changes nothing but the turn', b.fen().startsWith('4k3/3p4/8/8/8/2B5/3P4/4K3[] b'), b.fen());
-
-  // F8 a pawn through a portal
-  b = new ffish.Board(V, '4k3/3p4/4P3/8/8/8/3P4/4K3 w - - 0 1 {b3-e7}'); m = moves(b);
-  ok('F8: 8 moves incl. e6e7', m.length === 8 && m.includes('e6e7'), m.join(','));
+  ok('F12: the king back on e6, the pawn on c3, the rook gone', board(b.fen()) === 'r7/8/4k3/8/8/2p5/3P4/4K3', b.fen());
+  b.delete();
+  fen = '4k3/3p4/5b2/8/8/2n5/3P4/2R1K3[] w - - 0 1 {c3-f6}';
+  b = new ffish.Board(V, fen);
+  ok("F13: capture through with the far occupant swapped back — 9 moves, SAN 'Rxc3'", moves(b).length === 9 && b.sanMove('c1c3') === 'Rxc3', moves(b).join(','));
+  b.push('c1c3');
+  ok('F13: knight gone, rook on f6, bishop on c3', board(b.fen()) === '4k3/3p4/5R2/8/8/2b5/3P4/4K3', b.fen());
+  b.pop();
+  ok('F13: pop restores all three squares', b.fen() === fen, b.fen());
+  b.delete();
+  b = new ffish.Board(V, '4k3/p6r/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}');
+  ok('F14: 22 moves — the king may not step through onto g7 (attacked by the rook h7), but d2c3 is fine (nothing runs through g7-d3; v2 refused it)', moves(b).length === 22 && !moves(b).includes('d2d3') && moves(b).includes('d2c3'), moves(b).join(','));
+  b.delete();
+  b = new ffish.Board(V, '4k2r/p7/8/8/8/8/1P1K4/R7[] w - - 0 1 {d3-g7}');
+  ok('F14b: 23 moves with d2d3 onto a safe exit', moves(b).length === 23 && moves(b).includes('d2d3'), String(moves(b).length));
+  b.push('d2d3');
+  ok('F14b: the king stands on g7', board(b.fen()) === '4k2r/p5K1/8/8/8/8/1P6/R7', b.fen());
+  b.delete();
+  b = new ffish.Board(V, '4k3/3p4/4P3/8/8/8/3P4/4K3[] w - - 0 1 {b3-e7}');
+  ok('F15: a pawn through a portal — 8 moves incl. e6e7', moves(b).length === 8 && moves(b).includes('e6e7'), moves(b).join(','));
   b.push('e6e7');
-  ok('F8: the pawn lands on b3', b.fen().startsWith('4k3/3p4/8/8/8/1P6/3P4/4K3[]'), b.fen());
+  ok('F15: the pawn lands on b3', board(b.fen()) === '4k3/3p4/8/8/8/1P6/3P4/4K3', b.fen());
+  b.delete();
+  b = new ffish.Board(V, '4k3/3p4/8/8/8/8/3P4/r3K3[OOoo] w - - 0 1');
+  ok('F16: no cast while in check — 2 evasions', moves(b).length === 2 && !moves(b).some((x) => x.includes('@')), moves(b).join(','));
+  b.delete();
 
-  // F9 no cast while in check
-  b = new ffish.Board(V, '4k3/3p4/8/8/8/8/3P4/r3K3[OOoo] w - - 0 1'); m = moves(b);
-  ok('F9: 2 evasions, no cast', m.length === 2 && !m.some((x) => x.includes('@')), m.join(','));
-
-  // F7 the casts: open, the enemy opens, close, the enemy closes
+  // The four casts as before, and the field's own checks
   const fen7 = '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1';
-  b = new ffish.Board(V, fen7); m = moves(b);
-  const casts = m.filter((x) => x.startsWith('O@'));
-  ok('F7: 52 moves = 6 normal + 46 casts', m.length === 52 && casts.length === 46, `${m.length} ${casts.length}`);
-  ok('F7: no cast on rank 1 or 8', !casts.some((x) => /[18]$/.test(x)), casts.filter((x) => /[18]$/.test(x)).join(','));
-  ok("F7: cast SAN is 'O@c3'", b.sanMove('O@c3') === 'O@c3', b.sanMove('O@c3'));
-  b.push('O@c3');
-  ok('F7: white half open', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c3w}', b.fen());
-  b.push('O@f6');
-  ok('F7: black half open', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Oo] w - - 0 2 {c3w,f6b}', b.fen());
-  b.push('O@e5');
-  ok('F7: white pair closed', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[o] b - - 0 2 {c3-e5,f6b}', b.fen());
-  m = moves(b);
-  const bc = m.filter((x) => x.startsWith('O@'));
-  ok('F7: black cannot cast on c3, e5 or f6', !bc.some((x) => ['c3', 'e5', 'f6'].includes(x.slice(2))));
-  ok('F7: black has 43 casts left to choose from', bc.length === 43, String(bc.length));
-  b.push('O@a4');
-  ok('F7: both pairs closed, hands empty', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 3 {c3-e5,a4-f6}', b.fen());
-  b.pop(); b.pop(); b.pop(); b.pop();
-  ok('F7: four pops restore the start', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1', b.fen());
+  b = new ffish.Board(V, fen7);
+  const casts = moves(b).filter((x) => x.startsWith('O@'));
+  ok('F17: 52 moves = 6 normal + 46 casts, none on a king row', moves(b).length === 52 && casts.length === 46 && !casts.some((x) => /[18]$/.test(x)), `${moves(b).length} ${casts.length}`);
+  for (const m of ['O@c3', 'e8e8', 'O@e5', 'O@f6', 'e1e1', 'O@a4']) b.push(m); // v3: half, the frozen pass, link — twice
+  ok('F17: both pairs closed, hands empty, six plies', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 4 {c3-e5,a4-f6}', b.fen());
+  b.delete();
+
+  // V3 THE ONE-TURN CAST (2026-09-19, portals-cast.patch — portals-v3.patch until the tunnel's retirement): the frozen ply, the link ply, the fizzle, the pass's SAN
+  b = new ffish.Board(V, '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1');
+  b.push('O@c4');
+  ok('V3: after the half the enemy is FROZEN — its one legal move is the pass', moves(b).join(',') === 'e8e8', moves(b).join(','));
+  ok("V3: the pass reads '--' in SAN", b.sanMove('e8e8') === '--', b.sanMove('e8e8'));
+  ok('V3: the half stands in the FEN, black to move, the scroll spent', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', b.fen());
+  b.push('e8e8');
+  ok('V3: nobody in check after the pass; white to move on the link ply', !b.isCheck() && b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] w - - 1 2 {c4w}', b.fen());
+  const links = moves(b);
+  ok('V3: the link ply — 45 linking casts and nothing else (no piece move; the pass is illegal while a link is)', links.length === 45 && links.every((x) => x.startsWith('O@')) && !links.includes('O@c4'), `${links.length} ${links.filter((x) => !x.startsWith('O@')).join(',')}`);
+  b.push('O@f5');
+  ok('V3: the pair stands, black to move unfrozen with 50 moves, its own casts among them', b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-f5}' && moves(b).length === 50 && moves(b).some((x) => x.startsWith('O@')) && !moves(b).includes('e8e8'), `${b.fen()} ${moves(b).length}`);
+  b.pop(); b.pop();
+  ok('V3: pop restores the frozen ply', moves(b).join(',') === 'e8e8' && b.fen() === '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', b.fen());
+  b.delete();
+  const V6 = 'portal6';
+  // the fizzle board: ONE castable square on the whole board, so after the half nothing is left to link
+  b = new ffish.Board(V6, '4rk/******/******/******/1*****/KN4[OO] w - - 0 1');
+  ok('V3 fizzle: Ka2 and the one cast alone (the knight is walled in)', same(moves(b), ['a1a2', 'O@a2']), moves(b).join(','));
+  b.push('O@a2');
+  ok('V3 fizzle: black frozen — f6f6', moves(b).join(',') === 'f6f6', moves(b).join(','));
+  b.push('f6f6');
+  ok('V3 fizzle: no castable square is left — the fizzle a1a1 alone', moves(b).join(',') === 'a1a1', moves(b).join(','));
+  ok("V3 fizzle: its SAN is '--' too", b.sanMove('a1a1') === '--', b.sanMove('a1a1'));
+  b.push('a1a1');
+  ok('V3 fizzle: the half is gone, the other scroll kept, black to move with its rook along the sixth rank', b.fen() === '4rk/******/******/******/1*****/KN4[O] b - - 2 2' && same(moves(b), ['e6a6', 'e6b6', 'e6c6', 'e6d6']), `${b.fen()} ${moves(b).join(',')}`);
+  ok('V3 fizzle: two passes in a row end nothing', !b.isGameOver() && !b.isGameOver(true), `${b.isGameOver()} ${b.isGameOver(true)}`);
+  b.delete();
+  // v3's fizzle board links freely now: b3 exposed the king only through a tunnel
+  b = new ffish.Board(V6, '5k/******/*r****/*1****/1*****/KN4[OO] w - - 0 1');
+  b.push('O@a2'); b.push('f6f6');
+  ok('V3: the old fizzle board has its one legal link O@b3 (no tunnel to expose a1)', moves(b).join(',') === 'O@b3', moves(b).join(','));
+  b.delete();
   ok('validateFen rejects a portal on a king row', ffish.validateFen('4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 1 {a1-c4}', V) < 0);
   ok('validateFen rejects a square used twice', ffish.validateFen('4k3/3p4/8/8/8/8/3P4/4K3[] w - - 0 1 {c3-c4,c4-d5}', V) < 0);
 
   // The strip rule: scrolls, halves and pairs are never pieces
-  const strip = (f, label) => {
+  for (const [f, label] of [['4k3/3p4/8/8/8/8/8/4K3[OOoo] w - - 0 1', 'king + scrolls in hand'], ['4k3/3p4/8/8/8/8/8/4K3[] w - - 0 1 {e4w}', 'king + an open half'], ['4k3/3p4/8/8/8/8/8/4K3[] w - - 0 1 {c3-f6}', 'king + a pair']]) {
     const sb = new ffish.Board(V, f);
-    ok(`strip: ${label} is decided at load (game over, side to move lost)`, sb.isGameOver() && sb.result() !== '*', `${sb.isGameOver()} ${sb.result()}`);
-  };
-  strip('4k3/3p4/8/8/8/8/8/4K3[OOoo] w - - 0 1', 'king + scrolls in hand');
-  strip('4k3/3p4/8/8/8/8/8/4K3[] w - - 0 1 {e4w}', 'king + an open half');
-  strip('4k3/3p4/8/8/8/8/8/4K3[] w - - 0 1 {c3-f6}', 'king + a pair');
-  ok('strip: king + a pawn + scrolls is NOT bare', !new ffish.Board(V, '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1').isGameOver());
+    ok(`strip: ${label} is decided at load`, sb.isGameOver() && sb.result() !== '*', `${sb.isGameOver()} ${sb.result()}`);
+    sb.delete();
+  }
 
   // Consistency sweep: the SAN check suffix (gives_check) against push + isCheck,
   // on every legal move of every fixture position and one ply deeper.
   const fixtures = [
-    'r3k3/3p4/8/8/8/8/3P4/2R1K3 w - - 0 1 {c3-f6}',
-    '4k3/3p4/5b2/8/8/2n5/3P4/2R1K3 w - - 0 1 {c3-f6}',
-    '4k2r/p7/8/8/8/8/1P1K4/R7 w - - 0 1 {d3-g7}',
-    'r7/3p4/4k3/8/8/8/3P4/2R1K3 w - - 0 1 {c3-e6}',
-    '4k3/3p4/5n2/8/8/2B5/3P4/4K3 w - - 0 1 {c3-f6}',
-    '4k3/3p4/4P3/8/8/8/3P4/4K3 w - - 0 1 {b3-e7}',
-    'r2qk2r/pp1bppb1/2np1np1/8/3P4/2N2N2/PPQ1PPPP/R3KB1R w - - 0 1 {c4-f5,d5-g6}',
+    '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', '4k3/p7/8/7n/8/8/8/R3K3[] w - - 0 1 {a4-h5}', '8/6bk/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}',
+    '7k/1p6/7B/8/8/8/8/R3K3[] w - - 0 1 {a4-h5}', 'r7/7k/8/8/8/8/8/R3K3[] b - - 0 1 {a4-h5}', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-c6,c7-f2}',
+    '7k/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a3-e5,e6-e3}', '8/1p5k/8/8/8/8/8/R3K3[OO] w - - 0 1 {a4w}', 'r2k4/8/8/8/7K/8/8/1R6[OO] w - - 0 1 {a5w}',
+    'r7/3p4/4k3/8/8/8/3P4/2R1K3[] w - - 0 1 {c3-e6}', 'r2qk2r/pp1bppb1/2np1np1/8/3P4/2N2N2/PPQ1PPPP/R3KB1R[] w - - 0 1 {c4-f5,d5-g6}',
     '4k3/3p4/8/8/8/8/3P4/4K3[OOoo] w - - 0 1 {c3-f6}',
+    '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] b - - 0 1 {c4w}', '4k3/3p4/8/8/8/8/3P4/4K3[Ooo] w - - 0 1 {c4w}', // v3: a frozen ply, a link ply
   ];
   let checked = 0, bad = 0;
-  const sweep = (board, depth) => {
-    for (const mv of moves(board)) {
-      const san = board.sanMove(mv);
+  const sweep = (bd, depth) => {
+    for (const mv of moves(bd)) {
+      const san = bd.sanMove(mv);
       const saysCheck = /[+#]$/.test(san);
-      board.push(mv);
-      const isCheck = board.isCheck();
-      if (saysCheck !== isCheck) { bad++; if (bad < 6) console.log('   mismatch', board.fen(), mv, san, isCheck); }
+      bd.push(mv);
+      const isCheck = bd.isCheck();
+      if (saysCheck !== isCheck) { bad++; if (bad < 6) console.log('   mismatch', bd.fen(), mv, san, isCheck); }
       checked++;
-      if (depth > 1 && !board.isGameOver()) sweep(board, depth - 1);
-      board.pop();
+      if (depth > 1 && !bd.isGameOver()) sweep(bd, depth - 1);
+      bd.pop();
     }
   };
-  for (const f of fixtures) sweep(new ffish.Board(V, f), 2);
+  for (const f of fixtures) { const sb = new ffish.Board(V, f); sweep(sb, 2); sb.delete(); }
   ok(`check-flag sweep: ${checked} moves, SAN check suffix == push+isCheck`, bad === 0, `${bad} mismatches`);
 
   console.log(`\nportals/ffish: ${pass} passed, ${fail} failed`);

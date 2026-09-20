@@ -43,6 +43,54 @@ log is the analyzer's third sample, `replay/samples/dck-log_vaults-4-t109_
 s3010228489.json` — one K*e4 played, the reply the engine's own depth-22
 search had predicted, and four more hammers in its lines).
 
+**Status 2026-09-18: THE PORTALS-V2 PATCH shipped.** `patches/portals-v2.patch`
+(650 lines across `position.h`, `position.cpp`, `movegen.cpp`, applied on
+top of the five above, in that order — six patches now) gives the engine
+brief §4.7's Portals v2: a linked portal square is a BODY to every line and
+an EMPTY PAIR a TUNNEL for riders, chained once per pair per line. Both
+artifacts rebuilt from clean pinned trees; validated natively against an
+INDEPENDENT Python oracle on 1,500 random positions before any WASM was
+built; the rule-16 gate ran green end to end (see "The portals-v2 patch as built"
+below). Phone verdict 2026-09-19 (designer): "Seems to work fine on the
+phone" — IN.
+
+**Status 2026-09-19: THE PORTALS-V3 PATCH shipped — the one-turn cast.**
+`patches/portals-v3.patch` (185 lines across `position.h`, `position.cpp`,
+`movegen.cpp`, `apiutil.h`, applied on top of the six above — seven patches
+now) gives the engine brief §4.7's Portals v3: an open half FREEZES the
+other side (its one legal move is a pass) and BINDS its caster to the
+linking casts; a pass FIZZLES a half no link can close. Both artifacts
+rebuilt from the clean pinned trees; validated natively against the
+Python oracle extended with scrolls, halves and passes (1,800 random
+positions, the sweep, the fixtures under asserts); the rule-16 gate ran
+green end to end (see "The portals-cast patch" below). On the way it closed
+a gap in portals.patch: an ordinary move onto a portal square was
+pseudo-legal, so a colliding transposition-table move could be tried as a
+non-teleporting move.
+
+**Status 2026-09-19 (later the same day): PORTALS v4 — THE TUNNEL RETIRED.**
+`patches/portals-v2.patch` is REPLACED by `patches/portals-body.patch` (263
+lines across `position.h`, `position.cpp`, `movegen.cpp`: the body rule
+alone — a linked portal square ends every line — with every tunnel
+construct removed: `open_portals` / `portal_through` / `tunnel_attackers`,
+the tunnel movegen, the whole-board evasions, the tunnel checks, the
+linking cast's exposure and check tests), and `patches/portals-v3.patch` is
+REBASED on it as `patches/portals-cast.patch` (185 lines, the one-turn cast
+unchanged in substance). Seven patches still, applied in order:
+dead-squares, thread-stack, portals, wall-kinds, hammer, portals-body,
+portals-cast. The designer, on the s88 log: "Let's make v3 portals without
+the pass thru moves… Everything going thru a portal simply lands on the
+exit portal now, swapping if there's something there." Both artifacts
+rebuilt from the clean pinned trees; validated natively against the
+oracle with its pass-through removed (62 fixtures on the debug build with
+asserts on, 1,800 random positions, the sweep, perft 4); the rule-16 gate
+ran green end to end (see "The portals-body patch" below). Portal-free
+boards are node-identical to the seven-patch build before it; a board
+with SCROLLS IN HAND is not portal-free to a search (it casts pairs deep
+in the tree, where the rules differ), so the identity check reads boards
+with no pair and no scroll. Verdict 2026-09-20 (designer): "Alright this
+works pretty good" — IN.
+
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
 diff. `patches/pr29-dead-squares-full.diff` (KOTH-Stockfish PR #29) is
@@ -260,7 +308,9 @@ portal always teleports the piece to the other portal; if the other portal
 is occupied they swap places; a piece standing on a portal is captured as
 normal, and the attacker is teleported after the capture) plus one
 placement rule (portals never on a king row, which is the promotion zone,
-so no pawn ever promotes through one and the move carries no promotion).
+so no pawn ever promotes through one and the move carries no promotion —
+the engine's floor; the game's deal keeps a cast TWO rows off since
+2026-09-20, in the ini alone: `variant.mjs portalIniKeys`).
 Authored against the pinned trees on top of `dead-squares.patch` +
 `thread-stack.patch` (apply in that order); 489 insertions / 14 deletions
 across `types.h`, `variant.h`, `parser.cpp`, `position.h`, `position.cpp`,
@@ -298,8 +348,10 @@ Design, in the engine's own shapes:
   half closes into a pair with the square, or the square becomes the
   caster's open half (`portalHalf[colour]`). Never while in check, never
   on a square a portal or a half already takes (`portal_taken()`), and the
-  drop region is the variant's `dropRegionWhite/Black` (grammar: every rank
-  but the king rows). A cast gives no check and passes SEE at zero.
+  drop region is the variant's `dropRegionWhite/Black` (grammar; the game's
+  deal emits ranks 3…R−2 since 2026-09-20 — two rows off each king row, an
+  ini rule — and every rank but the king rows before, which these tests'
+  own variants keep). A cast gives no check and passes SEE at zero.
 - **The trailing FEN field** ` {c3-h8,d1-a9,e4w}` after the move counters —
   pairs as `a-b` (emitted with the lower square first), halves as the
   square plus `w`/`b` — parsed by `set()` (3check's optional trailing field
@@ -489,6 +541,334 @@ wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
 `#` board ("Invalid piece character"), so a phase0 run that forgot the
 overlay dies at once instead of misplaying.
 
+## The portals-cast patch (`patches/portals-cast.patch`, was `portals-v3.patch`) — 2026-09-19
+
+The one-turn cast, rebased on the body-only patch when the tunnel was
+retired later the same day (Portals v4, below). In substance unchanged:
+the two conflicts of the rebase were the tunnel's evasion block in
+`generate_all` (gone) and the three tunnel declarations in `position.h`
+(gone). ONE RULE CHANGED BY THE REBASE, not by this patch: the caster's
+pass FIZZLES only when no castable square is left — v2's self-exposure
+filter on the link (a twin that would open an enemy slider onto the
+caster's king THROUGH THE NEW TUNNEL) has no tunnel to test any more, so
+every castable square is a legal link; the fizzle stays as the safety net
+and is unreachable on a real board. The v3 record follows as written.
+
+
+Canon: brief §4.7 "Portals v3 — the one-turn cast" (the designer: "Is it
+possible to make it so both portals are placed in one turn instead of
+two?" — then "It might make portals too strong but let's go ahead and try
+it"). A free pair as ONE move is quadratic (about 1,000–2,400 legal casts
+at every node on a 10×10 while the scrolls are in hand; `MAX_MOVES` is
+8,192 in this build, so the array holds them and the search does not), so
+the one turn is three alternating plies the other side cannot use — the
+engine stays an ordinary alternating engine and nothing in `search.cpp`
+moves. Authored on the pinned trees on top of the six patches before it
+(apply in that order); 81 insertions / 3 deletions across four files.
+
+Design, in the engine's own shapes:
+
+- **The state is the FEN's.** Nothing new is carried: `Position::half_open()`
+  (either side's half stands; for `do_move`, where the new state's checkers
+  are not yet set) and `in_cast()` (the same and nobody in check) read the
+  portals patch's `st->portalHalf[c]`. Which side is bound is who owns the
+  half: its caster to the link, the other side to a pass. A half never
+  outlives the link ply (linked or fizzled), so "the opponent's half is
+  open" IS "frozen" — no flag, no grammar change, a bare `position fen`
+  reproduces the legal move set exactly.
+- **movegen** (`generate_all`, before anything else, never for EVASIONS):
+  when `in_cast()`, CAPTURES yields nothing; the caster's ply yields
+  `generate_drops` of the scroll alone (the existing drop generator, so the
+  king rows, the taken squares and the in-check rule hold) plus the PASS
+  `make<SPECIAL>(ksq, ksq)` — FSF's own pass move, printed `e1e1` by UCI —
+  and the frozen side's ply yields the pass alone; QUIET_CHECKS carries no
+  pass (a pass never checks). Then `return`.
+- **legal()**: a pass inside a cast is legal for the frozen side, and for
+  the caster only when NO linking cast is legal — the fizzle: the casts of
+  `MoveList<QUIETS>` judged by the position's own `legal()` (v2's
+  self-exposure test, `portal_attacks_king`), a list of at most a few
+  dozen. `pseudo_legal()`: inside a cast the move set is that short list,
+  so a transposition-table or killer move is validated by regeneration
+  (`MoveList<NON_EVASIONS>.contains`) — a colliding ordinary move can
+  never slip through the frozen or the link ply.
+- **gives_check()**: a pass is never a check (stock's blocker logic would
+  have read a king standing between its own rook and the enemy king as
+  discovering a check by not moving — latent for FSF's pass variants,
+  ruled out here). **do_move()**: `st->pass` is set only for a VARIANT's
+  pass (`pass` / `wallOrMove`), never for a cast's, so FSF's double-pass
+  game end (`st->pass && st->previous->pass` → draw) never fires on a frozen
+  pass followed by a fizzle; the fizzle clears the caster's half and XORs
+  its Zobrist key out (`undo_move` restores it with the state pointer; no
+  scroll returns). The two asserts that name a pass accept a portal
+  variant's. **key_after()**: a pass moves nothing (stock XORed the king's
+  square once too often for `from == to`), and the fizzle takes the half's
+  key with it.
+- **SAN** (`apiutil.h`): a pass in a portal variant prints `--`; the check
+  suffix never applies.
+- **Closed on the way — portals.patch's gap**: `pseudo_legal()` let a
+  NORMAL-typed move onto a portal square through its fast path (movegen
+  encodes every such move as PORTAL). A colliding transposition-table move
+  (the 16-bit key check) could therefore be tried as a move that lands on
+  the portal square without teleporting — found by the debug build's
+  MovePicker assert during the one-turn cast's search tests, at
+  `4k3/3p4/8/8/8/8/3P4/4K3[oo] b - - 0 2 {c4-e7}` with `e8e7` typed NORMAL.
+  Now `type_of(m) == NORMAL && (portalSquares & to)` is not pseudo-legal.
+
+Stock when no half stands: the early return, the legality branches and the
+pass paths are behind `in_cast()` / `is_pass()`; portal-free boards are
+node-identical to the six-patch build (perft 3 = 61,433 on the v1 gate's
+opening; depth-12 transcripts identical — bestmove, nodes 62,772 / 9,297 /
+464, score — on three plain positions, native).
+
+### Native validation (2026-09-19)
+
+`engine/forge/oracle.py` grew the rules from the text: scrolls in hand
+(`hand`), the open half per colour (`half`), the opening cast, the link
+with its self-exposure test, the frozen pass, the fizzle, and `from_fen`
+so the fixtures are loaded, not rebuilt. `native-test.py` drives a native
+largeboard build over UCI (`--fixtures --random N --sweep --depth D`; the
+scratch tree's `xsweep` learnt the fizzle rule: a pass at a link ply is
+legal iff no cast is).
+
+| check | result |
+|---|---|
+| the fixtures (the v2 set + V3a–e: 46 casts beside 6 piece moves; after `O@c4` black's one move `e8e8`; after the pass 45 linking casts and nothing else; the link `{c4-f5}` with black free on 50 moves; the searches — frozen → the pass, bound → a cast; the fizzle board `5k/******/*r****/*1****/1*****/KN4[OO] w` on portal6: `O@a2`, `f6f6`, then `a1a1` alone, the half gone, the other scroll kept, black on with Ke6 and Rb3), every count confirmed by the oracle first | **64/64** on the debug build (asserts on) and the release |
+| F10a / F10b under v3 (a white half open, white to move = the link ply) | 45 and 43 legal moves, the casts alone (v2: 60 / 62 with the piece moves) — the oracle agrees |
+| random positions vs the oracle — scrolls 0–2 a side, a half open for one side on 35% of them (frozen or link plies), 1–3 pairs, walls and crates, 6×6 / 8×8 / 10×10: perft-1 move sets and perft-2 per-move counts | **400 (seed 11, release, perft only) + 800 (seed 21, debug, + xsweep 2) + 600 (seed 99, release, more pairs, + xsweep 2): 0 mismatches** |
+| debug perft 4 on 15 fixtures (`givesCheck == checkers`, `pos_is_ok`, the undo) | completed, no assert |
+| portal-free identity vs the six-patch native build | perft 3 equal (61,433); depth-12 transcripts identical on three positions |
+
+### The rule-16 gate (both WASM binaries rebuilt from the clean pinned trees)
+
+`ffish.js` and `stockfish.js` byte-identical to the vendored (the worker
+as ever `cat stockfish.worker.js emscripten/worker-postamble.js`); the
+wasms +3,402 / +1,457 bytes.
+
+- [x] `test-portals-ffish.cjs` **77/77** — the v2 set with F10b at 43 and F17's two pairs in six plies (half, the frozen pass, link — twice), plus V3: the frozen ply, SAN `--`, the FENs along the sequence, the link ply's 45 casts, pop back to the frozen ply, the fizzle on portal6 with `isGameOver(true)` false after two passes in a row; the check-flag sweep over the fixtures plus a frozen and a link ply
+- [x] `test-portals-engine.cjs` **141/141** — perft 3 re-pinned to the native build where scrolls are in hand (F10a 16,214, F10b 33,603, F16 2,070, F17 4,248; the 10×10 duel shape perft 2 = 1,893), the V3 sequence over UCI, the searches, the fizzle
+- [x] `test-hammer-ffish.cjs` 27, `test-hammer-engine.cjs` 25, `test-ffish.cjs` 19, `test-engine.cjs` 7
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored six-patch engine at depth 12 (19,459 / 26,462 / 35,136 nodes)
+- [x] `depthcap.cjs` — d22 110/110 (slowest 1,551 ms), d60 30/30 (slowest 10,021 ms, the movetime) — **the cap stays at d22**
+- [x] the game's gates on the vendored pair: selftest 50/50 headless (the v3 check on the deal variant, the v1 check's four casts now six plies), ui-smoke 326 ok (THE PORTAL SPELL block reads the one-turn cast), replay-smoke 76, test-logreport 61, test-portals-game 34, the other Node gates unchanged
+
+## The portals-body patch (`patches/portals-body.patch`, was `portals-v2.patch`) — 2026-09-18, the tunnel retired 2026-09-19
+
+Canon: brief §4.7 "Portals v4 — the tunnel retired" (the designer, on the
+s88 log: "I'm actually considering getting rid of the true pass thru moves
+for sliders, and making it so entering a portal always stops movement and
+lands on the exit portal… I'm worried it's not intuitive to read" — then
+"Let's make v3 portals without the pass thru moves. We'll keep the double
+portal cast and the portals stopping movement. Everything going thru a
+portal simply lands on the exit portal now, swapping if there's something
+there."). `portals-body.patch` is `portals-v2.patch` with its tunnel half
+removed, regenerated from the tree (pin + five patches + v2, edited, `git
+diff`): 61 insertions / 26 deletions across three files, against v2's 309
+/ 55. What stays is the BODY RULE — every ray passes its occupancy through
+`pieces() | st->portalSquares`: `attacks_from` / `moves_from`, the check
+squares, the sniper and blocker lines of `slider_blockers` (an empty portal
+square on a line is skipped as a blocker of record), SEE's x-rays, the
+promotion branches of `gives_check`, the pawn's double and triple steps,
+and `attackers_to`, which now adds the bodies to its occupancy in ONE line
+at the top (v2 had restructured it around the tunnel term). What went:
+`open_portals`, `portal_through`, `tunnel_attackers` and the `twin_of`
+helper; the tunnel squares in `generate_moves`; the whole-board evasions
+(`tunnelEvasions`) — the evasions are v1's again, portal landings
+generated whole by `generate_portal_evasions` and `legal()` deciding, the
+en passant early return back to stock; the tunnel fallback and the
+regeneration-in-check in `pseudo_legal`; the tunnel block of
+`gives_check`; the DROP branch of `portal_attacks_king` (a linking cast is
+`!checkers() && !(portal_taken() & to)` again and never gives check — two
+bodies can only close lines), whose PORTAL branch is v1's shape judged
+through the bodies. Stock when no pair stands: portal-free boards
+node-identical to the build before (perft 3 = 61,433 on the v1 gate's
+opening; depth-12 transcripts identical on four boards with no pair and no
+scroll — with scrolls in hand a search casts pairs deep in the tree, where
+the rules legitimately differ).
+
+### Native validation (2026-09-19)
+
+`engine/forge/oracle.py` lost its pass-through (a ray ends at a portal
+square) and the link's exposure test (vacuous without a tunnel); every
+fixture count in `native-test.py` was re-derived by it before the engine
+ran — and it corrected one of mine on the way (F5: h6g7 is the bishop's own
+direct check, so "no bishop move gives check" reads "only h6g7").
+
+| check | result |
+|---|---|
+| the fixtures (F1 11 moves, a1a4 landing on h5 with no check; F4 not in check with 13 free moves, the bishop on h6 unpinned; F5 no discovered check; F6 not in check, a8a4 to h5, a8a1 no move; F7 and F8 ten moves — the first pair the body, no chain; F10a 45 links and none gives check, black on with 7 moves after O@h5; F10b all 46 links legal, h5/h6/h7 included; F14 22 moves with d2c3 legal and d2d3 refused; B1 the shield; the v1 landings, the double step, the casts and V3a–d unchanged; the fizzle on a NEW board — `4rk/******/******/******/1*****/KN4[OO] w` on portal6, one castable square in all, so after the half nothing is left to link — while v3's fizzle board links freely now, O@b3 its one legal move) | **62/62** on the debug build (asserts on) and the release |
+| random positions vs the oracle — scrolls 0–2 a side, a half open for one side on 35% of them, 1–3 pairs (plugged or open), walls and crates, 6×6 / 8×8 / 10×10: perft-1 move sets and perft-2 per-move counts | **800 (seed 21, debug, + xsweep 2) + 600 (seed 99, release, more pairs, + xsweep 2) + 400 (seed 7, release): 0 mismatches** |
+| `xsweep 3` on the nine sweep fixtures | clean |
+| debug perft 4 on 16 fixtures (`givesCheck == checkers`, `pos_is_ok`, the undo) | completed, no assert |
+| the oracle's own perft 3 on six fixtures (F1 1,155 · F4 1,581 · F7 917 · F10b 28,018 · F16 2,070 · F17 4,248) | equal to the native build's |
+| portal-free identity vs the seven-patch (tunnel) native build | perft 3 equal (61,433); depth-12 transcripts identical on four boards with no pair and no scroll |
+
+### The rule-16 gate (both WASM binaries rebuilt from the clean pinned trees)
+
+`ffish.js`, `stockfish.js` and the worker byte-identical to the vendored;
+the wasms −10,849 / −8,745 bytes.
+
+- [x] `test-portals-ffish.cjs` **78/78** — rewritten for v4 (the fixtures above through the JS API, SAN `Ra4` for the landing, no `+` on any cast, the new fizzle board, the old one linking; the check-flag sweep over the fixtures plus a frozen and a link ply)
+- [x] `test-portals-engine.cjs` **146/146** — perft 3 re-pinned to the native build (F1 1,155, F4 1,581, F10a 17,173, F10b 28,018, F14 5,517, F17 4,248 …; the 10×10 duel shape perft 2 = 1,893), the boards after the key moves, no check through a pair, the V3 sequence and the fizzle, the queen on its portal square taken by search (the rook or the pawn, the captor landing on f6), the strip rule, the 10×10 search alive
+- [x] `test-hammer-ffish.cjs` 27, `test-hammer-engine.cjs` 25, `test-ffish.cjs` 19, `test-engine.cjs` 7
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored seven-patch engine at depth 12 (19,459 / 26,462 / 35,136 nodes)
+- [x] `depthcap.cjs` — d22 110/110 (slowest 1,410 ms), d60 30/30 (slowest 10,022 ms, the movetime) — **the cap stays at d22**
+- [x] the game's gates on the vendored pair: selftest 50/50 headless (the v4 check), ui-smoke 373 ok (one run died on the engine transport glue on record, the rerun green), replay-smoke 76 ok, test-logreport 61, test-portals-game 27, the other Node gates unchanged
+
+## The portals-v2 patch as built (2026-09-18) — THE RECORD; its tunnel half is gone since v4, above
+
+Canon: brief §4.7 "Portals v2" (the designer's two questions — "portals
+block sliders?" and "sliders go fully thru both portals?" — settled in one
+conversation: a linked portal square is a BODY, every line stops at it
+whatever stands on it, a half is not a body until linked; an EMPTY PAIR is
+a TUNNEL for rooks, bishops and queens — the line comes out of the twin in
+the same direction and runs on, through another empty pair too, each pair
+once per line; landings step through and swap exactly as v1; a pawn's
+double step never crosses a portal square; capture at the exit and a
+tunnel for the double step were rejected). Authored on the pinned trees on
+top of dead-squares, thread-stack, portals, wall-kinds, hammer (apply in
+that order); 309 insertions / 55 deletions across three files.
+
+Design, in the engine's own shapes:
+
+- **The bodies**: every ray passes its occupancy through
+  `byTypeBB[ALL_PIECES] | st->portalSquares` — `attacks_from` /
+  `moves_from` (both paths; `moves_bb<true>` too, so a pawn's lame double
+  step stops at a portal), `attackers_to` (the occupancy parameter is a
+  piece occupancy, real or virtual; the bodies are added inside), the
+  check squares in `set_check_info`, the sniper and blocker lines of
+  `slider_blockers` (an EMPTY portal square on a line is a body that never
+  moves — it is skipped as a blocker of record, so nothing is pinned by it
+  and nothing discovered past it), SEE's x-ray additions, the promotion
+  branches of `gives_check`. No representation change: the pairs ride the
+  state and the FEN's trailing field as before, halves stay inert.
+- **The tunnels**: `portal_through(riders, s, bodies, open)` — the rider's
+  magic rays with the bodies in (they stop AT a portal square and include
+  it), then from each OPEN entry (both squares empty, `open_portals`) a
+  stepped walk from the twin in the line's direction until the next body,
+  which is included (a piece to capture, a plugged portal to step into);
+  an open portal of an unused pair on the way is entered again (each pair
+  once per line — the loop terminates at the used pair, whose square is
+  still a landing); never a wall, and NEVER THE ORIGIN (a line that comes
+  back round to its own square attacks nothing there — the oracle found
+  that one). `tunnel_attackers` lists the riders whose lines reach a
+  square through a tunnel; `attackers_to` appends them, so FSF's
+  `legal()` — which already judges every move on a virtual occupancy —
+  reads the rule for free, and so do the evasions' king-square tests, SEE
+  and the checkers after a move.
+- **The relocating moves**: `portal_attacks_king` keeps the PORTAL move's
+  virtual board (victim gone, mover on the twin, the twin's occupant on
+  the target) and adds the tunnel attackers of the stayers (the relocated
+  squares' pieces of record masked out and judged from where they end)
+  and the mover's and the swapped piece's own lines from their new
+  squares; it also judges a LINKING CAST with the new pair in the table
+  (`twin_of` takes the extra pair) — `legal()` refuses a cast that opens a
+  tunnel onto the caster's own king, `gives_check` reports one that opens
+  a tunnel onto the enemy's.
+- **`gives_check`**: while a pair is open after the move, the mover's
+  tunnel line from its new square (the promoted type for a promotion) and
+  the attackers of the king on the new occupancy (a discovered check
+  through a tunnel, or plainly); the stock direct-check squares and
+  branches read through the bodies.
+- **Move generation**: a rider's attacks and quiets gain
+  `portal_through` (the bitboards dedupe a square reached plainly and
+  through a pair); the pawn's double and triple steps never cross a
+  portal square; IN CHECK WITH AN OPEN PAIR the whole board is generated
+  and `legal()` decides — a leaper's check and a double check included,
+  since a landing on a portal may swap the king out of either (the
+  non-sliding-rider fallback's shape; `generate_portal_evasions` stays
+  for the plugged-pairs case) — and the en passant early return yields
+  when portals stand. `pseudo_legal` accepts a rider's tunnel move and,
+  in check with an open pair, validates by regeneration.
+- **Stock when absent**: every new expression is behind
+  `st->portalSquares` — portal-free boards are node-identical to the
+  five-patch build (perft 4 and depth-12 transcripts, natively and in
+  WASM).
+
+Known gaps, on record: the eval's mobility terms use plain occupancies (the
+search sees the tunnel moves, the eval does not count them); a PORTAL move
+still takes the stock simple SEE (zero); the quiet-check generator finds no
+tunnel checks (the main search does at depth one); only rook and bishop
+lines tunnel (a hopper's or a nightrider's do not).
+
+### Validation (2026-09-18, this container)
+
+Native first, and for the first time against an INDEPENDENT ORACLE
+(`engine/forge/oracle.py`, COMMITTED with the driver: the rules written as
+Python from the rule text — forward rays for every attack where the engine
+uses reverse rays plus a tunnel term, make/unmake by copying the board;
+`engine/forge/native-test.py` drives a native largeboard build over UCI on
+`engine/forge/portals-v2.ini` — `python3 native-test.py <binary> --fixtures
+--sweep --random 600 --seed 99 --pairs 1 --depth 4`; the `--sweep` flag needs
+the scratch `xsweep` command compiled into the binary, described above):
+
+- 57 hand-derived fixture checks — the body (a5..a7 gone, h6..h8 through
+  a4–h5), the plugged exit's swap and the plugged entry's capture, check
+  and a pin through the tunnel, a discovered check off the blocking
+  square, stepping into the tunnel as a block, the chain through two
+  pairs (c8 never reached), the cycle cap, the pawn's double step (blocked
+  by a portal on the first square, landing on one on the second, no en
+  passant square), a linking cast giving check and one refused as a
+  self-check, the v1 landings kept (twin to twin, the swapped king, the
+  capture through) — every count confirmed by the oracle before the
+  engine ran it (the oracle corrected one of mine: in the old F3 the king
+  may not step to c3, the enemy rook reaches it THROUGH g7–d3);
+- the engine's own consistency sweep (`xsweep`, a scratch UCI command in
+  the forge build only): for every generated move, `pseudo_legal`,
+  `legal` against the king's real attackers after the move, `gives_check`
+  against the real check after it, the incremental keys / checkers /
+  blockers / pinners / check squares / material against a fresh position
+  from the FEN, and the undo — depth 3 over the fixtures, depth 2 over
+  every random position, clean;
+- 1,500 random positions (seeds 7, 99, 2024; 6×6, 8×8 and 10×10 boards
+  with walls, crates and one to five pairs, plugged or open): perft-1
+  move sets and perft-2 per-move counts equal to the oracle's. The runs
+  caught TWO real bugs on the way: a captured piece's own tunnel line
+  looping back to its square counted it as an attacker of the square it
+  was taken on (a legal king capture refused), and the evasion fallback's
+  leaper narrowing dropped the portal landings that swap a king out of a
+  knight's check;
+- a debug largeboard build (asserts on, `givesCheck == checkers` in
+  `do_move`, `pos_is_ok`): perft 5 on twelve fixtures (up to 94 M nodes),
+  the fixtures and the sweep;
+- portal-free boards node-identical to the five-patch build (perft 4,
+  depth-12 node counts and PVs).
+
+WASM (both binaries rebuilt from clean clones of the pinned trees with the
+six patches applied by `git apply`; `ffish.js`, `stockfish.js` and the
+worker came out byte-identical in size to the vendored, the wasms +11 KB
+and +10 KB):
+
+- [x] `test-portals-ffish.cjs` — **64/64** (rewritten for v2: the same
+  fixtures through the JS API, SAN `Rh8+` through the tunnel, `O@h5+`, the
+  pin, the swap, push/pop, a 2-ply check-flag sweep over twelve fixtures)
+- [x] `test-portals-engine.cjs` — **129/129** (perft 1 sets and perft 3
+  totals pinned to the native build's, the boards after the key moves
+  through `d`, the casts, the strip rule, the queen taken through a tunnel
+  by search, a 10×10 duel-shaped perft 2 = 7503 and a depth-12 search
+  alive)
+- [x] `regress.cjs` / `regress-ffish.cjs` — crate-free perft identical to
+  the vendored pair; `test-engine.cjs` 7/7; `test-ffish.cjs` 19/19;
+  `xcheck.cjs` PASS; `test-hammer-ffish.cjs` 27/27; `test-hammer-engine.cjs`
+  25/25; `stack-regress.cjs` 5/5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored pair
+  at depth 12 (19459 / 26462 / 35136)
+- [x] `depthcap.cjs` — d22 110/110 clean (slowest 1335 ms), d60 30/30 clean
+  (slowest 10015 ms) — the cap STAYS at d22 (rule 11)
+- [x] `play/selftest.html` in headless Chromium — **49/49** (a new v2 check
+  on the game's own deal variant, both binaries, and the grid's walker)
+- [x] the game's gates on the vendored pair (CLAUDE.md, the Portals v2
+  paragraph)
+
+Build notes: the toolchains were reinstalled from scratch again (the
+container keeps nothing — the two emsdk installs, the two trees, the net);
+the artifacts were built from CLEAN clones with the six patches applied by
+`git apply`, never from the working tree that carried the scratch sweep
+command. `ffish.js` compiles `uci.cpp` into the library, so any scratch
+instrumentation there would ride into the artifact — build from a clean
+tree.
+
 ## Provenance (pin these)
 
 - ffish tree: `fairy-stockfish/Fairy-Stockfish` master @ `6d9d0f5` (2026-08-23), emsdk **1.39.16**, `make -f src/Makefile_js build` → `tests/js/ffish.{js,wasm}`
@@ -559,8 +939,8 @@ FFISH_JS=... node engine/tests/regress-ffish.cjs                         # ffish
 PILOT=1 node engine/tests/search-identity.cjs                            # determinism pilot (vendored vs itself)
 ENGINE_JS=... node engine/tests/search-identity.cjs                      # fixed-depth transcript identity vs vendored
 ENGINE_JS=... node engine/tests/depthcap.cjs                             # rule-11 re-measure (110 d22 + 30 d60)
-FFISH_JS=... node engine/tests/test-portals-ffish.cjs                   # the portal spell, ffish half (42)
-ENGINE_JS=... node engine/tests/test-portals-engine.cjs                 # the portal spell, engine half (55)
+FFISH_JS=... node engine/tests/test-portals-ffish.cjs                   # the portal spell — the body rule + the one-turn cast (Portals v4), ffish half (78)
+ENGINE_JS=... node engine/tests/test-portals-engine.cjs                 # the portal spell — the body rule + the one-turn cast (Portals v4), engine half (146)
 FFISH_JS=... node engine/tests/test-hammer-ffish.cjs                    # the hard wall + the sledgehammer, ffish half (27)
 ENGINE_JS=... node engine/tests/test-hammer-engine.cjs                  # the hard wall + the sledgehammer, engine half (25)
 node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
