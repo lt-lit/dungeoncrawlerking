@@ -36,8 +36,9 @@
 //   &fx=<scale>      animation speed multiplier; 0 disables motion entirely
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
-import { makeCatalogIni, PORTAL_SCROLL } from './variant.mjs';
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf } from './fen.mjs';
+import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
+import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -62,7 +63,7 @@ import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylog.mjs';
-import { deltaWords } from './logreport.mjs'; // the deep-Δ wording, shared with the report and the analyzer
+import { deltaWords, slideWords } from './logreport.mjs'; // the deep-Δ wording and THE ICE's slide words, shared with the report and the analyzer
 
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
@@ -249,6 +250,7 @@ function computeDeal() {
       turn: setup.turn === 'b' ? 'b' : 'w',
       portals: portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns
       hammer: hammerOn(), // THE SLEDGEHAMMER: every king may crack an adjacent wall
+      ice: iceOn(), // THE ICE: one 3×3 patch per side
       ffish: app.ffish,
     });
   } catch (e) {
@@ -291,7 +293,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, hammer: true };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, hammer: true, ice: true };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -324,6 +326,7 @@ function loadOptions() {
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
     options.portals = options.portals !== false; // THE PORTAL SPELL (2026-09-17): everyone has it unless switched off
     options.hammer = options.hammer !== false; // THE SLEDGEHAMMER (2026-09-17): every king a sledge-king unless switched off
+    options.ice = options.ice !== false; // THE ICE (2026-09-20): everyone has one ice scroll unless switched off
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
@@ -378,6 +381,9 @@ const portalsOn = () => params.get('portals') !== 'off' && options.portals !== f
 // THE SLEDGEHAMMER (2026-09-17): every king a sledge-king, both sides — the
 // stress test; an upgrade later. `?hammer=off` for plain kings.
 const hammerOn = () => params.get('hammer') !== 'off' && options.hammer !== false;
+// THE ICE (2026-09-20): one ice scroll a side, every duel — the stress test;
+// an upgrade later. `?ice=off` for a duel without it.
+const iceOn = () => params.get('ice') !== 'off' && options.ice !== false;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
 // The Gods debug overlay (Phase 1.2) is a tuning instrument, not a cheat —
@@ -388,6 +394,7 @@ function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
   $('optPortals').checked = options.portals !== false;
   $('optHammer').checked = options.hammer !== false;
+  $('optIce').checked = options.ice !== false;
   $('optHints').checked = options.hints;
   $('optHintN').value = String(options.hintN);
   $('optHintCont').checked = !!options.hintCont;
@@ -1103,7 +1110,9 @@ function applyHintLines(pvs, n, duel, partial) {
     // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a breakable wall is a
     // hammer — the arrow ends in the hammer on the wall, the list shows it.
     const hammer = !!m && !!hammerOf(fenNow, pv.move);
-    arrows.push(m ? { from: m[1], to: m[2], strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
+    // THE ICE (2026-09-20): a hint onto the ice ends where the piece comes to REST (the slide runs on along the arrow's own line).
+    const end = m ? slideRest(fenNow, pv.move) ?? m[2] : null;
+    arrows.push(m ? { from: m[1], to: end, strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
@@ -2525,7 +2534,7 @@ async function driveTurn() {
     app.busy = false;
     app.boardUI.setInteractive(true);
     if (duel.mustLink()) {
-      setCastMode(true); // the link ply: the second portal is the only move there is
+      setCastMode('portal'); // the link ply: the second portal is the only move there is
       setStatus('place the second portal');
     } else setStatus('your move');
     refreshCheatUI();
@@ -2786,6 +2795,7 @@ function paintWithDebris(fen, ledgers) {
   // colour — the ledger is one walk over the duel record's positions plus
   // this one (fen.mjs portalLedger; a paint before any duel has none).
   app.boardUI.setPortals?.(portalInfo(fen, portalLedger([...(app.duel?.record?.states ?? []).map((s) => s.fen), fen])));
+  app.boardUI.setSlick?.(slickSquares(fen)); // THE ICE: the slippery squares of the position, over their flagstones
   app.boardUI.setPosition(fen, { ...ledgers, debris: debrisPainter() });
 }
 
@@ -3028,10 +3038,10 @@ function paintBoard(fen) {
  *  displacements, the oracle's hints). */
 function renderPlayMarks() {
   const q = app.quakeMarks;
-  const last = lastMoveArrow();
+  const last = lastMoveArrows();
   const marks = {
     check: checkMark(),
-    arrows: [...(last ? [last] : []), ...(q?.arrows ?? []), ...app.cheatArrows],
+    arrows: [...last, ...(q?.arrows ?? []), ...app.cheatArrows],
     pits: q?.pits ?? [],
     cracked: q?.cracked ?? [],
     breached: q?.breached ?? [],
@@ -3040,11 +3050,21 @@ function renderPlayMarks() {
   if (app.selectedSquare && app.duel && app.duel.state === 'playing') {
     marks.selected = app.selectedSquare;
     const targets = targetsFor(app.selectedSquare);
-    marks.targets = [...targets, ...exitAliases(app.duel.fen(), targets)];
+    marks.targets = [...targets, ...moveAliases(app.duel.fen(), app.selectedSquare, targets).keys()];
   }
-  // THE PORTAL SPELL: in cast mode the targets are the squares a scroll may be cast on.
-  if (app.castMode && app.duel && app.duel.state === 'playing') marks.targets = castTargets();
+  // THE PORTAL SPELL / THE ICE: in cast mode the targets are the squares the scroll may be cast on.
+  if (app.castMode && app.duel && app.duel.state === 'playing') marks.targets = castTargets(app.castMode);
   app.boardUI.setMarks(marks);
+}
+
+/** THE ICE (2026-09-20): where a move's piece comes to rest — the slide's end
+ *  (a portal landing's ENTRY, the pit it fell into) — or null when the move
+ *  does not slide. The arrows end there; the slide runs along their line. */
+function slideRest(fen, uci) {
+  const o = slideOutcome(fen, uci);
+  if (!o) return null;
+  const s = o.steps[0];
+  return s.landing?.entry ?? s.to ?? s.pit ?? null;
 }
 
 // ------------------------------------------------------ THE PORTAL SPELL
@@ -3053,42 +3073,55 @@ function renderPlayMarks() {
 // too. The first cast opens a half; the second links it to the square the
 // player picks. Cast mode: the Portal button in the player's bar lights the
 // legal squares, a tap casts, a tap elsewhere leaves the spell.
-function castTargets() {
+// THE ICE (2026-09-20) shares the cast path: `app.castMode` is the spell's
+// KIND ('portal' | 'ice') or null, each spell its own button and scroll letter.
+const SPELLS = { portal: { letter: PORTAL_SCROLL, btn: 'btnPortal' }, ice: { letter: ICE_SCROLL, btn: 'btnIce' } };
+
+function castTargets(kind = app.castMode || 'portal') {
   if (!app.duel || app.duel.state !== 'playing') return [];
-  return [...new Set(app.duel.legalMoves().map((m) => m.match(CAST_RE)).filter(Boolean).map((p) => p[2]))];
+  const letter = (SPELLS[kind] ?? SPELLS.portal).letter;
+  return [...new Set(app.duel.legalMoves().filter((m) => castLetter(m) === letter).map((m) => m.match(CAST_RE)[2]))];
 }
 
-/** The player's scrolls still in hand, read off the FEN's holdings. */
-function scrollsLeft() {
+/** The player's scrolls of a spell still in hand, read off the FEN's holdings. */
+function scrollsLeft(kind = 'portal') {
   const m = app.duel?.fen()?.match(/\[([^\]]*)\]/);
   if (!m) return 0;
-  const mine = app.session?.playerColor === 'white' ? PORTAL_SCROLL.toUpperCase() : PORTAL_SCROLL;
+  const letter = (SPELLS[kind] ?? SPELLS.portal).letter;
+  const mine = app.session?.playerColor === 'white' ? letter.toUpperCase() : letter;
   return m[1].split('').filter((c) => c === mine).length;
 }
 
-function setCastMode(on) {
+function setCastMode(kind) {
   const forced = !!app.duel && app.duel.state === 'playing' && app.duel.mustLink(); // PORTALS v3: the link ply cannot be left
-  app.castMode = (!!on || forced) && castTargets().length > 0;
+  const want = forced || kind === true ? 'portal' : kind && SPELLS[kind] ? kind : null;
+  app.castMode = want && castTargets(want).length > 0 ? want : null;
   app.selectedSquare = null;
-  $('btnPortal').classList.toggle('active', app.castMode);
+  for (const [k, s] of Object.entries(SPELLS)) $(s.btn).classList.toggle('active', app.castMode === k);
   renderPlayMarks();
 }
 
-/** The Portal button: shown through a duel while the player holds a scroll,
- *  enabled on the player's turn, its count and its title from the position. */
+/** The spell buttons: each shown through a duel while the player holds its
+ *  scroll, enabled on the player's turn, its count and its title from the position. */
 function refreshSpellUI() {
-  const btn = $('btnPortal');
   const inDuel = !!app.duel && app.phase === 'playing' && app.duel.state === 'playing';
   const mine = inDuel && !!app.session && app.duel.turnColor() === app.session.playerColor && !app.busy;
-  const n = inDuel ? scrollsLeft() : 0;
-  btn.hidden = !inDuel || n === 0;
-  btn.disabled = !mine || !castTargets().length;
-  $('btnPortalN').textContent = n ? `×${n}` : '';
   const half = inDuel ? parsePortalField(app.duel.fen()).halves[app.session?.playerColor === 'white' ? 'w' : 'b'] : null;
-  btn.title = half ? `your portal at ${half} is open: pick the square it links to` : 'cast a portal: pick a square; the second cast links it to the first';
+  const titles = {
+    portal: half ? `your portal at ${half} is open: pick the square it links to` : 'cast a portal: pick a square; the second cast links it to the first',
+    ice: 'cast ice: pick the centre of a 3×3 patch on the middle rows — a piece that moves onto the ice slides on until something stops it',
+  };
+  for (const [kind, s] of Object.entries(SPELLS)) {
+    const btn = $(s.btn);
+    const n = inDuel ? scrollsLeft(kind) : 0;
+    btn.hidden = !inDuel || n === 0;
+    btn.disabled = !mine || !castTargets(kind).length;
+    $(`${s.btn}N`).textContent = n ? `×${n}` : '';
+    btn.title = titles[kind];
+  }
   if (!mine && app.castMode) {
-    app.castMode = false;
-    btn.classList.remove('active');
+    app.castMode = null;
+    for (const s of Object.values(SPELLS)) $(s.btn).classList.remove('active');
   }
 }
 
@@ -3106,11 +3139,11 @@ function onSquareTap(sq) {
   if (app.phase !== 'playing' || !app.duel || app.duel.state !== 'playing') return;
   if (app.duel.turnColor() !== app.session.playerColor) return;
 
-  // THE PORTAL SPELL: a tap on a lit square casts; a tap elsewhere leaves the spell.
+  // THE PORTAL SPELL / THE ICE: a tap on a lit square casts; a tap elsewhere leaves the spell.
   if (app.castMode) {
-    if (castTargets().includes(sq)) return void playPlayerMove(null, sq, [`${PORTAL_SCROLL.toUpperCase()}@${sq}`]);
+    if (castTargets(app.castMode).includes(sq)) return void playPlayerMove(null, sq, [`${SPELLS[app.castMode].letter.toUpperCase()}@${sq}`]);
     if (app.duel.mustLink()) return; // PORTALS v3: on the link ply a tap elsewhere is nothing — the second portal is the move
-    setCastMode(false);
+    setCastMode(null);
   }
   const legal = app.duel.legalMoves();
   const from = app.selectedSquare;
@@ -3120,15 +3153,16 @@ function onSquareTap(sq) {
       return p && p[1] === from && p[2] === sq;
     });
     if (matches.length) return void playPlayerMove(from, sq, matches);
-    // PORTALS v2: a tap on the EMPTY exit of a pair plays the landing on its entry — the piece ends where the tap was
-    const P = parsePortalField(app.duel.fen());
-    const entry = P.twin.get(sq);
-    if (entry && getSquare(app.duel.fen(), sq) === null) {
-      const viaEntry = legal.filter((m) => {
+    // PORTALS v2: a tap on the EMPTY exit of a pair plays the landing on its entry — the piece ends where the tap was;
+    // THE ICE: a tap on the square a slide comes to rest on plays the move that slides there.
+    const alias = moveAliases(app.duel.fen(), from, targetsFor(from)).get(sq);
+    if (alias) {
+      const entry = alias.match(UCI_MOVE_RE)[2];
+      const viaAlias = legal.filter((m) => {
         const p = m.match(UCI_MOVE_RE);
         return p && p[1] === from && p[2] === entry;
       });
-      if (viaEntry.length) return void playPlayerMove(from, entry, viaEntry);
+      if (viaAlias.length) return void playPlayerMove(from, entry, viaAlias);
     }
   }
   // (Re)select: any square with at least one legal move from it.
@@ -3140,31 +3174,45 @@ function onSquareTap(sq) {
 /** The ENEMY's most recent move as a red arrow (round 13: "stop trying to
  *  indicate the previous move with the square color filters"), shown
  *  while it is the last move played — from the reply until the player
- *  answers it; the player's own move gets no arrow. */
-function lastMoveArrow() {
+ *  answers it; the player's own move gets no arrow. THE ICE (2026-09-20):
+ *  the arrow ends where the piece came to REST, and every piece it shoved
+ *  gets a short red arrow of its own. */
+function lastMoveArrows() {
   const duel = app.duel;
   const moves = duel?.record.moves;
-  if (!moves || !moves.length) return null;
-  if (duel.turnColor() !== app.session.playerColor) return null; // the player moved last
-  const p = moves[moves.length - 1].match(UCI_MOVE_RE);
+  if (!moves || !moves.length) return [];
+  if (duel.turnColor() !== app.session.playerColor) return []; // the player moved last
+  const last = moves[moves.length - 1];
+  const p = last.match(UCI_MOVE_RE);
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): the enemy's hammer ends in the red hammer on the wall it cracked.
-  const hammer = !!duel.lastMove?.hammer && duel.lastMove.move === moves[moves.length - 1];
-  if (p && p[1] === p[2]) return null; // PORTALS v3: a pass draws nothing
-  if (p) return { from: p[1], to: p[2], strength: 1, kind: 'last', ...(hammer ? { hammer: true } : {}) }; // a landing on a portal square: the arrow ends on the entry, the commit shows the piece on the twin
-  const c = moves[moves.length - 1].match(CAST_RE); // THE PORTAL SPELL: the enemy's cast, a red ring on the square
-  return c ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : null;
+  const hammer = !!duel.lastMove?.hammer && duel.lastMove.move === last;
+  if (p && p[1] === p[2]) return []; // PORTALS v3: a pass draws nothing
+  if (p) {
+    const slide = duel.lastMove?.slide && duel.lastMove.move === last ? duel.lastMove.slide : null;
+    const rest = (s) => s.landing?.entry ?? s.to ?? s.pit;
+    const out = [{ from: p[1], to: slide ? rest(slide.steps[0]) ?? p[2] : p[2], strength: 1, kind: 'last', ...(hammer ? { hammer: true } : {}) }]; // a landing on a portal square: the arrow ends on the entry, the commit shows the piece on the twin
+    for (const s of slide?.steps.slice(1) ?? []) if (rest(s) && rest(s) !== s.from) out.push({ from: s.from, to: rest(s), strength: 0.6, kind: 'last' });
+    return out;
+  }
+  const c = last.match(CAST_RE); // THE PORTAL SPELL / THE ICE: the enemy's cast, a red ring on the square
+  return c ? [{ from: c[2], to: c[2], strength: 1, kind: 'last', cast: true }] : [];
 }
 
-/** THE EXIT ALIAS (Portals v2, kept by v4): a landing on a portal square ends on its twin, so an EMPTY twin
- *  lights as the landing's alias — the picture the designer asked for: the
- *  landing squares go into one portal and out of the other. */
-function exitAliases(fen, targets) {
+/** THE ALIASES of a piece's moves — squares lit beside its destinations, a
+ *  tap on one playing the move it stands for: THE EXIT ALIAS (Portals v2,
+ *  kept by v4 — a landing on a portal square ends on its twin, so an EMPTY
+ *  twin lights as the landing's alias: the picture the designer asked for,
+ *  the landing squares go into one portal and out of the other) and, since
+ *  THE ICE (2026-09-20), the square a slide comes to REST on (or the pit it
+ *  falls into). Map(square → the move, `from` + its destination). */
+function moveAliases(fen, from, targets) {
+  const out = new Map();
   const P = parsePortalField(fen);
-  const out = [];
   for (const t of targets) {
     const q = P.twin.get(t);
-    if (q && !targets.includes(q) && !out.includes(q) && getSquare(fen, q) === null) out.push(q);
+    if (q && !targets.includes(q) && !out.has(q) && getSquare(fen, q) === null) out.set(q, `${from}${t}`);
   }
+  if (app.duel) for (const [sq, uci] of slideAliases(fen, from, app.duel.legalMoves())) if (!targets.includes(sq) && !out.has(sq)) out.set(sq, uci);
   return out;
 }
 
@@ -3180,8 +3228,8 @@ async function playPlayerMove(from, to, matches) {
   }
   app.busy = true;
   app.selectedSquare = null;
-  app.castMode = false;
-  $('btnPortal').classList.remove('active');
+  app.castMode = null;
+  for (const s of Object.values(SPELLS)) $(s.btn).classList.remove('active');
   app.boardUI.setInteractive(false);
   await cancelIdleProbes(); // the engine must be quiet before its reply search
   try {
@@ -3218,6 +3266,10 @@ async function onMove({ uci, san, mover, ply }) {
   // where it stands — nothing slides; the wall wears the gods' weaken beat
   // and drops its chips (duel.mjs marked the move; the ledger has the square).
   const hammered = parts && !pass ? duel.lastMove?.hammer ?? null : null;
+  // THE ICE (2026-09-20): the slide the move set off (duel.mjs read it off the
+  // board before the move) — the mover glides on past its destination, every
+  // piece it shoved glides after it, a fall sinks into the pit.
+  const slide = parts && !pass ? duel.lastMove?.slide ?? null : null;
   let hit = null, dz = null, hitSrc = null;
   if (parts && !hammered && !pass) {
     hit = debrisCaptureOf(app.residue.lastFen, duel.fen(), parts[1], parts[2]);
@@ -3239,7 +3291,11 @@ async function onMove({ uci, san, mover, ply }) {
   } else if (parts && !pass) {
     // A shattering crate holds until the piece arrives; a piece still dissolves under the blow.
     const shatters = !!(dz && hit?.victim === 'terrain' && debrisOpts().fx && FX(1));
-    await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: !shatters });
+    if (slide) {
+      const rest = (s) => (s.pit ? [s.pit] : s.landing ? [s.landing.entry] : s.to && s.to !== s.from ? [s.to] : []);
+      const chain = slide.steps.map((s, i) => ({ letter: s.piece, path: [...(i === 0 ? [parts[1]] : []), s.from, ...rest(s)], fade: i === 0 && !shatters, fall: !!s.pit }));
+      await app.boardUI.animateSlideChain(chain, { msPerSquare: FX(mover === 'engine' ? 90 : 70), minMs: FX(mover === 'engine' ? 240 : 150) });
+    } else await app.boardUI.animateSlide(parts[1], parts[2], { ms: FX(mover === 'engine' ? 240 : 150), fade: !shatters });
     if (app.duel !== duel || !duel.board) return; // abandoned mid-slide
   }
   // The spray flies while the engine thinks (never awaited); it lands into
@@ -3263,11 +3319,13 @@ async function onMove({ uci, san, mover, ply }) {
     if (pass) {
       // PORTALS v3: the frozen side's pass, or the caster's fizzle
       note = duel.lastMove?.cast === 'fizzle' ? ' — no square could hold the second portal: the cast fizzles' : mover === 'player' ? " — you are frozen while the enemy's portal opens" : ' — the enemy is frozen while your portal opens';
+    } else if (castLetter(uci) === ICE_SCROLL) {
+      note = ` — the ice is cast: the floor around ${uci.match(CAST_RE)[2]} turns slippery`; // THE ICE
     } else if (isCast(uci)) {
       const half = P.halves[mover === 'player' ? 'w' : 'b'];
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
     } else if (parts) {
-      note = P.twin.has(parts[2]) ? ` — through the portal to ${P.twin.get(parts[2])}` : '';
+      note = slide ? ` — ${slideWords(slide)}` : P.twin.has(parts[2]) ? ` — through the portal to ${P.twin.get(parts[2])}` : '';
     }
   }
   if (hammered) note = ` — the sledgehammer cracks the wall at ${hammered}`; // THE SLEDGEHAMMER
@@ -3453,6 +3511,7 @@ async function onEnd({ result, winner, termination }) {
           earthquake: playerWon
             ? 'The gods end it — the arena collapses around the enemy king.'
             : 'The gods end it — the arena collapses around your king. The run is over.',
+          pit: playerWon ? 'The enemy king slides into the pit.' : 'Your king slides into the pit. The run is over.', // THE ICE
           concede: playerWon ? 'The enemy concedes.' : 'You concede. The run is over.',
         }[termination] ?? `${result}`;
 
@@ -3543,13 +3602,14 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
-for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['optIce', 'ice'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
   });
 }
-$('btnPortal').addEventListener('click', () => setCastMode(!app.castMode)); // THE PORTAL SPELL
+$('btnPortal').addEventListener('click', () => setCastMode(app.castMode === 'portal' ? null : 'portal')); // THE PORTAL SPELL
+$('btnIce').addEventListener('click', () => setCastMode(app.castMode === 'ice' ? null : 'ice')); // THE ICE
 $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
@@ -4530,8 +4590,8 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
       pivoted = true;
     }
     const plan = enemyFile !== null && enemyFile !== undefined
-      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn() })
-      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn() });
+      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn(), ice: iceOn() })
+      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn(), ice: iceOn() });
     if (!plan.ok) {
       if (pivoted) {
         W.world = World.load(snapshot.world);
@@ -5345,6 +5405,13 @@ window.__DCK = {
   legalMoves: () => app.duel.legalMoves(),
   /** A tap on a square of the duel board, as the pointer would (the cast mode's targets included). */
   tap: (sq) => onSquareTap(sq),
+  /** THE ICE (2026-09-20): the slide a move would make on the live board, and a piece's move aliases (the resting squares lit beside its destinations). */
+  ice: {
+    outcome: (uci) => (app.duel ? slideOutcome(app.duel.fen(), uci) : null),
+    aliases: (from) => (app.duel ? [...moveAliases(app.duel.fen(), from, targetsFor(from))] : []),
+    slick: () => (app.duel ? [...slickSquares(app.duel.fen())] : []),
+    castMode: () => app.castMode,
+  },
   randomMove: () => {
     const legal = app.duel.legalMoves();
     return legal[Math.floor(Math.random() * legal.length)];

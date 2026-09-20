@@ -41,7 +41,7 @@
 // start, north by default). The 3–12 × 5–10 cap is the DEAL's (an arena
 // must fit the engine), never the world's.
 import { normFacing, toScreen, toWorld, pxToScreen, screenDims } from './camera.mjs';
-import { WALL, FURNITURE, splitFen, parseBoard, serializeBoard, emptyBoard, squareName, parseSquare, HARD } from './fen.mjs';
+import { WALL, FURNITURE, splitFen, parseBoard, serializeBoard, emptyBoard, squareName, parseSquare, HARD, PIT } from './fen.mjs';
 import { SKIN_CHARS, THEMES } from './stage.mjs';
 
 export const T = 16; // the tile grid (atlas.mjs TILE; debris.mjs T)
@@ -251,7 +251,7 @@ export class World {
     for (let r = 0; r < stage.ranks; r++) {
       for (let f = 0; f < stage.files; f++) {
         const t = stage.grid[r][f];
-        w.terrain[w.idx(f, r)] = t === WALL ? WALL : t === HARD ? BEDROCK : t === FURNITURE ? FURNITURE : FLOOR;
+        w.terrain[w.idx(f, r)] = t === WALL ? WALL : t === HARD ? BEDROCK : t === PIT ? HOLE : t === FURNITURE ? FURNITURE : FLOOR;
         const s = stage.skin?.[r]?.[f];
         if (s && t === FURNITURE) w.skins[w.idx(f, r)] = s;
       }
@@ -307,15 +307,16 @@ export class World {
   }
 
   /** The FEN cell of a world cell: a piece letter, '*' (a breakable wall),
-   *  '#' (a hole OR bedrock — one indestructible obstacle to the engine; the
-   *  ledger tells the eye which), '^', or null for floor. */
+   *  '_' (a hole — THE PIT since the ice, 2026-09-20: the engine tells it
+   *  from bedrock, since a sliding piece falls into one), '#' (bedrock — an
+   *  indestructible obstacle), '^', or null for floor. */
   v(f, r) {
     if (!this.inBounds(f, r)) return undefined;
     const i = this.idx(f, r);
     const p = this.pieces[i];
     if (p) return p;
     const t = this.terrain[i];
-    return t === FLOOR ? null : t === HOLE || t === BEDROCK ? HARD : t;
+    return t === FLOOR ? null : t === HOLE ? PIT : t === BEDROCK ? HARD : t;
   }
 
   /**
@@ -349,8 +350,11 @@ export class World {
         const i = this.idx(c.f, c.r);
         const sq = squareName(f, r);
         const v = grid[tx.ranks - 1 - r]?.[f] ?? null;
-        if (v === WALL || v === HARD) {
-          // The ledger decides what an obstacle is (a '*' in it is an old log's hole).
+        if (v === PIT) {
+          this.terrain[i] = HOLE; // the engine's own pit glyph (the ice, 2026-09-20)
+          this.pieces[i] = null;
+        } else if (v === WALL || v === HARD) {
+          // The ledger decides what an obstacle is (a '*' or a '#' in it is an old log's hole).
           this.terrain[i] = has(holes, sq) ? HOLE : v === HARD ? BEDROCK : WALL;
           this.pieces[i] = null;
         } else if (v === FURNITURE) {
@@ -368,8 +372,9 @@ export class World {
     }
   }
 
-  /** The FEN of a crop of this world (turn `w` / `b`): a hole or bedrock is
-   *  '#', a wall '*', a piece its letter — the board the engine sees. */
+  /** The FEN of a crop of this world (turn `w` / `b`): a hole is '_' (the
+   *  pit), bedrock and every off-map square '#', a wall '*', a piece its
+   *  letter — the board the engine sees. */
   arenaFen(tx, turn = 'w') {
     const board = emptyBoard(tx.files, tx.ranks);
     for (let r = 0; r < tx.ranks; r++) {
@@ -387,8 +392,9 @@ export class World {
   /**
    * THE BARRIER (Phase 2 milestone 4c): a crop of this world as a STAGE —
    * the shape the deal molds onto (stage.mjs: grid[rankFromBottom][file]
-   * of '*' / '#' / '^' / null, skin[r][f]) — its id naming the crop. A hole
-   * and bedrock are '#' to the deal (a wall to molding), a square off the
+   * of '*' / '#' / '_' / '^' / null, skin[r][f]) — its id naming the crop. A
+   * hole is '_' (the pit: terrain to molding, a fall to a slide), bedrock
+   * '#', a square off the
    * map is '#' (the barrier), and the skin grid is read off the world's skins whatever
    * stands on the cell now, so a door whose leaf fell still pairs its
    * twin. Pieces are NOT part of a stage: the deal composes them.
@@ -404,7 +410,7 @@ export class World {
           continue;
         }
         const t = this.at(c.f, c.r);
-        grid[r][f] = t === FLOOR ? null : t === FURNITURE ? FURNITURE : t === WALL ? WALL : HARD;
+        grid[r][f] = t === FLOOR ? null : t === FURNITURE ? FURNITURE : t === WALL ? WALL : t === HOLE ? PIT : HARD;
         skin[r][f] = this.skinAt(c.f, c.r);
       }
     }

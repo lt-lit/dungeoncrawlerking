@@ -29,7 +29,7 @@
 // eye in the stage gallery rather than enforced.
 import { mulberry32, childSeed } from './prng.mjs';
 import { emptyBoard, serializeBoard, isTerrain, withPocket, isWall } from './fen.mjs';
-import { catalogVariantName, dealVariant, portalPocket } from './variant.mjs';
+import { catalogVariantName, dealVariant, spellPocket } from './variant.mjs';
 import { flipStageVertical, cropStage } from './stage.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
@@ -435,6 +435,7 @@ export function dealMatchup({
   white, black, seed = 1, turn = 'w', gapMin = 1, attempts = 8, ffish = null,
   portals = false, // THE PORTAL SPELL (2026-09-17): both sides carry their scrolls, the deal's variant knows the rule
   hammer = false, // THE SLEDGEHAMMER (2026-09-17): every king may crack an adjacent wall — the deal's variant names the hammer types
+  ice = false, // THE ICE (2026-09-20): one ice scroll a side in hand, the deal's variant knows the slide
 }) {
   let terrain;
   try {
@@ -487,9 +488,9 @@ export function dealMatchup({
       arena.ranks,
       campLineRank(m.white.layout.cells, 1),
       campLineRank(m.black.layout.cells, -1),
-      { portals, hammer }
+      { portals, hammer, ice }
     );
-    if (portals) m.fen = withPocket(m.fen, portalPocket()); // the scrolls in hand, both sides
+    if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);
       const lint = lintMatchupFen(ffish, variant.name, m.fen);

@@ -1,0 +1,1095 @@
+diff --git a/src/apiutil.h b/src/apiutil.h
+index 890b432d..f0e31f72 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -347,6 +347,8 @@ inline const std::string move_to_san(Position& pos, Move m, Notation n) {
+         // Suffix
+         if (type_of(m) == PROMOTION)
+             san += std::string("=") + (char)toupper(pos.piece_to_char()[make_piece(us, promotion_type(m))]);
++        else if (type_of(m) == SLIDE && slide_promotion(m) != NO_PIECE_TYPE)
++            san += std::string("=") + (char)toupper(pos.piece_to_char()[make_piece(us, slide_promotion(m))]); // THE ICE: a pawn promoting where its slide stops
+         else if (type_of(m) == PIECE_PROMOTION)
+             san += is_shogi(n) ? std::string("+") : std::string("=") + (char)toupper(pos.piece_to_char()[make_piece(us, pos.promoted_piece_type(type_of(pos.moved_piece(m))))]);
+         else if (type_of(m) == PIECE_DEMOTION)
+@@ -642,7 +644,7 @@ inline Validation fill_char_board(CharBoard& board, const std::string& fenBoard,
+     {
+         if (c == ' ' || c == '[')
+             break;
+-        if (c == '*' || c == '^' || c == '#')
++        if (c == '*' || c == '^' || c == '#' || c == '_')
+             ++fileIdx;
+         else if (isdigit(c))
+         {
+@@ -992,7 +994,7 @@ inline Validation check_digit_field(const std::string& field) {
+ }
+ 
+ inline std::string get_valid_special_chars(const Variant* v) {
+-    std::string validSpecialCharactersFirstField = "/*^#";
++    std::string validSpecialCharactersFirstField = "/*^#_";
+     // Whether or not '-', '+', '~', '[', ']' are valid depends on the variant being played.
+     if (v->shogiStylePromotions)
+         validSpecialCharactersFirstField += '+';
+@@ -1042,6 +1044,14 @@ inline Validation check_portal_field(const std::string& field, const Variant* v)
+             ++i;
+             continue;
+         }
++        // A slippery square (ice.patch): "~e4" - any square of the board
++        if (body[i] == '~')
++        {
++            ++i;
++            if (parse_square(i) == SQ_NONE)
++                return NOK;
++            continue;
++        }
+         Square a = parse_square(i);
+         if (!admit(a))
+             return NOK;
+diff --git a/src/evaluate.cpp b/src/evaluate.cpp
+index 2b8bb471..74dc79bf 100644
+--- a/src/evaluate.cpp
++++ b/src/evaluate.cpp
+@@ -628,7 +628,7 @@ namespace {
+ 
+     Score score = SCORE_ZERO;
+ 
+-    if (pos.count_in_hand(Us, pt) > 0 && pt != KING && !pos.is_portal_scroll(pt))
++    if (pos.count_in_hand(Us, pt) > 0 && pt != KING && !pos.is_spell_scroll(pt))
+     {
+         Bitboard b = pos.drop_region(Us, pt) & ~pos.pieces() & (~attackedBy2[Them] | attackedBy[Us][ALL_PIECES]);
+         if ((b & kingRing[Them]) && pt != SHOGI_PAWN)
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index 884fb4e9..04f72917 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -25,6 +25,54 @@ namespace Stockfish {
+ 
+ namespace {
+ 
++  // THE ICE (ice.patch, brief 4.9): a line move whose destination is a
++  // slippery square is a SLIDE - the physics decides where the mover ends. A
++  // leaper's jump has no direction and lands (an ordinary move). A rider's
++  // quiet move onto a slippery square is emitted once per outcome, at the last
++  // empty slippery square its line reaches before what stops it: when the next
++  // square is empty floor, empty ice or a portal square the rider reaches
++  // anyway, the move there is the same outcome and this one is not emitted. A
++  // pawn whose slide stops on its promotion zone promotes, so that SLIDE comes
++  // in one move per promotion piece.
++  template<MoveType T>
++  ExtMove* emit_slide(const Position& pos, ExtMove* moveList, Color us, Square from, Square to, PieceType pt) {
++
++    const Direction d = Position::slide_direction(from, to);
++    const PieceType ptMover = type_of(pos.piece_on(from));
++
++    if (T == NORMAL && ptMover != PAWN && ptMover != KING && !(pos.pieces() & to))
++    {
++        Square nx = to + d;
++        if (   is_ok(nx) && (pos.board_bb() & nx) && std::abs(int(file_of(nx)) - int(file_of(to))) <= 1
++            && !(pos.pieces() & nx) && (pos.moves_from(us, ptMover, from) & nx))
++            return moveList;
++    }
++
++    if (ptMover == PAWN && pt == NO_PIECE_TYPE)
++    {
++        // Where does the pawn stop? On its promotion zone, the move names the piece
++        SlideStep steps[MAX_SLIDE_STEPS];
++        int n = pos.slide_outcome(make<SLIDE>(from, to), steps);
++        Square end = to;
++        for (int i = 0; i < n; ++i)
++            if (steps[i].from == end)
++                end = steps[i].to;
++        if (end != SQ_NONE && (pos.promotion_zone(us) & end))
++        {
++            for (PieceSet promotions = pos.promotion_piece_types(us); promotions;)
++            {
++                PieceType ptP = pop_msb(promotions);
++                if (!pos.promotion_limit(ptP) || pos.promotion_limit(ptP) > pos.count(us, ptP))
++                    *moveList++ = make<SLIDE>(from, to, ptP);
++            }
++            return moveList;
++        }
++    }
++
++    *moveList++ = make<SLIDE>(from, to, pt);
++    return moveList;
++  }
++
+   template<MoveType T>
+   ExtMove* make_move_and_gating(const Position& pos, ExtMove* moveList, Color us, Square from, Square to, PieceType pt = NO_PIECE_TYPE) {
+ 
+@@ -64,6 +112,11 @@ namespace {
+         return moveList;
+     }
+ 
++    // THE ICE (ice.patch): a line move ending on a slippery square is a SLIDE
++    if ((T == NORMAL || T == EN_PASSANT || T == PROMOTION) && (pos.slick_effective() & to)
++        && Position::slide_direction(from, to) != Direction(0))
++        return emit_slide<T>(pos, moveList, us, from, to, pt);
++
+     // A move landing on a portal square is a portal move; en passant never lands on one
+     if (T == NORMAL && (pos.portal_squares() & to))
+         *moveList++ = make<PORTAL>(from, to);
+@@ -127,6 +180,15 @@ namespace {
+             b &= ~pos.portal_taken();
+         }
+ 
++        // An ice scroll (ice.patch) is cast on any floor square, under whatever
++        // stands there, never while in check
++        if (pos.is_ice_scroll(pt))
++        {
++            if (pos.checkers())
++                return moveList;
++            b = pos.drop_region(Us, pt) & pos.board_bb() & ~pos.dead_squares();
++        }
++
+         // Add to move list
+         if (pos.drop_promoted() && pos.promoted_piece_type(pt))
+         {
+@@ -442,6 +504,93 @@ namespace {
+   }
+ 
+ 
++  // THE ICE (ice.patch): slides as check evasions. The evasion masks describe
++  // where a piece must LAND, but a slide ends elsewhere and may shove the
++  // checker or a blocker, so every line move onto a slippery square is
++  // generated whole here and legal() decides. The regular evasion generation
++  // masks slippery squares out so nothing is emitted twice. A leaper's move
++  // onto one is an ordinary move, emitted here for the same reason.
++  template<Color Us>
++  ExtMove* generate_slide_evasions(const Position& pos, ExtMove* moveList, Bitboard target) {
++
++    constexpr Color     Them     = ~Us;
++    constexpr Direction Up       = pawn_push(Us);
++    constexpr Direction UpRight  = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
++    constexpr Direction UpLeft   = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
++
++    const Bitboard slick = pos.slick_effective() & ~pos.pieces(Us);
++    if (!slick)
++        return moveList;
++
++    // Pawns: pushes and captures exactly as generate_pawn_moves defines them
++    if (pos.pieces(Us, PAWN))
++    {
++        const Bitboard promotionZone = pos.sittuyin_promotion() ? Bitboard(0) : pos.promotion_zone(Us);
++        const Bitboard pawns      = pos.pieces(Us, PAWN);
++        const Bitboard movable    = pos.board_bb(Us, PAWN) & ~pos.pieces();
++        const Bitboard capturable = pos.board_bb(Us, PAWN) & (pos.pieces(Them) | pos.dead_squares());
++        const Bitboard passable   = movable & ~pos.portal_squares();
++        Bitboard b1  = shift<Up>(pawns) & movable & slick;
++        Bitboard b2  = shift<Up>(shift<Up>(pawns & pos.double_step_region(Us)) & passable) & movable & slick;
++        Bitboard b3  = shift<Up>(shift<Up>(shift<Up>(pawns & pos.triple_step_region(Us)) & passable) & passable) & movable & slick;
++        Bitboard brc = shift<UpRight>(pawns) & capturable & slick;
++        Bitboard blc = shift<UpLeft >(pawns) & capturable & slick;
++        auto emit = [&](Bitboard b, Direction D) {
++            while (b)
++            {
++                Square to = pop_lsb(b);
++                if (promotionZone & to)
++                {
++                    for (PieceSet promotions = pos.promotion_piece_types(Us); promotions;)
++                    {
++                        PieceType ptP = pop_msb(promotions);
++                        if (!pos.promotion_limit(ptP) || pos.promotion_limit(ptP) > pos.count(Us, ptP))
++                            moveList = make_move_and_gating<PROMOTION>(pos, moveList, Us, to - D, to, ptP);
++                    }
++                    if (!pos.mandatory_pawn_promotion())
++                        moveList = make_move_and_gating<NORMAL>(pos, moveList, Us, to - D, to);
++                }
++                else
++                    moveList = make_move_and_gating<NORMAL>(pos, moveList, Us, to - D, to);
++            }
++        };
++        emit(b1, Up);
++        emit(b2, Up + Up);
++        emit(b3, Up + Up + Up);
++        emit(brc, UpRight);
++        emit(blc, UpLeft);
++        for (Bitboard epSquares = pos.ep_squares() & ~pos.pieces() & slick; epSquares; )
++        {
++            Square epSquare = pop_lsb(epSquares);
++            Bitboard b = pawns & pawn_attacks_bb(Them, epSquare);
++            while (b)
++                moveList = make_move_and_gating<EN_PASSANT>(pos, moveList, Us, pop_lsb(b), epSquare);
++        }
++    }
++
++    // Every other piece, the king included. A leap onto a slippery square is an
++    // ordinary move (no direction, no slide): only where the evasion mask allows
++    for (PieceSet ps = pos.piece_types() & ~piece_set(PAWN); ps;)
++    {
++        PieceType pt = pop_lsb(ps);
++        for (Bitboard bb = pos.pieces(Us, pt); bb; )
++        {
++            Square from = pop_lsb(bb);
++            Bitboard b = (  (pos.attacks_from(Us, pt, from) & pos.pieces())
++                          | (pos.moves_from(Us, pt, from) & ~pos.pieces())) & slick;
++            while (b)
++            {
++                Square to = pop_lsb(b);
++                if (Position::slide_direction(from, to) != Direction(0) || (target & to))
++                    moveList = make_move_and_gating<NORMAL>(pos, moveList, Us, from, to);
++            }
++        }
++    }
++
++    return moveList;
++  }
++
++
+   // THE SLEDGEHAMMER (hammer.patch): a piece of a hammer type spends its move
+   // turning ONE ADJACENT breakable wall (the eight king steps) into a neutral
+   // dead square. Never a capture, never a check, never in check: a quiet
+@@ -472,6 +621,7 @@ namespace {
+     constexpr bool Checks = Type == QUIET_CHECKS; // Reduce template instantiations
+     const Square ksq = pos.count<KING>(Us) ? pos.square<KING>(Us) : SQ_NONE;
+     Bitboard target;
++    Bitboard evasionTarget = 0; // THE ICE: the evasion mask before the slippery squares leave it
+ 
+     // PORTALS v3 (2026-09-19, the one-turn cast): an open half BINDS both
+     // sides until it is linked. Its caster's only moves are the LINKING casts
+@@ -514,9 +664,12 @@ namespace {
+         // Remove inaccessible squares (outside board + wall squares)
+         target &= pos.board_bb();
+ 
+-        // Portal evasions are generated whole below
++        // Portal and slide evasions are generated whole below (the slides need the mask)
+         if (Type == EVASIONS)
+-            target &= ~pos.portal_squares();
++        {
++            evasionTarget = target;
++            target &= ~pos.portal_squares() & ~pos.slick_effective();
++        }
+ 
+         moveList = generate_pawn_moves<Us, Type>(pos, moveList, target);
+         for (PieceSet ps = pos.piece_types() & ~(piece_set(PAWN) | KING); ps;)
+@@ -576,7 +729,7 @@ namespace {
+     if (pos.count<KING>(Us) && (!Checks || pos.blockers_for_king(~Us) & ksq))
+     {
+         Bitboard b = (  (pos.attacks_from(Us, KING, ksq) & pos.pieces())
+-                      | (pos.moves_from(Us, KING, ksq) & ~pos.pieces())) & (Type == EVASIONS ? ~pos.pieces(Us) & ~pos.portal_squares() : target);
++                      | (pos.moves_from(Us, KING, ksq) & ~pos.pieces())) & (Type == EVASIONS ? ~pos.pieces(Us) & ~pos.portal_squares() & ~pos.slick_effective() : target);
+         while (b)
+             moveList = make_move_and_gating<NORMAL>(pos, moveList, Us, ksq, pop_lsb(b));
+ 
+@@ -591,7 +744,10 @@ namespace {
+     }
+ 
+     if (Type == EVASIONS)
++    {
+         moveList = generate_portal_evasions<Us>(pos, moveList);
++        moveList = generate_slide_evasions<Us>(pos, moveList, evasionTarget);
++    }
+ 
+     return moveList;
+   }
+diff --git a/src/parser.cpp b/src/parser.cpp
+index 0adfd45f..bf891fbd 100644
+--- a/src/parser.cpp
++++ b/src/parser.cpp
+@@ -445,6 +445,7 @@ Variant* VariantParser<DoCheck>::parse(Variant* v) {
+     parse_attribute("castlingKingPieceWhite", v->castlingKingPiece[WHITE], v->pieceToChar);
+     parse_attribute("castlingKingPieceBlack", v->castlingKingPiece[BLACK], v->pieceToChar);
+     parse_attribute("portalScroll", v->portalScroll, v->pieceToChar);
++    parse_attribute("iceScroll", v->iceScroll, v->pieceToChar);
+     parse_attribute("hammerPieceTypes", v->hammerPieceTypes[WHITE], v->pieceToChar);
+     parse_attribute("hammerPieceTypes", v->hammerPieceTypes[BLACK], v->pieceToChar);
+     parse_attribute("hammerPieceTypesWhite", v->hammerPieceTypes[WHITE], v->pieceToChar);
+diff --git a/src/position.cpp b/src/position.cpp
+index 2de2e315..7c96cbc0 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -49,6 +49,8 @@ namespace Zobrist {
+   Key hard[SQUARE_NB];
+   Key portalPair[SQUARE_NB][SQUARE_NB];
+   Key portalHalf[COLOR_NB][SQUARE_NB];
++  Key slick[SQUARE_NB];
++  Key hole[SQUARE_NB];
+   Key endgame[EG_EVAL_NB];
+ }
+ 
+@@ -67,6 +69,8 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
+       for (File f = FILE_A; f <= pos.max_file(); ++f)
+           if (pos.state()->deadSquares & make_square(f, r))
+               os << " | ^";
++          else if (pos.state()->holeSquares & make_square(f, r))
++              os << " | _";
+           else if (pos.state()->hardSquares & make_square(f, r))
+               os << " | #";
+           else if (pos.state()->wallSquares & make_square(f, r))
+@@ -212,6 +216,14 @@ void Position::init() {
+   for (Square s = SQ_A1; s <= SQ_MAX; ++s)
+       Zobrist::hard[s] = hardRng.rand<Key>();
+ 
++  // THE ICE (ice.patch): slippery squares and pits from their own generator, likewise
++  PRNG iceRng(0x165667B19E3779F9ULL);
++  for (Square s = SQ_A1; s <= SQ_MAX; ++s)
++  {
++      Zobrist::slick[s] = iceRng.rand<Key>();
++      Zobrist::hole[s] = iceRng.rand<Key>();
++  }
++
+   for (int i = NO_EG_EVAL; i < EG_EVAL_NB; ++i)
+       Zobrist::endgame[i] = rng.rand<Key>();
+ 
+@@ -365,6 +377,16 @@ Position& Position::set(const Variant* v, const string& fenStr, bool isChess960,
+           ++sq;
+       }
+ 
++      // A pit (ice.patch): an indestructible obstacle a sliding piece falls into
++      else if (token == '_')
++      {
++          st->wallSquares |= sq;
++          st->hardSquares |= sq;
++          st->holeSquares |= sq;
++          byTypeBB[ALL_PIECES] |= sq;
++          ++sq;
++      }
++
+       else if ((idx = piece_to_char().find(token)) != string::npos || (idx = piece_to_char_synonyms().find(token)) != string::npos)
+       {
+           if (ss.peek() == '~')
+@@ -701,7 +723,7 @@ void Position::set_state(StateInfo* si) const {
+       si->key ^= Zobrist::psq[pc][s];
+ 
+       if (!pc)
+-          si->key ^= (si->deadSquares & s) ? Zobrist::dead[s] : (si->hardSquares & s) ? Zobrist::hard[s] : Zobrist::wall[s];
++          si->key ^= (si->deadSquares & s) ? Zobrist::dead[s] : (si->holeSquares & s) ? Zobrist::hole[s] : (si->hardSquares & s) ? Zobrist::hard[s] : Zobrist::wall[s];
+ 
+       else if (type_of(pc) == PAWN)
+           si->pawnKey ^= Zobrist::psq[pc][s];
+@@ -729,6 +751,9 @@ void Position::set_state(StateInfo* si) const {
+       if (si->portalHalf[c] != SQ_NONE)
+           si->key ^= Zobrist::portalHalf[c][si->portalHalf[c]];
+ 
++  for (Bitboard b = si->slickSquares; b; )
++      si->key ^= Zobrist::slick[pop_lsb(b)];
++
+   for (Color c : {WHITE, BLACK})
+       for (PieceType pt = PAWN; pt <= KING; ++pt)
+       {
+@@ -791,6 +816,7 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+               if (empty(make_square(f, r)) || fogArea & make_square(f, r))
+                   // Wall, hard wall or neutral dead square
+                   ss << ((st->deadSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "^"
++                       : (st->holeSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "_"
+                        : (st->hardSquares & make_square(f, r)) && !(fogArea & make_square(f, r)) ? "#" : "*");
+               else if (unpromoted_piece_on(make_square(f, r)))
+                   // Promoted shogi pieces, e.g., +r for dragon
+@@ -912,8 +938,8 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+ 
+   ss << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+ 
+-  // Portal field
+-  if (st->portalSquares || st->portalHalf[WHITE] != SQ_NONE || st->portalHalf[BLACK] != SQ_NONE)
++  // Portal field (and the slippery squares, ice.patch: "~e4" each)
++  if (st->portalSquares || st->portalHalf[WHITE] != SQ_NONE || st->portalHalf[BLACK] != SQ_NONE || st->slickSquares)
+   {
+       ss << " {";
+       bool first = true;
+@@ -933,6 +959,11 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+               ss << (first ? "" : ",") << UCI::square(*this, st->portalHalf[c]) << (c == WHITE ? "w" : "b");
+               first = false;
+           }
++      for (Bitboard b = st->slickSquares; b; )
++      {
++          ss << (first ? "" : ",") << "~" << UCI::square(*this, pop_lsb(b));
++          first = false;
++      }
+       ss << "}";
+   }
+ 
+@@ -1351,6 +1382,17 @@ bool Position::legal(Move m) const {
+   if (type_of(m) == PORTAL)
+       return !portal_attacks_king(m, us);
+ 
++  // THE ICE (ice.patch): a slide relocates the mover and whatever it shoves -
++  // the king is judged where he ends, and a king that fell into a pit is
++  // reported as attacked (a move that ends with your king dead is illegal,
++  // exactly as one that ends with him in check)
++  if (type_of(m) == SLIDE)
++      return !slide_attacks_king(m, us);
++
++  // An ice scroll cast moves nothing: never an answer to a check
++  if (type_of(m) == DROP && is_ice_scroll(dropped_piece_type(m)))
++      return !checkers();
++
+   // A portal scroll cast never answers a check and never lands on a portal
+   // square (a linking cast adds two bodies, which can only close lines: it
+   // never exposes the caster's own king)
+@@ -1468,13 +1510,18 @@ bool Position::pseudo_legal(const Move m) const {
+   if (type_of(m) == NORMAL && (st->portalSquares & to))
+       return false;
+ 
++  // A line move onto a slippery square is a SLIDE (ice.patch; movegen encodes
++  // it so) - an ordinary move landing on one is a colliding TT move likewise
++  if (type_of(m) == NORMAL && (slick_effective() & to) && slide_direction(from, to) != Direction(0))
++      return false;
++
+   // Use a fast check for piece drops
+   if (type_of(m) == DROP)
+       return   piece_drops()
+             && pc != NO_PIECE
+             && color_of(pc) == us
+             && (can_drop(us, in_hand_piece_type(m)) || (two_boards() && allow_virtual_drop(us, type_of(pc))))
+-            && (drop_region(us, type_of(pc)) & ~pieces() & to)
++            && (drop_region(us, type_of(pc)) & (is_ice_scroll(type_of(pc)) ? ~st->deadSquares : ~pieces()) & to) // an ice cast lands under whatever stands there
+             && (   type_of(pc) == in_hand_piece_type(m)
+                 || (drop_promoted() && type_of(pc) == promoted_piece_type(in_hand_piece_type(m))));
+ 
+@@ -1614,6 +1661,14 @@ bool Position::gives_check(Move m) const {
+   if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
+       return false;
+ 
++  // THE ICE (ice.patch): a slide relocates pieces - judge the enemy king where he ends
++  if (type_of(m) == SLIDE)
++      return slide_attacks_king(m, ~sideToMove);
++
++  // An ice scroll cast moves nothing
++  if (type_of(m) == DROP && is_ice_scroll(dropped_piece_type(m)))
++      return false;
++
+   Bitboard occupied = (type_of(m) != DROP ? pieces() ^ from : pieces()) | to;
+   Bitboard janggiCannons = pieces(JANGGI_CANNON);
+   if (type_of(moved_piece(m)) == JANGGI_CANNON)
+@@ -1762,7 +1817,16 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   Square to = to_sq(m);
+   Square dest = type_of(m) == PORTAL ? portal_twin(to) : to; // where the mover ends up
+   Piece pc = moved_piece(m);
+-  Piece captured = piece_on(type_of(m) == EN_PASSANT ? capture_square(to) : to);
++  // THE ICE (ice.patch): a SLIDE's relocations are computed on the board as it
++  // stands, before anything moves; its en passant form is a pawn's diagonal
++  // move onto the empty en passant square
++  st->slideCount = 0;
++  st->slideEp = type_of(m) == SLIDE && type_of(pc) == PAWN && empty(to) && (st->epSquares & to) && file_of(from) != file_of(to);
++  if (type_of(m) == SLIDE)
++      st->slideCount = slide_outcome(m, st->slideSteps);
++  Piece captured = piece_on(type_of(m) == EN_PASSANT || st->slideEp ? capture_square(to) : to);
++  if (type_of(m) == DROP && is_ice_scroll(type_of(pc)))
++      captured = NO_PIECE; // an ice cast lands under whatever stands on its square
+   if (to == from)
+   {
+       assert((type_of(m) == PROMOTION && sittuyin_promotion()) || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
+@@ -1804,7 +1868,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   {
+       Square capsq = to;
+ 
+-      if (type_of(m) == EN_PASSANT)
++      if (type_of(m) == EN_PASSANT || st->slideEp)
+       {
+           capsq = capture_square(to);
+           st->captureSquare = capsq;
+@@ -1834,7 +1898,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       Piece unpromotedCaptured = unpromoted_piece_on(capsq);
+       remove_piece(capsq);
+ 
+-      if (type_of(m) == EN_PASSANT)
++      if (type_of(m) == EN_PASSANT || st->slideEp)
+           board[capsq] = NO_PIECE;
+       if (captures_to_hand())
+       {
+@@ -1882,7 +1946,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   if (type_of(m) == DROP)
+   {
+       Piece pc_hand = make_piece(us, in_hand_piece_type(m));
+-      k ^=  (is_portal_scroll(type_of(pc)) ? Key(0) : Zobrist::psq[pc][to])
++      k ^=  (is_spell_scroll(type_of(pc)) ? Key(0) : Zobrist::psq[pc][to])
+           ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)] - 1]
+           ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)]];
+ 
+@@ -2012,6 +2076,17 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+               k ^= Zobrist::portalHalf[us][to];
+           }
+       }
++      else if (is_ice_scroll(type_of(pc)))
++      {
++          // THE ICE (ice.patch): an ice cast places nothing. The hand loses the
++          // scroll and the floor of the 3x3 around the square turns slippery,
++          // under whatever stands there; a square already slippery stays so.
++          remove_from_hand(make_piece(us, in_hand_piece_type(m)));
++          Bitboard patch = ice_patch(to) & ~st->slickSquares;
++          st->slickSquares |= patch;
++          while (patch)
++              k ^= Zobrist::slick[pop_lsb(patch)];
++      }
+       else
+       {
+       drop_piece(make_piece(us, in_hand_piece_type(m)), pc, to);
+@@ -2087,6 +2162,49 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       // THE SLEDGEHAMMER: nothing moves (the terrain changed above)
+       dp.dirty_num = 0;
+   }
++  else if (type_of(m) == SLIDE)
++  {
++      // THE ICE (ice.patch): the mover lands on 'to' (the victim there is gone
++      // already) and the slide physics relocates it and whatever it shoves,
++      // step by step as slide_outcome() recorded them - a piece leaves its
++      // square and arrives elsewhere, promoted or not, or falls into a pit and
++      // is gone as a captured piece is. Keys and material follow each step.
++      // Classical eval only: the NNUE dirty-piece record carries no chain.
++      move_piece(from, to);
++      for (int i = 0; i < st->slideCount; ++i)
++      {
++          SlideStep& s = st->slideSteps[i];
++          assert(piece_on(s.from) == s.before);
++          s.wasPromoted = is_promoted(s.from);
++          s.unpromoted = unpromoted_piece_on(s.from);
++          remove_piece(s.from);
++          k ^= Zobrist::psq[s.before][s.from];
++          if (type_of(s.before) == PAWN)
++              st->pawnKey ^= Zobrist::psq[s.before][s.from];
++          if (s.to == SQ_NONE)
++          {
++              st->materialKey ^= Zobrist::psq[s.before][pieceCount[s.before]];
++              if (type_of(s.before) != PAWN)
++                  st->nonPawnMaterial[color_of(s.before)] -= PieceValue[MG][s.before];
++              st->rule50 = 0;
++          }
++          else
++          {
++              put_piece(s.after, s.to, s.wasPromoted || s.after != s.before, s.unpromoted);
++              k ^= Zobrist::psq[s.after][s.to];
++              if (type_of(s.after) == PAWN)
++                  st->pawnKey ^= Zobrist::psq[s.after][s.to];
++              if (s.after != s.before)
++              {
++                  st->materialKey ^=  Zobrist::psq[s.after][pieceCount[s.after] - 1]
++                                    ^ Zobrist::psq[s.before][pieceCount[s.before]];
++                  st->nonPawnMaterial[color_of(s.after)] += PieceValue[MG][s.after] - (type_of(s.before) != PAWN ? PieceValue[MG][s.before] : VALUE_ZERO);
++                  st->rule50 = 0;
++              }
++          }
++      }
++      dp.dirty_num = 0;
++  }
+   else if (type_of(m) != CASTLING)
+   {
+       if (Eval::useNNUE)
+@@ -2135,8 +2253,8 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+           st->nonPawnMaterial[us] += PieceValue[MG][promotion];
+       }
+ 
+-      // Set en passant square(s) if the moved pawn can be captured
+-      else if (   type_of(m) != DROP && type_of(m) != PORTAL
++      // Set en passant square(s) if the moved pawn can be captured (never after a slide)
++      else if (   type_of(m) != DROP && type_of(m) != PORTAL && type_of(m) != SLIDE
+           && (   std::abs(int(to) - int(from)) == 2 * NORTH
+               || std::abs(int(to) - int(from)) == 3 * NORTH))
+       {
+@@ -2435,7 +2553,7 @@ void Position::undo_move(Move m) {
+   Square to = to_sq(m);
+   Piece pc = piece_on(to);
+ 
+-  assert(type_of(m) == DROP || type_of(m) == PORTAL || type_of(m) == HAMMER || empty(from) || type_of(m) == CASTLING || is_gating(m)
++  assert(type_of(m) == DROP || type_of(m) == PORTAL || type_of(m) == HAMMER || type_of(m) == SLIDE || empty(from) || type_of(m) == CASTLING || is_gating(m)
+          || (type_of(m) == PROMOTION && sittuyin_promotion())
+          || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
+   assert(type_of(st->capturedPiece) != KING);
+@@ -2513,8 +2631,8 @@ void Position::undo_move(Move m) {
+   {
+       if (type_of(m) == DROP)
+       {
+-          if (is_portal_scroll(in_hand_piece_type(m)))
+-              add_to_hand(make_piece(us, in_hand_piece_type(m))); // A cast placed nothing; the portal state returns with st->previous
++          if (is_spell_scroll(in_hand_piece_type(m)))
++              add_to_hand(make_piece(us, in_hand_piece_type(m))); // A cast placed nothing; the portal / ice state returns with st->previous
+           else
+               undrop_piece(make_piece(us, in_hand_piece_type(m)), to); // Remove the dropped piece
+       }
+@@ -2535,6 +2653,18 @@ void Position::undo_move(Move m) {
+           // THE SLEDGEHAMMER: nothing moved; the wall and the crate return with
+           // st->previous, and the wall / dead occupancy XORs above and below cancel
+       }
++      else if (type_of(m) == SLIDE)
++      {
++          // THE ICE: the relocations come back in reverse, then the landing
++          for (int i = st->slideCount - 1; i >= 0; --i)
++          {
++              const SlideStep& s = st->slideSteps[i];
++              if (s.to != SQ_NONE)
++                  remove_piece(s.to);
++              put_piece(s.before, s.from, s.wasPromoted, s.unpromoted);
++          }
++          move_piece(to, from);
++      }
+       else
+           move_piece(to, from); // Put the piece back at the source square
+ 
+@@ -2542,7 +2672,7 @@ void Position::undo_move(Move m) {
+       {
+           Square capsq = to;
+ 
+-          if (type_of(m) == EN_PASSANT)
++          if (type_of(m) == EN_PASSANT || st->slideEp)
+           {
+               capsq = st->captureSquare;
+ 
+@@ -2792,7 +2922,7 @@ bool Position::see_ge(Move m, Value threshold) const {
+   // Only deal with normal moves, assume others pass a simple SEE
+   if (type_of(m) != NORMAL && type_of(m) != DROP && type_of(m) != PIECE_PROMOTION)
+       return VALUE_ZERO >= threshold;
+-  if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
++  if (type_of(m) == DROP && is_spell_scroll(dropped_piece_type(m)))
+       return VALUE_ZERO >= threshold;
+ 
+   Square from = from_sq(m), to = to_sq(m);
+@@ -3083,6 +3213,17 @@ bool Position::is_optional_game_end(Value& result, int ply, int countStarted) co
+ 
+ bool Position::is_immediate_game_end(Value& result, int ply) const {
+ 
++  // THE ICE (ice.patch): a king that slid or was shoved into a pit is gone,
++  // and a side without its king has lost - as the game's own adjudication
++  // reads it. Gated on the ice, so every other variant is untouched.
++  if (st->slickSquares || var->iceScroll != NO_PIECE_TYPE)
++      for (Color c : { sideToMove, ~sideToMove })
++          if (!count<KING>(c) && count<KING>(~c))
++          {
++              result = c == sideToMove ? mated_in(ply) : mate_in(ply);
++              return true;
++          }
++
+   // Extinction
+   // Extinction does not apply for pseudo-royal pieces, because they can not be captured
+   if (extinction_value() != VALUE_NONE && (!var->extinctionPseudoRoyal || blast_on_capture()))
+@@ -3656,6 +3797,267 @@ bool Position::portal_attacks_king(Move m, Color kingColor) const {
+ }
+ 
+ 
++/// THE ICE (ice.patch, brief 4.9). The physics, in one place. A piece whose
++/// move ends on a slippery square keeps sliding the way it was moving, over
++/// slippery squares, and stops on the first square that is not slippery. A
++/// wall, a crate, the board's edge or a piece that cannot slide stops it on
++/// the square before; a piece on a slippery square that it hits takes its
++/// momentum - the hitter stops where it is, the hit piece slides the same way
++/// and passes it on in turn, either colour, kings included; a slide never
++/// captures. A pit swallows what slides into it. A linked portal square is a
++/// landing: the slider comes out of the twin, swapping with whatever stands
++/// there, and rests. A piece standing on a portal square is an obstacle. A
++/// knight's jump has no direction and lands. A pawn that stops on its
++/// promotion zone promotes: by its own move to the piece the move names,
++/// shoved to the strongest piece the variant offers.
++
++Direction Position::slide_direction(Square from, Square to) {
++
++  int df = int(file_of(to)) - int(file_of(from));
++  int dr = int(rank_of(to)) - int(rank_of(from));
++  if (from == to || (df && dr && std::abs(df) != std::abs(dr)))
++      return Direction(0);
++  return Direction((df > 0 ? int(EAST) : df < 0 ? int(WEST) : 0) + (dr > 0 ? int(NORTH) : dr < 0 ? int(SOUTH) : 0));
++}
++
++
++/// The piece as it stands on 'to' the moment it lands, before the slide: the
++/// move's own promotion applies there when 'to' is in the zone (a PROMOTION
++/// move onto ice), else at the square it stops on (slide_outcome).
++
++Piece Position::slide_mover_piece(Move m) const {
++
++  Piece pc = piece_on(from_sq(m));
++  PieceType promo = slide_promotion(m);
++  if (promo != NO_PIECE_TYPE && type_of(pc) == PAWN && (promotion_zone(color_of(pc)) & to_sq(m)))
++      return make_piece(color_of(pc), promo);
++  return pc;
++}
++
++
++/// Position::slide_outcome() records what a SLIDE move relocates, on the board
++/// as it stands (the mover on 'to', the victim gone), and returns the count.
++
++int Position::slide_outcome(Move m, SlideStep* steps) const {
++
++  assert(type_of(m) == SLIDE);
++
++  const Square from = from_sq(m);
++  const Square to = to_sq(m);
++  const Piece mover = piece_on(from);
++  const Direction d = slide_direction(from, to);
++  assert(d != Direction(0));
++  assert(mover != NO_PIECE);
++
++  Bitboard occ = (pieces() ^ from) & ~square_bb(to);
++  if (type_of(mover) == PAWN && empty(to) && (st->epSquares & to) && file_of(from) != file_of(to))
++      occ &= ~square_bb(capture_square(to));
++  occ |= to;
++  const Bitboard slick = slick_effective();
++  const Bitboard walls = st->wallSquares & ~st->holeSquares;
++  const Bitboard board = board_size_bb(var->maxFile, var->maxRank);
++
++  int n = 0;
++  auto record = [&](Square f, Square t, Piece before, Piece after) {
++      assert(n < MAX_SLIDE_STEPS);
++      steps[n].from = f;
++      steps[n].to = t;
++      steps[n].before = before;
++      steps[n].after = after;
++      steps[n].wasPromoted = false;
++      steps[n].unpromoted = NO_PIECE;
++      ++n;
++  };
++  // The board as the chain has made it so far
++  auto piece_at = [&](Square s) -> Piece {
++      for (int i = n - 1; i >= 0; --i)
++      {
++          if (steps[i].to == s)
++              return steps[i].after;
++          if (steps[i].from == s)
++              return NO_PIECE;
++      }
++      return s == to ? slide_mover_piece(m) : s == from ? NO_PIECE : piece_on(s);
++  };
++  auto next_square = [&](Square s) -> Square {
++      Square t = s + d;
++      if (!is_ok(t) || !(board & t) || std::abs(int(file_of(t)) - int(file_of(s))) > 1)
++          return SQ_NONE;
++      return t;
++  };
++  auto promoted = [&](Piece pc, Square s, PieceType named) -> Piece {
++      if (type_of(pc) != PAWN || !(promotion_zone(color_of(pc)) & s))
++          return pc;
++      if (named != NO_PIECE_TYPE)
++          return make_piece(color_of(pc), named);
++      PieceSet ps = promotion_piece_types(color_of(pc));
++      return ps ? make_piece(color_of(pc), pop_msb(ps)) : pc;
++  };
++
++  // The move's own promotion on 'to'
++  Piece pc = slide_mover_piece(m);
++  if (pc != mover)
++      record(to, to, mover, pc);
++
++  Square sq = to;
++  bool isMover = true;
++  while (true)
++  {
++      Square cur = sq;
++      Square landing = SQ_NONE;   // an ordinary landing beyond the ice, or a portal square
++      Square shoved = SQ_NONE;    // a piece on ice that takes the momentum
++      bool fell = false;
++      while (true)
++      {
++          Square nx = next_square(cur);
++          if (nx == SQ_NONE || (walls & nx) || (st->deadSquares & nx))
++              break;                                   // the edge, a wall, a crate: stop here
++          if (st->holeSquares & nx)
++          {
++              fell = true;                             // a pit: gone
++              break;
++          }
++          if (st->portalSquares & nx)
++          {
++              if (!(occ & nx))
++                  landing = nx;                        // an empty portal square: a landing on it
++              break;                                   // a piece on one is an obstacle
++          }
++          if (occ & nx)
++          {
++              if (slick & nx)
++                  shoved = nx;                         // a piece on ice: it takes the momentum
++              break;                                   // stop before it either way
++          }
++          if (slick & nx)
++          {
++              cur = nx;                                // empty ice: slide on
++              continue;
++          }
++          landing = nx;                                // empty floor: land
++          break;
++      }
++
++      Square end = fell ? SQ_NONE : landing != SQ_NONE ? landing : cur;
++      Piece swapped = NO_PIECE;
++      Square twin = SQ_NONE;
++      if (!fell && landing != SQ_NONE && (st->portalSquares & landing))
++      {
++          twin = portal_twin(landing);
++          swapped = (occ & twin) ? piece_at(twin) : NO_PIECE;
++          end = twin;
++      }
++      Piece after = fell ? NO_PIECE : promoted(pc, end, isMover ? slide_promotion(m) : NO_PIECE_TYPE);
++      if (swapped != NO_PIECE)
++      {
++          // The twin's occupant leaves for the portal square before the slider arrives
++          record(twin, landing, swapped, swapped);
++          occ |= landing;
++      }
++      if (end != sq || after != pc)
++          record(sq, end, pc, after);
++      occ ^= sq;
++      if (!fell)
++          occ |= end;
++      if (shoved == SQ_NONE)
++          break;
++      sq = shoved;
++      pc = piece_at(shoved);
++      isMover = false;
++  }
++  return n;
++}
++
++
++/// Position::slide_attacks_king() answers whether the king of kingColor is
++/// attacked after the SLIDE move m is made - judged on the board the slide
++/// leaves, the king where he ends. A king that fell into a pit is reported
++/// as attacked when he is the mover's own (the move is illegal) and as not
++/// attacked when he is the enemy's (no check: the game is over).
++
++bool Position::slide_attacks_king(Move m, Color kingColor) const {
++
++  assert(type_of(m) == SLIDE);
++
++  SlideStep steps[MAX_SLIDE_STEPS];
++  const int n = slide_outcome(m, steps);
++  const Square from = from_sq(m);
++  const Square to = to_sq(m);
++  const Piece mover = piece_on(from);
++  const Color att = ~kingColor;
++
++  Square capsq = SQ_NONE;
++  if (!empty(to))
++      capsq = to;
++  else if (type_of(mover) == PAWN && (st->epSquares & to) && file_of(from) != file_of(to))
++      capsq = capture_square(to);
++
++  // The occupancy after the move, and the squares whose piece is not where the
++  // real board has it (the static attackers must not be read there)
++  Bitboard occ = (pieces() ^ from) & ~square_bb(to);
++  if (capsq != SQ_NONE)
++      occ &= ~square_bb(capsq);
++  occ |= to;
++  Bitboard moved = square_bb(from) | to;
++  if (capsq != SQ_NONE)
++      moved |= capsq;
++
++  // The pieces that ended somewhere else, where they ended
++  Square relocSq[MAX_SLIDE_STEPS + 1];
++  Piece relocPc[MAX_SLIDE_STEPS + 1];
++  int nr = 0;
++  relocSq[nr] = to;
++  relocPc[nr++] = slide_mover_piece(m);
++
++  Square ksq = count<KING>(kingColor) ? square<KING>(kingColor) : SQ_NONE;
++  if (kingColor == color_of(mover) && type_of(mover) == KING)
++      ksq = to;
++
++  for (int i = 0; i < n; ++i)
++  {
++      const SlideStep& s = steps[i];
++      occ ^= s.from;
++      moved |= s.from;
++      for (int j = 0; j < nr; ++j)
++          if (relocSq[j] == s.from)
++          {
++              relocSq[j] = relocSq[nr - 1];
++              relocPc[j] = relocPc[--nr];
++              break;
++          }
++      if (s.from == ksq)
++          ksq = s.to;
++      if (s.to != SQ_NONE)
++      {
++          occ |= s.to;
++          moved |= s.to;
++          relocSq[nr] = s.to;
++          relocPc[nr++] = s.after;
++      }
++  }
++
++  if (ksq == SQ_NONE)
++      return kingColor == sideToMove;
++
++  // Every piece that stands where the real board has it, through the new occupancy
++  if (attackers_to(ksq, occ, att) & ~moved)
++      return true;
++
++  // The relocated pieces, from where they end, through the bodies
++  const Bitboard bodies = occ | st->portalSquares;
++  for (int j = 0; j < nr; ++j)
++      if (color_of(relocPc[j]) == att && relocSq[j] != ksq)
++      {
++          PieceType pt = type_of(relocPc[j]);
++          PieceType movePt = pt == KING ? king_type() : pt;
++          if (attacks_bb(att, movePt, relocSq[j], bodies) & ksq)
++              return true;
++      }
++
++  return false;
++}
++
++
+ /// Position::parse_portal_field() reads the FEN's trailing portal field, the
+ /// text between the braces: entries separated by commas, a pair as "c3-h8",
+ /// a half-open portal as "e4w" or "e4b". Entries that cannot stand - off the
+@@ -3695,6 +4097,17 @@ void Position::parse_portal_field(const std::string& field) {
+           ++i;
+           continue;
+       }
++      // A slippery square (ice.patch): "~e4" - anywhere on the board, under anything
++      if (field[i] == '~')
++      {
++          ++i;
++          Square s = parse_square(i);
++          if (s == SQ_NONE)
++              break;
++          if (board_bb() & s)
++              st->slickSquares |= s;
++          continue;
++      }
+       Square a = parse_square(i);
+       if (a == SQ_NONE)
+           break;
+diff --git a/src/position.h b/src/position.h
+index 95619414..9224a501 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -40,6 +40,20 @@ namespace Stockfish {
+ /// its previous state when we retract a move. Whenever a move is made on the
+ /// board (by calling Position::do_move), a StateInfo object must be passed.
+ 
++// THE ICE (ice.patch, brief 4.9): one relocation of the slide physics - a piece
++// leaving `from` for `to` (SQ_NONE: it fell into a pit) as `before`, ending as
++// `after` (a pawn that promotes where it stops). `wasPromoted` / `unpromoted`
++// carry the shogi-style promotion state across, so undo restores it exactly.
++struct SlideStep {
++  Square from;
++  Square to;
++  Piece  before;
++  Piece  after;
++  bool   wasPromoted;
++  Piece  unpromoted;
++};
++constexpr int MAX_SLIDE_STEPS = 16; // a chain relocates at most one piece per square of one line, plus a portal's swap
++
+ struct StateInfo {
+ 
+   // Copied when making a move
+@@ -60,6 +74,8 @@ struct StateInfo {
+   Bitboard portalSquares;
+   Square   portalHalf[COLOR_NB];
+   int8_t   portalTwin[SQUARE_NB];
++  Bitboard slickSquares;  // THE ICE (ice.patch): the slippery squares - a move that ends on one keeps sliding
++  Bitboard holeSquares;   // the pits ('_'), a subset of hardSquares: a wall to every move, a fall to a slide
+   Bitboard gatesBB[COLOR_NB];
+ 
+   // Not copied when making a move (will be recomputed anyhow)
+@@ -76,6 +92,9 @@ struct StateInfo {
+   Piece      capturedPiece;
+   Square     captureSquare; // when != to_sq, e.g., en passant
+   Piece      promotionPawn;
++  SlideStep  slideSteps[MAX_SLIDE_STEPS]; // THE ICE: the relocations a SLIDE move made, for undo
++  int        slideCount;
++  bool       slideEp;                     // a SLIDE that was an en passant capture (the victim on captureSquare)
+   Bitboard   nonSlidingRiders;
+   Bitboard   flippedPieces;
+   Bitboard   pseudoRoyalCandidates;
+@@ -141,6 +160,18 @@ public:
+   bool is_portal_scroll(PieceType pt) const;
+   PieceSet hammer_piece_types(Color c) const;
+   bool portal_attacks_king(Move m, Color kingColor) const;
++  // THE ICE (ice.patch)
++  Bitboard slick_squares() const;
++  Bitboard hole_squares() const;
++  Bitboard slick_effective() const;
++  PieceType ice_scroll() const;
++  bool is_ice_scroll(PieceType pt) const;
++  bool is_spell_scroll(PieceType pt) const;
++  Bitboard ice_patch(Square s) const;
++  static Direction slide_direction(Square from, Square to);
++  Piece slide_mover_piece(Move m) const;
++  int slide_outcome(Move m, SlideStep* steps) const;
++  bool slide_attacks_king(Move m, Color kingColor) const;
+   // Portals v3 (the one-turn cast): a half open on either side; the same with nobody in check
+   bool half_open() const;
+   bool in_cast() const;
+@@ -523,9 +554,44 @@ inline int Position::count_with_hand_spellfree(Color c, PieceType pt) const {
+   int n = count_with_hand(c, pt);
+   if (var->portalScroll != NO_PIECE_TYPE && (pt == ALL_PIECES || pt == var->portalScroll))
+       n -= pieceCountInHand[c][var->portalScroll];
++  if (var->iceScroll != NO_PIECE_TYPE && (pt == ALL_PIECES || pt == var->iceScroll))
++      n -= pieceCountInHand[c][var->iceScroll];
+   return n;
+ }
+ 
++// THE ICE (ice.patch, brief 4.9)
++inline Bitboard Position::slick_squares() const {
++  return st->slickSquares;
++}
++
++inline Bitboard Position::hole_squares() const {
++  return st->holeSquares;
++}
++
++// A portal square is never slippery: a move onto it is a landing, and a slide
++// that reaches one lands on it
++inline Bitboard Position::slick_effective() const {
++  return st->slickSquares & ~st->portalSquares;
++}
++
++inline PieceType Position::ice_scroll() const {
++  assert(var != nullptr);
++  return var->iceScroll;
++}
++
++inline bool Position::is_ice_scroll(PieceType pt) const {
++  return pt != NO_PIECE_TYPE && pt == var->iceScroll;
++}
++
++inline bool Position::is_spell_scroll(PieceType pt) const {
++  return is_portal_scroll(pt) || is_ice_scroll(pt);
++}
++
++// The floor an ice cast on s ices: the 3x3 around it, walls, pits and crates skipped
++inline Bitboard Position::ice_patch(Square s) const {
++  return (PseudoAttacks[WHITE][KING][s] | s) & board_bb() & ~st->deadSquares;
++}
++
+ inline PieceSet Position::piece_types() const {
+   assert(var != nullptr);
+   return var->pieceTypes;
+diff --git a/src/types.h b/src/types.h
+index 2301cb64..8972998e 100644
+--- a/src/types.h
++++ b/src/types.h
+@@ -272,6 +272,7 @@ enum MoveType : int {
+   SPECIAL            = 7 << (2 * SQUARE_BITS),
+   PORTAL             = 8 << (2 * SQUARE_BITS),
+   HAMMER             = 9 << (2 * SQUARE_BITS),
++  SLIDE              = 10 << (2 * SQUARE_BITS),
+ };
+ 
+ constexpr int MOVE_TYPE_BITS = 4;
+@@ -809,6 +810,12 @@ inline PieceType promotion_type(Move m) {
+   return type_of(m) == PROMOTION ? PieceType((m >> (2 * SQUARE_BITS + MOVE_TYPE_BITS)) & (PIECE_TYPE_NB - 1)) : NO_PIECE_TYPE;
+ }
+ 
++// THE ICE (ice.patch): a SLIDE move that lands or stops on a pawn's promotion
++// zone carries the promotion piece in the promotion bits
++inline PieceType slide_promotion(Move m) {
++  return type_of(m) == SLIDE ? PieceType((m >> (2 * SQUARE_BITS + MOVE_TYPE_BITS)) & (PIECE_TYPE_NB - 1)) : NO_PIECE_TYPE;
++}
++
+ inline PieceType gating_type(Move m) {
+   return PieceType((m >> (2 * SQUARE_BITS + MOVE_TYPE_BITS)) & (PIECE_TYPE_NB - 1));
+ }
+diff --git a/src/uci.cpp b/src/uci.cpp
+index 584977aa..10b30835 100644
+--- a/src/uci.cpp
++++ b/src/uci.cpp
+@@ -540,6 +540,8 @@ string UCI::move(const Position& pos, Move m) {
+ 
+   if (type_of(m) == PROMOTION)
+       move += pos.piece_to_char()[make_piece(BLACK, promotion_type(m))];
++  else if (type_of(m) == SLIDE && slide_promotion(m) != NO_PIECE_TYPE)
++      move += pos.piece_to_char()[make_piece(BLACK, slide_promotion(m))]; // THE ICE: a pawn promoting where its slide stops
+   else if (type_of(m) == PIECE_PROMOTION)
+       move += '+';
+   else if (type_of(m) == PIECE_DEMOTION)
+diff --git a/src/variant.h b/src/variant.h
+index 296ccf05..8fa3dfed 100644
+--- a/src/variant.h
++++ b/src/variant.h
+@@ -119,6 +119,7 @@ struct Variant {
+   EnclosingRule flipEnclosedPieces = NO_ENCLOSING;
+   bool freeDrops = false;
+   PieceType portalScroll = NO_PIECE_TYPE;
++  PieceType iceScroll = NO_PIECE_TYPE; // THE ICE (ice.patch): the scroll whose cast ices the floor of the 3x3 around its square
+   PieceSet hammerPieceTypes[COLOR_NB] = {NO_PIECE_SET, NO_PIECE_SET}; // THE SLEDGEHAMMER (hammer.patch): the types that may crack an adjacent wall
+ 
+   // game end

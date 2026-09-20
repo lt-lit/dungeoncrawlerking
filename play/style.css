@@ -217,9 +217,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #gods-line { color: var(--gods); }
 #hint-line:empty, #gods-line:empty { display: none; }
 /* THE PORTAL SPELL (2026-09-17): the cast button in the player's bar. */
-#btnPortal { font: inherit; text-transform: uppercase; letter-spacing: .06em; padding: .1rem .5rem; border-radius: .3rem; border: 1px solid var(--gods); background: rgba(124, 200, 255, .12); color: var(--gods); cursor: pointer; }
-#btnPortal.active { background: var(--gods); color: #0b0d14; }
-#btnPortal:disabled { opacity: .45; cursor: default; }
+#btnPortal, #btnIce { font: inherit; text-transform: uppercase; letter-spacing: .06em; padding: .1rem .5rem; border-radius: .3rem; border: 1px solid var(--gods); background: rgba(124, 200, 255, .12); color: var(--gods); cursor: pointer; }
+#btnPortal.active, #btnIce.active { background: var(--gods); color: #0b0d14; }
+#btnPortal:disabled, #btnIce:disabled { opacity: .45; cursor: default; }
+#btnIce { margin-left: .3rem; }
 /* The hint LIST (2026-09-07): rank, move and eval per hint — the numbers
    live here, not on the arrows (designer: "I don't think the numbers are
    worth keeping" on the board). A swatch in the rank's arrow colour ties

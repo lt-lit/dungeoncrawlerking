@@ -91,6 +91,27 @@ in the tree, where the rules differ), so the identity check reads boards
 with no pair and no scroll. Verdict 2026-09-20 (designer): "Alright this
 works pretty good" — IN.
 
+**Status 2026-09-20: THE ICE PATCH shipped.** `patches/ice.patch` (1,095
+lines, +677/−21 across nine files — `types.h`, `variant.h`, `parser.cpp`,
+`evaluate.cpp`, `position.h`, `position.cpp`, `movegen.cpp`, `apiutil.h`,
+`uci.cpp` — applied on top of the seven above: EIGHT patches now, in order
+dead-squares, thread-stack, portals, wall-kinds, hammer, portals-body,
+portals-cast, ice) gives the engine brief §4.9: SLIPPERY SQUARES of any
+shape (`~e5` entries in the trailing FEN field), the SLIDE move type (a
+piece whose move ends on ice glides on in its own direction until floor,
+an obstacle or a pit; momentum passes to a piece it hits standing on ice;
+an empty portal square on the way is a landing), THE PIT `_` (a hole the
+engine tells from bedrock: nothing enters it by a move, a sliding piece
+falls into it and is gone; a side whose king fell has lost), and THE ICE
+SCROLL (`iceScroll`, a custom immobile piece dropped on the middle rows,
+one ply, never in check: the 3×3 around the square turns slippery). Both
+artifacts rebuilt from the clean pinned trees; validated natively against
+the independent Python oracle grown for the ice (55 fixtures, 4,200
+random positions, the sweep, perft 4 under asserts) before any WASM was
+built; ice-free boards node-identical to the seven-patch build; the
+rule-16 gate ran green end to end (see "The ice patch" below). The phone
+verdict is owed.
+
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
 diff. `patches/pr29-dead-squares-full.diff` (KOTH-Stockfish PR #29) is
@@ -541,6 +562,133 @@ wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
 `#` board ("Invalid piece character"), so a phase0 run that forgot the
 overlay dies at once instead of misplaying.
 
+## The ice patch (`patches/ice.patch`) — 2026-09-20
+
+Canon: brief §4.9 (the designer's rules, 2026-09-20: "a sliding piece
+should keep sliding until it's not on a slippery surface anymore. Or until
+it hits a wall or another piece"; "Sliding pieces can fall into holes and
+die. So I guess we do in fact need to differentiate between holes and
+indestructible walls"; "either king can slide and fall into a hole, just
+make a move illegal if ends with your king dead or in check, just like
+always"; "don't assume that every slippery patch is always going to be a
+3x3 placed spell"; momentum transfers when a slider bumps a piece on the
+ice; a portal square is never slippery). The eighth patch, applied after
+portals-cast; the scripted edit that produced it is in the forge's scratch
+(`apply-ice.py`), the patch itself the record.
+
+- **The glyphs and the field** (`position.cpp`, `apiutil.h`, `uci.cpp`):
+  `_` on the board is a PIT — parsed into `holeSquares` ⊂ `hardSquares` ⊂
+  `wallSquares` (so every reader that knows `#` treats it as an obstacle a
+  move never enters), emitted and printed as `_`, hashed by `Zobrist::hole`
+  from its own PRNG (seed `0x165667B19E3779F9`, with `Zobrist::slick`; the
+  stock key sequence untouched). `~sq` entries in the trailing `{}` field
+  are the SLIPPERY squares, `slickSquares` in the copied state region;
+  `slick_effective()` = slick & ~portalSquares (a portal square is never
+  slippery). A pawn's promotion where its slide stops prints `=Q` in SAN;
+  the check suffix reads the real checkers after the slide.
+- **The SLIDE move type** (`types.h` type 10, after HAMMER): encoded on the
+  ENTERED square, plain `e2e4` notation (+ the promotion letter when the
+  pawn STOPS on its zone — `slide_promotion(m)` in the promotion bits;
+  `uci.cpp` prints the char). Movegen (`movegen.cpp` `emit_slide` and the
+  hook): a NORMAL, EN_PASSANT or PROMOTION move whose destination is
+  slick-effective and whose line has a direction (`slide_direction`,
+  Direction(0) for a leap — a knight lands where it jumps) becomes a SLIDE;
+  a RIDER's quiet move onto ice is emitted only at the LAST empty ice
+  square before what stops it (skipped when the next square is empty and
+  reachable — the folded moves would end where the plain move past the ice
+  does), pawns, kings and every capture always emitted; promotion variants
+  when the resting square is in the zone. In check, `generate_slide_evasions`
+  generates the slides whole and filters (a slide may block, capture the
+  checker, or carry the king out), slick squares masked out of the regular
+  evasion target so no move onto ice is generated twice.
+- **The physics** (`Position::slide_outcome`): from the entered square,
+  in the move's direction — the next square off the board, a wall or a
+  crate: stop here; a pit: FELL; an empty portal square: a LANDING (out of
+  the twin, swapping with whatever stands there; the swap step recorded
+  BEFORE the mover's, since a slide can exit onto the square it came from
+  through a pair); a piece on ice: SHOVED (the momentum passes: the slider
+  stops, the hit piece slides on the same way, chained); a piece on floor:
+  stop before it; empty ice: on; empty floor: land. Every relocation is a
+  `SlideStep { from, to | SQ_NONE, before, after, wasPromoted }` in the
+  StateInfo's not-copied region (`MAX_SLIDE_STEPS` 16), so `do_move`
+  applies the list castling-style and `undo_move` walks it backwards off
+  the state pointer. A shoved pawn that stops on its zone promotes to the
+  strongest piece (the mover's to the letter the move names).
+- **Legality and check** (`position.cpp`): `slide_attacks_king` judges a
+  SLIDE on the virtual board after every relocation — the mover's king
+  fallen (`SQ_NONE`) or attacked → illegal; the enemy king attacked (or
+  fallen) → `gives_check`. `pseudo_legal` refuses a NORMAL-typed move onto
+  a slick square with a direction (movegen encodes it as SLIDE — the
+  transposition-table collision the one-turn cast's gate found for
+  portals), and validates a SLIDE by regeneration. No en passant square is
+  set after a SLIDE; a slide whose capture WAS en passant carries
+  `st->slideEp` so the capture square is right in `do_move` / `undo_move`
+  / SEE. `see_ge` prices a SLIDE by its capture alone (the captor leaves
+  the square, so nothing recaptures there).
+- **The game's end**: `is_immediate_game_end` — while any square is slick,
+  a side without a king has LOST (the engine scores it as mate; a kingless
+  side has no legal move, so ffish's `isGameOver` reads it too).
+- **The scroll** (`variant.h` / `parser.cpp` `iceScroll`; `movegen.cpp`
+  `generate_drops`; `evaluate.cpp`): a custom piece with an empty Betza
+  string (`customPiece1 = i:`, immobile) named by `iceScroll`; its drop —
+  `I@e5` for either side — is generated on the intersection of the drop
+  region and the piece's MOBILITY region (the cast rows), on occupied floor
+  too, never on a wall, a crate or a pit, never in check, never while a
+  portal half is open (the in-cast branch drops the portal scroll alone);
+  `do_move` adds `ice_patch(s)` (the 3×3 ∩ `board_bb` ∩ ~dead squares) to
+  the slick set and spends the scroll, `undo_move` restores the set off the
+  state. `is_spell_scroll` keeps every scroll out of the extinction count
+  and the eval's in-hand term (a scroll is never a piece).
+
+Stock when nothing is slick and no scroll is in hand: the SLIDE branches
+sit behind `slick_effective()`, the drops behind `iceScroll`, and the
+game-end check behind the slick set; ice-free boards are node-identical to
+the seven-patch build (fixed-depth transcripts identical on five boards —
+plain 8×8, with a pair, with walls and crates, 10×10, 6×6 — native).
+
+### Native validation (2026-09-20)
+
+`engine/forge/oracle.py` grew the ice from the rule text (`TERRAIN`
+`*#^_`, `slippery`, `slide`, `promote`, `cast_ice`, the rider dedupe in
+`legal_moves`, a missing king ending the game, `~sq` in `to_fen` /
+`from_fen`, `random_position(ice='patch' | 'scatter' | 'floor' | 'mixed')`);
+`native_test_common.py` is the shared UCI driver, `native-test-ice.py` the
+fixtures I1–I13 (every count derived with the oracle before the engine
+ran them), `ice.ini` the test variants (`ice8` / `ice6` / `ice10`: the
+portal variants + the scroll, cast rows the two middle ranks);
+`apply-xsweep.py` puts the scratch-only `xsweep` command into a tree.
+
+| check | result |
+|---|---|
+| the fixtures — a run of ice, the shove and the capture, a king onto ice, a pit behind the ice (the king may not slide in), the enemy king shoved into a pit (game over), a chain of knights and a gap in it, a pawn's push and double step sliding, a slide onto the promotion zone, a shoved pawn promoting to the strongest, a rook and a knight into a pit, a slide into a portal as a landing (the twin plugged, a knight on the portal square an obstacle), the casts (16 on rows 4–5, under a knight, not on a wall, none in check, none for the frozen side), a knight landing where it jumps, evasions that slide, a shove that gives check, a pinned rook that may not slide off the rank, en passant onto ice promoting at the end, a shoved king with no check, the 10×10 duel shape | **55/55** on the debug build (asserts on) and the release, the sweep clean |
+| random positions vs the oracle — 6×6 / 8×8 / 10×10, kings and 2–7 pieces, walls, crates and pits, a pair on a third, scrolls in hand, ice as a 3×3 patch / scattered / most of the floor: perft-1 move sets and perft-2 per-move counts | **4,200: 0 mismatches**, `xsweep` clean (pseudo_legal / legal / gives_check / the incremental state / the undo) |
+| debug perft 4 on 9 fixtures (`givesCheck == checkers`, `pos_is_ok`, the undo) | completed, no assert |
+| the portal fixtures on the ice build (`native-test.py`) | 62/62, sweep 71/71 |
+| ice-free identity vs the seven-patch native build | depth-12 transcripts identical on five boards |
+
+TWO REAL BUGS the oracle caught before any WASM was built: a slide into a
+portal recorded the mover's arrival before the twin's occupant left, so
+`do_move` clobbered the piece and `slide_attacks_king` misread the king's
+square (a king ending attacked on j9 read as legal) — the swap step is
+recorded first now; and a leaper's move onto ice in check was generated
+as an evasion off the check line — the slide evasions take the evasion
+target.
+
+### The rule-16 gate (both WASM binaries rebuilt from the clean pinned trees)
+
+`ffish.js` and `stockfish.js` differ from the vendored in seven bytes each
+(the static memory layout constants — the data segment grew with the new
+Zobrist tables and the slide storage) and the worker is byte-identical;
+the wasms +18,109 / +19,403 bytes.
+
+- [x] `test-ice-ffish.cjs` **53/53** — the fixtures through the JS API, SAN (`Ra4`, `Rxa5`, `d5=Q+`, `I@e4`), push/pop along a slide, the field kept, the fallen king's game over, a 3,932-move check-flag sweep with 0 mismatches
+- [x] `test-ice-engine.cjs` **79/79** — perft 1–3 on every fixture over UCI pinned to the native build (I1 981, I2 1,486, I3 1,440 / 1,228 / 551, I4 1,787 / 2,023, I5 320 / 764 / 7,435, I6 3,402, I7 742 / 1,195, I8 946 / 1,292 / 1,468, I9 48,633 / 59,174 / 44,233 / 7,859, I10 454, I11 704 / 2,985 / 1,481, I12 379, I13 494; the 10×10 duel shape perft 1 = 107, perft 2 = 4,453), `d` with the pit and the ice, the boards after the key moves, the search finding the shove into the pit (`e1f1`), a search alive on a floor of ice
+- [x] `test-portals-ffish.cjs` 78, `test-portals-engine.cjs` 146, `test-hammer-ffish.cjs` 27, `test-hammer-engine.cjs` 25, `test-ffish.cjs` 19, `test-engine.cjs` 7
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored seven-patch engine at depth 12
+- [x] `depthcap.cjs` — d22 110/110 (slowest 1,533 ms), d60 30/30 (slowest 10,023 ms, the movetime) — **the cap stays at d22**
+- [x] the game's gates on the vendored pair: `test-ice-game.mjs` 42 (the grid's physics against ffish on the fixtures and 1,142 random slides), selftest 51/51 headless (the ice check on the deal variant), ui-smoke NNN ok (THE ICE block), replay-smoke 76, test-logreport 61, test-world 132, test-barrier 170, test-portals-game 27, the other Node gates unchanged
+
 ## The portals-cast patch (`patches/portals-cast.patch`, was `portals-v3.patch`) — 2026-09-19
 
 The one-turn cast, rebased on the body-only patch when the tunnel was
@@ -943,6 +1091,8 @@ FFISH_JS=... node engine/tests/test-portals-ffish.cjs                   # the po
 ENGINE_JS=... node engine/tests/test-portals-engine.cjs                 # the portal spell — the body rule + the one-turn cast (Portals v4), engine half (146)
 FFISH_JS=... node engine/tests/test-hammer-ffish.cjs                    # the hard wall + the sledgehammer, ffish half (27)
 ENGINE_JS=... node engine/tests/test-hammer-engine.cjs                  # the hard wall + the sledgehammer, engine half (25)
+FFISH_JS=... node engine/tests/test-ice-ffish.cjs                       # the ice — slippery squares, the slide, the pit `_`, the scroll — ffish half (53)
+ENGINE_JS=... node engine/tests/test-ice-engine.cjs                     # the ice, engine half: perft pinned to the native build, the searches (79)
 node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
 ```
 

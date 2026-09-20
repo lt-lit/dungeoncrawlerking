@@ -35,7 +35,7 @@
 //
 // The variant must already be registered via ffish.loadVariantConfig().
 
-import { setSquare, getSquare, clearEp, splitFen, joinFen, isTerrain, HARD } from './fen.mjs';
+import { setSquare, getSquare, clearEp, splitFen, joinFen, isTerrain, PIT } from './fen.mjs';
 
 // (ffish module) → Map(variantName → reused Board)
 const boardCache = new WeakMap();
@@ -65,11 +65,12 @@ export function resetCrumbleFilterCache(ffish) {
   }
 }
 
-/** Apply the §4.5 collapse transform: square → '#' (a pit: indestructible,
- *  wall-kinds 2026-09-17 — it was '*' plus the ledger before), occupant
- *  removed, ep cleared. */
+/** Apply the §4.5 collapse transform: square → '_' (THE PIT — the engine's
+ *  own hole glyph since the ice, 2026-09-20: indestructible, and a sliding
+ *  piece falls in; it was '#' from wall-kinds 2026-09-17 and '*' plus the
+ *  ledger before that), occupant removed, ep cleared. */
 export function collapseFen(fen, square) {
-  return clearEp(setSquare(fen, square, HARD));
+  return clearEp(setSquare(fen, square, PIT));
 }
 
 /**

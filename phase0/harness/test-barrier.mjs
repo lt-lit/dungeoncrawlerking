@@ -305,15 +305,17 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
   {
     const tx = cropTransform({ wf: -2, wr: 2, facing: 0, files: 6, ranks: 8, worldFiles: 8, worldRanks: 8 });
     const b = boardOf(edge.arenaFen(tx, 'w'));
-    let offMapWalls = 0, offMapTotal = 0, onMapWalls = 0;
+    let offMapWalls = 0, offMapTotal = 0, onMapWalls = 0, onMapPits = 0;
     for (let r = 0; r < tx.ranks; r++) for (let f = 0; f < tx.files; f++) {
       const c = arenaToWorld(tx, f, r);
       const off = !c || !edge.inBounds(c.f, c.r);
       if (off) { offMapTotal++; if (b[tx.ranks - 1 - r][f] === '#') offMapWalls++; }
       else if (b[tx.ranks - 1 - r][f] === '#') onMapWalls++;
+      else if (b[tx.ranks - 1 - r][f] === '_') onMapPits++;
     }
     check(offMapTotal === 2 * 8 + 4 * 2 && offMapWalls === offMapTotal, `off-map squares read as indestructible walls (#) in the crop's FEN (${offMapWalls}/${offMapTotal})`);
-    check(onMapWalls === 1, `on the map only the pit is a # (${onMapWalls})`);
+    // THE PIT (the ice, 2026-09-20): a hole is the engine's own '_' now, never a '#' on the map
+    check(onMapWalls === 0 && onMapPits === 1, `on the map the pit is the one _ and nothing is a # (${onMapWalls} #, ${onMapPits} _)`);
     const layers = edge.cropLayers(tx);
     check(layers.holes.length === offMapTotal + 1, `every off-map square and the pit are the crop's holes (${layers.holes.length})`);
     const stage = edge.arenaStage(tx);
@@ -339,7 +341,7 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
     check(!crateSq || layers.godCrates.includes(`${String.fromCharCode(97 + crateSq.f)}${crateSq.r + 1}`), `the floor's god crate is in the crop's godCrates`);
     check(layers.holes.length > 1, `the off-map files are holes to the gods (${layers.holes.length})`);
     const stage = tall.arenaStage(tx);
-    check(stage.files === BOX && stage.ranks === BOX && stage.id.startsWith('lab@') && stage.grid[holeSq.r][holeSq.f] === '#', `arenaStage: a 10×10 stage named ${stage.id}, the pit a # to the deal`);
+    check(stage.files === BOX && stage.ranks === BOX && stage.id.startsWith('lab@') && stage.grid[holeSq.r][holeSq.f] === '_', `arenaStage: a 10×10 stage named ${stage.id}, the pit a _ to the deal`);
   }
 }
 
@@ -450,6 +452,20 @@ const openFloor = (w, h) => worldOf(['#'.repeat(w), ...Array.from({ length: h - 
   check(region('White') === '*3 *4 *5 *6 *7 *8' && region('Black') === '*3 *4 *5 *6 *7 *8', `the cast region is ranks 3…8 for both colours (${region('White')} / ${region('Black')})`);
   const bare = planBox(w, army, { enemy: KIT_ENEMY, seed: 1 });
   check(bare.ok && !bare.deal.variantName.includes('portals') && !/dropRegion/.test(bare.deal.variantIni), 'a plain deal carries no drop region');
+}
+
+// ---- THE ICE (2026-09-20): an ice deal names itself, carries the scroll's keys (the cast rows the box's middle
+// ranks 5–6, one value line for every scroll) and one ice scroll a side in the holdings beside the portal scrolls
+{
+  const w = openFloor(30, 30);
+  const army = spawnArmy(w, makePattern(KIT, { seed: 1 }), { f: 14, r: 14 }, 0, 'w');
+  const ice = planBox(w, army, { enemy: KIT_ENEMY, seed: 1, portals: true, ice: true });
+  check(ice.ok && ice.deal.variantName.endsWith('__portals2__ice') && /customPiece1 = i:/.test(ice.deal.variantIni) && /iceScroll = i/.test(ice.deal.variantIni), `an ice deal names itself and carries the scroll's keys: ${ice.ok ? ice.deal.variantName : ice.error}`);
+  check(ice.ok && /mobilityRegionWhiteCustomPiece1 = \*5 \*6/.test(ice.deal.variantIni) && /mobilityRegionBlackCustomPiece1 = \*5 \*6/.test(ice.deal.variantIni), 'the cast rows are the box\'s middle ranks 5 and 6, both colours');
+  check(ice.ok && /pieceValueMg = o:0 i:0/.test(ice.deal.variantIni) && (ice.deal.variantIni.match(/pieceValueMg/g) ?? []).length === 1, 'one value line names both scrolls');
+  check(ice.ok && /\[IOOioo\]/.test(ice.deal.fen), `the holdings carry one ice scroll a side beside the portal scrolls (${ice.ok ? ice.deal.fen.match(/\[[^\]]*\]/)?.[0] : '-'})`);
+  const only = planBox(w, army, { enemy: KIT_ENEMY, seed: 1, ice: true });
+  check(only.ok && only.deal.variantName.endsWith('__ice') && !only.deal.variantName.includes('portals') && /\[Ii\]/.test(only.deal.fen) && !/dropRegion/.test(only.deal.variantIni), `ice without portals: the scroll alone in hand, no drop region (${only.ok ? only.deal.fen.match(/\[[^\]]*\]/)?.[0] : only.error})`);
 }
 
 console.log(`test-barrier: ${ok}/${ok + bad} checks passed`);

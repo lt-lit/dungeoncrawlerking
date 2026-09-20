@@ -88,7 +88,7 @@
 //              neighbours' wall cases — as does an opened doorway — so the
 //              wall line runs on through the break instead of capping
 //              either side of a gap.
-import { splitFen, parseBoard, WALL, FURNITURE, HARD, isTerrain } from './fen.mjs';
+import { splitFen, parseBoard, WALL, FURNITURE, HARD, PIT, isTerrain } from './fen.mjs';
 
 /** The tile grid's placement dials, in whole tile pixels (canvas-board
  *  setPieceFit): rows above the square's bottom edge, columns east of centre. */
@@ -283,9 +283,9 @@ export function floorVariantIndex(f, rank) {
  * terrain rule of the renderer (2026-09-07: lifted out of setPosition so the
  * replay analyzer can rebuild a board's residue from a log without a DOM;
  * setPosition paints exactly this). Returns Map(square → {
- *   v            the FEN cell: a piece letter, '*', '#', '^' or null
+ *   v            the FEN cell: a piece letter, '*', '#', '_', '^' or null
  *   wallTile     '*', or a '#' that is not a hole (standing stone)
- *   hole         a '#' (an old log's '*') the gods crumbled (the `holes` ledger)
+ *   hole         a '_' (the pit, since the ice 2026-09-20), or a '#' (an old log's '*') the gods crumbled (the `holes` ledger)
  *   bedrock      a '#' that is not a hole — indestructible stone, painted darker
  *   furniture    '^'
  *   cracked      '^' the gods weakened (the `godCrates` ledger ANDed with the FEN)
@@ -353,16 +353,16 @@ export function classifyCell(ctx, f, rank) {
     if (c === undefined) return false;
     if (c.v === FURNITURE) return c.crate || c.skin === 'door' || c.skin === 'masonry';
     if (c.v === WALL || c.v === HARD) return !c.hole;
-    return false;
+    return false; // a pit ('_', the ice 2026-09-20) stands nothing
   };
   const isHole = (ff, rr) => {
     const c = at(ff, rr);
-    return !!c && (c.v === WALL || c.v === HARD) && c.hole;
+    return !!c && (c.v === PIT || ((c.v === WALL || c.v === HARD) && c.hole));
   };
   const solid = (ff, rr) => {
     if (standing(ff, rr)) return true;
     const c = at(ff, rr);
-    if (c === undefined || c.v === FURNITURE || c.v === WALL || c.v === HARD) return false;
+    if (c === undefined || c.v === FURNITURE || c.v === WALL || c.v === HARD || c.v === PIT) return false;
     return c.rubble || c.opened;
   };
   const me = at(f, rank);
@@ -370,7 +370,9 @@ export function classifyCell(ctx, f, rank) {
   const isWall = v === WALL || v === HARD;
   const furniture = v === FURNITURE;
   const wallTile = isWall && !me.hole;
-  const hole = isWall && !!me.hole;
+  // A HOLE: the engine's own pit glyph '_' (since the ice, 2026-09-20), or a
+  // '#' / '*' the ledger calls a pit (every log and crop before it).
+  const hole = v === PIT || (isWall && !!me.hole);
   // BEDROCK (wall-kinds, 2026-09-17): a '#' the ledger does not call a pit —
   // a standing wall to every mask, painted a darker, deader stone, never
   // cracked. (A '*' in the holes ledger is an old log's pit: the ledger decides.)
@@ -388,7 +390,7 @@ export function classifyCell(ctx, f, rank) {
   const N = solid(f, rank + 1), E = solid(f + 1, rank), S = solid(f, rank - 1), W = solid(f - 1, rank);
   const weak = skin === 'masonry';
   const doorLine = skin === 'door' ? ((N || S) && !(E || W) ? 'ns' : 'ew') : null;
-  const floor = !isWall && !furniture;
+  const floor = !isWall && !furniture && v !== PIT;
   const ruin = floor && !!me?.rubble;
   const doorway = floor && !ruin && !!me?.opened;
   // A door always carries its wall case: edge-on it paints the wall's

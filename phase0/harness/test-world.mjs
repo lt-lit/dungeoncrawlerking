@@ -118,11 +118,12 @@ for (const [files, ranks] of [[10, 10], [7, 5], [3, 10], [12, 6]]) {
   world.writeArena(tx, fen2, { holes: new Set(['d10']), godCrates: new Set(['f9']), opened: new Set(['d8']), rubble: new Set(['b6']) });
   expect(world.pieceAt(0, 9) === 'k' && world.pieceAt(0, 0) === 'K', 'pieces land on their cells');
   expect(world.at(3, 9) === W.FLOOR || world.at(3, 9) === W.HOLE, 'a hole written as a hole');
-  // WALL KINDS (2026-09-17): the hole at d10 was written as a '*' in the ledger (an old log's spelling) and reads back as '#', the indestructible glyph.
-  const fen2back = fen2.replace('k2*6', 'k2#6');
-  expect(world.arenaFen(tx, 'w').split(' ')[0] === fen2back.split(' ')[0], `the crop reads back as the FEN written, the hole spelled # (${world.arenaFen(tx, 'w').split(' ')[0]})`);
+  // WALL KINDS (2026-09-17): the hole at d10 was written as a '*' in the ledger (an old log's spelling) and reads back as
+  // THE PIT '_' (the ice, 2026-09-20 — the engine's own hole glyph, which it tells from bedrock; '#' from wall-kinds until then).
+  const fen2back = fen2.replace('k2*6', 'k2_6');
+  expect(world.arenaFen(tx, 'w').split(' ')[0] === fen2back.split(' ')[0], `the crop reads back as the FEN written, the hole spelled _ (${world.arenaFen(tx, 'w').split(' ')[0]})`);
   expect(world.godCrates.has(world.idx(5, 8)) && world.opened.has(world.idx(3, 7)) && world.rubble.has(world.idx(1, 5)), 'the layers land on their cells');
-  expect(world.cellView(3, 9).hole === true && world.cellView(3, 9).v === '#', 'cellView: a hole is a hole and reads as # to the engine');
+  expect(world.cellView(3, 9).hole === true && world.cellView(3, 9).v === '_', 'cellView: a hole is a hole and reads as _ (the pit) to the engine');
   expect(world.cellView(5, 8).crate === true && world.cellView(5, 8).v === '^', 'cellView: a god crate');
   expect(world.cellView(-1, 0) === undefined, 'cellView off the world is undefined');
   void fen;
@@ -183,9 +184,14 @@ for (const [files, ranks] of [[10, 10], [7, 5], [3, 10], [12, 6]]) {
   bw.writeArena(W.identityTransform(4, 4), '#*^1/4/4/K3 w - - 0 1', { holes: new Set(['c4']) });
   expect(bw.at(0, 3) === W.BEDROCK && bw.at(1, 3) === W.WALL && bw.at(2, 3) === W.FURNITURE, `writeArena: # outside the ledger is bedrock, * a wall (${bw.at(0, 3)} ${bw.at(1, 3)} ${bw.at(2, 3)})`);
   bw.writeArena(W.identityTransform(4, 4), '#*#1/4/4/K3 w - - 0 1', { holes: new Set(['c4']) });
-  expect(bw.at(2, 3) === W.HOLE && bw.arenaFen(W.identityTransform(4, 4), 'w').startsWith('#*#1/'), `writeArena: # in the ledger is a hole, and both read back as # (${bw.arenaFen(W.identityTransform(4, 4), 'w').split(' ')[0]})`);
+  expect(bw.at(2, 3) === W.HOLE && bw.arenaFen(W.identityTransform(4, 4), 'w').startsWith('#*_1/'), `writeArena: # in the ledger is a hole, which reads back as the pit _ beside the bedrock # (${bw.arenaFen(W.identityTransform(4, 4), 'w').split(' ')[0]})`);
+  // THE PIT (the ice, 2026-09-20): a '_' written is a hole with or without the ledger, and the stage the crop makes carries it as '_' (terrain to molding, a fall to a slide).
+  bw.writeArena(W.identityTransform(4, 4), '#*_1/4/4/K3 w - - 0 1', {});
+  expect(bw.at(2, 3) === W.HOLE && bw.cellView(2, 3).hole === true && bw.arenaFen(W.identityTransform(4, 4), 'w').startsWith('#*_1/'), `writeArena: _ is a hole without the ledger and reads back as _ (${bw.arenaFen(W.identityTransform(4, 4), 'w').split(' ')[0]})`);
   const st = bw.arenaStage(W.cropTransform({ wf: -1, wr: 0, facing: 0, files: 4, ranks: 4, worldFiles: 4, worldRanks: 4 }));
-  expect(st.grid[0][0] === '#' && st.grid[3][1] === '#' && st.grid[3][2] === '*', `arenaStage: off-map and bedrock are #, a wall is * (${st.grid[3].join('')})`);
+  expect(st.grid[0][0] === '#' && st.grid[3][1] === '#' && st.grid[3][2] === '*' && st.grid[3][3] === '_', `arenaStage: off-map and bedrock are #, a wall is *, the pit is _ (${st.grid[3].join('')})`);
+  const round = W.World.fromStage({ id: 'r', files: 4, ranks: 4, grid: st.grid, skin: st.skin });
+  expect(round.at(3, 3) === W.HOLE && round.at(1, 3) === W.BEDROCK && round.at(2, 3) === W.WALL, 'fromStage: the pit comes back as a hole, bedrock as bedrock');
 }
 
 for (const b of bad) console.log(`FAIL ${b}`);

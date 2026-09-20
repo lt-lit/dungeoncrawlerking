@@ -1299,7 +1299,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await settle();
     const holes = K.app.duel ? [...K.app.duel.director.holes] : [];
     out.second = { ok: !!plan2?.ok, error: plan2?.error ?? null, files: plan2?.stage?.files, ranks: plan2?.stage?.ranks, pit, holes, authored: K.app.duel?.director.authoredTerrain ?? null, fenHasPit: null };
-    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('#'); // WALL KINDS: a pit is a '#'
+    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('_'); // THE PIT (the ice, 2026-09-20): a hole is the engine's own '_' (a '#' from wall-kinds until then)
     out.lost = { ended: await K.walk.concede('white'), label: document.getElementById('btnWalkOut').textContent };
     document.getElementById('btnWalkOut').click();
     for (let i = 0; i < 100 && K.app.phase !== 'setup'; i++) await new Promise((r) => setTimeout(r, 30));
@@ -1733,6 +1733,154 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs9.length === 0, `no page errors with the portal pictures on the page${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
   await page9.close();
 }
+// --- THE ICE (2026-09-20; brief §4.9; engine/patches/ice.patch): on a fresh
+// duel the Ice button shows one scroll; the button enters CAST MODE with the
+// centres lit — every non-terrain square of the middle rows (5 and 6 on the
+// 10-rank box), occupied or not — and a tap on a wall leaves it; a tap on a
+// lit square casts through the piece-move path: the field gains its `~`
+// entries (the floor of the 3×3), the scroll is spent, the record's state is
+// a one-ply `ice` cast, the log says so, the button goes, and the board
+// PAINTS THE ICE (blue-cold pixels over the flagstones of the patch, none
+// off it). Then, within a few plies, a legal move onto the ice: the tap plays
+// it, the state carries the slide (the mover's resting square holds the
+// piece after the commit), the log says where it slid, and the enemy's own
+// slides draw their red arrow to the resting square. With `?ice=off` the
+// button never shows and no scroll is in hand.
+{
+  const page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs11 = [];
+  page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
+  await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
+  await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const ic = await page11.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const fen = () => K.app.duel.fen();
+    const field = () => fen().match(/\{([^}]*)\}/)?.[1] ?? '';
+    const holdings = () => fen().match(/\[([^\]]*)\]/)?.[1] ?? '';
+    const grid = () => fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const lit = () => [...K.app.boardUI.marks.targets];
+    const icy = (sq) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i + 3] === 255 && px[i + 2] > px[i] + 40 && px[i + 2] > px[i + 1] + 10) n++; return n; }; // cold pixels: blue well over red
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent);
+    const btn = document.getElementById('btnIce');
+    const out = { hidden0: btn.hidden, text0: btn.textContent.trim(), disabled0: btn.disabled, holdings0: holdings(), portalHidden0: document.getElementById('btnPortal').hidden };
+    btn.click();
+    out.castMode = K.ice.castMode();
+    const L0 = lit();
+    out.litN = L0.length;
+    out.litRows = [...new Set(L0.map(rankOf))].sort((a, b) => a - b);
+    out.litTerrain = L0.filter((sq) => /[*#^_]/.test(at(sq))).length;
+    out.litMiddleFloor = grid().flatMap((row, i) => row.map((c, f) => ({ sq: String.fromCharCode(97 + f) + (ranks - i), c }))).filter((x) => [Math.floor(ranks / 2), Math.floor(ranks / 2) + 1].includes(rankOf(x.sq)) && !/[*#^_]/.test(x.c)).length;
+    const wall = [...K.app.boardUI.cells.keys()].find((sq) => at(sq) === '*' && !L0.includes(sq));
+    K.tap(wall);
+    out.leftAfterWallTap = !K.ice.castMode() && lit().length === 0;
+    btn.click();
+    // The cast: a lit square whose 3×3 has as much bare floor as possible (the ice reads on empty flagstones).
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
+    const floorAround = (sq) => around(sq).filter((s) => at(s) === '.').length;
+    // …and nearest the player's pieces, so a slide comes up in the plies that follow.
+    const whites = grid().flatMap((row, i) => row.map((c, f) => ({ f, r: ranks - i, c }))).filter((x) => /[A-Z]/.test(x.c));
+    const nearWhite = (sq) => Math.min(...whites.map((w) => Math.max(Math.abs(w.f - (sq.charCodeAt(0) - 97)), Math.abs(w.r - rankOf(sq)))));
+    const centre = [...lit()].sort((a, b) => floorAround(b) * 10 - nearWhite(b) - (floorAround(a) * 10 - nearWhite(a)))[0];
+    out.centre = centre;
+    out.patchExpected = around(centre).filter((s) => !/[*#^_]/.test(at(s))).sort();
+    out.icyBefore = around(centre).filter((s) => at(s) === '.').map((s) => [s, icy(s)]);
+    K.tap(centre);
+    await settle();
+    out.fieldA = field();
+    out.slickA = K.ice.slick().sort();
+    out.holdingsA = holdings();
+    out.hiddenA = btn.hidden;
+    out.castsA = K.app.duel.record.states.map((s) => s.cast ?? null).filter(Boolean);
+    out.logA = logLines().filter((l) => /ice/i.test(l));
+    out.stateA = K.app.duel.state;
+    out.icyAfter = out.icyBefore.map(([s]) => [s, icy(s)]);
+    out.icyOff = [...K.app.boardUI.cells.keys()].filter((s) => at(s) === '.' && !out.slickA.includes(s)).slice(0, 12).map((s) => [s, icy(s)]);
+    // A slide in play: the first legal move of the player's that slides, within a few plies.
+    out.slide = null;
+    out.enemySlide = null;
+    for (let ply = 0; ply < 24 && K.app.duel.state === 'playing' && !out.slide; ply++) {
+      await settle();
+      if (K.app.duel.state !== 'playing') break;
+      if (K.app.duel.turnColor() !== 'white') { await settle(); continue; }
+      const legal = K.app.duel.legalMoves().filter((m) => /^[a-l](?:10|[1-9])[a-l](?:10|[1-9])[a-z]?$/.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m));
+      // A move that really slides: the mover leaves the square it entered, or shoves somebody (a piece entering ice at the board's edge stops where it is).
+      const moving = (o) => o.steps[0].to !== o.steps[0].from || o.steps.length > 1;
+      const cands = legal.map((m) => [m, K.ice.outcome(m)]).filter(([, o]) => o && moving(o) && !o.steps.some((s) => s.pit && s.piece.toLowerCase() === 'k'));
+      if (cands.length) {
+        const [m, o] = cands.sort((a, b) => b[1].steps.length - a[1].steps.length)[0];
+        const from = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/)[1];
+        const to = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/)[2];
+        const rest = o.steps[0].landing?.entry ?? o.steps[0].to ?? o.steps[0].pit;
+        K.tap(from);
+        const aliases = K.ice.aliases(from);
+        const litNow = lit();
+        const aliasLit = rest !== to && litNow.includes(rest);
+        const useAlias = aliasLit && aliases.some(([sq]) => sq === rest);
+        const before = K.app.duel.record.states.length;
+        K.tap(useAlias ? rest : to);
+        await settle();
+        const st = K.app.duel.record.states[before] ?? null;
+        out.slide = { move: m, from, to, rest, aliasLit, useAlias, predicted: o.steps, recorded: st?.slide ?? null, san: K.app.duel.record.sans[before - 1] ?? null, played: K.app.duel.record.moves[before - 1] ?? null, pieceAtRest: st ? (() => { const g = st.fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/'); const r = parseInt(rest.slice(1), 10); const row = g[g.length - r]; let f = 0; for (const ch of row) { if (/\d/.test(ch)) f += parseInt(ch, 10); else { if (f === rest.charCodeAt(0) - 97) return ch; f++; } } return '.'; })() : null, log: logLines().filter((l) => /slides|stops on|shoves|falls into|portal/.test(l)).slice(-1)[0] ?? null, state: K.app.duel.state };
+      } else {
+        // Walk toward the ice: the move whose destination lies nearest a slippery square (a king's move last).
+        const slick = K.ice.slick();
+        const dist = (sq) => Math.min(...slick.map((s) => Math.max(Math.abs(s.charCodeAt(0) - sq.charCodeAt(0)), Math.abs(rankOf(s) - rankOf(sq)))));
+        const scored = legal.map((m) => { const p = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/); return [m, dist(p[2]) + (at(p[1]) === 'K' ? 3 : 0)]; }).sort((a, b) => a[1] - b[1]);
+        await K.playerMove(scored[0][0]);
+      }
+    }
+    // The enemy's slides, if any so far: their red arrow ends where the piece rests.
+    const st = K.app.duel.record.states;
+    for (let i = st.length - 1; i >= 1; i--) {
+      if (st[i].mover === 'engine' && st[i].slide) {
+        out.enemySlide = { ply: st[i].ply, move: st[i].move, steps: st[i].slide.steps, isLast: i === st.length - 1, arrows: i === st.length - 1 ? K.renderer.arrows.filter((a) => a.kind === 'last').map((a) => `${a.from}${a.to}`) : null };
+        break;
+      }
+    }
+    out.state = K.app.duel.state;
+    return out;
+  });
+  expect(!ic.hidden0 && /×1/.test(ic.text0) && !ic.disabled0 && /I/.test(ic.holdings0) && ic.portalHidden0, `the Ice button shows on the player's turn with one scroll (${ic.text0}${ic.hidden0 ? ', hidden' : ''}${ic.disabled0 ? ', disabled' : ''}; holdings [${ic.holdings0}], the portal button hidden under ?portals=off)`);
+  expect(ic.castMode === 'ice' && ic.litN > 0 && ic.litRows.join(',') === '5,6' && ic.litTerrain === 0 && ic.litN === ic.litMiddleFloor, `the button enters ice cast mode with ${ic.litN} centres lit — every non-terrain square of ranks ${ic.litRows.join(' and ')} (${ic.litMiddleFloor} such squares, ${ic.litTerrain} on terrain)`);
+  expect(ic.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
+  expect(ic.fieldA.split(',').filter((e) => e.startsWith('~')).length === ic.patchExpected.length && JSON.stringify(ic.slickA) === JSON.stringify(ic.patchExpected), `the cast at ${ic.centre} ices the floor of its 3×3: {${ic.fieldA}} (${ic.patchExpected.length} squares)`);
+  expect(!/I/.test(ic.holdingsA) && /i/.test(ic.holdingsA) && ic.hiddenA, `the scroll is spent and the button goes (holdings [${ic.holdingsA}]${ic.hiddenA ? '' : ', the button still shows'})`);
+  expect(ic.castsA[0] === 'ice' && ic.logA.some((l) => /the ice is cast/.test(l)), `the record's state is a one-ply ice cast and the log says so (${ic.castsA.join(',')}; "${ic.logA[0] ?? ''}")`);
+  expect(ic.icyAfter.every(([, n]) => n >= 60) && ic.icyBefore.every(([, n]) => n < 20), `the patch's empty squares paint the ice — cold pixels ${ic.icyAfter.map(([s, n]) => `${s}:${n}`).join(' ')} of 256 (before: ${ic.icyBefore.map(([, n]) => n).join(' ')})`);
+  expect(ic.icyOff.every(([, n]) => n < 20), `no ice off the patch (${ic.icyOff.map(([s, n]) => `${s}:${n}`).join(' ')})`);
+  if (ic.slide) {
+    const s = ic.slide;
+    expect(s.recorded && JSON.stringify(s.recorded.steps) === JSON.stringify(s.predicted) && s.played.startsWith(s.from + s.to), `the tap plays ${s.move} (${s.san}) and the state records the slide the grid predicted (${s.predicted.map((x) => `${x.piece} ${x.from}→${x.to ?? `pit ${x.pit}`}`).join(', ')}${s.useAlias ? ', played through the resting square' : ''})`);
+    expect(s.predicted[0].pit ? s.pieceAtRest === '.' || s.pieceAtRest === '_' : /[A-Z]/.test(s.pieceAtRest ?? ''), `after the commit the piece stands where it came to rest, ${s.rest} (${s.pieceAtRest})`);
+    expect(s.log && /slides to|stops on|shoves|falls into|portal/.test(s.log), `the log says what the slide did ("${s.log}")`);
+    if (s.rest !== s.to) expect(s.aliasLit, `the resting square ${s.rest} lit beside the destination ${s.to}`);
+  } else expect(true, `no player slide came up in the plies played (${ic.state}) — the physics stand on the selftest and the Node gate`);
+  if (ic.enemySlide) {
+    const e = ic.enemySlide;
+    if (e.isLast) expect(e.arrows.some((a) => a === `${e.move.slice(0, 2)}${e.steps[0].landing?.entry ?? e.steps[0].to ?? e.steps[0].pit}`), `the enemy's slide ${e.move} draws its red arrow to the resting square (${e.arrows.join(' ')})`);
+    else expect(true, `the enemy slid at ply ${e.ply} (${e.move}: ${e.steps.map((x) => `${x.from}→${x.to ?? `pit ${x.pit}`}`).join(', ')})`);
+  } else expect(true, 'the enemy did not slide in these plies');
+  expect(errs11.length === 0, `no page errors with the ice${errs11.length ? ` — ${errs11.join(' | ')}` : ''}`);
+  await page11.close();
+  // ?ice=off: no scroll, no button
+  const page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
+  await page12.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const off = await page12.evaluate(() => ({ hidden: document.getElementById('btnIce').hidden, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
+  expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no Ice button, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
+  await page12.close();
+}
 // --- THE SLEDGEHAMMER (2026-09-17; brief §4.8; engine/patches/wall-kinds.patch
 // + hammer.patch): every king a sledge-king for the stress test. On
 // s65-guard-post seed 1 the kit's king deals at e1 with breakable walls at d1
@@ -1829,7 +1977,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     };
     return out;
   });
-  expect(/__sledge$/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
+  expect(/__sledge/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
   expect(hm.king === 'e1' && hm.walls.length === 2 && hm.walls.includes('d1') && hm.walls.includes('d2'), `the kit's king at ${hm.king} with breakable walls beside him (${hm.walls.join(' ')})`);
   expect(hm.selected === hm.king && hm.wallsLit.length === hm.walls.length, `a tap on the king lights the walls beside him with his moves (${hm.wallsLit.join(' ')} of ${hm.lit.join(' ')})`);
   expect(hm.after.cell === '^' && hm.after.crate && hm.after.king === hm.king && hm.after.hammer === hm.target, `a tap on ${hm.target} cracks it: the state after the ply shows a crate in the ledger, the king still on ${hm.after.king}, the state marked hammer ${hm.after.hammer}`);

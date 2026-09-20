@@ -2661,6 +2661,111 @@ then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
 
+## The ice spell (2026-09-20)
+
+Brief §4.9 (the designer: "Time to implement a spell that creates a 3x3
+ice patch… I intend for there to be oil and ice in the game, so they will
+likely share the slip logic… when a sliding piece bumps into another piece
+on the ice, it should transfer the momentum… give each side one cast per
+game for now"; the rulings the same day — the stop rule, the pit, the
+kings, the shapes — are there in full). The engine half is
+`engine/patches/ice.patch`, the eighth patch (`engine/README.md` § "The
+ice patch"); this is the game half.
+
+- **The rule in one sentence:** a piece whose move ends on a slippery
+  square slides on in the direction it moved until it is not on ice any
+  more, or until a wall, a crate, the edge or a piece stops it; a piece it
+  hits standing on ice takes the momentum and slides on the same way; a
+  pit swallows what slides into it; a portal square on the way is a
+  landing. `play/js/ice.mjs` (`slideOutcome`) mirrors the engine's physics
+  on the grid — the mover's step, then each shoved piece's, a fall named by
+  its pit, a portal landing with its swap, a pawn's promotion where it
+  stops — and `phase0/harness/test-ice-game.mjs` holds it to ffish's own
+  board after every slide on the engine gate's fixtures and 1,142 random
+  slides (42 checks), the selftest again on the deal variant.
+- **The glyph:** `fen.mjs PIT` `_` — the engine's own hole, told from
+  bedrock `#` since a sliding piece falls into one; `isTerrain` / `isWall`
+  know it. `world.mjs` spells a HOLE `_` in every crop FEN and stage grid
+  (bedrock and the map's edge stay `#`; `writeArena` reads `_` with or
+  without the ledger), `crumbleFilter collapseFen` and the Director's
+  terminal crumble write `_`, `board-ui classifyCell` reads it as a hole
+  whatever the ledger says, the report prints it `O`. Old logs and crops
+  keep loading: a `#` (or a `*`) the ledger names is a pit as ever.
+- **The field:** `parsePortalField` reads the `~sq` entries beside the
+  pairs and halves (`slick`); `slickSquares(fen)` is the set that slides
+  (the portal squares taken out, the engine's `slick_effective`);
+  `withSlick` builds a fixture; `castLetter(uci)` tells `I@e5` from `O@e5`.
+- **The deal:** `variant.mjs ICE_SCROLL` `i`, one a side (`ICE_SCROLLS_PER_SIDE`),
+  `iceIniKeys(ranks)` — the custom immobile piece, `iceScroll`, the cast
+  rows as the piece's mobility region: `iceCastRanks`, the board's two
+  MIDDLE ranks (5–6 on the box, 4–5 on the selftest's 8), so a patch never
+  comes nearer than two rows to a king row — `spellIniKeys` composes the
+  portal's and the ice's keys with ONE value line for every scroll,
+  `spellPocket` the holdings (`[IOOioo]`), `dealVariant(..., { ice })` the
+  suffix `__ice` (rule 7). `dealMatchup`, `planBox` and `planBarrier`
+  take `ice`; main.mjs `iceOn()` (`options.ice`, Options → Spells "Ice
+  spell", `?ice=off`).
+- **The record:** duel.mjs reads the slide off the board before the move
+  and every state carries `slide: { dir, steps }`; `castKind` names the
+  cast `ice` (one ply, cold to the meter like a portal cast); a king that
+  slid into a pit ends the duel with termination `pit` (the end overlay's
+  own words); `mustLink` is specific to the PORTAL cast now, so an ice
+  scroll in hand never reads as a link ply.
+- **The gods:** `blocked.slick` — no displacement lands on a slippery
+  square and no pit opens under one (reason `slick`); a piece may be
+  moved off the ice.
+- **The page** (main.mjs): the ❄ Ice button beside the Portal button
+  shares the cast path — `app.castMode` is the spell's KIND now
+  (`'portal'` | `'ice'` | null, `SPELLS` the letters and buttons),
+  `castTargets(kind)` / `scrollsLeft(kind)` / `setCastMode(kind)`, a tap on
+  a lit centre casts `I@sq`. A selected piece's RESTING squares light
+  beside its destinations and a tap on one plays the move that slides
+  there (`moveAliases`, which also carries Portals v2's exit alias;
+  `ice.mjs slideAliases`). The move animates leg by leg
+  (`canvas-board animateSlideChain`: the chess move, the glide over the
+  ice easing to a stop, then each shoved piece from where it stood, every
+  finished piece parked at its rest until the chain is over; a fall sinks
+  and fades into the pit). The log says what the slide did
+  (`logreport.mjs slideWords`: "slides to e7", "stops on a4, shoves the
+  knight on a5, which slides to a6", "falls into the pit at h1", "slides
+  into the portal at a5 and out at h7, swapping with the knight there",
+  "… and becomes a queen"; a cast: "the ice is cast: the floor around e5
+  turns slippery"). Arrows end where the piece REST — the enemy's last
+  move (`lastMoveArrows`, with a short red arrow for every piece it
+  shoved) and the hints (`slideRest`); a portal landing's arrow ends on
+  the entry as ever.
+- **The board:** `canvas-board setSlick(squares)` paints THE ICE TILE over
+  each slippery square's own flagstone in the flat pass, under the rings,
+  the debris and the pieces — a paint-time composite (`#iceTile`: the
+  flagstone pulled toward a cold blue-white, `ICE_TINT` at `ICE_MIX`, a
+  sheen of lighter diagonals, a lighter rim, the dark square's checker
+  baked in), cached per theme, floor variant and shade; no atlas row.
+  `paintWithDebris` sets it from the FEN beside the portals.
+- **The analyzer** (replay.mjs): every state's ice painted from its FEN,
+  the ply's arrow to the resting square with the shoves, a line's first
+  move likewise, the timeline's `❄` words (`logreport timelineLine`).
+- **Gates:** test-ice-game 42, selftest 51/51 headless (the ice check:
+  16 casts on the 8-rank deal's ranks 4–5, I@e4 icing nine squares and
+  spending the scroll, no cast in check, 19 slides on eight fixtures equal
+  to ffish square for square, the shove and its alias, the pit ending the
+  duel and a king that may not slide into his own, engine perft 62 and
+  e1f1 found), ui-smoke NNN ok (THE ICE block: the button with one scroll,
+  cast mode lighting every non-terrain square of ranks 5–6, a tap on a wall
+  leaving it, the cast icing the floor of its 3×3 and spending the scroll,
+  the record's `ice` cast and the log, the ice pixels on the patch and none
+  off it, a slide played in the plies that followed with the state's slide
+  equal to the grid's prediction and the piece at rest, the enemy's slide
+  arrow, `?ice=off`), replay-smoke 76, test-logreport 61, test-world 132
+  (the pit glyph in the crop, the stage and back), test-barrier 170 (an
+  ice deal's name, keys, rows and holdings), test-portals-game 27,
+  test-dungeon 96, test-army 131, test-enemy 100, test-camera 80,
+  test-debris 76, test-armygen (on the overlaid pair).
+- **Held over:** oil (the same slip, a difference to design), other ice
+  shapes and floors of ice (the engine takes any set; a writer is a
+  world / stage matter), the ice as an upgrade, a sound and a spray of
+  frost on the cast, the scroll's sprite on the button, a debris mark
+  where a piece fell.
+
 ## Portals v4.1 — two rows off the king rows (2026-09-20)
 
 Brief §4.7 "Portals v4.1" (designer: "Let's make it so portals must be

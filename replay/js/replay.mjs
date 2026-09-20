@@ -50,7 +50,8 @@ import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '.
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf, slickSquares } from '../../play/js/fen.mjs';
+import { slideOutcome } from '../../play/js/ice.mjs'; // THE ICE (2026-09-20): a line's first move ends where its piece rests
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -370,7 +371,21 @@ function moveArrow(st) {
   // Gold is the player's colour, red the enemy's last move (style.css roles).
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
   const hammer = st.hammer ? { hammer: true } : {};
-  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last', ...hammer } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint', ...hammer };
+  // THE ICE (2026-09-20): a slide's arrow ends where the piece came to rest (a portal landing's entry, the pit it fell into).
+  const to = st.slide ? slideRest(st.slide.steps[0]) ?? p[2] : p[2];
+  return st.mover === 'engine' ? { from: p[1], to, strength: 1, kind: 'last', ...hammer } : { from: p[1], to, strength: 0.9, rank: 1, kind: 'hint', ...hammer };
+}
+
+const slideRest = (s) => s?.landing?.entry ?? s?.to ?? s?.pit ?? null;
+
+/** THE ICE: a short arrow for every piece the ply's slide shoved, in the mover's colour. */
+function shoveArrows(st) {
+  const out = [];
+  for (const s of st?.slide?.steps?.slice(1) ?? []) {
+    const to = slideRest(s);
+    if (to && to !== s.from) out.push(st.mover === 'engine' ? { from: s.from, to, strength: 0.6, kind: 'last' } : { from: s.from, to, strength: 0.6, rank: 1, kind: 'hint' });
+  }
+  return out;
 }
 
 const idx = () => R.indexLine(app.line);
@@ -384,7 +399,7 @@ function paint() {
   const st = stateAt(line, ply);
   const i = stateIndexAt(line, ply);
   const res = residueFor(line)[i] ?? { opened: new Set(), rubble: new Set() };
-  const portalsAt = (f) => ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); // THE PORTAL SPELL: each pair in its caster's colour
+  const portalsAt = (f) => { ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); ui.setSlick?.(slickSquares(f)); }; // THE PORTAL SPELL: each pair in its caster's colour; THE ICE: the slippery squares of the position
   const ix = idx();
   const q = ix.quakes.get(ply) ?? null;
   const t = ix.traces.get(ply) ?? null;
@@ -416,7 +431,7 @@ function paint() {
       ui.setPosition(st.fen, { ...ledgers(st), skins: app.skins, ...res });
       const arrows = [];
       const mv = moveArrow(st);
-      if (mv) arrows.push(mv);
+      if (mv) arrows.push(mv, ...shoveArrows(st));
       if (q) {
         const qm = quakeMarksOf(q);
         marks = { ...qm, arrows: [...qm.arrows, ...arrows] };
@@ -517,7 +532,9 @@ function pvArrows(pv, fen) {
     const hm = hammerOf(fen, `${p[1]}${p[2]}`);
     const hammer = !!hm && !cracked.has(hm);
     if (hammer) cracked.add(hm);
-    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
+    // THE ICE: the line's FIRST move is read on the board shown (the later ones are on boards the line makes) — its arrow ends where the piece rests
+    const to = j === 0 ? slideRest(slideOutcome(fen, m)?.steps?.[0]) ?? p[2] : p[2];
+    out.push({ from: p[1], to, strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
   });
   return out;
 }
