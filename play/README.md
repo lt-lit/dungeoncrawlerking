@@ -2840,8 +2840,10 @@ text unchanged), the board's arrows (the spell on the cast), the pixels
 tip's black shadow, the frame's corner gold with floor inside it, no
 frame on any neighbour, hints off clearing them), and on the `?ice=off`
 page a portal cast (`1:portal 2:-`, the ring gold with its shadow and
-hollow at its centre, the square framed at its edge alone); replay-smoke
-and the selftest re-run green.
+hollow at its centre, the square framed at its edge alone) — ui-smoke
+353 ok / 0 failed on the second cut (383 on the first; the count moves
+with the random driver); replay-smoke 76 ok / 0 failed and the selftest
+51/51 headless re-run green.
 
 ## Portals v4.1 — two rows off the king rows (2026-09-20)
 
