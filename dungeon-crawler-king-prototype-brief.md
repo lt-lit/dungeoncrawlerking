@@ -646,6 +646,8 @@ ledger names, either glyph.
 
 **The game shape:** `play/js/ice.mjs` mirrors the physics for the page (the animation leg by leg, the mover first then each shoved piece, a fall sinking into the pit; the RESTING square lit beside a destination and a tap on it playing the move; the log's words; the arrows to where a piece rests) and is held to the engine's own board after every slide by the Node gate and the selftest; the ❄ Ice button shares the portal's cast path; `fen.mjs PIT`; the Director's `blocked.slick`; every crop, stage and crumble spells a hole `_`.
 
+**The glyphs `[designer, 2026-09-21]`:** "On move hints, there's just a square outline for both portal and ice. How am I supposed to know what spell it's suggesting?" — built the same day: every PROPOSED cast (a hint, a cast in the analyzer's lines — the board does not show the spell yet) is marked by its spell — the portal's ring, the ice's snowflake with the 3×3 the patch would freeze framed — in the arrow's colour, and the hint list wears the same glyph before the move's SAN (the hammer glyph's method, §4.8); a PLAYED cast (the enemy's own, the analyzer's ply) keeps the bare frame, since the board shows the spell itself there and a glyph over a pair's ring would hide whose it is.
+
 ## 5. Exploration Layer
 
 ### 5.1 Basics

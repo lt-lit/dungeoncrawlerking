@@ -99,6 +99,66 @@ export function drawHammer(ctx, x, y, colour) {
   }
 }
 
+// THE SPELL GLYPHS (2026-09-21 — the designer, on the ice build: "On move
+// hints, there's just a square outline for both portal and ice. How am I
+// supposed to know what spell it's suggesting?"): a cast hint, the enemy's
+// own cast and the analyzer's cast ply are marked BY SPELL now, in the
+// arrow's colour with the arrows' one-pixel halo, centred on the cast
+// square — a PORTAL is a ring (the rune ring's own shape), the ICE a
+// snowflake, and the ice hint also frames the 3×3 the patch would freeze
+// (canvas-board #paintArrows). The hint list wears the same drawings
+// (main.mjs spellIcon), as it wears the hammer.
+export const PORTAL_GLYPH = Object.freeze([
+  '...PPPP...',
+  '.PP....PP.',
+  '.P......P.',
+  'P........P',
+  'P........P',
+  'P........P',
+  'P........P',
+  '.P......P.',
+  '.PP....PP.',
+  '...PPPP...',
+]);
+export const ICE_GLYPH = Object.freeze([
+  'I...I...I',
+  '.I..I..I.',
+  '..I.I.I..',
+  '...III...',
+  'IIIIIIIII',
+  '...III...',
+  '..I.I.I..',
+  '.I..I..I.',
+  'I...I...I',
+]);
+export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH });
+
+/** A spell glyph's size: { w, h }. */
+export function spellGlyphSize(kind) {
+  const g = SPELL_GLYPHS[kind] ?? PORTAL_GLYPH;
+  return { w: g[0].length, h: g.length };
+}
+
+/** The glyph's top-left for a square whose top-left is (ox, oy), centred in the 16-px square. */
+export function spellOrigin(kind, ox, oy, size = 16) {
+  const { w, h } = spellGlyphSize(kind);
+  return { x: Math.round(ox) + Math.floor((size - w) / 2), y: Math.round(oy) + Math.floor((size - h) / 2) };
+}
+
+/** Stamp a spell's glyph with its halo, its top-left at (x, y), whole pixels, in `colour`. */
+export function drawSpell(ctx, kind, x, y, colour) {
+  const g = SPELL_GLYPHS[kind] ?? PORTAL_GLYPH;
+  const h = g.length, w = g[0].length;
+  const at = (r, c) => g[r]?.[c] ?? '.';
+  ctx.fillStyle = HALO;
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+    if (at(r, c) === '.') continue;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && at(r + dy, c + dx) === '.') ctx.fillRect(x + c + dx, y + r + dy, 1, 1);
+  }
+  ctx.fillStyle = colour;
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (at(r, c) !== '.') ctx.fillRect(x + c, y + r, 1, 1);
+}
+
 /** The arrow style dials: the shaft's width in floor pixels and the
  *  opacity at full strength. Both boards take a style through
  *  `setArrowStyle`; main.mjs keeps it in the Options. */

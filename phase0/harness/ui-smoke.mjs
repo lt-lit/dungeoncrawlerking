@@ -1756,6 +1756,57 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
   await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
+  // supposed to know what spell it's suggesting?"): an ICE cast hint is the SNOWFLAKE on its square in the rank's colour
+  // (pixelarrow.mjs ICE_GLYPH, centred, the arrows' black halo) with the 3×3 the patch would freeze FRAMED — its non-terrain
+  // squares alone, a wall in the 3×3 gets no frame, nothing outside it — and the hint list wears the snowflake before the
+  // SAN (a canvas per cast hint, `.hint-glyph` with `data-spell`; the line's text unchanged); a plain hint carries none; hints
+  // off clears them. Lines injected through the probe's own paint path; a cast is drawn at its strength (full here).
+  const ig = await page11.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const grid = () => K.app.duel.fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks, files = K.app.boardUI.files;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (f + df >= 0 && f + df < files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
+    const terrain = (sq) => /[*#^_]/.test(at(sq));
+    const cheb = (a, b) => Math.max(Math.abs(a.charCodeAt(0) - b.charCodeAt(0)), Math.abs(rankOf(a) - rankOf(b)));
+    const legal = K.app.duel.legalMoves();
+    const casts = legal.filter((m) => /^I@/.test(m)).map((m) => m.slice(2));
+    const centre = casts.find((c) => around(c).some(terrain)) ?? casts[0]; // a patch with terrain in it when there is one: the frame must skip it
+    const plain = legal.find((m) => UCI.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m)); // any ordinary move: the control
+    const ends = [plain.match(UCI)[1], plain.match(UCI)[2]];
+    K.paintHints([{ rank: 1, move: `I@${centre}`, score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: plain, score: { type: 'cp', value: 40 }, depth: 9 }], 2);
+    const out = { centre, plain, casts: casts.length, line: document.getElementById('hint-line').textContent, plainSan: K.app.duel.board.sanMove(plain) };
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => `${s.dataset.rank}:${s.querySelector('canvas.hint-glyph')?.dataset.spell ?? '-'}`);
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.cast ? `:${a.cast}` : ''}`);
+    K.renderer.paintNow();
+    const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    out.centrePx = { flake: px(centre, 7, 7), arm: px(centre, 3, 3), halo: px(centre, 4, 3), frame: px(centre, 1, 1) };
+    out.patch = around(centre).filter((s) => s !== centre && !terrain(s)).map((s) => [s, px(s, 1, 1)]);
+    out.walls = around(centre).filter(terrain).map((s) => [s, px(s, 1, 1)]);
+    out.outside = [...K.app.boardUI.cells.keys()].filter((s) => !terrain(s) && cheb(s, centre) === 2 && ends.every((e) => cheb(s, e) >= 2)).slice(0, 8).map((s) => [s, px(s, 1, 1)]); // the ring of squares just outside the 3×3, clear of the plain arrow
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  const GOLD = '242,193,78,255';
+  expect(ig.icons.join(' ') === '1:ice 2:-', `the snowflake icon sits on the ice hint alone (${ig.icons.join(' ')})`);
+  expect(/^1 \S*@\S+ \+0\.4 · 2 .+ \+0\.4 · d9$/.test(ig.line), `the hint list reads as ever, the cast by its SAN ("${ig.line}")`);
+  expect(ig.arrows.join(' ') === `${ig.plain} ${ig.centre}${ig.centre}:ice`, `the board's cast hint carries its spell, worst to best (${ig.arrows.join(' ')})`);
+  expect(ig.centrePx.flake === GOLD && ig.centrePx.arm === GOLD && ig.centrePx.halo === '0,0,0,255' && ig.centrePx.frame === GOLD, `${ig.centre} wears the rank-1 snowflake: its centre and an arm gold, a black halo, the square framed (${Object.values(ig.centrePx).join(' / ')})`);
+  expect(ig.patch.length > 0 && ig.patch.every(([, c]) => c === GOLD), `every floor square of the 3×3 is framed (${ig.patch.map(([s, c]) => `${s}:${c === GOLD ? 'framed' : c}`).join(' ')})`);
+  expect(ig.walls.every(([, c]) => c !== GOLD), ig.walls.length ? `the terrain in the 3×3 is not framed (${ig.walls.map(([s]) => s).join(' ')})` : `no terrain in the 3×3 of any of the ${ig.casts} cast squares — nothing to skip`);
+  expect(ig.outside.length > 0 && ig.outside.every(([, c]) => c !== GOLD), `nothing outside the 3×3 is framed (${ig.outside.map(([s]) => s).join(' ')})`);
+  expect(ig.cleared === 0, 'hints off clears the spell marks with the arrows');
   const ic = await page11.evaluate(async () => {
     const K = window.__DCK;
     K.options.cheat = false;
@@ -1890,6 +1941,48 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await page12.evaluate(() => ({ hidden: document.getElementById('btnIce').hidden, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
   expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no Ice button, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
+  // THE SPELL GLYPHS, the portal's: on this page (portals on) a PORTAL cast hint is its square framed with the RING inside —
+  // hollow, in the rank's colour with the black halo — and nothing framed beside it; the list wears the ring.
+  const ip = await page12.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const grid = () => K.app.duel.fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks, files = K.app.boardUI.files;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if ((df || dr) && f + df >= 0 && f + df < files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
+    const terrain = (sq) => /[*#^_]/.test(at(sq));
+    const cheb = (a, b) => Math.max(Math.abs(a.charCodeAt(0) - b.charCodeAt(0)), Math.abs(rankOf(a) - rankOf(b)));
+    const legal = K.app.duel.legalMoves();
+    const casts = legal.filter((m) => /^O@/.test(m)).map((m) => m.slice(2));
+    const plain = legal.find((m) => UCI.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m));
+    const ends = [plain.match(UCI)[1], plain.match(UCI)[2]];
+    const centre = casts.find((c) => ends.every((e) => cheb(c, e) >= 3)) ?? casts[0]; // clear of the plain arrow, so its neighbours read clean
+    K.paintHints([{ rank: 1, move: `O@${centre}`, score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: plain, score: { type: 'cp', value: 40 }, depth: 9 }], 2);
+    const out = { centre, plain, casts: casts.length, line: document.getElementById('hint-line').textContent };
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => `${s.dataset.rank}:${s.querySelector('canvas.hint-glyph')?.dataset.spell ?? '-'}`);
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.cast ? `:${a.cast}` : ''}`);
+    K.renderer.paintNow();
+    const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    out.ring = { top: px(centre, 6, 3), halo: px(centre, 5, 3), hollow: px(centre, 7, 7), frame: px(centre, 1, 1) };
+    out.beside = around(centre).filter((s) => !terrain(s)).map((s) => [s, px(s, 1, 1)]);
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  expect(ip.icons.join(' ') === '1:portal 2:-', `the ring icon sits on the portal hint alone (${ip.icons.join(' ')})`);
+  expect(/^1 \S*@\S+ \+0\.4 · 2 .+ \+0\.4 · d9$/.test(ip.line), `the hint list reads the cast by its SAN ("${ip.line}")`);
+  expect(ip.arrows.join(' ') === `${ip.plain} ${ip.centre}${ip.centre}:portal`, `the board's portal cast hint carries its spell (${ip.arrows.join(' ')})`);
+  expect(ip.ring.top === GOLD && ip.ring.halo === '0,0,0,255' && ip.ring.hollow !== GOLD && ip.ring.hollow !== '0,0,0,255' && ip.ring.frame === GOLD, `${ip.centre} wears the rank-1 ring: gold with a black halo, hollow at its centre, the square framed (${Object.values(ip.ring).join(' / ')})`);
+  expect(ip.beside.length > 0 && ip.beside.every(([, c]) => c !== GOLD), `a portal cast frames its square alone (${ip.beside.map(([s]) => s).join(' ')})`);
+  expect(ip.cleared === 0, 'hints off clears the ring with the arrows');
   await page12.close();
 }
 // --- THE SLEDGEHAMMER (2026-09-17; brief §4.8; engine/patches/wall-kinds.patch

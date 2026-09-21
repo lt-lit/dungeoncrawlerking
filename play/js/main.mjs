@@ -48,7 +48,7 @@ import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANG
 import { CanvasBoard, loadAtlas } from './canvas-board.mjs';
 import { normFacing, facingName } from './camera.mjs'; // THE CAMERA's facing (2026-09-08)
 import { Atlas } from './atlas.mjs';
-import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE, arrowColour, drawHammer, HAMMER_W, HAMMER_H } from './pixelarrow.mjs'; // the arrows' width / opacity dials; THE HAMMER GLYPH for the hint list
+import { ARROW_STYLE_DEFAULT, ARROW_WIDTH_RANGE, ARROW_ALPHA_RANGE, arrowColour, drawHammer, HAMMER_W, HAMMER_H, drawSpell, spellGlyphSize } from './pixelarrow.mjs'; // the arrows' width / opacity dials; THE HAMMER GLYPH and THE SPELL GLYPHS for the hint list
 // THE DEBRIS LAYER (2026-09-07): the ledger + painter, the flight, the PNG.
 import { loadWorld, World, arenaToWorld, FLOOR } from './world.mjs';
 import { makePattern, spawnArmy, walkOutArmy, planTurn, applyTurn, manualMoves, boxOf, facingOfStep, formationFocus, bagOfPattern, Army, OPENING_KIT } from './army.mjs';
@@ -1104,22 +1104,23 @@ function applyHintLines(pvs, n, duel, partial) {
   const fenNow = duel.fen();
   for (const pv of sorted) {
     const m = pv.move.match(UCI_MOVE_RE);
-    const c = m ? null : pv.move.match(CAST_RE); // THE PORTAL SPELL: a cast hint is a ring on its square
+    const c = m ? null : pv.move.match(CAST_RE); // a cast hint: marked by its spell on the square (THE SPELL GLYPHS, 2026-09-21)
     if (!m && !c) continue;
+    const spell = c ? spellOf(pv.move) : null;
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
     // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a breakable wall is a
     // hammer — the arrow ends in the hammer on the wall, the list shows it.
     const hammer = !!m && !!hammerOf(fenNow, pv.move);
     // THE ICE (2026-09-20): a hint onto the ice ends where the piece comes to REST (the slide runs on along the arrow's own line).
     const end = m ? slideRest(fenNow, pv.move) ?? m[2] : null;
-    arrows.push(m ? { from: m[1], to: end, strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: true });
+    arrows.push(m ? { from: m[1], to: end, strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: spell });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
     } catch {
       /* keep uci */
     }
-    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer });
+    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer, spell });
   }
   app.cheatArrows = arrows;
   renderPlayMarks();
@@ -1142,10 +1143,36 @@ function hammerIcon(rank) {
   return c;
 }
 
+/** THE SPELL GLYPHS in the hint list (2026-09-21 — designer: "On move hints,
+ *  there's just a square outline for both portal and ice. How am I supposed
+ *  to know what spell it's suggesting?"): the board's own glyph for the
+ *  spell (pixelarrow.mjs drawSpell — the portal's ring, the ice's snowflake)
+ *  on a small canvas in the rank's arrow colour, before the SAN of a cast
+ *  hint. No text of its own, like the hammer's. */
+function spellIcon(kind, rank) {
+  const { w, h } = spellGlyphSize(kind);
+  const c = document.createElement('canvas');
+  c.width = w + 2;
+  c.height = h + 2;
+  c.className = 'hint-glyph';
+  c.dataset.spell = kind;
+  c.title = kind === 'ice' ? 'the ice spell: this move freezes the floor' : 'the portal spell: this move opens a portal';
+  drawSpell(c.getContext('2d'), kind, 1, 1, arrowColour({ kind: 'hint', rank }));
+  return c;
+}
+
+/** Which spell a cast move is — 'ice' for the ice scroll, 'portal' for a portal scroll — or null for a move that is no cast
+ *  (or a scroll the page does not know: the board then draws the bare frame and the list no icon). */
+function spellOf(uci) {
+  const letter = castLetter(uci);
+  return letter === ICE_SCROLL ? 'ice' : letter === PORTAL_SCROLL ? 'portal' : null;
+}
+
 /** The hint list in the player's bar: one entry per rank — a swatch in the
  *  rank's arrow colour (CSS, by class), the move and its eval — then the
  *  depth readout. Its textContent reads "1 Nf3 +0.8 · 2 e4 +0.6 · d14"; a
- *  hammer hint wears the hammer icon between its rank and its SAN. */
+ *  hammer hint wears the hammer icon between its rank and its SAN, a cast
+ *  hint its spell's glyph. */
 function setHintList(items, depthText) {
   const el = $('hint-line');
   el.textContent = '';
@@ -1156,6 +1183,7 @@ function setHintList(items, depthText) {
     span.dataset.rank = String(it.rank);
     span.append(`${it.rank} `);
     if (it.hammer) span.appendChild(hammerIcon(it.rank));
+    if (it.spell) span.appendChild(spellIcon(it.spell, it.rank));
     span.append(it.san);
     if (it.score) {
       const b = document.createElement('b');
@@ -3194,8 +3222,8 @@ function lastMoveArrows() {
     for (const s of slide?.steps.slice(1) ?? []) if (rest(s) && rest(s) !== s.from) out.push({ from: s.from, to: rest(s), strength: 0.6, kind: 'last' });
     return out;
   }
-  const c = last.match(CAST_RE); // THE PORTAL SPELL / THE ICE: the enemy's cast, a red ring on the square
-  return c ? [{ from: c[2], to: c[2], strength: 1, kind: 'last', cast: true }] : [];
+  const c = last.match(CAST_RE); // THE PORTAL SPELL / THE ICE: the enemy's cast — a PLAYED cast, the red frame on its square (the board shows the spell itself: the rune ring, the ice)
+  return c ? [{ from: c[2], to: c[2], strength: 1, kind: 'last', cast: spellOf(last), played: true }] : [];
 }
 
 /** THE ALIASES of a piece's moves — squares lit beside its destinations, a

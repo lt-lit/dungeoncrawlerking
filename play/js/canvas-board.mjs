@@ -134,7 +134,7 @@
 // The atlas is play/js/atlas.mjs.
 import { WALL, isWall, parseSquare } from './fen.mjs';
 import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_RAISE, WALL_SPRITE_H, WALL_DY, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, wallFaceCols } from './board-ui.mjs';
-import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
+import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha, spellOrigin, drawSpell } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
 import { normFacing, facingName, screenDims, toScreen, toWorld, pxToScreen, rotMask8, rotMask4, rotTile, doorHalf, edgeOn, coordEdges } from './camera.mjs';
@@ -2182,12 +2182,33 @@ export class CanvasBoard {
     for (const a of this.arrows) {
       if (!this.cells.has(a.from) || !this.cells.has(a.to)) continue;
       if (a.from === a.to) {
-        // THE PORTAL SPELL: a cast (a hint, or the enemy's last move) has no
-        // path — a ring on its square in the arrow's own colour and strength.
+        // A CAST has no path. A PROPOSED cast (a hint, a numbered line — the
+        // board does not show the spell yet) is marked BY SPELL in the arrow's
+        // own colour and strength (THE SPELL GLYPHS, 2026-09-21; pixelarrow.mjs):
+        // THE ICE frames the 3×3 the patch would freeze (its non-terrain
+        // squares) and stamps the snowflake on the centre; a PORTAL cast is
+        // the square framed with the ring inside. A PLAYED cast (`played`: the
+        // enemy's last move, the analyzer's ply) is the bare frame alone — the
+        // board shows the spell itself there (the pair's rune ring in its
+        // caster's colour, the ice tiles), and a glyph over the rune ring would
+        // hide the colour that says whose pair it is.
         const o = this.#origin(a.from);
+        const col = arrowColour(a);
         const ga = this.bctx.globalAlpha;
         this.bctx.globalAlpha = Math.max(0.2, Math.min(1, a.strength ?? 1));
-        this.#frame1(o.x, o.y, arrowColour(a), 1);
+        const kind = a.cast === 'ice' || a.cast === 'portal' ? a.cast : null; // no spell named (a pass, an old caller): the bare frame
+        const proposed = !!kind && !a.played;
+        if (proposed && kind === 'ice') {
+          for (const sq of this.#patchSquares(a.from)) {
+            const p = this.#origin(sq);
+            this.#frame1(p.x, p.y, col, 1);
+          }
+        } else this.#frame1(o.x, o.y, col, 1);
+        if (proposed) {
+          const g = spellOrigin(kind, o.x, o.y, T);
+          drawSpell(this.bctx, kind, g.x, g.y, col);
+        }
+        if (a.label != null) drawText(this.bctx, String(a.label), o.x + 2, o.y + 2, col, '#000000'); // the analyzer's numbered line: the number in the square's corner, inside the frame
         this.bctx.globalAlpha = ga;
         continue;
       }
@@ -2196,6 +2217,26 @@ export class CanvasBoard {
       // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammer arrow ends in the hammer stamped on its wall.
       drawArrow(this.bctx, p.x + T / 2, p.y + T / 2, q.x + T / 2, q.y + T / 2, { colour: arrowColour(a), label: a.label ?? null, width: this.arrowStyle.width, alpha: arrowAlpha(this.arrowStyle.alpha, s), scratch: sg, hammer: !!a.hammer });
     }
+  }
+
+  /** THE ICE's patch (2026-09-21): the squares of the crop a cast on `sq`
+   *  would freeze — the 3×3 around it less the terrain (a wall, a pit, a
+   *  crate takes no ice; the engine's `ice_patch`). */
+  #patchSquares(sq) {
+    const c = parseSquare(sq);
+    const out = [];
+    for (let df = -1; df <= 1; df++) {
+      for (let dr = -1; dr <= 1; dr++) {
+        const f = c.file + df, r = c.rankFromBottom + dr;
+        if (f < 0 || r < 0) continue;
+        const name = squareName(f, r + 1); // the module's own (a 1-based rank)
+        if (!this.cells.has(name)) continue;
+        const k = this.#kindOfSq(name);
+        if (k && (k.wallTile || k.hole || k.bedrock || k.furniture)) continue;
+        out.push(name);
+      }
+    }
+    return out;
   }
 
   /** The crop's edge coordinates (the DOM's .coord): along its bottom row

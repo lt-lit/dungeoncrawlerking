@@ -233,6 +233,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #hint-line .hint-depth { color: var(--muted); }
 /* THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint that cracks a wall wears the board's own hammer, a canvas painted per rank (main.mjs hammerIcon). */
 #hint-line .hint-hammer { height: 1em; width: auto; image-rendering: pixelated; vertical-align: -.15em; margin-right: .15em; }
+#hint-line .hint-glyph { height: 1em; width: auto; image-rendering: pixelated; vertical-align: -.15em; margin-right: .15em; } /* THE SPELL GLYPHS (2026-09-21): a cast hint's portal ring or ice snowflake, drawn like the hammer */
 
 /* ---------- board ----------
    THE CANVAS BOARD (play/js/canvas-board.mjs, 2026-09-07): one native 16×16

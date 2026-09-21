@@ -2590,9 +2590,12 @@ the duel: the pairs and halves ride the FEN's trailing field
   targets, a tap casts through the same path as a piece move, a tap
   elsewhere leaves the spell. The log names what a cast did ("a portal
   opens at e4", "the portals are linked") and where a portal move came out
-  ("through the portal to g7"). A cast in the hint list is a RING on its
-  square in the hint's rank colour, the enemy's cast a red ring (the
-  arrows' `from === to` case, canvas-board `#paintArrows`). A portal move
+  ("through the portal to g7"). A cast in the hint list is marked BY ITS
+  SPELL since 2026-09-21 — the square framed with the portal's ring inside
+  in the hint's rank colour; the enemy's cast stays a red frame on its
+  square, since the pair's own ring is there to see (the arrows'
+  `from === to` case, canvas-board `#paintArrows`; § "The spell glyphs",
+  below — a bare frame for either spell's hint until then). A portal move
   slides to the portal square and the commit paints the mover on the twin
   (a cut for now).
 - **The board** (`canvas-board.mjs setPortals`, `#paintPortal`,
@@ -2733,7 +2736,9 @@ ice patch"); this is the game half.
   turns slippery"). Arrows end where the piece REST — the enemy's last
   move (`lastMoveArrows`, with a short red arrow for every piece it
   shoved) and the hints (`slideRest`); a portal landing's arrow ends on
-  the entry as ever.
+  the entry as ever. A cast hint — the ice's or a portal's — is marked by
+  its spell since 2026-09-21 (§ "The spell glyphs", below: the snowflake
+  with the 3×3 the patch would freeze framed).
 - **The board:** `canvas-board setSlick(squares)` paints THE ICE TILE over
   each slippery square's own flagstone in the flat pass, under the rings,
   the debris and the pieces — a paint-time composite (`#iceTile`: the
@@ -2766,6 +2771,58 @@ ice patch"); this is the game half.
   world / stage matter), the ice as an upgrade, a sound and a spray of
   frost on the cast, the scroll's sprite on the button, a debris mark
   where a piece fell.
+
+## The spell glyphs (2026-09-21)
+
+Designer, on the ice build: "On move hints, there's just a square outline
+for both portal and ice. How am I supposed to know what spell it's
+suggesting?" — a cast hint was the same one-pixel frame for either spell
+(canvas-board's `from === to` arrow: the portal spell's "ring" of
+2026-09-17 was that frame). Now a PROPOSED cast — a hint, a cast in the
+analyzer's numbered PV lines: the board does not show the spell yet — is
+marked BY ITS SPELL; a PLAYED cast (the enemy's own cast under the red
+last-move mark, the analyzer's cast ply; arrows flagged `played`) keeps
+the bare frame, because the board shows the spell itself there — the
+pair's rune ring in its caster's colour, the ice tiles — and a glyph over
+the rune ring hid the colour that says whose pair it is (the replay
+smoke's ring-pixel counts caught it on the first cut):
+
+- **The glyphs** (`pixelarrow.mjs PORTAL_GLYPH` / `ICE_GLYPH`,
+  `SPELL_GLYPHS`, `drawSpell`, `spellOrigin`, `spellGlyphSize`): a PORTAL
+  is a 10×10 ring (the rune ring's own shape), the ICE a 9×9 eight-armed
+  snowflake, each in the arrow's colour with the arrows' one-pixel black
+  halo, centred on the cast square and stamped after the frame — the
+  hammer's method (one bitmap for the board and the list).
+- **The board** (`canvas-board #paintArrows`, the cast branch; an arrow's
+  `cast` names the spell, `'ice'` or `'portal'`, never a bare `true` now):
+  a portal cast is its square framed with the ring inside; an ICE cast
+  frames THE 3×3 THE PATCH WOULD FREEZE (`#patchSquares`: the crop's
+  squares around the centre less the terrain — a wall, a pit, bedrock or a
+  crate takes no ice, the engine's `ice_patch`) and stamps the snowflake
+  on the centre, so a hint shows where the ice would lie. A from === to
+  arrow with no spell named (a pass) keeps the bare frame. A numbered
+  line's cast (the analyzer's PV) wears its number in the square's
+  corner, inside the frame. Drawn at the arrow's strength, as the frame
+  was. A played cast: the frame on its square, whatever the spell.
+- **The hint list** (main.mjs `spellIcon`, `spellOf`; `.hint-glyph` with
+  `data-spell`, styled like `.hint-hammer`): a cast hint wears its spell's
+  glyph on a small canvas in the rank's arrow colour between the rank and
+  the SAN — drawn, not text, so the line's textContent reads as it always
+  did ("1 I@e5 +0.4"). The enemy's cast (`lastMoveArrows`, `played`) and
+  the analyzer (`replay.mjs moveArrow`, `played`; `pvArrows` — a cast in
+  a line is its glyph numbered like the arrows, a pass in a line draws
+  nothing) name the spell the same way, off the scroll letter
+  (`castLetter`, `ICE_SCROLL`).
+
+Gates: ui-smoke's ICE block paints an ice cast hint and a plain one
+through the probe's own paint path and reads the list (`1:ice 2:-`, the
+text unchanged), the board's arrows (the spell on the cast), the pixels
+(the snowflake's centre and an arm in the rank-1 gold, the black halo, the
+frame on every floor square of the 3×3 and on no wall in it, nothing
+framed on the ring of squares outside it, hints off clearing them), and on
+the `?ice=off` page a portal cast (`1:portal 2:-`, the ring gold with its
+halo and hollow at its centre, the square framed alone); replay-smoke and
+the selftest re-run green.
 
 ## Portals v4.1 — two rows off the king rows (2026-09-20)
 
