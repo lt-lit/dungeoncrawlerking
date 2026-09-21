@@ -1757,11 +1757,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
-  // supposed to know what spell it's suggesting?"): an ICE cast hint is the SNOWFLAKE on its square in the rank's colour
-  // (pixelarrow.mjs ICE_GLYPH, centred, the arrows' black halo) with the 3×3 the patch would freeze FRAMED — its non-terrain
-  // squares alone, a wall in the 3×3 gets no frame, nothing outside it — and the hint list wears the snowflake before the
-  // SAN (a canvas per cast hint, `.hint-glyph` with `data-spell`; the line's text unchanged); a plain hint carries none; hints
-  // off clears them. Lines injected through the probe's own paint path; a cast is drawn at its strength (full here).
+  // supposed to know what spell it's suggesting?"): an ICE cast hint is its square framed at its edge with the SNOWFLAKE
+  // inside in the rank's colour (pixelarrow.mjs ICE_GLYPH, 11×11 at rows 2–12, a black drop shadow down and right, a hollow
+  // hub) — the centre square alone (the designer, on the first cut's framed 3×3: "way too loud. Just the one center square is
+  // fine"), so no neighbour is framed — and the hint list wears the snowflake before the SAN (a canvas per cast hint,
+  // `.hint-glyph` with `data-spell`; the line's text unchanged); a plain hint carries none; hints off clears them. Lines
+  // injected through the probe's own paint path; a cast is drawn at its strength (full here).
   const ig = await page11.evaluate(async () => {
     const K = window.__DCK;
     K.options.cheat = true;
@@ -1788,10 +1789,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.cast ? `:${a.cast}` : ''}`);
     K.renderer.paintNow();
     const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
-    out.centrePx = { flake: px(centre, 7, 7), arm: px(centre, 3, 3), halo: px(centre, 4, 3), frame: px(centre, 1, 1) };
-    out.patch = around(centre).filter((s) => s !== centre && !terrain(s)).map((s) => [s, px(s, 1, 1)]);
-    out.walls = around(centre).filter(terrain).map((s) => [s, px(s, 1, 1)]);
-    out.outside = [...K.app.boardUI.cells.keys()].filter((s) => !terrain(s) && cheb(s, centre) === 2 && ends.every((e) => cheb(s, e) >= 2)).slice(0, 8).map((s) => [s, px(s, 1, 1)]); // the ring of squares just outside the 3×3, clear of the plain arrow
+    out.centrePx = { tip: px(centre, 7, 2), hub: px(centre, 6, 7), hollow: px(centre, 7, 7), shadow: px(centre, 8, 3), frame: px(centre, 0, 0), inset: px(centre, 1, 1) }; // the top tip, the hub's left vertex, the hollow centre, the tip's shadow, the frame's corner, the floor inside it
+    out.beside = around(centre).filter((s) => s !== centre && !terrain(s) && ends.every((e) => cheb(s, e) >= 2)).map((s) => [s, px(s, 0, 0), px(s, 1, 1)]); // the neighbours, clear of the plain arrow: no frame on them
     K.options.cheat = false;
     K.options.hints = false;
     K.applyOptions();
@@ -1802,10 +1801,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(ig.icons.join(' ') === '1:ice 2:-', `the snowflake icon sits on the ice hint alone (${ig.icons.join(' ')})`);
   expect(/^1 \S*@\S+ \+0\.4 · 2 .+ \+0\.4 · d9$/.test(ig.line), `the hint list reads as ever, the cast by its SAN ("${ig.line}")`);
   expect(ig.arrows.join(' ') === `${ig.plain} ${ig.centre}${ig.centre}:ice`, `the board's cast hint carries its spell, worst to best (${ig.arrows.join(' ')})`);
-  expect(ig.centrePx.flake === GOLD && ig.centrePx.arm === GOLD && ig.centrePx.halo === '0,0,0,255' && ig.centrePx.frame === GOLD, `${ig.centre} wears the rank-1 snowflake: its centre and an arm gold, a black halo, the square framed (${Object.values(ig.centrePx).join(' / ')})`);
-  expect(ig.patch.length > 0 && ig.patch.every(([, c]) => c === GOLD), `every floor square of the 3×3 is framed (${ig.patch.map(([s, c]) => `${s}:${c === GOLD ? 'framed' : c}`).join(' ')})`);
-  expect(ig.walls.every(([, c]) => c !== GOLD), ig.walls.length ? `the terrain in the 3×3 is not framed (${ig.walls.map(([s]) => s).join(' ')})` : `no terrain in the 3×3 of any of the ${ig.casts} cast squares — nothing to skip`);
-  expect(ig.outside.length > 0 && ig.outside.every(([, c]) => c !== GOLD), `nothing outside the 3×3 is framed (${ig.outside.map(([s]) => s).join(' ')})`);
+  expect(ig.centrePx.tip === GOLD && ig.centrePx.hub === GOLD && ig.centrePx.hollow !== GOLD && ig.centrePx.hollow !== '0,0,0,255' && ig.centrePx.shadow === '0,0,0,255', `${ig.centre} wears the rank-1 snowflake: its top tip and its hub gold, the hub hollow, a black drop shadow (${Object.values(ig.centrePx).join(' / ')})`);
+  expect(ig.centrePx.frame === GOLD && ig.centrePx.inset !== GOLD, `the square is framed at its edge, floor inside the frame (${ig.centrePx.frame} / ${ig.centrePx.inset})`);
+  expect(ig.beside.length > 0 && ig.beside.every(([, a, b]) => a !== GOLD && b !== GOLD), `the centre square alone is framed — none of its neighbours (${ig.beside.map(([s]) => s).join(' ')})`);
   expect(ig.cleared === 0, 'hints off clears the spell marks with the arrows');
   const ic = await page11.evaluate(async () => {
     const K = window.__DCK;
@@ -1941,8 +1939,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await page12.evaluate(() => ({ hidden: document.getElementById('btnIce').hidden, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
   expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no Ice button, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
-  // THE SPELL GLYPHS, the portal's: on this page (portals on) a PORTAL cast hint is its square framed with the RING inside —
-  // hollow, in the rank's colour with the black halo — and nothing framed beside it; the list wears the ring.
+  // THE SPELL GLYPHS, the portal's: on this page (portals on) a PORTAL cast hint is its square framed at its edge with the
+  // RING inside — hollow, in the rank's colour with the black drop shadow — and nothing framed beside it; the list wears the ring.
   const ip = await page12.evaluate(async () => {
     const K = window.__DCK;
     K.options.cheat = true;
@@ -1969,8 +1967,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.cast ? `:${a.cast}` : ''}`);
     K.renderer.paintNow();
     const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
-    out.ring = { top: px(centre, 6, 3), halo: px(centre, 5, 3), hollow: px(centre, 7, 7), frame: px(centre, 1, 1) };
-    out.beside = around(centre).filter((s) => !terrain(s)).map((s) => [s, px(s, 1, 1)]);
+    out.ring = { top: px(centre, 6, 3), shadow: px(centre, 7, 4), hollow: px(centre, 7, 7), frame: px(centre, 0, 0), inset: px(centre, 1, 1) }; // the ring's top row, its shadow under it, the hollow centre, the frame's corner, the floor inside it
+    out.beside = around(centre).filter((s) => !terrain(s)).map((s) => [s, px(s, 0, 0)]);
     K.options.cheat = false;
     K.options.hints = false;
     K.applyOptions();
@@ -1980,7 +1978,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(ip.icons.join(' ') === '1:portal 2:-', `the ring icon sits on the portal hint alone (${ip.icons.join(' ')})`);
   expect(/^1 \S*@\S+ \+0\.4 · 2 .+ \+0\.4 · d9$/.test(ip.line), `the hint list reads the cast by its SAN ("${ip.line}")`);
   expect(ip.arrows.join(' ') === `${ip.plain} ${ip.centre}${ip.centre}:portal`, `the board's portal cast hint carries its spell (${ip.arrows.join(' ')})`);
-  expect(ip.ring.top === GOLD && ip.ring.halo === '0,0,0,255' && ip.ring.hollow !== GOLD && ip.ring.hollow !== '0,0,0,255' && ip.ring.frame === GOLD, `${ip.centre} wears the rank-1 ring: gold with a black halo, hollow at its centre, the square framed (${Object.values(ip.ring).join(' / ')})`);
+  expect(ip.ring.top === GOLD && ip.ring.shadow === '0,0,0,255' && ip.ring.hollow !== GOLD && ip.ring.hollow !== '0,0,0,255' && ip.ring.frame === GOLD && ip.ring.inset !== GOLD, `${ip.centre} wears the rank-1 ring: gold with a black drop shadow, hollow at its centre, the square framed at its edge (${Object.values(ip.ring).join(' / ')})`);
   expect(ip.beside.length > 0 && ip.beside.every(([, c]) => c !== GOLD), `a portal cast frames its square alone (${ip.beside.map(([s]) => s).join(' ')})`);
   expect(ip.cleared === 0, 'hints off clears the ring with the arrows');
   await page12.close();
