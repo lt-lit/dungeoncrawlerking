@@ -169,6 +169,33 @@ if (!process.argv[2]) {
   expect((L3.quakes?.length ?? 0) === 25 && (L3.quakeTraces?.length ?? 0) > 25 && (L3.branches?.length ?? 0) === 0, `twenty-five quakes fired of ${L3.quakeTraces?.length} rolls, no undo`);
 }
 
+// THE ICE (2026-09-24): the fourth sample — the first ice duel, the designer's
+// phone log (vaults-2 at walk turn 24, restless, Android Firefox, 68 plies,
+// 1-0 by checkmate) — renders with both casts of the ice on its timeline,
+// the slides in words (a pawn's double step onto the patch sliding on to
+// d8; a rook stopped on c5 by the pawn on c4), the field's slick squares
+// growing cast by cast (eight from the player's d6 — e5 is a wall — fourteen
+// once the enemy's b6 overlaps it), the enemy's portal pair cast after in
+// one turn, and both kings hammering (the enemy's three times).
+if (!process.argv[2]) {
+  const L4 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-2-t24_s3571496125.json'), 'utf8'));
+  const full4 = R.renderReport(L4, { sections: R.SECTION_NAMES });
+  const tl4 = R.timelineSection(L4);
+  expect(full4.length > 10000 && full4.includes('world vaults-2') && /RESULT 1-0/.test(full4) && /checkmate/.test(full4) && /anomalies 0/.test(full4), 'the ice duel sample renders: the world line, 1-0 by checkmate, no anomaly');
+  expect(tl4.some((l) => /I@d6/.test(l) && /the ice is cast/.test(l)) && tl4.some((l) => /I@b6/.test(l) && /the ice is cast/.test(l)), "both casts of the ice are on the timeline, the player's I@d6 and the enemy's I@b6");
+  expect(tl4.some((l) => /\bd5\b/.test(l) && /slides to d8/.test(l)) && tl4.some((l) => /Rc5/.test(l) && /stops on c5/.test(l)), "the slides read in words: the pawn's double step onto the ice slides to d8, the rook stops on c5");
+  const slick = (s) => (s.fen.match(/\{([^}]*)\}/)?.[1] ?? '').split(',').filter((e) => e.startsWith('~')).length;
+  const s26 = L4.states[26], s34 = L4.states[34], s35 = L4.states[35], s39 = L4.states[39];
+  expect(s26.cast === 'ice' && s26.mover === 'player' && slick(L4.states[25]) === 0 && slick(s26) === 8 && !/~e5/.test(s26.fen), "the player's cast ices the eight floor squares of d6's 3×3 — e5, a wall, takes none");
+  expect(s39.cast === 'ice' && s39.mover === 'engine' && slick(s39) === 14 && slick(L4.states[L4.states.length - 1]) === 14, "the enemy's cast at b6 overlaps it — fourteen slippery squares, to the end");
+  expect(s34.move === 'd3d5' && s34.slide?.steps?.length === 1 && s34.slide.steps[0].from === 'd5' && s34.slide.steps[0].to === 'd8' && /P/.test(s34.fen.split(' ')[0].split('/')[2]), "the state records the pawn's slide from d5 to d8, and the pawn stands on d8");
+  expect(s35.move === 'c9c5' && s35.slide?.steps?.[0]?.to === 'c5' && /^[^ ]*/.test(s35.fen), "the rook's slide stops where it landed (a pawn stands on c4)");
+  const hammers = L4.states.filter((s) => s.hammer).map((s) => `${s.ply}:${s.mover}:${s.san}`);
+  expect(hammers.join(' ') === '1:engine:K*e10 4:player:K*e2 11:engine:K*f8 19:engine:K*g8', `both kings hammered — the enemy's three times (${hammers.join(' ')})`);
+  expect(L4.states[41]?.cast === 'half' && L4.states[42]?.cast === 'pass' && L4.states[42]?.san === '--' && L4.states[43]?.cast === 'link' && /\{f4-c8,~a5/.test(L4.states[43].fen), "the enemy's portal pair follows in one turn — the half, the player's pass, the link — and the field names the pair before the ice");
+  expect((L4.quakes?.length ?? 0) === 3 && (L4.branches?.length ?? 0) === 6 && (L4.anomalies?.length ?? 0) === 0 && !L4.engine.some((e) => e.recovered), 'three quakes landed, six undos, no anomaly, no recovered search');
+}
+
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(failures.length ? `\n${failures.length} FAILED` : `\nPASS (${notes.length} checks)`);

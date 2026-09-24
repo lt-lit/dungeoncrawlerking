@@ -63,8 +63,12 @@ const params = new URLSearchParams(location.search);
 // first three moves, a pawn through the player's portal to the promotion row;
 // 3 — THE FIRST SLEDGE DUEL (2026-09-17, vaults-4 at walk turn 109, the
 // phone): the player's K*e4 at ply 16 (the hammered wall a crate in the
-// gods' ledger from that state on), twenty crumbles written as `#` pits.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json'];
+// gods' ledger from that state on), twenty crumbles written as `#` pits;
+// 4 — THE FIRST ICE DUEL (2026-09-24, vaults-2 at walk turn 24, the phone):
+// both sides cast the ice (the player's I@d6 at ply 26, the enemy's I@b6
+// overlapping it at 39), a pawn's double step sliding on to d8, a rook
+// stopped on c5, the enemy's portal pair after, both kings hammering.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json'];
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;
