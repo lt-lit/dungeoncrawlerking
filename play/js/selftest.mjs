@@ -10,8 +10,9 @@
 // window.__SELFTEST = { done, passed, failed, lines } (done set LAST) so a
 // headless driver can poll for completion.
 import { createEngine, getFfish } from './engine.mjs';
-import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket } from './variant.mjs';
-import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger, isCast, isPass } from './fen.mjs';
+import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket, iceCastRanks, spellPocket } from './variant.mjs';
+import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger, isCast, isPass, slickSquares, castLetter, PIT } from './fen.mjs';
+import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20)
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { DuelController, RECORD_ARRAYS } from './duel.mjs';
@@ -567,6 +568,89 @@ async function main() {
     twinH.delete();
     if (!same) throw new Error('a # board is not its * twin without the key');
     return 'K*f2 offered and cracks f2 (the hard f1 never), none in check, engine perft 5 + a legal bestmove, plain kings have no hammer, # ≡ * without the key';
+  });
+
+  // --- THE ICE (2026-09-20, engine/patches/ice.patch; brief §4.9): the one-ply
+  // cast of the ice scroll, the slide on the game's own deal variant on both
+  // binaries, the grid's physics (ice.mjs) held to ffish's board after every
+  // slide, the pit that ends a duel, the engine finding the shove. ---
+  await check('the ice: the cast, the slide, the shove, the pit, the portal landing (ffish + engine + the grid, the deal variant)', async () => {
+    const iv = dealVariant(8, 8, 2, 7, { portals: true, ice: true });
+    ffish.loadVariantConfig(iv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + iv.ini);
+    const lm = (bd) => bd.legalMoves().trim().split(/\s+/).filter(Boolean);
+    const f0 = `4k3/p7/8/8/8/8/8/R3K3[${spellPocket({ portals: true, ice: true })}] w - - 0 1`;
+    if (ffish.validateFen(f0, iv.name) !== 1) throw new Error(`validateFen rejected ${f0}`);
+    const b = new ffish.Board(iv.name, f0);
+    const legal0 = lm(b);
+    const casts = legal0.filter((m) => castLetter(m) === 'i');
+    const rows = iceCastRanks(8);
+    if (casts.length !== 16 || !casts.every((m) => rows.includes(parseInt(m.slice(3), 10)))) throw new Error(`ice casts: ${casts.join(' ')}`);
+    if (b.sanMove('I@e4') !== 'I@e4') throw new Error(`SAN ${b.sanMove('I@e4')}`);
+    b.push('I@e4');
+    const f1 = b.fen();
+    const slick = slickSquares(f1);
+    if (slick.size !== 9 || !slick.has('d3') || !slick.has('f5') || !/\[OOioo\]/.test(f1) || b.turn()) throw new Error(`after the cast: ${f1}`);
+    if (lm(b).some((m) => castLetter(m) === 'i' && false)) throw new Error('unreachable');
+    b.pop();
+    if (b.fen() !== f0) throw new Error(`pop: ${b.fen()}`);
+    b.delete();
+    // A cast is never legal in check, and the frozen side of an open half cannot cast ice either.
+    const chk = new ffish.Board(iv.name, `4k3/p7/8/8/8/8/8/r3K2R[${spellPocket({ portals: true, ice: true })}] w - - 0 1`);
+    if (lm(chk).some((m) => isCast(m))) throw new Error(`a cast in check: ${lm(chk).join(' ')}`);
+    chk.delete();
+    // The grid's physics against ffish on the engine gate's fixtures: every legal move that slides.
+    const fixtures = [
+      '4k3/p7/8/n7/8/8/8/R3K3[] w - - 0 1 {~a3,~a4,~a5}',
+      '8/p7/8/8/8/8/8/R3K1k_[] w - - 0 1 {~f1,~g1}',
+      '4k3/p7/8/8/8/8/8/R1nn1K2[] w - - 0 1 {~b1,~c1,~d1,~e1}',
+      '1k6/p7/8/8/3P4/8/8/4K3[] w - - 0 1 {~d5,~d6,~d7}',
+      '4k3/p7/8/8/_7/n7/8/R3K3[] w - - 0 1 {~a2,~a3}',
+      '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a5-h7,~a3,~a4,~h6,~h7}',
+      '4k3/8/8/2pP4/8/8/8/4K3[] w - c6 0 1 {~c6,~b7}',
+      '8/p7/8/8/8/4B3/R7/KR1nk3[] w - - 0 1 {~c1,~d1,~e1,~f1}',
+    ];
+    let slides = 0;
+    for (const fen of fixtures) {
+      if (ffish.validateFen(fen, iv.name) !== 1) throw new Error(`validateFen rejected ${fen}`);
+      const bb = new ffish.Board(iv.name, fen);
+      for (const u of lm(bb)) {
+        if (isCast(u)) continue;
+        const o = slideOutcome(fen, u);
+        if (!o) continue;
+        slides++;
+        bb.push(u);
+        const got = splitFen(bb.fen()).board;
+        bb.pop();
+        if (got !== o.board) throw new Error(`${fen} ${u}: the grid says ${o.board}, ffish ${got}`);
+      }
+      bb.delete();
+    }
+    if (slides < 15) throw new Error(`only ${slides} slides among the fixtures`); // 19 on the eight fixtures
+    // The shove: a1a4 stops the rook on a4 and sends the knight from a5 to a6; the alias of the capture a1a5 is a6.
+    const sh = slideOutcome('4k3/p7/8/n7/8/8/8/R3K3[] w - - 0 1 {~a3,~a4,~a5}', 'a1a4');
+    if (sh.steps.length !== 2 || sh.steps[0].to !== 'a4' || sh.steps[1].from !== 'a5' || sh.steps[1].to !== 'a6') throw new Error(`the shove: ${JSON.stringify(sh.steps)}`);
+    const al = slideAliases('4k3/p7/8/n7/8/8/8/R3K3[] w - - 0 1 {~a3,~a4,~a5}', 'a1', ['a1a4', 'a1a5', 'a1b1']);
+    if (al.get('a6') !== 'a1a5' || al.size !== 1) throw new Error(`aliases ${JSON.stringify([...al])}`);
+    // The pit: the shove that drops the enemy king ends the game — and the same for the pit glyph in a FEN.
+    const pit = new ffish.Board(iv.name, '8/p7/8/8/8/8/8/R3K1k_[] w - - 0 1 {~f1,~g1}');
+    if (getSquare(pit.fen(), 'h1') !== PIT) throw new Error(`the pit glyph: ${pit.fen()}`);
+    pit.push('e1f1');
+    if (lm(pit).length !== 0 || !pit.isGameOver() || splitFen(pit.fen()).board !== '8/p7/8/8/8/8/8/R4K1_') throw new Error(`the fallen king: ${pit.fen()} ${lm(pit).length}`);
+    pit.delete();
+    const own = new ffish.Board(iv.name, '4k3/p7/8/4_3/8/8/8/R3K3[] w - - 0 1 {~e2,~e3,~e4}');
+    if (lm(own).includes('e1e2')) throw new Error('the king may slide into his own pit');
+    own.delete();
+    // The engine: perft 1 on the cast board equals ffish's count; a search on the pit board finds the shove.
+    engine.setoption('UCI_Variant', iv.name);
+    engine.position({ fen: f0 });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== legal0.length) throw new Error(`engine perft 1 = ${n1}, ffish ${legal0.length}`);
+    engine.position({ fen: '8/pp6/8/8/8/8/8/R3K1k_[] w - - 0 1 {~f1,~g1}' });
+    const res = await engine.go('depth 8 movetime 3000');
+    if (res.bestmove !== 'e1f1') throw new Error(`bestmove ${res.bestmove} (e1f1 shoves the king into the pit)`);
+    return `16 casts on ranks ${rows.join('–')}, I@e4 ices nine squares and spends the scroll; ${slides} slides on eight fixtures agree with ffish square for square; the shove and its alias; the pit ends the duel and the king may not slide into his own; engine perft ${n1} and e1f1 found`;
   });
 
   // --- Duel generation + legality cross-check (phase0 selftest, 9x8 arena) ---

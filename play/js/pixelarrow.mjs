@@ -99,6 +99,73 @@ export function drawHammer(ctx, x, y, colour) {
   }
 }
 
+// THE SPELL GLYPHS (2026-09-21 — the designer, on the ice build: "On move
+// hints, there's just a square outline for both portal and ice. How am I
+// supposed to know what spell it's suggesting?"): a cast hint and the
+// analyzer's cast lines are marked BY SPELL, in the arrow's colour, centred
+// on the cast square inside its frame — a PORTAL is a ring (the rune
+// ring's own shape), the ICE a SNOWFLAKE (the designer's reference, the
+// same day: a six-armed hexagonal flake with forked tips and a hollow hub —
+// here at 11×11: the vertical arm with its forks, the four arms at thirty
+// degrees with a barb each, a hollow diamond hub). A spell glyph wears a
+// one-pixel DROP SHADOW (black, down and right — `drawSpell`) and not the
+// arrows' eight-neighbour halo: the halo fills the gaps between a flake's
+// arms and turns it into a black tile (the first cut; the designer: "the
+// icon could use some work"). The hint list wears the same drawings
+// (main.mjs spellIcon), as it wears the hammer.
+export const PORTAL_GLYPH = Object.freeze([
+  '...PPPP...',
+  '.PP....PP.',
+  '.P......P.',
+  'P........P',
+  'P........P',
+  'P........P',
+  'P........P',
+  '.P......P.',
+  '.PP....PP.',
+  '...PPPP...',
+]);
+export const ICE_GLYPH = Object.freeze([
+  '.....I.....',
+  '...I.I.I...',
+  '.I..III..I.',
+  'II...I...II',
+  '..II.I.II..',
+  '....I.I....',
+  '..II.I.II..',
+  'II...I...II',
+  '.I..III..I.',
+  '...I.I.I...',
+  '.....I.....',
+]);
+export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH });
+export const SPELL_SHADOW = HALO; // the drop shadow's colour
+
+/** A spell glyph's size: { w, h } — its shadow adds a pixel right and below. */
+export function spellGlyphSize(kind) {
+  const g = SPELL_GLYPHS[kind] ?? PORTAL_GLYPH;
+  return { w: g[0].length, h: g.length };
+}
+
+/** The glyph's top-left for a square whose top-left is (ox, oy), centred in the 16-px square
+ *  (an odd glyph sits the half pixel up and left; its shadow fills the row and column below and right). */
+export function spellOrigin(kind, ox, oy, size = 16) {
+  const { w, h } = spellGlyphSize(kind);
+  return { x: Math.round(ox) + Math.floor((size - w) / 2), y: Math.round(oy) + Math.floor((size - h) / 2) };
+}
+
+/** Stamp a spell's glyph with its drop shadow, its top-left at (x, y), whole pixels, in `colour`:
+ *  the shadow first (a black pixel down and right of every glyph pixel, where the glyph has none), then the glyph. */
+export function drawSpell(ctx, kind, x, y, colour) {
+  const g = SPELL_GLYPHS[kind] ?? PORTAL_GLYPH;
+  const h = g.length, w = g[0].length;
+  const at = (r, c) => g[r]?.[c] ?? '.';
+  ctx.fillStyle = SPELL_SHADOW;
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (at(r, c) !== '.' && at(r + 1, c + 1) === '.') ctx.fillRect(x + c + 1, y + r + 1, 1, 1);
+  ctx.fillStyle = colour;
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (at(r, c) !== '.') ctx.fillRect(x + c, y + r, 1, 1);
+}
+
 /** The arrow style dials: the shaft's width in floor pixels and the
  *  opacity at full strength. Both boards take a style through
  *  `setArrowStyle`; main.mjs keeps it in the Options. */

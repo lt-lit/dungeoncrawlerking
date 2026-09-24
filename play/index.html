@@ -142,7 +142,7 @@
     <!-- The player's bar also carries the hint list and the gods line (the
          last quake, held until the player moves) — folded in rather than
          a new row, to protect the board's height budget on a phone. -->
-    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><button id="btnPortal" hidden title="cast a portal: pick a square; the second cast links it to the first">&#9678; Portal <span id="btnPortalN"></span></button><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
+    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><button id="btnPortal" hidden title="cast a portal: pick a square; the second cast links it to the first">&#9678; Portal <span id="btnPortalN"></span></button><button id="btnIce" hidden title="cast ice: pick the centre of a 3×3 patch on the middle rows">&#10052; Ice <span id="btnIceN"></span></button><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
     <div id="preview-controls" hidden>
       <button id="btnBegin" class="primary">Begin duel</button>
       <button id="btnRedeal">Re-deal</button>
@@ -257,6 +257,10 @@
          test; an upgrade later. A move onto an adjacent breakable wall cracks
          it into a crate — on the duel board and on the walk. -->
     <label class="opt"><input type="checkbox" id="optHammer"> Sledge-kings — every king may spend its move cracking an adjacent wall into a crate</label>
+    <!-- THE ICE (2026-09-20): one scroll a side for the stress test; an upgrade
+         later. A cast turns the floor of a 3×3 slippery for the duel: a piece
+         that moves onto it slides on until something stops it. -->
+    <label class="opt"><input type="checkbox" id="optIce"> Ice spell — each side may cast one 3×3 patch of ice per duel; pieces that move onto it slide</label>
     <h2>Look</h2>
     <!-- THE 16×16 CANVAS BOARD is the one renderer (2026-09-07): one native
          buffer, scaled once to the screen. -->

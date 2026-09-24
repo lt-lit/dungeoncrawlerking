@@ -37,6 +37,13 @@ const KNOWN_INI_KEYS = new Set([
   'hammerPieceTypes',
   'hammerPieceTypesWhite',
   'hammerPieceTypesBlack',
+  // THE ICE (2026-09-20, engine/patches/ice.patch): the ice scroll is FSF's
+  // first custom piece with an empty Betza (immobile), its cast rows the
+  // custom piece's mobility region.
+  'customPiece1',
+  'iceScroll',
+  'mobilityRegionWhiteCustomPiece1',
+  'mobilityRegionBlackCustomPiece1',
 ]);
 
 // THE PORTAL SPELL (2026-09-17): the scroll is a piece type that only ever
@@ -76,6 +83,67 @@ export const HAMMER_VARIANT_SUFFIX = '__sledge';
 /** The variants.ini keys that arm the kings. */
 export function hammerIniKeys() {
   return { hammerPieceTypes: HAMMER_PIECES };
+}
+
+// THE ICE (2026-09-20, engine/patches/ice.patch; brief §4.9): the ice scroll
+// is a piece type that only lives in hand (FSF's `customPiece1` with an empty
+// Betza string — immobile — letter `i`), ONE per side per duel for the stress
+// test; a drop of it (`I@e5`, one ply, never in check, on any floor square of
+// the cast rows, occupied or not) turns the floor of the 3×3 around the
+// square slippery for the rest of the duel. THE CAST ROWS are the board's
+// two MIDDLE ranks (`iceIniKeys`: the custom piece's mobility region, which
+// the engine intersects with the drop region), so a patch never comes nearer
+// than two rows to a king row on the 10-rank box (ranks 5–6 → rows 4–7;
+// 4–5 → 3–6 on the selftest's 8) — the portal's two-row promotion margin,
+// kept for the ice. The scroll's value is 0 like the portal scroll's (FSF's
+// own in-hand bonus is enough of a nudge). The name suffix `__ice` makes an
+// ice deal its own variant (rule 7).
+export const ICE_SCROLL = 'i';
+export const ICE_SCROLLS_PER_SIDE = 1;
+export const ICE_SCROLL_VALUE = 0;
+export const ICE_VARIANT_SUFFIX = '__ice';
+
+/** The two middle ranks of a `ranks`-deep board, 1-based: the ice cast's rows. */
+export function iceCastRanks(ranks) {
+  const lo = Math.floor(ranks / 2);
+  return ranks >= 2 ? [lo, lo + 1] : [1];
+}
+
+/**
+ * The variants.ini keys that turn the ice spell on for a `ranks`-deep board.
+ * The piece VALUE keys are shared with the portal scroll's (one `pieceValueMg`
+ * line names every scroll), so a deal composes them through `spellIniKeys`.
+ */
+export function iceIniKeys(ranks) {
+  const rows = iceCastRanks(ranks).map((r) => `*${r}`).join(' ');
+  return {
+    customPiece1: `${ICE_SCROLL}:`,
+    iceScroll: ICE_SCROLL,
+    pieceDrops: 'true',
+    mobilityRegionWhiteCustomPiece1: rows,
+    mobilityRegionBlackCustomPiece1: rows,
+  };
+}
+
+/** The keys of every spell a deal carries — the portal's, the ice's, and ONE
+ *  value line for all the scrolls (a second `pieceValueMg` would overwrite
+ *  the first in the ini object). */
+export function spellIniKeys(ranks, { portals = false, ice = false } = {}) {
+  const out = { ...(portals ? portalIniKeys(ranks) : {}), ...(ice ? iceIniKeys(ranks) : {}) };
+  const values = [...(portals ? [`${PORTAL_SCROLL}:${PORTAL_SCROLL_VALUE}`] : []), ...(ice ? [`${ICE_SCROLL}:${ICE_SCROLL_VALUE}`] : [])];
+  if (values.length) {
+    out.pieceValueMg = values.join(' ');
+    out.pieceValueEg = values.join(' ');
+  }
+  return out;
+}
+
+/** The holdings block of a duel with these spells: the ice scroll, then the
+ *  portal scrolls, White's uppercase then Black's (`[IOOioo]`); '' with none. */
+export function spellPocket({ portals = false, ice = false } = {}) {
+  const white = (ice ? ICE_SCROLL.toUpperCase().repeat(ICE_SCROLLS_PER_SIDE) : '') + (portals ? PORTAL_SCROLL.toUpperCase().repeat(PORTAL_SCROLLS_PER_SIDE) : '');
+  const black = (ice ? ICE_SCROLL.repeat(ICE_SCROLLS_PER_SIDE) : '') + (portals ? PORTAL_SCROLL.repeat(PORTAL_SCROLLS_PER_SIDE) : '');
+  return white + black;
 }
 
 /**
@@ -191,14 +259,14 @@ export function catalogVariantName(files, ranks) {
  * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
  * cumulative variants-ini reload (main.mjs appends to app.catalog).
  */
-export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false, hammer = false } = {}) {
+export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false, hammer = false, ice = false } = {}) {
   const w = whiteLineRank | 0;
   const b = blackLineRank | 0;
   if (w < 1 || w > ranks || b < 1 || b > ranks) {
     throw new Error(`camp lines w${w}/b${b} outside 1-${ranks}`);
   }
-  // The name encodes the config (rule 7): a portal deal, a sledge deal, is its own variant.
-  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}${hammer ? HAMMER_VARIANT_SUFFIX : ''}`;
+  // The name encodes the config (rule 7): a portal deal, a sledge deal, an ice deal, is its own variant.
+  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}${hammer ? HAMMER_VARIANT_SUFFIX : ''}${ice ? ICE_VARIANT_SUFFIX : ''}`;
   const ini = makeDuelVariantIni({
     name,
     files,
@@ -206,11 +274,11 @@ export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portal
     extra: {
       doubleStepRegionWhite: Array.from({ length: w }, (_, i) => `*${i + 1}`).join(' '),
       doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
-      ...(portals ? portalIniKeys(ranks) : {}),
+      ...spellIniKeys(ranks, { portals, ice }),
       ...(hammer ? hammerIniKeys() : {}),
     },
   });
-  return { name, ini, portals: !!portals, hammer: !!hammer };
+  return { name, ini, portals: !!portals, hammer: !!hammer, ice: !!ice };
 }
 
 /**

@@ -30,7 +30,8 @@ export const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/;
 
 /** One board as text rows (top rank first). A breakable wall '*', an
  *  indestructible wall '#' (wall-kinds 2026-09-17; every wall printed '#'
- *  before), a hole 'O' (the ledger's, either glyph), a god-cracked wall 'x',
+ *  before), a hole 'O' (the engine's own pit '_' since the ice, 2026-09-20,
+ *  or the ledger's, either older glyph), a god-cracked wall 'x',
  *  authored furniture '^', floor '·'. `files` is the
  *  footer's width when the fen has no ranks (never, in practice). */
 export function boardRows(fen, { holes = [], godCrates = [] } = {}, files = 10) {
@@ -46,6 +47,7 @@ export function boardRows(fen, { holes = [], godCrates = [] } = {}, files = 10) 
       const sq = sqName(f, r);
       let ch;
       if (c === null) ch = '·';
+      else if (c === '_') ch = 'O';
       else if (c === '*' || c === '#') ch = holeSet.has(sq) ? 'O' : c;
       else if (c === '^') ch = crateSet.has(sq) ? 'x' : '^';
       else ch = c;
@@ -249,12 +251,28 @@ export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(),
   const st = stateAt(states, ply);
   let line = `p${String(ply).padStart(3)}  ${String(n).padStart(3)}${white ? '. ' : '… '}${String(san ?? '?').padEnd(8)}`;
   line += e ? ` e:d${e.depth ?? '?'} ${fmtScore(e.score).padStart(6)} ${String(e.ms ?? '?').padStart(5)}ms${e.recovered ? ' RECOVERED' : ''}` : ' '.repeat(23);
+  if (st?.slide) line += `  ❄ ${slideWords(st.slide)}`; // THE ICE (2026-09-20)
+  else if (st?.cast === 'ice') line += `  ❄ the ice is cast`;
   if (leftMateLine(st)) line += `  ⚠ left the engine's mate-in-${-st.engineSaw.value} line (it expected ${st.predicted})`;
   if (t && t.outcome !== 'quiet' && t.outcome !== 'vetoed') line += `  ⚡ ${q ? quakeSummary(q) : t.outcome}${t.evalGate?.attempt ? ` [draw ${t.evalGate.attempt + 1}]` : ''}`;
   else if (t?.outcome === 'vetoed') line += `  ⚡ VETOED (every draw softened)`;
   else if (t?.vetoed) line += `  ⚡ ${t.vetoed} (duel-layer veto)`;
   for (const f of flags.get(ply) ?? []) line += `  ⚑${f.note ? ` ${f.note}` : ''}`;
   return line;
+}
+
+/** THE ICE (2026-09-20): what a slide did, in words — the record's `slide`
+ *  (play/js/ice.mjs slideOutcome: the mover's step first, then each shoved
+ *  piece's) as the duel log, the timeline and the analyzer say it. */
+const PIECE_WORDS = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+export function slideWords(slide) {
+  const steps = slide?.steps ?? [];
+  if (!steps.length) return '';
+  const name = (s) => PIECE_WORDS[String(s.piece ?? '').toLowerCase()] ?? 'piece';
+  const rest = (s) => (s.pit ? `falls into the pit at ${s.pit}` : s.landing ? `slides into the portal at ${s.landing.entry} and out at ${s.to}${s.landing.swapped ? `, swapping with the ${PIECE_WORDS[String(s.landing.swapped).toLowerCase()] ?? 'piece'} there` : ''}` : s.to === s.from ? `stops on ${s.to}` : `slides to ${s.to}`) + (s.promoted ? ` and becomes a ${PIECE_WORDS[String(s.promoted).toLowerCase()] ?? 'piece'}` : '');
+  const parts = [rest(steps[0])];
+  for (let i = 1; i < steps.length; i++) parts.push(`shoves the ${name(steps[i])} on ${steps[i].from}, which ${rest(steps[i])}`);
+  return parts.join(', ');
 }
 
 // ------------------------------------------------------------- sections

@@ -21,15 +21,18 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField } from './fen.mjs';
+import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, castLetter } from './fen.mjs';
+import { slideOutcome, fallen } from './ice.mjs'; // THE ICE (2026-09-20): the slide a move makes, for the record
 import { flipTurn, evalSoftens } from './tactics.mjs';
 
 /** PORTALS v3 (the one-turn cast, 2026-09-19): what a ply is inside a cast —
  *  'half' (a cast that opened the mover's half), 'link' (one that closed the
  *  pair), 'pass' (the frozen side's one move), 'fizzle' (the caster's pass that
- *  let a half no link could close go) — or null for an ordinary ply. */
+ *  let a half no link could close go), 'ice' (THE ICE, 2026-09-20: the ice
+ *  scroll's one-ply cast) — or null for an ordinary ply. */
 export function castKind(fenBefore, uci, fenAfter) {
   const side = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
+  if (castLetter(uci) === 'i') return 'ice';
   if (isCast(uci)) return parsePortalField(fenAfter).halves[side] ? 'half' : 'link';
   if (isPass(uci)) return parsePortalField(fenBefore).halves[side] && !parsePortalField(fenAfter).halves[side] ? 'fizzle' : 'pass';
   return null;
@@ -275,10 +278,10 @@ export class DuelController {
     return ms.length === 1 && isPass(ms[0]) ? ms[0] : null;
   }
 
-  /** PORTALS v3: is the side to move bound to the link — its own half open, every legal move a linking cast? */
+  /** PORTALS v3: is the side to move bound to the link — its own half open, every legal move a linking PORTAL cast? */
   mustLink() {
     const ms = this.state === 'playing' ? this.legalMoves() : [];
-    return ms.length > 0 && ms.every((m) => isCast(m));
+    return ms.length > 0 && ms.every((m) => castLetter(m) === 'o');
   }
 
   /** Play the forced move (forcedMove) for whoever is to move; `mover` names the seat for the record. */
@@ -512,7 +515,12 @@ export class DuelController {
     // crate brake and the breach rung see one kind; the state carries
     // `hammer` so the log and the analyzer can say what the move did.
     const hammered = hammerOf(fenBefore, uci);
-    this.lastMove = { move: uci, san, mover, predicted, followed: predicted ? uci === predicted : null, engineSaw, ...(hammered ? { hammer: hammered } : {}) };
+    // THE ICE (2026-09-20): what the move did on the ice — the slide's steps
+    // (the mover's, then each shoved piece's, a fall named by its pit) ride
+    // the state, so the page animates it, the log says it and the analyzer
+    // draws it from the record, never from a second reading of the rules.
+    const slide = slideOutcome(fenBefore, uci);
+    this.lastMove = { move: uci, san, mover, predicted, followed: predicted ? uci === predicted : null, engineSaw, ...(hammered ? { hammer: hammered } : {}), ...(slide ? { slide: { dir: slide.dir, steps: slide.steps } } : {}) };
     this.board.push(uci);
     // PORTALS v3 (the one-turn cast): what this ply is inside a cast — the
     // record carries it, the page reads it, the gods skip the inside plies
@@ -527,7 +535,11 @@ export class DuelController {
     if (this.state !== 'playing') return { ended: true }; // destroyed during an awaited hook
 
     if (gameEnded(this.board)) {
-      await this.#finish();
+      // THE ICE: a king that slid into a pit has lost on the spot (the engine's
+      // `is_immediate_game_end`: the kingless side has no move) — named for
+      // what did it, not for a capture.
+      const kingFell = slide && fallen(slide).some((f) => f.piece.toLowerCase() === 'k');
+      await this.#finish(kingFell ? { termination: 'pit' } : null);
       return { ended: true };
     }
     // King-capture adjudication (§4.5 filter-miss safety net): a kingless
@@ -915,7 +927,7 @@ export class DuelController {
     const kings = findSquares(fen, (c) => c === 'K' || c === 'k').map((s) => s.cell);
     const loser = whiteToMove ? 'white' : 'black';
     if (adjudicated?.termination) {
-      this.record.termination = adjudicated.termination; // e.g. 'earthquake' — loser is still the mover
+      this.record.termination = adjudicated.termination; // e.g. 'earthquake', 'pit' — loser is still the mover
     } else if (!kings.includes('K') || !kings.includes('k')) {
       this.record.termination = 'king-capture';
     } else if (this.board.isCheck()) {

@@ -136,7 +136,7 @@
 // still terrain to molding, crop, the camp line, and to displacement, which
 // neither moves a crate nor lands on one.
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField, HARD } from './fen.mjs';
+import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField, HARD, PIT, slickSquares } from './fen.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
@@ -245,6 +245,11 @@ function blockedReason(blocked, mover, target) {
   // crumble on one, no displacement onto or off one (the engine's rule
   // is that only a MOVE teleports; the gods never move a piece through).
   if (blocked.portals && (blocked.portals.has(mover) || blocked.portals.has(target))) return 'portal';
+  // THE ICE (2026-09-20): the gods leave slippery squares alone — nothing lands
+  // on one (a piece resting on open ice is a picture the rules never paint:
+  // only a move slides) and no pit opens under one; a piece may be moved OFF
+  // the ice (it stands there because something stopped it).
+  if (blocked.slick && blocked.slick.has(target)) return 'slick'; // a terrain edit names its own square as the target; a displacement its landing (leaving the ice is fine: the mover is not the target)
   if (blocked.pieces.has(mover) || blocked.squares.has(mover) || blocked.squares.has(target)) return 'protected';
   return null;
 }
@@ -300,7 +305,7 @@ export function crumbleCandidates(ffish, variant, fen, files, ranks, blocked = n
       // before the ffish-heavy validateCrumbleCandidate (rule 14).
       {
         const g2 = copyGrid(g); // Portals v2: the copy keeps the pairs
-        g2[r][f] = HARD;
+        g2[r][f] = PIT;
         if (editExposes(g, g2, [{ f, r }], files, ranks)) {
           rejected.push({ sq, reason: 'hangs_piece' });
           continue;
@@ -338,7 +343,8 @@ export function terrainCensus(fen, files, ranks, holes, godCrates = null) {
       if (c === FURNITURE) {
         crates++;
         if (godCrates?.has(SQ(f, r))) godMade++;
-      } else if (c === WALL) (holes.has(SQ(f, r)) ? holeCount++ : walls++);
+      } else if (c === PIT) holeCount++; // the engine's own pit glyph (the ice, 2026-09-20)
+      else if (c === WALL) (holes.has(SQ(f, r)) ? holeCount++ : walls++);
       else if (c === HARD) (holes.has(SQ(f, r)) ? holeCount++ : hard++);
     }
   }
@@ -1513,7 +1519,7 @@ export class Director {
     // twice, no piece moved twice); `pieces`/`squares` are the protected set
     // — every threat on the board and every forced win's net, both sides
     // (tactics.mjs). Computed once, on the board the gods are about to edit.
-    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set(), portals: parsePortalField(fen).squares };
+    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set(), portals: parsePortalField(fen).squares, slick: slickSquares(fen) }; // THE ICE: no landing on, no pit under, a slippery square
     if (this.protect) {
       const guard = protectedSet(ffish, variant, fen, files, ranks, { depth: this.winDepth, nodeBudget: this.winNodes, hints: mates });
       blocked.pieces = guard.pieces;
@@ -1819,7 +1825,7 @@ export class Director {
         displacements: [],
         crumble: { square: t.sq, reason: t.reason, pieceLost: t.pieceLost },
         terrain: null,
-        postFen: clearEp(setSquare(fen, t.sq, HARD)),
+        postFen: clearEp(setSquare(fen, t.sq, PIT)),
         endsGame: true,
         landedOn: null,
         outcome: 'terminal',

@@ -132,9 +132,9 @@
 // default set stands in), the % piece-fit dials (the tile grid is the only
 // mode here: the art's own scale, lift and shift in whole tile pixels).
 // The atlas is play/js/atlas.mjs.
-import { WALL, isWall } from './fen.mjs';
+import { WALL, isWall, parseSquare } from './fen.mjs';
 import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_RAISE, WALL_SPRITE_H, WALL_DY, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, wallFaceCols } from './board-ui.mjs';
-import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha } from './pixelarrow.mjs';
+import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha, spellOrigin, drawSpell } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
 import { normFacing, facingName, screenDims, toScreen, toWorld, pxToScreen, rotMask8, rotMask4, rotTile, doorHalf, edgeOn, coordEdges } from './camera.mjs';
@@ -146,6 +146,9 @@ const FX_KINDS = { weaken: 'cracking', breach: 'breaching', crumble: 'crumbling'
 /** The classic set's flat colours (style.css --cell-light / --cell-dark / --pit). */
 const CLASSIC = { light: '#4a4a42', dark: '#3a3a33', pit: '#0a0a0e', pitLip: '#000000' };
 const SHADE = 'rgba(0,0,0,0.22)'; // the dark square's checker shade under a theme (#00000038)
+// THE ICE (2026-09-20): the sheet's colour, mixed into the flagstone it covers (#iceTile).
+export const ICE_TINT = [150, 204, 236];
+export const ICE_MIX = 0.6;
 const DIM = 'rgba(0,0,0,0.55)'; // the world outside a duel's crop
 // BEDROCK (wall-kinds, 2026-09-17): the indestructible wall wears the wall
 // case in a darker, deader stone — every pixel pulled toward grey by
@@ -287,11 +290,12 @@ export class CanvasBoard {
     this.fen = null;
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
     this.portals = null; // THE PORTAL SPELL: the position's pairs and halves (fen.mjs parsePortalField), painted on the floor
+    this.slick = null; // THE ICE (2026-09-20): the position's slippery squares (fen.mjs slickSquares), the ice over their flagstones
     this.cellMarks = { selected: null, targets: new Map(), threats: new Map(), badges: new Map() }; // the walk's (setCellMarks): a selection, its targets, THE THREAT DISPLAY (milestone 6: the band where a hunter's duel would start — the far row framed, the rest tinted) and the badges over the enemy kings
     this.debrisBufs = new Map(); // cell index → 16×16 RGBA in WORLD orientation (the test surface: the buffer the cell wears)
     this.debrisCanvas = new Map(); // cell index → a 16×16 canvas of it, turned to the screen
     this.fx = new Map(); // sq → { kind, t0, ms, hold, done }
-    this.slides = []; // { from, to, letter, t0, ms, fade, victimLetter }
+    this.slides = []; // { from, to, letter, t0, ms, fade, victimLetter } — or, for THE ICE's chain, { path, letter, t0, ms, fade, fadeMs, fall, done }
     this.hidden = new Set(); // squares whose sprite is hidden (a shatter, a slide's source)
     this.hiddenCells = new Set(); // world cells whose sprite is hidden (an arrival in flight)
     this.cellSlides = []; // the walk's arrivals: { from, to, ch, t0, ms }
@@ -944,6 +948,16 @@ export class CanvasBoard {
     this.invalidate();
   }
 
+  /** THE ICE (2026-09-20): the slippery squares of the position (fen.mjs
+   *  slickSquares — the field's `~sq` entries less the portal squares), each
+   *  painted as ice over its own flagstone in the flat pass, under the rings,
+   *  the debris and whatever stands on it. */
+  setSlick(squares) {
+    const set = squares instanceof Set ? squares : new Set(squares ?? []);
+    this.slick = set.size ? set : null;
+    this.invalidate();
+  }
+
   /** The arrows to draw: kept in draw order and
    *  painted into the buffer above the pieces on the next frame. */
   setArrows(arrows) {
@@ -1213,6 +1227,50 @@ export class CanvasBoard {
     await wait(ms);
     this.slides = this.slides.filter((x) => x !== s);
     this.hidden.delete(from); // before the caller's setPosition
+    this.invalidate();
+  }
+
+  /**
+   * THE ICE (2026-09-20): a move and the slide it sets off, leg by leg — one
+   * record per piece that moves, played IN ORDER (the mover first: its chess
+   * move, then its glide over the ice; then each piece it shoved, from where
+   * it stood to where it came to rest), every finished piece PARKED at its
+   * resting square until the whole chain is over, so the buffer's pre-move
+   * position never shows a piece back where it started while the next one
+   * is still sliding. `chain` = [{ letter, path: [sq, sq, …], fade, fall }]:
+   * `fade` dissolves the occupant of the path's second square (the capture
+   * the move made), `fall` sinks the piece into the last square (a pit). The
+   * duration of a record is its path's length in squares × `msPerSquare`,
+   * at least `minMs`. The caller commits with setPosition after.
+   */
+  async animateSlideChain(chain, { msPerSquare = 80, minMs = 160 } = {}) {
+    if ((!msPerSquare && !minMs) || !this.fen || !chain?.length) return;
+    const recs = [];
+    for (const c of chain) {
+      const path = (c.path ?? []).filter((sq) => this.cells.has(sq));
+      if (path.length < 2 || !c.letter || isWall(c.letter)) continue;
+      let len = 0;
+      for (let i = 1; i < path.length; i++) {
+        const a = parseSquare(path[i - 1]), b = parseSquare(path[i]);
+        len += Math.max(Math.abs(a.file - b.file), Math.abs(a.rankFromBottom - b.rankFromBottom));
+      }
+      const ms = Math.max(minMs, Math.round(len * msPerSquare));
+      const victim = c.fade ? this.#letterAt(path[1]) : null;
+      const a0 = parseSquare(path[0]), a1 = parseSquare(path[1]);
+      const leg0 = Math.max(Math.abs(a0.file - a1.file), Math.abs(a0.rankFromBottom - a1.rankFromBottom));
+      recs.push({ path, from: path[0], to: path[1], letter: c.letter, t0: 0, ms, fade: !!victim && !isWall(victim), fadeMs: Math.max(1, Math.round((ms * leg0) / Math.max(1, len))), fall: !!c.fall, done: false });
+    }
+    if (!recs.length) return;
+    for (const r of recs) {
+      this.hidden.add(r.from); // a piece leaves its square only when its own leg begins (a piece about to be shoved stands there until it is hit)
+      r.t0 = now();
+      this.slides.push(r);
+      this.#run();
+      await wait(r.ms);
+      r.done = true; // parked at its resting square until the chain is over
+    }
+    this.slides = this.slides.filter((x) => !recs.includes(x));
+    for (const r of recs) this.hidden.delete(r.from); // before the caller's setPosition
     this.invalidate();
   }
 
@@ -1510,6 +1568,47 @@ export class CanvasBoard {
     return c;
   }
 
+  /** THE ICE's tile (2026-09-20) for a floor variant: the flagstone itself
+   *  pulled toward a cold blue-white (ICE_TINT at ICE_MIX), a sheen of
+   *  lighter diagonals across it, its edges a shade lighter (the rim of the
+   *  sheet) — a paint-time composite that follows every theme and tone, no
+   *  atlas row; the dark square's checker shade baked in where the square is
+   *  dark. Cached with the other composites. */
+  #iceTile(floor, variant, dark) {
+    const key = `ice|${this.theme ?? ''}|${variant}|${dark ? 'd' : 'l'}`;
+    let c = this.composites.get(key);
+    if (c) return c;
+    const cv = document.createElement('canvas');
+    cv.width = T;
+    cv.height = T;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    if (floor) g.drawImage(floor.src, floor.sx, floor.sy, T, T, 0, 0, T, T);
+    else {
+      g.fillStyle = dark ? CLASSIC.dark : CLASSIC.light;
+      g.fillRect(0, 0, T, T);
+    }
+    const img = g.getImageData(0, 0, T, T);
+    const d = img.data;
+    const shade = dark ? 1 - 0.22 : 1; // the checker's shade (SHADE), baked in
+    for (let py = 0; py < T; py++) {
+      for (let px = 0; px < T; px++) {
+        const i = (py * T + px) * 4;
+        const rim = px === 0 || py === 0 || px === T - 1 || py === T - 1 ? 0.1 : 0;
+        const sheen = (px + py) % 7 === 0 || (px + py) % 7 === 1 ? 0.14 : 0;
+        for (let ch = 0; ch < 3; ch++) {
+          const base = d[i + ch] * (1 - ICE_MIX) + ICE_TINT[ch] * ICE_MIX;
+          d[i + ch] = Math.max(0, Math.min(255, Math.round((base + (255 - base) * (sheen + rim)) * shade)));
+        }
+        d[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    c = { src: cv, sx: 0, sy: 0, w: T, h: T };
+    this.composites.set(key, c);
+    return c;
+  }
+
   /** A piece's one-tile-pixel shadow: its silhouette at 67% black. Cached. */
   #shadowOf(set, fen, sprite) {
     const key = `shadow|${set}|${fen}`;
@@ -1675,7 +1774,7 @@ export class CanvasBoard {
     //    designer 2026-09-10, "their heads briefly render under the piece
     //    to the north"). A slider on a row's own line paints after that row.
     const sliding = [];
-    for (const s of this.slides) { const p = this.#slideAt(s, t); sliding.push({ x: p.x, y: p.y, paint: () => this.#paintSlideAt(s, p.x, p.y) }); }
+    for (const s of this.slides) { const p = this.#slideAt(s, t); sliding.push({ x: p.x, y: p.y, paint: () => this.#paintSlideAt(s, p.x, p.y, p.alpha) }); }
     for (const s of this.cellSlides) { const p = this.#cellSlideAt(s, t); if (p) sliding.push({ x: p.x, y: p.y, paint: () => this.#paintPiece(s.ch, p.x, p.y) }); }
     sliding.sort((a, b) => a.y - b.y || a.x - b.x);
     let si = 0;
@@ -1769,6 +1868,11 @@ export class CanvasBoard {
         g.fillStyle = SHADE;
         g.fillRect(x, y, T, T);
       }
+    }
+    // THE ICE (2026-09-20): a slippery square wears the ice over its own flagstone, under the rings, the debris and the pieces.
+    if (sq && this.slick?.has(sq)) {
+      const ice = this.#iceTile(floor, floorVariantIndex(hf, hr), dark);
+      if (ice) this.#draw(ice, x, y);
     }
     // THE PORTAL SPELL: the rune ring on the floor, under the debris and the pieces.
     if (sq && this.portals?.squares.has(sq)) this.#paintPortal(sq, x, y);
@@ -1922,7 +2026,7 @@ export class CanvasBoard {
       }
       const fading = sq ? this.slides.find((s) => s.fade && s.to === sq) : null;
       if (fading) {
-        const fu = Math.min(1, (t - fading.t0) / fading.ms);
+        const fu = Math.min(1, (t - fading.t0) / (fading.fadeMs ?? fading.ms));
         if (k.skin === 'door') {
           // A captured door SWINGS instead of dissolving (scaleX .12 about its hinge).
           const w = Math.max(2, Math.round(T * (1 - 0.88 * fu)));
@@ -1937,7 +2041,7 @@ export class CanvasBoard {
     }
     if (!v || isWall(v)) return;
     const fading = sq ? this.slides.find((s) => s.fade && s.to === sq) : null;
-    this.#paintPiece(v, x, y, fading ? Math.min(1, (t - fading.t0) / fading.ms) : 0);
+    this.#paintPiece(v, x, y, fading ? Math.min(1, (t - fading.t0) / (fading.fadeMs ?? fading.ms)) : 0);
   }
 
   /** A piece sprite at its square: the shadow one tile pixel down, then the sprite, lifted and shifted. */
@@ -1979,22 +2083,47 @@ export class CanvasBoard {
 
   /** A duel slide this frame: the buffer origin of the sliding sprite between its squares. */
   #slideAt(s, t) {
-    const u = Math.min(1, (t - s.t0) / s.ms);
-    const e = ease(u);
-    const a = this.#origin(s.from), b = this.#origin(s.to);
-    return { x: Math.round(a.x + (b.x - a.x) * e), y: Math.round(a.y + (b.y - a.y) * e) };
+    const u = s.done ? 1 : Math.min(1, (t - s.t0) / s.ms);
+    if (!s.path) {
+      const e = ease(u);
+      const a = this.#origin(s.from), b = this.#origin(s.to);
+      return { x: Math.round(a.x + (b.x - a.x) * e), y: Math.round(a.y + (b.y - a.y) * e), alpha: 1 };
+    }
+    // THE ICE's chain: a polyline through the path's squares, the glide easing
+    // out to a stop; a fall sinks and fades over the last leg.
+    const pts = s.path.map((sq) => this.#origin(sq));
+    const segs = [];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const L = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      segs.push(L);
+      total += L;
+    }
+    const e = 1 - (1 - u) ** 1.7;
+    let d = total * e;
+    let i = 0;
+    while (i < segs.length - 1 && d > segs[i]) { d -= segs[i]; i++; }
+    const L = segs[i] || 1;
+    const lu = Math.max(0, Math.min(1, d / L));
+    const a = pts[i], b = pts[i + 1];
+    const last = i === segs.length - 1;
+    const alpha = s.fall && last ? Math.max(0, 1 - lu) : 1;
+    const sink = s.fall && last ? Math.round(4 * lu) : 0;
+    return { x: Math.round(a.x + (b.x - a.x) * lu), y: Math.round(a.y + (b.y - a.y) * lu) + sink, alpha };
   }
 
   /** The sliding sprite of a duel slide, drawn at a buffer origin (#slideAt). */
-  #paintSlideAt(s, x, y) {
+  #paintSlideAt(s, x, y, alpha = 1) {
     const k = this.#kindOfSq(s.from);
+    const g = this.bctx;
+    if (alpha <= 0) return;
+    if (alpha < 1) g.globalAlpha = alpha;
     if (k?.furniture) {
       const c = this.cells.get(s.from);
       const { tile, dy } = this.#furnitureSprite(k, this.#hc(c.cell, s.from));
       if (tile) this.#draw(tile, x, y + dy);
-      return;
-    }
-    this.#paintPiece(s.letter, x, y);
+    } else this.#paintPiece(s.letter, x, y);
+    if (alpha < 1) g.globalAlpha = 1;
   }
 
   #paintCellMarks({ idx, x, y, k }) {
@@ -2053,12 +2182,32 @@ export class CanvasBoard {
     for (const a of this.arrows) {
       if (!this.cells.has(a.from) || !this.cells.has(a.to)) continue;
       if (a.from === a.to) {
-        // THE PORTAL SPELL: a cast (a hint, or the enemy's last move) has no
-        // path — a ring on its square in the arrow's own colour and strength.
+        // A CAST has no path. A PROPOSED cast (a hint, a numbered line — the
+        // board does not show the spell yet) is its square FRAMED AT ITS EDGE
+        // with the SPELL'S GLYPH inside, in the arrow's own colour and
+        // strength (THE SPELL GLYPHS, 2026-09-21; pixelarrow.mjs): the
+        // portal's ring, the ice's snowflake — the centre square alone for the
+        // ice too (the first cut framed the whole 3×3 the patch would freeze;
+        // the designer: "way too loud. Just the one center square is fine").
+        // The frame sits on the square's outermost pixels, not a pixel in like
+        // the target marks, so an 11-pixel glyph and its shadow fit inside it
+        // with a pixel of floor around. A PLAYED cast (`played`: the enemy's
+        // last move, the analyzer's ply) is the bare frame alone — the board
+        // shows the spell itself there (the pair's rune ring in its caster's
+        // colour, the ice tiles), and a glyph over the rune ring would hide
+        // the colour that says whose pair it is.
         const o = this.#origin(a.from);
+        const col = arrowColour(a);
         const ga = this.bctx.globalAlpha;
         this.bctx.globalAlpha = Math.max(0.2, Math.min(1, a.strength ?? 1));
-        this.#frame1(o.x, o.y, arrowColour(a), 1);
+        const kind = a.cast === 'ice' || a.cast === 'portal' ? a.cast : null; // no spell named (a pass, an old caller): the bare frame
+        const proposed = !!kind && !a.played;
+        this.#frame1(o.x, o.y, col, 0);
+        if (proposed) {
+          const g = spellOrigin(kind, o.x, o.y, T);
+          drawSpell(this.bctx, kind, g.x, g.y, col);
+        }
+        if (a.label != null) drawText(this.bctx, String(a.label), o.x + 1, o.y + 1, col, '#000000'); // the analyzer's numbered line: the number in the square's corner, inside the frame
         this.bctx.globalAlpha = ga;
         continue;
       }

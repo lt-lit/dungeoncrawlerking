@@ -217,9 +217,10 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #gods-line { color: var(--gods); }
 #hint-line:empty, #gods-line:empty { display: none; }
 /* THE PORTAL SPELL (2026-09-17): the cast button in the player's bar. */
-#btnPortal { font: inherit; text-transform: uppercase; letter-spacing: .06em; padding: .1rem .5rem; border-radius: .3rem; border: 1px solid var(--gods); background: rgba(124, 200, 255, .12); color: var(--gods); cursor: pointer; }
-#btnPortal.active { background: var(--gods); color: #0b0d14; }
-#btnPortal:disabled { opacity: .45; cursor: default; }
+#btnPortal, #btnIce { font: inherit; text-transform: uppercase; letter-spacing: .06em; padding: .1rem .5rem; border-radius: .3rem; border: 1px solid var(--gods); background: rgba(124, 200, 255, .12); color: var(--gods); cursor: pointer; }
+#btnPortal.active, #btnIce.active { background: var(--gods); color: #0b0d14; }
+#btnPortal:disabled, #btnIce:disabled { opacity: .45; cursor: default; }
+#btnIce { margin-left: .3rem; }
 /* The hint LIST (2026-09-07): rank, move and eval per hint — the numbers
    live here, not on the arrows (designer: "I don't think the numbers are
    worth keeping" on the board). A swatch in the rank's arrow colour ties
@@ -232,6 +233,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #hint-line .hint-depth { color: var(--muted); }
 /* THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint that cracks a wall wears the board's own hammer, a canvas painted per rank (main.mjs hammerIcon). */
 #hint-line .hint-hammer { height: 1em; width: auto; image-rendering: pixelated; vertical-align: -.15em; margin-right: .15em; }
+#hint-line .hint-glyph { height: 1em; width: auto; image-rendering: pixelated; vertical-align: -.15em; margin-right: .15em; } /* THE SPELL GLYPHS (2026-09-21): a cast hint's portal ring or ice snowflake, drawn like the hammer */
 
 /* ---------- board ----------
    THE CANVAS BOARD (play/js/canvas-board.mjs, 2026-09-07): one native 16×16

@@ -2590,9 +2590,13 @@ the duel: the pairs and halves ride the FEN's trailing field
   targets, a tap casts through the same path as a piece move, a tap
   elsewhere leaves the spell. The log names what a cast did ("a portal
   opens at e4", "the portals are linked") and where a portal move came out
-  ("through the portal to g7"). A cast in the hint list is a RING on its
-  square in the hint's rank colour, the enemy's cast a red ring (the
-  arrows' `from === to` case, canvas-board `#paintArrows`). A portal move
+  ("through the portal to g7"). A cast in the hint list is marked BY ITS
+  SPELL since 2026-09-21 — the square framed at its edge with the portal's
+  ring inside in the hint's rank colour; the enemy's cast stays a red
+  frame on its square, since the pair's own ring is there to see (the
+  arrows' `from === to` case, canvas-board `#paintArrows`; § "The spell
+  glyphs", below — a bare frame for either spell's hint until then). A
+  portal move
   slides to the portal square and the commit paints the mover on the twin
   (a cut for now).
 - **The board** (`canvas-board.mjs setPortals`, `#paintPortal`,
@@ -2660,6 +2664,208 @@ with"); next the sledgehammer (✅ built the same day, the section below),
 then ice. Held over: the atlas sprite, a
 blink for the teleport, the scroll as an upgrade instead of everyone's,
 world-persistent portals, a god rung that opens one.
+
+## The ice spell (2026-09-20)
+
+Brief §4.9 (the designer: "Time to implement a spell that creates a 3x3
+ice patch… I intend for there to be oil and ice in the game, so they will
+likely share the slip logic… when a sliding piece bumps into another piece
+on the ice, it should transfer the momentum… give each side one cast per
+game for now"; the rulings the same day — the stop rule, the pit, the
+kings, the shapes — are there in full). The engine half is
+`engine/patches/ice.patch`, the eighth patch (`engine/README.md` § "The
+ice patch"); this is the game half.
+
+- **The rule in one sentence:** a piece whose move ends on a slippery
+  square slides on in the direction it moved until it is not on ice any
+  more, or until a wall, a crate, the edge or a piece stops it; a piece it
+  hits standing on ice takes the momentum and slides on the same way; a
+  pit swallows what slides into it; a portal square on the way is a
+  landing. `play/js/ice.mjs` (`slideOutcome`) mirrors the engine's physics
+  on the grid — the mover's step, then each shoved piece's, a fall named by
+  its pit, a portal landing with its swap, a pawn's promotion where it
+  stops — and `phase0/harness/test-ice-game.mjs` holds it to ffish's own
+  board after every slide on the engine gate's fixtures and 1,142 random
+  slides (42 checks), the selftest again on the deal variant.
+- **The glyph:** `fen.mjs PIT` `_` — the engine's own hole, told from
+  bedrock `#` since a sliding piece falls into one; `isTerrain` / `isWall`
+  know it. `world.mjs` spells a HOLE `_` in every crop FEN and stage grid
+  (bedrock and the map's edge stay `#`; `writeArena` reads `_` with or
+  without the ledger), `crumbleFilter collapseFen` and the Director's
+  terminal crumble write `_`, `board-ui classifyCell` reads it as a hole
+  whatever the ledger says, the report prints it `O`. Old logs and crops
+  keep loading: a `#` (or a `*`) the ledger names is a pit as ever.
+- **The field:** `parsePortalField` reads the `~sq` entries beside the
+  pairs and halves (`slick`); `slickSquares(fen)` is the set that slides
+  (the portal squares taken out, the engine's `slick_effective`);
+  `withSlick` builds a fixture; `castLetter(uci)` tells `I@e5` from `O@e5`.
+- **The deal:** `variant.mjs ICE_SCROLL` `i`, one a side (`ICE_SCROLLS_PER_SIDE`),
+  `iceIniKeys(ranks)` — the custom immobile piece, `iceScroll`, the cast
+  rows as the piece's mobility region: `iceCastRanks`, the board's two
+  MIDDLE ranks (5–6 on the box, 4–5 on the selftest's 8), so a patch never
+  comes nearer than two rows to a king row — `spellIniKeys` composes the
+  portal's and the ice's keys with ONE value line for every scroll,
+  `spellPocket` the holdings (`[IOOioo]`), `dealVariant(..., { ice })` the
+  suffix `__ice` (rule 7). `dealMatchup`, `planBox` and `planBarrier`
+  take `ice`; main.mjs `iceOn()` (`options.ice`, Options → Spells "Ice
+  spell", `?ice=off`).
+- **The record:** duel.mjs reads the slide off the board before the move
+  and every state carries `slide: { dir, steps }`; `castKind` names the
+  cast `ice` (one ply, cold to the meter like a portal cast); a king that
+  slid into a pit ends the duel with termination `pit` (the end overlay's
+  own words); `mustLink` is specific to the PORTAL cast now, so an ice
+  scroll in hand never reads as a link ply.
+- **The gods:** `blocked.slick` — no displacement lands on a slippery
+  square and no pit opens under one (reason `slick`); a piece may be
+  moved off the ice.
+- **The page** (main.mjs): the ❄ Ice button beside the Portal button
+  shares the cast path — `app.castMode` is the spell's KIND now
+  (`'portal'` | `'ice'` | null, `SPELLS` the letters and buttons),
+  `castTargets(kind)` / `scrollsLeft(kind)` / `setCastMode(kind)`, a tap on
+  a lit centre casts `I@sq`. A selected piece's RESTING squares light
+  beside its destinations and a tap on one plays the move that slides
+  there (`moveAliases`, which also carries Portals v2's exit alias;
+  `ice.mjs slideAliases`). The move animates leg by leg
+  (`canvas-board animateSlideChain`: the chess move, the glide over the
+  ice easing to a stop, then each shoved piece from where it stood, every
+  finished piece parked at its rest until the chain is over; a fall sinks
+  and fades into the pit). The log says what the slide did
+  (`logreport.mjs slideWords`: "slides to e7", "stops on a4, shoves the
+  knight on a5, which slides to a6", "falls into the pit at h1", "slides
+  into the portal at a5 and out at h7, swapping with the knight there",
+  "… and becomes a queen"; a cast: "the ice is cast: the floor around e5
+  turns slippery"). Arrows end where the piece REST — the enemy's last
+  move (`lastMoveArrows`, with a short red arrow for every piece it
+  shoved) and the hints (`slideRest`); a portal landing's arrow ends on
+  the entry as ever. A cast hint — the ice's or a portal's — is marked by
+  its spell since 2026-09-21 (§ "The spell glyphs", below: the snowflake
+  on the centre square, framed at its edge).
+- **The board:** `canvas-board setSlick(squares)` paints THE ICE TILE over
+  each slippery square's own flagstone in the flat pass, under the rings,
+  the debris and the pieces — a paint-time composite (`#iceTile`: the
+  flagstone pulled toward a cold blue-white, `ICE_TINT` at `ICE_MIX`, a
+  sheen of lighter diagonals, a lighter rim, the dark square's checker
+  baked in), cached per theme, floor variant and shade; no atlas row.
+  `paintWithDebris` sets it from the FEN beside the portals.
+- **The analyzer** (replay.mjs): every state's ice painted from its FEN,
+  the ply's arrow to the resting square with the shoves, a line's first
+  move likewise, the timeline's `❄` words (`logreport timelineLine`).
+- **Gates:** test-ice-game 42, selftest 51/51 headless (the ice check:
+  16 casts on the 8-rank deal's ranks 4–5, I@e4 icing nine squares and
+  spending the scroll, no cast in check, 19 slides on eight fixtures equal
+  to ffish square for square, the shove and its alias, the pit ending the
+  duel and a king that may not slide into his own, engine perft 62 and
+  e1f1 found), ui-smoke 318 ok (THE ICE block, on s73 where the cast rows are open floor: the button with one scroll,
+  cast mode lighting every non-terrain square of ranks 5–6, a tap on a wall
+  leaving it, the cast icing the floor of its 3×3 and spending the scroll,
+  the record's `ice` cast and the log, the ice pixels on the patch and none
+  off it, a king stepping onto the patch and sliding two squares, played
+  through the lit resting square, the state's slide equal to the grid's
+  prediction, the piece at rest after the commit, the log's "Kb5 — slides
+  to b7"; `?ice=off`), facing-walk 108/108, replay-smoke 76, test-logreport 61, test-world 132
+  (the pit glyph in the crop, the stage and back), test-barrier 170 (an
+  ice deal's name, keys, rows and holdings), test-portals-game 27,
+  test-dungeon 96, test-army 131, test-enemy 100, test-camera 80,
+  test-debris 76, test-armygen (on the overlaid pair).
+- **Held over:** oil (the same slip, a difference to design), other ice
+  shapes and floors of ice (the engine takes any set; a writer is a
+  world / stage matter), the ice as an upgrade, a sound and a spray of
+  frost on the cast, the scroll's sprite on the button, a debris mark
+  where a piece fell.
+
+
+**The verdict (designer, 2026-09-24, with the phone log): "Looks like it
+works as far as I can tell" — the ice is in.** The log is the fourth
+committed sample, THE FIRST ICE DUEL (`replay/samples/dck-log_vaults-2-
+t24_s3571496125.json`, `?sample=4`: vaults-2 at walk turn 24, the enemy's
+initiative, restless, Android Firefox, 68 plies, 3 quakes of 65 rolls, 6
+undos, 0 anomalies, 1-0 by checkmate). What it shows: both sides cast the
+ice — the player's `I@d6` at ply 26 ices the eight floor squares of its
+3×3 (e5 is a wall), the enemy's `I@b6` at ply 39 overlaps it (fourteen
+slippery squares); a pawn's double step d3–d5 onto the patch slides on to
+d8 (ply 34), a rook from c9 is stopped on c5 by the pawn on c4 (ply 35);
+the enemy casts its portal pair after the ice, in one turn; both kings
+hammer, the enemy's three times. `test-logreport` (71) reads the casts,
+the slides' words, the field cast by cast and the hammers off it;
+`replay-smoke` (88 ok) opens it in the analyzer — the ice painted on the
+patch's empty squares from the field and none on the wall or beyond it,
+the slide's arrow ending on d8 and the rook's on c5, a played cast the
+bare frame at its edge (gold for the player's, red for the enemy's), the
+frozen pass drawing nothing, the pair's orange rings under the frame.
+
+## The spell glyphs (2026-09-21)
+
+Designer, on the ice build: "On move hints, there's just a square outline
+for both portal and ice. How am I supposed to know what spell it's
+suggesting?" — a cast hint was the same one-pixel frame for either spell
+(canvas-board's `from === to` arrow: the portal spell's "ring" of
+2026-09-17 was that frame). Now a PROPOSED cast — a hint, a cast in the
+analyzer's numbered PV lines: the board does not show the spell yet — is
+marked BY ITS SPELL; a PLAYED cast (the enemy's own cast under the red
+last-move mark, the analyzer's cast ply; arrows flagged `played`) keeps
+the bare frame, because the board shows the spell itself there — the
+pair's rune ring in its caster's colour, the ice tiles — and a glyph over
+the rune ring hid the colour that says whose pair it is (the replay
+smoke's ring-pixel counts caught it on the first cut). THE SECOND CUT,
+the same day, on the designer's verdict of the first ("For the ice patch
+hint, outlines around all 9 tiles is way too loud. Just the one center
+square is fine. Also the icon could use some work" — with a reference: a
+pixel snowflake, six-armed and hexagonal, forked tips, a hollow hub):
+the centre square alone is framed, the snowflake is redrawn to the
+reference, and the glyphs wear a drop shadow instead of the halo.
+
+- **The glyphs** (`pixelarrow.mjs PORTAL_GLYPH` / `ICE_GLYPH`,
+  `SPELL_GLYPHS`, `drawSpell`, `spellOrigin`, `spellGlyphSize`): a PORTAL
+  is a 10×10 ring (the rune ring's own shape); the ICE an 11×11 SNOWFLAKE
+  after the designer's reference — the vertical arm with a forked tip at
+  each end, the four arms at thirty degrees (2:1 pixel steps) with a barb
+  each, a hollow diamond hub; each in the arrow's colour, centred on the
+  cast square (an odd glyph sits the half pixel up and left), with a
+  ONE-PIXEL DROP SHADOW in black, down and right (`SPELL_SHADOW`) — not
+  the arrows' eight-neighbour halo, which fills the gaps between a flake's
+  arms and turned the first cut into a black tile with a gold star on it
+  (the hammer, a solid shape, wears the halo as an outline; a snowflake
+  cannot). Judged on a scratch sheet of candidates at ten times scale
+  beside the reference: the halo, a four-neighbour halo, no halo and the
+  shadow, in the three rank colours.
+- **The board** (`canvas-board #paintArrows`, the cast branch; an arrow's
+  `cast` names the spell, `'ice'` or `'portal'`, never a bare `true` now):
+  a proposed cast is its square FRAMED AT ITS EDGE — `#frame1` at inset 0,
+  the square's outermost pixels, where the target marks sit a pixel in —
+  with the glyph inside (rows 2–12 for the flake, its shadow on 13, a
+  pixel of floor between glyph and frame all round; the ring on rows
+  3–12); an ice cast frames the centre square alone (the first cut framed
+  the 3×3 the patch would freeze, its non-terrain squares — "way too
+  loud"). A from === to arrow with no spell named (a pass) keeps the bare
+  frame. A numbered line's cast (the analyzer's PV) wears its number in
+  the square's top-left corner, inside the frame, over the glyph's edge.
+  Drawn at the arrow's strength, as the frame was. A played cast: the
+  frame at the edge, whatever the spell; it never touches the rune ring
+  (rows and columns 1–14).
+- **The hint list** (main.mjs `spellIcon`, `spellOf`; `.hint-glyph` with
+  `data-spell`, styled like `.hint-hammer`): a cast hint wears its spell's
+  glyph on a small canvas in the rank's arrow colour between the rank and
+  the SAN — drawn, not text, so the line's textContent reads as it always
+  did ("1 I@e5 +0.4"). The enemy's cast (`lastMoveArrows`, `played`) and
+  the analyzer (`replay.mjs moveArrow`, `played`; `pvArrows` — a cast in
+  a line is its glyph numbered like the arrows, a pass in a line draws
+  nothing) name the spell the same way, off the scroll letter
+  (`castLetter`, `ICE_SCROLL` / `PORTAL_SCROLL`; a letter the page does
+  not know is no spell: the bare frame, no icon).
+
+Gates: ui-smoke's ICE block paints an ice cast hint and a plain one
+through the probe's own paint path and reads the list (`1:ice 2:-`, the
+text unchanged), the board's arrows (the spell on the cast), the pixels
+(the flake's top tip and hub in the rank-1 gold, the hub hollow, the
+tip's black shadow, the frame's corner gold with floor inside it, no
+frame on any neighbour, hints off clearing them), and on the `?ice=off`
+page a portal cast (`1:portal 2:-`, the ring gold with its shadow and
+hollow at its centre, the square framed at its edge alone) — ui-smoke
+353 ok / 0 failed on the second cut (383 on the first; the count moves
+with the random driver); replay-smoke 76 ok / 0 failed and the selftest
+51/51 headless re-run green. The verdict came 2026-09-24 with the first
+ice duel's log (designer: "Looks like it works as far as I can tell") —
+the second cut is in.
 
 ## Portals v4.1 — two rows off the king rows (2026-09-20)
 

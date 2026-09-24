@@ -1299,7 +1299,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await settle();
     const holes = K.app.duel ? [...K.app.duel.director.holes] : [];
     out.second = { ok: !!plan2?.ok, error: plan2?.error ?? null, files: plan2?.stage?.files, ranks: plan2?.stage?.ranks, pit, holes, authored: K.app.duel?.director.authoredTerrain ?? null, fenHasPit: null };
-    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('#'); // WALL KINDS: a pit is a '#'
+    if (plan2?.ok && pit) out.second.fenHasPit = board(K.app.duel.fen()).includes('_'); // THE PIT (the ice, 2026-09-20): a hole is the engine's own '_' (a '#' from wall-kinds until then)
     out.lost = { ended: await K.walk.concede('white'), label: document.getElementById('btnWalkOut').textContent };
     document.getElementById('btnWalkOut').click();
     for (let i = 0; i < 100 && K.app.phase !== 'setup'; i++) await new Promise((r) => setTimeout(r, 30));
@@ -1733,6 +1733,256 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs9.length === 0, `no page errors with the portal pictures on the page${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
   await page9.close();
 }
+// --- THE ICE (2026-09-20; brief §4.9; engine/patches/ice.patch): on a fresh
+// duel the Ice button shows one scroll; the button enters CAST MODE with the
+// centres lit — every non-terrain square of the middle rows (5 and 6 on the
+// 10-rank box), occupied or not — and a tap on a wall leaves it; a tap on a
+// lit square casts through the piece-move path: the field gains its `~`
+// entries (the floor of the 3×3), the scroll is spent, the record's state is
+// a one-ply `ice` cast, the log says so, the button goes, and the board
+// PAINTS THE ICE (blue-cold pixels over the flagstones of the patch, none
+// off it). Then, within a few plies, a legal move onto the ice: the tap plays
+// it, the state carries the slide (the mover's resting square holds the
+// piece after the commit), the log says where it slid, and the enemy's own
+// slides draw their red arrow to the resting square. With `?ice=off` the
+// button never shows and no scroll is in hand.
+{
+  // The block runs on a stage whose middle is open (`--icestage`, s73 by default: the cast rows 5–6 are floor, so a pawn on
+  // rank 4 pushes onto the patch and slides); s59's cast rows are walls but for a corner, and no pawn can enter a patch there.
+  const ICE_STAGE = arg('icestage', 's73-the-tower-room');
+  const page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errs11 = [];
+  page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
+  await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
+  await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
+  // supposed to know what spell it's suggesting?"): an ICE cast hint is its square framed at its edge with the SNOWFLAKE
+  // inside in the rank's colour (pixelarrow.mjs ICE_GLYPH, 11×11 at rows 2–12, a black drop shadow down and right, a hollow
+  // hub) — the centre square alone (the designer, on the first cut's framed 3×3: "way too loud. Just the one center square is
+  // fine"), so no neighbour is framed — and the hint list wears the snowflake before the SAN (a canvas per cast hint,
+  // `.hint-glyph` with `data-spell`; the line's text unchanged); a plain hint carries none; hints off clears them. Lines
+  // injected through the probe's own paint path; a cast is drawn at its strength (full here).
+  const ig = await page11.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const grid = () => K.app.duel.fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks, files = K.app.boardUI.files;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (f + df >= 0 && f + df < files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
+    const terrain = (sq) => /[*#^_]/.test(at(sq));
+    const cheb = (a, b) => Math.max(Math.abs(a.charCodeAt(0) - b.charCodeAt(0)), Math.abs(rankOf(a) - rankOf(b)));
+    const legal = K.app.duel.legalMoves();
+    const casts = legal.filter((m) => /^I@/.test(m)).map((m) => m.slice(2));
+    const centre = casts.find((c) => around(c).some(terrain)) ?? casts[0]; // a patch with terrain in it when there is one: the frame must skip it
+    const plain = legal.find((m) => UCI.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m)); // any ordinary move: the control
+    const ends = [plain.match(UCI)[1], plain.match(UCI)[2]];
+    K.paintHints([{ rank: 1, move: `I@${centre}`, score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: plain, score: { type: 'cp', value: 40 }, depth: 9 }], 2);
+    const out = { centre, plain, casts: casts.length, line: document.getElementById('hint-line').textContent, plainSan: K.app.duel.board.sanMove(plain) };
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => `${s.dataset.rank}:${s.querySelector('canvas.hint-glyph')?.dataset.spell ?? '-'}`);
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.cast ? `:${a.cast}` : ''}`);
+    K.renderer.paintNow();
+    const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    out.centrePx = { tip: px(centre, 7, 2), hub: px(centre, 6, 7), hollow: px(centre, 7, 7), shadow: px(centre, 8, 3), frame: px(centre, 0, 0), inset: px(centre, 1, 1) }; // the top tip, the hub's left vertex, the hollow centre, the tip's shadow, the frame's corner, the floor inside it
+    out.beside = around(centre).filter((s) => s !== centre && !terrain(s) && ends.every((e) => cheb(s, e) >= 2)).map((s) => [s, px(s, 0, 0), px(s, 1, 1)]); // the neighbours, clear of the plain arrow: no frame on them
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  const GOLD = '242,193,78,255';
+  expect(ig.icons.join(' ') === '1:ice 2:-', `the snowflake icon sits on the ice hint alone (${ig.icons.join(' ')})`);
+  expect(/^1 \S*@\S+ \+0\.4 · 2 .+ \+0\.4 · d9$/.test(ig.line), `the hint list reads as ever, the cast by its SAN ("${ig.line}")`);
+  expect(ig.arrows.join(' ') === `${ig.plain} ${ig.centre}${ig.centre}:ice`, `the board's cast hint carries its spell, worst to best (${ig.arrows.join(' ')})`);
+  expect(ig.centrePx.tip === GOLD && ig.centrePx.hub === GOLD && ig.centrePx.hollow !== GOLD && ig.centrePx.hollow !== '0,0,0,255' && ig.centrePx.shadow === '0,0,0,255', `${ig.centre} wears the rank-1 snowflake: its top tip and its hub gold, the hub hollow, a black drop shadow (${Object.values(ig.centrePx).join(' / ')})`);
+  expect(ig.centrePx.frame === GOLD && ig.centrePx.inset !== GOLD, `the square is framed at its edge, floor inside the frame (${ig.centrePx.frame} / ${ig.centrePx.inset})`);
+  expect(ig.beside.length > 0 && ig.beside.every(([, a, b]) => a !== GOLD && b !== GOLD), `the centre square alone is framed — none of its neighbours (${ig.beside.map(([s]) => s).join(' ')})`);
+  expect(ig.cleared === 0, 'hints off clears the spell marks with the arrows');
+  const ic = await page11.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const fen = () => K.app.duel.fen();
+    const field = () => fen().match(/\{([^}]*)\}/)?.[1] ?? '';
+    const holdings = () => fen().match(/\[([^\]]*)\]/)?.[1] ?? '';
+    const grid = () => fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const lit = () => [...K.app.boardUI.marks.targets];
+    const icy = (sq) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i + 3] === 255 && px[i + 2] > px[i] + 40 && px[i + 2] > px[i + 1] + 10) n++; return n; }; // cold pixels: blue well over red
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent);
+    const btn = document.getElementById('btnIce');
+    const out = { hidden0: btn.hidden, text0: btn.textContent.trim(), disabled0: btn.disabled, holdings0: holdings(), portalHidden0: document.getElementById('btnPortal').hidden };
+    btn.click();
+    out.castMode = K.ice.castMode();
+    const L0 = lit();
+    out.litN = L0.length;
+    out.litRows = [...new Set(L0.map(rankOf))].sort((a, b) => a - b);
+    out.litTerrain = L0.filter((sq) => /[*#^_]/.test(at(sq))).length;
+    out.litMiddleFloor = grid().flatMap((row, i) => row.map((c, f) => ({ sq: String.fromCharCode(97 + f) + (ranks - i), c }))).filter((x) => [Math.floor(ranks / 2), Math.floor(ranks / 2) + 1].includes(rankOf(x.sq)) && !/[*#^_]/.test(x.c)).length;
+    const wall = [...K.app.boardUI.cells.keys()].find((sq) => at(sq) === '*' && !L0.includes(sq));
+    K.tap(wall);
+    out.leftAfterWallTap = !K.ice.castMode() && lit().length === 0;
+    btn.click();
+    // The cast: a lit square whose 3×3 has as much bare floor as possible (the ice reads on empty flagstones).
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
+    const floorAround = (sq) => around(sq).filter((s) => at(s) === '.').length;
+    // …with the most ENTRIES — a patch square a pawn can push onto from the floor south of it (a pawn's push onto ice is always a
+    // slide; a rider runs over ice without stopping) — then the most floor, then nearest the player's pieces.
+    const sqOf = (f, r) => String.fromCharCode(97 + f) + r;
+    const south = (sq, n = 1) => sqOf(sq.charCodeAt(0) - 97, rankOf(sq) - n);
+    const inPatch = (c, sq) => Math.abs(sq.charCodeAt(0) - c.charCodeAt(0)) <= 1 && Math.abs(rankOf(sq) - rankOf(c)) <= 1;
+    const entriesOf = (c) => around(c).filter((s) => at(s) !== '?' && !/[*#^_]/.test(at(s)) && rankOf(s) >= 3 && !inPatch(c, south(s)) && at(south(s)) === '.' && at(south(s, 2)) === '.').map((s) => south(s));
+    const whites = grid().flatMap((row, i) => row.map((c, f) => ({ f, r: ranks - i, c }))).filter((x) => /[A-Z]/.test(x.c));
+    const nearWhite = (sq) => Math.min(...whites.map((w) => Math.max(Math.abs(w.f - (sq.charCodeAt(0) - 97)), Math.abs(w.r - rankOf(sq)))));
+    const score = (c) => entriesOf(c).length * 100 + floorAround(c) * 10 - nearWhite(c);
+    const centre = [...lit()].sort((a, b) => score(b) - score(a))[0];
+    const entries = entriesOf(centre); // the squares south of the patch a pawn pushes from
+    out.entries = entries;
+    out.centre = centre;
+    out.patchExpected = around(centre).filter((s) => !/[*#^_]/.test(at(s))).sort();
+    out.icyBefore = around(centre).filter((s) => at(s) === '.').map((s) => [s, icy(s)]);
+    K.tap(centre);
+    await settle();
+    out.fieldA = field();
+    out.slickA = K.ice.slick().sort();
+    out.holdingsA = holdings();
+    out.hiddenA = btn.hidden;
+    out.castsA = K.app.duel.record.states.map((s) => s.cast ?? null).filter(Boolean);
+    out.logA = logLines().filter((l) => /ice/i.test(l));
+    out.stateA = K.app.duel.state;
+    out.icyAfter = out.icyBefore.map(([s]) => [s, icy(s)]);
+    out.icyOff = [...K.app.boardUI.cells.keys()].filter((s) => at(s) === '.' && !out.slickA.includes(s)).slice(0, 12).map((s) => [s, icy(s)]);
+    // A slide in play: the first legal move of the player's that slides, within a few plies.
+    out.slide = null;
+    out.enemySlide = null;
+    for (let ply = 0; ply < 40 && K.app.duel.state === 'playing' && !out.slide; ply++) {
+      await settle();
+      if (K.app.duel.state !== 'playing') break;
+      if (K.app.duel.turnColor() !== 'white') { await settle(); continue; }
+      const legal = K.app.duel.legalMoves().filter((m) => /^[a-l](?:10|[1-9])[a-l](?:10|[1-9])[a-z]?$/.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m));
+      // A move that really slides: the mover leaves the square it entered, or shoves somebody (a piece entering ice at the board's edge stops where it is).
+      const moving = (o) => o.steps[0].to !== o.steps[0].from || o.steps.length > 1;
+      const cands = legal.map((m) => [m, K.ice.outcome(m)]).filter(([, o]) => o && moving(o) && !o.steps.some((s) => s.pit && s.piece.toLowerCase() === 'k'));
+      if (cands.length) {
+        const [m, o] = cands.sort((a, b) => b[1].steps.length - a[1].steps.length)[0];
+        const from = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/)[1];
+        const to = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/)[2];
+        const rest = o.steps[0].landing?.entry ?? o.steps[0].to ?? o.steps[0].pit;
+        K.tap(from);
+        const aliases = K.ice.aliases(from);
+        const litNow = lit();
+        const aliasLit = rest !== to && litNow.includes(rest);
+        const useAlias = aliasLit && aliases.some(([sq]) => sq === rest);
+        const before = K.app.duel.record.states.length;
+        K.tap(useAlias ? rest : to);
+        await settle();
+        const st = K.app.duel.record.states[before] ?? null;
+        out.slide = { move: m, from, to, rest, aliasLit, useAlias, predicted: o.steps, recorded: st?.slide ?? null, san: K.app.duel.record.sans[before - 1] ?? null, played: K.app.duel.record.moves[before - 1] ?? null, pieceAtRest: st ? (() => { const g = st.fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/'); const r = parseInt(rest.slice(1), 10); const row = g[g.length - r]; let f = 0; for (const ch of row) { if (/\d/.test(ch)) f += parseInt(ch, 10); else { if (f === rest.charCodeAt(0) - 97) return ch; f++; } } return '.'; })() : null, log: logLines().filter((l) => /slides|stops on|shoves|falls into|portal/.test(l)).slice(-1)[0] ?? null, state: K.app.duel.state };
+      } else {
+        // Walk toward the ice: a PAWN toward an entry square first (its push onto the patch is a slide), the king next, the rest last.
+        const goals = entries.length ? entries : K.ice.slick();
+        const dist = (sq) => Math.min(...goals.map((s) => Math.max(Math.abs(s.charCodeAt(0) - sq.charCodeAt(0)), Math.abs(rankOf(s) - rankOf(sq)))));
+        const scored = legal.map((m) => { const p = m.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/); const pc = at(p[1]); return [m, dist(p[2]) + (pc === 'P' ? 0 : pc === 'K' ? 4 : 8)]; }).sort((a, b) => a[1] - b[1]);
+        await K.playerMove(scored[0][0]);
+      }
+    }
+    // The enemy's slides, if any so far: their red arrow ends where the piece rests.
+    const st = K.app.duel.record.states;
+    for (let i = st.length - 1; i >= 1; i--) {
+      if (st[i].mover === 'engine' && st[i].slide) {
+        out.enemySlide = { ply: st[i].ply, move: st[i].move, steps: st[i].slide.steps, isLast: i === st.length - 1, arrows: i === st.length - 1 ? K.renderer.arrows.filter((a) => a.kind === 'last').map((a) => `${a.from}${a.to}`) : null };
+        break;
+      }
+    }
+    out.state = K.app.duel.state;
+    return out;
+  });
+  expect(!ic.hidden0 && /×1/.test(ic.text0) && !ic.disabled0 && /I/.test(ic.holdings0) && ic.portalHidden0, `the Ice button shows on the player's turn with one scroll (${ic.text0}${ic.hidden0 ? ', hidden' : ''}${ic.disabled0 ? ', disabled' : ''}; holdings [${ic.holdings0}], the portal button hidden under ?portals=off)`);
+  expect(ic.castMode === 'ice' && ic.litN > 0 && ic.litRows.join(',') === '5,6' && ic.litTerrain === 0 && ic.litN === ic.litMiddleFloor, `the button enters ice cast mode with ${ic.litN} centres lit — every non-terrain square of ranks ${ic.litRows.join(' and ')} (${ic.litMiddleFloor} such squares, ${ic.litTerrain} on terrain)`);
+  expect(ic.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
+  expect(ic.fieldA.split(',').filter((e) => e.startsWith('~')).length === ic.patchExpected.length && JSON.stringify(ic.slickA) === JSON.stringify(ic.patchExpected), `the cast at ${ic.centre} ices the floor of its 3×3: {${ic.fieldA}} (${ic.patchExpected.length} squares)`);
+  expect(!/I/.test(ic.holdingsA) && /i/.test(ic.holdingsA) && ic.hiddenA, `the scroll is spent and the button goes (holdings [${ic.holdingsA}]${ic.hiddenA ? '' : ', the button still shows'})`);
+  expect(ic.castsA[0] === 'ice' && ic.logA.some((l) => /the ice is cast/.test(l)), `the record's state is a one-ply ice cast and the log says so (${ic.castsA.join(',')}; "${ic.logA[0] ?? ''}")`);
+  expect(ic.icyAfter.every(([, n]) => n >= 60) && ic.icyBefore.every(([, n]) => n < 20), `the patch's empty squares paint the ice — cold pixels ${ic.icyAfter.map(([s, n]) => `${s}:${n}`).join(' ')} of 256 (before: ${ic.icyBefore.map(([, n]) => n).join(' ')})`);
+  expect(ic.icyOff.every(([, n]) => n < 20), `no ice off the patch (${ic.icyOff.map(([s, n]) => `${s}:${n}`).join(' ')})`);
+  if (ic.slide) {
+    const s = ic.slide;
+    expect(s.recorded && JSON.stringify(s.recorded.steps) === JSON.stringify(s.predicted) && s.played.startsWith(s.from + s.to), `the tap plays ${s.move} (${s.san}) and the state records the slide the grid predicted (${s.predicted.map((x) => `${x.piece} ${x.from}→${x.to ?? `pit ${x.pit}`}`).join(', ')}${s.useAlias ? ', played through the resting square' : ''})`);
+    expect(s.predicted[0].pit ? s.pieceAtRest === '.' || s.pieceAtRest === '_' : /[A-Z]/.test(s.pieceAtRest ?? ''), `after the commit the piece stands where it came to rest, ${s.rest} (${s.pieceAtRest})`);
+    expect(s.log && /slides to|stops on|shoves|falls into|portal/.test(s.log), `the log says what the slide did ("${s.log}")`);
+    if (s.rest !== s.to) expect(s.aliasLit, `the resting square ${s.rest} lit beside the destination ${s.to}`);
+  } else expect(true, `no player slide came up in the plies played (${ic.state}) — the physics stand on the selftest and the Node gate`);
+  if (ic.enemySlide) {
+    const e = ic.enemySlide;
+    if (e.isLast) expect(e.arrows.some((a) => a === `${e.move.slice(0, 2)}${e.steps[0].landing?.entry ?? e.steps[0].to ?? e.steps[0].pit}`), `the enemy's slide ${e.move} draws its red arrow to the resting square (${e.arrows.join(' ')})`);
+    else expect(true, `the enemy slid at ply ${e.ply} (${e.move}: ${e.steps.map((x) => `${x.from}→${x.to ?? `pit ${x.pit}`}`).join(', ')})`);
+  } else expect(true, 'the enemy did not slide in these plies');
+  expect(errs11.length === 0, `no page errors with the ice${errs11.length ? ` — ${errs11.join(' | ')}` : ''}`);
+  await page11.close();
+  // ?ice=off: no scroll, no button
+  const page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
+  await page12.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const off = await page12.evaluate(() => ({ hidden: document.getElementById('btnIce').hidden, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
+  expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no Ice button, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
+  // THE SPELL GLYPHS, the portal's: on this page (portals on) a PORTAL cast hint is its square framed at its edge with the
+  // RING inside — hollow, in the rank's colour with the black drop shadow — and nothing framed beside it; the list wears the ring.
+  const ip = await page12.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const grid = () => K.app.duel.fen().split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = grid(); const f = sq.charCodeAt(0) - 97; const r = parseInt(sq.slice(1), 10); return g[g.length - r]?.[f] ?? '?'; };
+    const ranks = K.app.boardUI.ranks, files = K.app.boardUI.files;
+    const rankOf = (sq) => parseInt(sq.slice(1), 10);
+    const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if ((df || dr) && f + df >= 0 && f + df < files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
+    const terrain = (sq) => /[*#^_]/.test(at(sq));
+    const cheb = (a, b) => Math.max(Math.abs(a.charCodeAt(0) - b.charCodeAt(0)), Math.abs(rankOf(a) - rankOf(b)));
+    const legal = K.app.duel.legalMoves();
+    const casts = legal.filter((m) => /^O@/.test(m)).map((m) => m.slice(2));
+    const plain = legal.find((m) => UCI.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m));
+    const ends = [plain.match(UCI)[1], plain.match(UCI)[2]];
+    const centre = casts.find((c) => ends.every((e) => cheb(c, e) >= 3)) ?? casts[0]; // clear of the plain arrow, so its neighbours read clean
+    K.paintHints([{ rank: 1, move: `O@${centre}`, score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: plain, score: { type: 'cp', value: 40 }, depth: 9 }], 2);
+    const out = { centre, plain, casts: casts.length, line: document.getElementById('hint-line').textContent };
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => `${s.dataset.rank}:${s.querySelector('canvas.hint-glyph')?.dataset.spell ?? '-'}`);
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.from}${a.to}${a.cast ? `:${a.cast}` : ''}`);
+    K.renderer.paintNow();
+    const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    out.ring = { top: px(centre, 6, 3), shadow: px(centre, 7, 4), hollow: px(centre, 7, 7), frame: px(centre, 0, 0), inset: px(centre, 1, 1) }; // the ring's top row, its shadow under it, the hollow centre, the frame's corner, the floor inside it
+    out.beside = around(centre).filter((s) => !terrain(s)).map((s) => [s, px(s, 0, 0)]);
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  expect(ip.icons.join(' ') === '1:portal 2:-', `the ring icon sits on the portal hint alone (${ip.icons.join(' ')})`);
+  expect(/^1 \S*@\S+ \+0\.4 · 2 .+ \+0\.4 · d9$/.test(ip.line), `the hint list reads the cast by its SAN ("${ip.line}")`);
+  expect(ip.arrows.join(' ') === `${ip.plain} ${ip.centre}${ip.centre}:portal`, `the board's portal cast hint carries its spell (${ip.arrows.join(' ')})`);
+  expect(ip.ring.top === GOLD && ip.ring.shadow === '0,0,0,255' && ip.ring.hollow !== GOLD && ip.ring.hollow !== '0,0,0,255' && ip.ring.frame === GOLD && ip.ring.inset !== GOLD, `${ip.centre} wears the rank-1 ring: gold with a black drop shadow, hollow at its centre, the square framed at its edge (${Object.values(ip.ring).join(' / ')})`);
+  expect(ip.beside.length > 0 && ip.beside.every(([, c]) => c !== GOLD), `a portal cast frames its square alone (${ip.beside.map(([s]) => s).join(' ')})`);
+  expect(ip.cleared === 0, 'hints off clears the ring with the arrows');
+  await page12.close();
+}
 // --- THE SLEDGEHAMMER (2026-09-17; brief §4.8; engine/patches/wall-kinds.patch
 // + hammer.patch): every king a sledge-king for the stress test. On
 // s65-guard-post seed 1 the kit's king deals at e1 with breakable walls at d1
@@ -1829,7 +2079,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     };
     return out;
   });
-  expect(/__sledge$/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
+  expect(/__sledge/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
   expect(hm.king === 'e1' && hm.walls.length === 2 && hm.walls.includes('d1') && hm.walls.includes('d2'), `the kit's king at ${hm.king} with breakable walls beside him (${hm.walls.join(' ')})`);
   expect(hm.selected === hm.king && hm.wallsLit.length === hm.walls.length, `a tap on the king lights the walls beside him with his moves (${hm.wallsLit.join(' ')} of ${hm.lit.join(' ')})`);
   expect(hm.after.cell === '^' && hm.after.crate && hm.after.king === hm.king && hm.after.hammer === hm.target, `a tap on ${hm.target} cracks it: the state after the ply shows a crate in the ledger, the king still on ${hm.after.king}, the state marked hammer ${hm.after.hammer}`);

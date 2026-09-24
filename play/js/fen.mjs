@@ -1,10 +1,12 @@
 // FEN utilities for largeboard Fairy-Stockfish positions.
 //
 // Handles: multi-digit empty runs (boards up to 12 files), terrain squares
-// (`*` stone wall, `^` furniture), pockets `[...]`, and per-square editing.
+// (`*` stone wall, `#` hard wall, `_` pit, `^` furniture), pockets `[...]`,
+// and per-square editing.
 // The board is represented as a 2D array indexed [rankFromTop][file] where
 // rankFromTop 0 is the highest rank (first FEN rank). Cell values: piece
-// char ('K', 'p', ...), '*' wall, '#' hard wall, '^' furniture, or null for empty.
+// char ('K', 'p', ...), '*' wall, '#' hard wall, '_' pit, '^' furniture, or
+// null for empty.
 
 // THE THREE TERRAIN GLYPHS (brief §4.6, §4.8). '*' is the BREAKABLE wall:
 // the gods' weaken rung and the sledgehammer turn it into '^'. '#' is ANY
@@ -28,6 +30,16 @@
 export const WALL = '*';
 export const FURNITURE = '^';
 export const HARD = '#';
+// THE PIT (2026-09-20, engine/patches/ice.patch; brief §4.9): '_' is a HOLE
+// the engine can tell from bedrock — a square nothing enters by a move (as
+// '#') but that a SLIDING piece falls into and dies in. Before the ice a pit
+// and bedrock shared '#' and the ledger told them apart for the eye alone;
+// the designer's "sliding pieces can fall into holes and die. So I guess we
+// do in fact need to differentiate between holes and indestructible walls"
+// gave the pit its own glyph. A crumble writes '_' now (plus the ledger
+// entry, as ever); every off-map square and every bedrock stays '#'. Old
+// logs still spell a pit '#' (or '*'): the ledger decides what the eye sees.
+export const PIT = '_';
 
 // THE PORTALS (2026-09-17, engine/patches/portals.patch): a cast is a DROP of
 // the portal scroll, `O@e4` for either side (FSF prints the piece letter
@@ -40,10 +52,13 @@ export const isCast = (uci) => CAST_RE.test(uci);
 /** PORTALS v3 (the one-turn cast): a PASS — the king's square twice (`e8e8`): the frozen side's one move, or a cast that fizzles. */
 export const isPass = (uci) => { const m = String(uci ?? '').match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/); return !!m && m[1] === m[2]; };
 
-/** Is this cell terrain (a wall of either kind or furniture)? Safe on null/undefined. */
-export const isTerrain = (c) => c === WALL || c === FURNITURE || c === HARD;
-/** Is this cell a wall of either kind (breakable or hard) — stone, not a crate? */
-export const isWall = (c) => c === WALL || c === HARD;
+/** THE ICE (2026-09-20): the letter a cast drops — 'o' the portal scroll, 'i' the ice scroll — lowercase, or null for a move. */
+export const castLetter = (uci) => { const m = String(uci ?? '').match(CAST_RE); return m ? m[1].toLowerCase() : null; };
+
+/** Is this cell terrain (a wall of either kind, a pit or furniture)? Safe on null/undefined. */
+export const isTerrain = (c) => c === WALL || c === FURNITURE || c === HARD || c === PIT;
+/** Is this cell a wall of either kind or a pit — stone, not a crate, and nothing a piece may enter? */
+export const isWall = (c) => c === WALL || c === HARD || c === PIT;
 
 /** Split a full FEN into its fields. Returns { board, pocket, turn, castling, ep, halfmove, fullmove, rest } */
 export function splitFen(fen) {
@@ -80,8 +95,8 @@ export function parseBoard(boardField) {
         const n = parseInt(rankStr.slice(i, j), 10);
         for (let k = 0; k < n; k++) cells.push(null);
         i = j;
-      } else if (ch === '*' || ch === '^' || ch === '#') {
-        cells.push(ch); // terrain: a breakable wall / furniture / an indestructible obstacle (§4.6, §4.8)
+      } else if (ch === '*' || ch === '^' || ch === '#' || ch === '_') {
+        cells.push(ch); // terrain: a breakable wall / furniture / an indestructible obstacle / a pit (§4.6, §4.8, §4.9)
         i++;
       } else if (ch === '+') {
         // promoted-piece prefix (shogi-style); keep attached to next char
@@ -120,19 +135,27 @@ export function serializeBoard(board) {
 }
 
 /**
- * The portal field of a FEN: `{c3-h8,d1-a9,e4w}` after the move counters —
- * linked pairs (`a-b`) and half-open portals (a square and the colour that
- * opened it, `e4w` / `f6b`). Returns the pairs, the halves by colour, a
- * square → twin map and the set of every square a portal or a half stands
- * on. A FEN without the field parses to the empty shape.
+ * The portal field of a FEN: `{c3-h8,d1-a9,e4w,~e5,~f5}` after the move
+ * counters — linked pairs (`a-b`), half-open portals (a square and the
+ * colour that opened it, `e4w` / `f6b`) and, since THE ICE (2026-09-20),
+ * the SLIPPERY squares (`~e5`). Returns the pairs, the halves by colour, a
+ * square → twin map, the set of every square a portal or a half stands on,
+ * and `slick`: every slippery square as written (a portal square among them
+ * is never slippery in play — the engine's `slick_effective`; `slickAt`
+ * reads that). A FEN without the field parses to the empty shape.
  */
 export function parsePortalField(fen) {
-  const out = { pairs: [], halves: { w: null, b: null }, twin: new Map(), squares: new Set() };
+  const out = { pairs: [], halves: { w: null, b: null }, twin: new Map(), squares: new Set(), slick: new Set() };
   const m = String(fen ?? '').match(/\{([^}]*)\}/);
   if (!m) return out;
   for (const entry of m[1].split(',')) {
     const e = entry.trim();
     if (!e) continue;
+    const ice = e.match(/^~([a-l](?:10|[1-9]))$/);
+    if (ice) {
+      out.slick.add(ice[1]);
+      continue;
+    }
     const pair = e.match(/^([a-l](?:10|[1-9]))-([a-l](?:10|[1-9]))$/);
     if (pair) {
       out.pairs.push([pair[1], pair[2]]);
@@ -156,6 +179,27 @@ export function withPocket(fen, pocket) {
   const f = splitFen(fen);
   f.pocket = pocket;
   return joinFen(f);
+}
+
+/** THE ICE: the slippery squares of a FEN that slide in play — the field's
+ *  `~sq` entries less the portal squares (a portal square is never slippery:
+ *  a slide that reaches one is a landing). */
+export function slickSquares(fen) {
+  const P = parsePortalField(fen);
+  const out = new Set();
+  for (const sq of P.slick) if (!P.squares.has(sq)) out.add(sq);
+  return out;
+}
+
+/** The FEN with these squares slippery (`~sq` entries added to the trailing
+ *  field, the pairs and halves kept) — the test fixtures' builder; in play
+ *  the engine writes the field. */
+export function withSlick(fen, squares) {
+  const P = parsePortalField(fen);
+  const all = new Set([...P.slick, ...squares]);
+  const entries = [...P.pairs.map(([a, b]) => `${a}-${b}`), ...['w', 'b'].filter((s) => P.halves[s]).map((s) => `${P.halves[s]}${s}`), ...[...all].sort((a, b) => squareOrder(a) - squareOrder(b)).map((sq) => `~${sq}`)];
+  const bare = String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim();
+  return entries.length ? `${bare} {${entries.join(',')}}` : bare;
 }
 
 // ---- THE PORTAL SPELL's ledger (2026-09-17 — the designer, on the first

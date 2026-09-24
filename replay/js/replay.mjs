@@ -48,9 +48,10 @@ import { PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_R
 import { CanvasBoard } from '../../play/js/canvas-board.mjs'; // the one renderer (2026-09-07): the 16×16 canvas board, its art off play/img/
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '../../play/js/stage.mjs';
 import { createEngine } from '../../play/js/engine.mjs';
-import { makeCatalogIni } from '../../play/js/variant.mjs';
+import { makeCatalogIni, ICE_SCROLL, PORTAL_SCROLL } from '../../play/js/variant.mjs';
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf, slickSquares } from '../../play/js/fen.mjs';
+import { slideOutcome } from '../../play/js/ice.mjs'; // THE ICE (2026-09-20): a line's first move ends where its piece rests
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
 
@@ -62,8 +63,12 @@ const params = new URLSearchParams(location.search);
 // first three moves, a pawn through the player's portal to the promotion row;
 // 3 — THE FIRST SLEDGE DUEL (2026-09-17, vaults-4 at walk turn 109, the
 // phone): the player's K*e4 at ply 16 (the hammered wall a crate in the
-// gods' ledger from that state on), twenty crumbles written as `#` pits.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json'];
+// gods' ledger from that state on), twenty crumbles written as `#` pits;
+// 4 — THE FIRST ICE DUEL (2026-09-24, vaults-2 at walk turn 24, the phone):
+// both sides cast the ice (the player's I@d6 at ply 26, the enemy's I@b6
+// overlapping it at 39), a pawn's double step sliding on to d8, a rook
+// stopped on c5, the enemy's portal pair after, both kings hammering.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json'];
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;
@@ -358,19 +363,42 @@ function quakeMarksOf(ev) {
   };
 }
 
+/** THE SPELL GLYPHS (2026-09-21): which spell a scroll letter casts — 'ice', 'portal', or null for one the page does not know (the bare frame then). */
+function spellOf(letter) {
+  const l = String(letter ?? '').toLowerCase();
+  return l === ICE_SCROLL ? 'ice' : l === PORTAL_SCROLL ? 'portal' : null;
+}
+
 function moveArrow(st) {
   const p = st?.move?.match(R.UCI_MOVE_RE);
   if (p && p[1] === p[2]) return null; // PORTALS v3: a pass (the frozen side's, or a fizzle) draws nothing
   if (!p) {
-    // THE PORTAL SPELL: a cast has no path — a ring on its square (the board's from === to case), in the mover's colour.
+    // A CAST has no path — the ply's cast is a PLAYED one: the frame on its square in the mover's colour (the board's from === to
+    // case; the state shown carries the spell itself — the pair's ring, the ice — so no glyph over it: THE SPELL GLYPHS, 2026-09-21,
+    // mark PROPOSED casts, the numbered lines' included, `pvArrows`).
     const c = st?.move?.match(CAST_RE);
     if (!c) return null;
-    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: true };
+    const spell = spellOf(c[1]);
+    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: spell, played: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: spell, played: true };
   }
   // Gold is the player's colour, red the enemy's last move (style.css roles).
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
   const hammer = st.hammer ? { hammer: true } : {};
-  return st.mover === 'engine' ? { from: p[1], to: p[2], strength: 1, kind: 'last', ...hammer } : { from: p[1], to: p[2], strength: 0.9, rank: 1, kind: 'hint', ...hammer };
+  // THE ICE (2026-09-20): a slide's arrow ends where the piece came to rest (a portal landing's entry, the pit it fell into).
+  const to = st.slide ? slideRest(st.slide.steps[0]) ?? p[2] : p[2];
+  return st.mover === 'engine' ? { from: p[1], to, strength: 1, kind: 'last', ...hammer } : { from: p[1], to, strength: 0.9, rank: 1, kind: 'hint', ...hammer };
+}
+
+const slideRest = (s) => s?.landing?.entry ?? s?.to ?? s?.pit ?? null;
+
+/** THE ICE: a short arrow for every piece the ply's slide shoved, in the mover's colour. */
+function shoveArrows(st) {
+  const out = [];
+  for (const s of st?.slide?.steps?.slice(1) ?? []) {
+    const to = slideRest(s);
+    if (to && to !== s.from) out.push(st.mover === 'engine' ? { from: s.from, to, strength: 0.6, kind: 'last' } : { from: s.from, to, strength: 0.6, rank: 1, kind: 'hint' });
+  }
+  return out;
 }
 
 const idx = () => R.indexLine(app.line);
@@ -384,7 +412,7 @@ function paint() {
   const st = stateAt(line, ply);
   const i = stateIndexAt(line, ply);
   const res = residueFor(line)[i] ?? { opened: new Set(), rubble: new Set() };
-  const portalsAt = (f) => ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); // THE PORTAL SPELL: each pair in its caster's colour
+  const portalsAt = (f) => { ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); ui.setSlick?.(slickSquares(f)); }; // THE PORTAL SPELL: each pair in its caster's colour; THE ICE: the slippery squares of the position
   const ix = idx();
   const q = ix.quakes.get(ply) ?? null;
   const t = ix.traces.get(ply) ?? null;
@@ -416,7 +444,7 @@ function paint() {
       ui.setPosition(st.fen, { ...ledgers(st), skins: app.skins, ...res });
       const arrows = [];
       const mv = moveArrow(st);
-      if (mv) arrows.push(mv);
+      if (mv) arrows.push(mv, ...shoveArrows(st));
       if (q) {
         const qm = quakeMarksOf(q);
         marks = { ...qm, arrows: [...qm.arrows, ...arrows] };
@@ -513,11 +541,19 @@ function pvArrows(pv, fen) {
   const cracked = new Set(); // THE SLEDGEHAMMER'S GLYPH: a line's first move onto a wall hammers it; a later move onto that square takes the crate
   (pv ?? []).slice(0, 6).forEach((m, j) => {
     const p = String(m).match(R.UCI_MOVE_RE);
-    if (!p) return;
+    if (p && p[1] === p[2]) return; // PORTALS v3: a pass in the line draws nothing
+    if (!p) {
+      // THE SPELL GLYPHS (2026-09-21): a cast in the line is its spell's glyph on its square, numbered like the arrows.
+      const c = String(m).match(CAST_RE);
+      if (c) out.push({ from: c[2], to: c[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), cast: spellOf(c[1]) });
+      return;
+    }
     const hm = hammerOf(fen, `${p[1]}${p[2]}`);
     const hammer = !!hm && !cracked.has(hm);
     if (hammer) cracked.add(hm);
-    out.push({ from: p[1], to: p[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
+    // THE ICE: the line's FIRST move is read on the board shown (the later ones are on boards the line makes) — its arrow ends where the piece rests
+    const to = j === 0 ? slideRest(slideOutcome(fen, m)?.steps?.[0]) ?? p[2] : p[2];
+    out.push({ from: p[1], to, strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), ...(hammer ? { hammer: true } : {}) });
   });
   return out;
 }

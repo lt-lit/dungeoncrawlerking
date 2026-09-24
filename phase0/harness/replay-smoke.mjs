@@ -418,6 +418,57 @@ expect(/K\*e4/.test(sl.e4after.line ?? ''), `the ply line reads the hammer's SAN
 expect(sl.last.holes === 20 && sl.last.pits === 20 && sl.last.bedrock === 0 && sl.last.cls0?.includes('hole'), `the final board: every # is a pit the ledger names — ${sl.last.pits} holes painted, ${sl.last.bedrock} bedrock (${sl.last.hole0}: ${(sl.last.cls0 ?? []).filter((c) => /hole|bedrock|wall/.test(c)).join(' ')})`);
 await shot('10-sledge', true);
 
+// ------------------------------------------------------------- THE ICE (2026-09-24): the fourth sample — the first ice duel, the designer's phone log — paints the ice on the patch from the field, the slide's arrow to the resting square, a played cast as the bare frame at its edge
+await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=4&fx=0`);
+await page.evaluate(() => window.__DCK.ready);
+const ic = await page.evaluate(async () => {
+  const Rp = window.__DCK.replay;
+  await Rp.boardReady();
+  const at = (ply) => { Rp.goto(ply); return Rp.view; };
+  const field = (fen) => fen.match(/\{([^}]*)\}/)?.[1] ?? '';
+  const cold = (sq) => { const p = Rp.pixels(sq); if (!p) return -1; let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i + 3] === 255 && p[i + 2] > p[i] + 40 && p[i + 2] > p[i + 1] + 10) n++; return n; }; // cold pixels: blue well over red (ui-smoke's rule)
+  const px = (sq, c, r) => { const p = Rp.pixels(sq); if (!p) return null; const i = (r * 16 + c) * 4; return [p[i], p[i + 1], p[i + 2]]; };
+  const count = (sq, rgb) => { const p = Rp.pixels(sq); if (!p) return -1; let n = 0; for (let i = 0; i < p.length; i += 4) if (p[i] === rgb[0] && p[i + 1] === rgb[1] && p[i + 2] === rgb[2] && p[i + 3] === 255) n++; return n; };
+  const grid = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+  const occ = (fen, sq) => { const g = grid(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+  const out = { stage: Rp.view.stage, plies: Rp.view.plies };
+  let v = at(25);
+  out.before = { field: field(v.fen), d6: cold('d6'), c7: cold('c7') };
+  v = at(26);
+  const patch = ['c5', 'd5', 'c6', 'd6', 'e6', 'c7', 'd7', 'e7'];
+  out.cast = { field: field(v.fen), line: v.plyLine, empty: patch.filter((s) => occ(v.fen, s) === '.').map((s) => [s, cold(s)]), e5: [occ(v.fen, 'e5'), cold('e5')], d8: cold('d8'), arrows: v.marks?.arrows ?? null, frame: px('d6', 0, 0), inside: px('d6', 1, 1), tip: px('d6', 7, 2) };
+  v = at(34);
+  out.slide = { line: v.plyLine, arrows: v.marks?.arrows ?? null, d8: occ(v.fen, 'd8'), d5: occ(v.fen, 'd5') };
+  v = at(35);
+  out.stop = { line: v.plyLine, arrows: v.marks?.arrows ?? null, c5: occ(v.fen, 'c5'), c4: occ(v.fen, 'c4') };
+  v = at(39);
+  out.enemy = { field: field(v.fen), line: v.plyLine, a5: [occ(v.fen, 'a5'), cold('a5')], b7: [occ(v.fen, 'b7'), cold('b7')], frame: px('b6', 0, 0), inside: px('b6', 1, 1), tip: px('b6', 7, 2), arrows: v.marks?.arrows ?? null };
+  v = at(43);
+  out.pair = { field: field(v.fen), f4: count('f4', [0xff, 0x9a, 0x2e]), c8: count('c8', [0xff, 0x9a, 0x2e]), frame: px('f4', 0, 0), arrows: v.marks?.arrows ?? null };
+  v = at(42);
+  out.pass = { line: v.plyLine, arrows: v.marks?.arrows ?? null };
+  return out;
+});
+expect(/^vaults-2/.test(ic.stage) && ic.plies === 68, `?sample=4 opens the first ice duel (${ic.stage}, ${ic.plies} plies)`);
+expect(ic.before.field === '' && ic.before.d6 < 20 && ic.before.c7 < 20, `ply 25: no ice yet (${ic.before.d6} / ${ic.before.c7} cold pixels on d6 / c7)`);
+expect(ic.cast.field === '~c5,~d5,~c6,~d6,~e6,~c7,~d7,~e7' && ic.cast.empty.length >= 5 && ic.cast.empty.every(([, n]) => n >= 60) && ic.cast.e5[0] === '*' && ic.cast.e5[1] < 20 && ic.cast.d8 < 20, `ply 26: the player's I@d6 paints the ice on the patch's empty squares (${ic.cast.empty.map(([s, n]) => `${s}:${n}`).join(' ')}) and none on the wall e5 (${ic.cast.e5[1]}) or beyond it (d8 ${ic.cast.d8})`);
+{
+  const gold = (p) => !!p && p[0] > 150 && p[1] > 110 && p[2] < 110 && p[0] > p[2] + 60;
+  const red = (p) => !!p && p[0] > 170 && p[1] < 120 && p[2] < 120;
+  const a = (ic.cast.arrows ?? []).find((x) => x.from === 'd6' && x.to === 'd6');
+  expect(!!a && a.cast === 'ice' && a.played === true, `ply 26: the ply's mark is a played ice cast on d6 (${JSON.stringify(a)})`);
+  expect(gold(ic.cast.frame) && !gold(ic.cast.inside) && !gold(ic.cast.tip), `ply 26: a played cast is the bare frame at the square's edge, no glyph over the ice (corner ${ic.cast.frame}, inside ${ic.cast.inside}, where the flake's tip would be ${ic.cast.tip})`);
+  const b = (ic.enemy.arrows ?? []).find((x) => x.from === 'b6' && x.to === 'b6');
+  expect(!!b && b.cast === 'ice' && b.played === true && red(ic.enemy.frame) && !red(ic.enemy.inside) && !red(ic.enemy.tip), `ply 39: the enemy's I@b6 is a red frame at the edge and nothing inside (corner ${ic.enemy.frame}, inside ${ic.enemy.inside}, tip ${ic.enemy.tip})`);
+  expect(red(ic.pair.frame), `ply 43: the enemy's link at f4 wears the red frame (${ic.pair.frame})`);
+}
+expect(ic.enemy.field.split(',').filter((e) => e.startsWith('~')).length === 14 && ic.enemy.a5[0] === '.' && ic.enemy.a5[1] >= 60 && ic.enemy.b7[0] === '.' && ic.enemy.b7[1] >= 60, `ply 39: the enemy's patch overlaps the player's — fourteen slippery squares, the ice on a5 and b7 (${ic.enemy.a5[1]} / ${ic.enemy.b7[1]})`);
+expect(/slides to d8/.test(ic.slide.line ?? '') && (ic.slide.arrows ?? []).some((x) => x.from === 'd3' && x.to === 'd8') && ic.slide.d8 === 'P' && ic.slide.d5 === '.', `ply 34: the pawn's double step onto the ice slides on to d8 — the ply line says so, the arrow ends on d8, the pawn stands there (${ic.slide.line})`);
+expect(/stops on c5/.test(ic.stop.line ?? '') && (ic.stop.arrows ?? []).some((x) => x.from === 'c9' && x.to === 'c5') && ic.stop.c5 === 'r' && ic.stop.c4 === 'P', `ply 35: the rook's slide stops on c5 against the pawn on c4 (${ic.stop.line})`);
+expect((ic.pass.arrows ?? []).length === 0 && /--/.test(ic.pass.line ?? ''), `ply 42: the player's frozen pass draws nothing (${ic.pass.line})`);
+expect(/^f4-c8,~a5/.test(ic.pair.field) && ic.pair.f4 >= 20 && ic.pair.c8 >= 20, `ply 43: the enemy's pair f4-c8 wears the solid orange ring under the frame (${ic.pair.f4} / ${ic.pair.c8} of 36)`);
+await shot('11-ice', true);
+
 expect(pageErrors.length === 0, `no page errors${pageErrors.length ? ` — ${pageErrors.join(' | ')}` : ''}`);
 
 await browser.close();
