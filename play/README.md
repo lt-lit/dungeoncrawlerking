@@ -2773,6 +2773,26 @@ ice patch"); this is the game half.
   frost on the cast, the scroll's sprite on the button, a debris mark
   where a piece fell.
 
+
+**The verdict (designer, 2026-09-24, with the phone log): "Looks like it
+works as far as I can tell" — the ice is in.** The log is the fourth
+committed sample, THE FIRST ICE DUEL (`replay/samples/dck-log_vaults-2-
+t24_s3571496125.json`, `?sample=4`: vaults-2 at walk turn 24, the enemy's
+initiative, restless, Android Firefox, 68 plies, 3 quakes of 65 rolls, 6
+undos, 0 anomalies, 1-0 by checkmate). What it shows: both sides cast the
+ice — the player's `I@d6` at ply 26 ices the eight floor squares of its
+3×3 (e5 is a wall), the enemy's `I@b6` at ply 39 overlaps it (fourteen
+slippery squares); a pawn's double step d3–d5 onto the patch slides on to
+d8 (ply 34), a rook from c9 is stopped on c5 by the pawn on c4 (ply 35);
+the enemy casts its portal pair after the ice, in one turn; both kings
+hammer, the enemy's three times. `test-logreport` (71) reads the casts,
+the slides' words, the field cast by cast and the hammers off it;
+`replay-smoke` (88 ok) opens it in the analyzer — the ice painted on the
+patch's empty squares from the field and none on the wall or beyond it,
+the slide's arrow ending on d8 and the rook's on c5, a played cast the
+bare frame at its edge (gold for the player's, red for the enemy's), the
+frozen pass drawing nothing, the pair's orange rings under the frame.
+
 ## The spell glyphs (2026-09-21)
 
 Designer, on the ice build: "On move hints, there's just a square outline
@@ -2843,7 +2863,9 @@ page a portal cast (`1:portal 2:-`, the ring gold with its shadow and
 hollow at its centre, the square framed at its edge alone) — ui-smoke
 353 ok / 0 failed on the second cut (383 on the first; the count moves
 with the random driver); replay-smoke 76 ok / 0 failed and the selftest
-51/51 headless re-run green.
+51/51 headless re-run green. The verdict came 2026-09-24 with the first
+ice duel's log (designer: "Looks like it works as far as I can tell") —
+the second cut is in.
 
 ## Portals v4.1 — two rows off the king rows (2026-09-20)
 
