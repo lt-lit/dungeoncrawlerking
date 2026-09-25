@@ -142,7 +142,7 @@
     <!-- The player's bar also carries the hint list and the gods line (the
          last quake, held until the player moves) — folded in rather than
          a new row, to protect the board's height budget on a phone. -->
-    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><button id="btnPortal" hidden title="cast a portal: pick a square; the second cast links it to the first">&#9678; Portal <span id="btnPortalN"></span></button><button id="btnIce" hidden title="cast ice: pick the centre of a 3×3 patch on the middle rows">&#10052; Ice <span id="btnIceN"></span></button><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
+    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><button id="btnPortal" hidden title="cast a portal: pick a square; the second cast links it to the first">&#9678; Portal <span id="btnPortalN"></span></button><button id="btnIce" hidden title="cast ice: pick the centre of a 3×3 patch on the middle rows">&#10052; Ice <span id="btnIceN"></span></button><!-- THE DECK (2026-09-25): the meta cards (the player's alone, no move spent), the redraw (a turn spent), the pile in order --><button id="btnReveal" class="card-btn" hidden title="Reveal: the oracle's best three lines for this turn — costs no move">&#9737; Reveal <span id="btnRevealN"></span></button><button id="btnUndoCard" class="card-btn" hidden title="Undo: take back your last move and the enemy's reply — costs no move">&#8634; Undo <span id="btnUndoCardN"></span></button><button id="btnMulligan" class="card-btn" hidden title="Redraw: discard your whole hand and draw a new one — this spends your turn">&#8635; Redraw</button><span id="deck-line"></span><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
     <div id="preview-controls" hidden>
       <button id="btnBegin" class="primary">Begin duel</button>
       <button id="btnRedeal">Re-deal</button>
@@ -250,6 +250,17 @@
       <label class="opt sub"><input type="checkbox" id="optEval"> Show eval bar</label>
     </div>
     <h2>Spells</h2>
+    <!-- THE DECK (2026-09-25; brief §4.10): spells as cards — a starter deck
+         shuffled at every duel, a hand of four drawn up to at the start of
+         each turn, both decks and hands visible; or the stress-test set the
+         spells shipped with (every spell in hand, no deck). -->
+    <label class="opt">Deck
+      <select id="optDeck">
+        <option value="adept" selected>Adept — 3 portals, 3 ice, Reveal, Undo</option>
+        <option value="off">Everything, no deck (the stress-test set)</option>
+      </select>
+    </label>
+    <span class="opt-hint">A hand of four, drawn up to at the start of each of your turns; the enemy's deck scales with its width. Reveal and Undo cost no move; Redraw spends the turn.</span>
     <!-- THE PORTAL SPELL (2026-09-17): everyone has it for the stress test;
          an upgrade later. One pair per side per duel, cast in two turns. -->
     <label class="opt"><input type="checkbox" id="optPortals"> Portal spell — each side may cast one pair of portals per duel</label>

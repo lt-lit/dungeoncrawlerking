@@ -24,11 +24,11 @@ import { World } from './world.mjs';
 import { Army } from './army.mjs';
 import { serializeEnemy, loadEnemy } from './enemy.mjs';
 
-export const RUN_SCHEMA = 'dck-run/5'; // 5 (2026-09-17, wall kinds): the floor's terrain rows spell a breakable wall '*' and bedrock '#' (the ring), a pit 'O' as ever — the old '#' = wall reading is gone; 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor; 3 (2026-09-10, milestone 6): THE ENEMIES ride in the floor's entry (state, last-seen cell, seed), the pending duel names its enemy and axis; 4 (2026-09-11, the wanderers): an enemy carries its mode and its roam (the waypoint, the pause, the draw count), the pending duel the enemy's standing row
+export const RUN_SCHEMA = 'dck-run/6'; // 6 (2026-09-25, THE DECK): the run carries the player's deck — `deck: { starter, cards }`, the collection every duel shuffles and deals a hand of four from; 5 (2026-09-17, wall kinds): the floor's terrain rows spell a breakable wall '*' and bedrock '#' (the ring), a pit 'O' as ever — the old '#' = wall reading is gone; 2 (2026-09-09, the controls session): the inputs are world-relative (`step { df, dr }`, `face { facing }`), the army carries its anchor; 3 (2026-09-10, milestone 6): THE ENEMIES ride in the floor's entry (state, last-seen cell, seed), the pending duel names its enemy and axis; 4 (2026-09-11, the wanderers): an enemy carries its mode and its roam (the waypoint, the pause, the draw count), the pending duel the enemy's standing row
 export const RUN_KEY = 'dck.run.v1';
 
 /** A fresh run object from its parts. */
-export function newRun({ id = null, seed, worldId, world, army, enemies = [], build = null, options = null } = {}) {
+export function newRun({ id = null, seed, worldId, world, army, enemies = [], build = null, options = null, deck = null } = {}) {
   const now = new Date().toISOString();
   const es = enemies.map(serializeEnemy);
   return {
@@ -45,6 +45,11 @@ export function newRun({ id = null, seed, worldId, world, army, enemies = [], bu
     turn: 0,
     turns: [],
     options,
+    // THE DECK (2026-09-25): the player's cards for the run — a starter's name
+    // and the list; every duel shuffles them by its own seed and deals a hand
+    // of four, spent cards come back for the next duel (the deck is the
+    // collection, the duel's deck state lives in the duel's record).
+    deck: deck ? { starter: deck.starter ?? null, cards: [...(deck.cards ?? [])], fixed: !!deck.fixed } : null,
   };
 }
 

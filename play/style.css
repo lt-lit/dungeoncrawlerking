@@ -217,10 +217,16 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 #gods-line { color: var(--gods); }
 #hint-line:empty, #gods-line:empty { display: none; }
 /* THE PORTAL SPELL (2026-09-17): the cast button in the player's bar. */
-#btnPortal, #btnIce { font: inherit; text-transform: uppercase; letter-spacing: .06em; padding: .1rem .5rem; border-radius: .3rem; border: 1px solid var(--gods); background: rgba(124, 200, 255, .12); color: var(--gods); cursor: pointer; }
+#btnPortal, #btnIce, .card-btn { font: inherit; text-transform: uppercase; letter-spacing: .06em; padding: .1rem .5rem; border-radius: .3rem; border: 1px solid var(--gods); background: rgba(124, 200, 255, .12); color: var(--gods); cursor: pointer; }
 #btnPortal.active, #btnIce.active { background: var(--gods); color: #0b0d14; }
-#btnPortal:disabled, #btnIce:disabled { opacity: .45; cursor: default; }
-#btnIce { margin-left: .3rem; }
+#btnPortal:disabled, #btnIce:disabled, .card-btn:disabled { opacity: .45; cursor: default; }
+#btnIce, .card-btn { margin-left: .3rem; }
+/* THE DECK (2026-09-25): the meta cards' buttons wear the spell buttons' look in the hint gold (they never reach the engine); the pile reads in mono, muted. */
+.card-btn { border-color: var(--gold); color: var(--gold); background: rgba(255, 214, 102, .1); }
+#btnMulligan { border-color: var(--muted); color: var(--muted); background: transparent; }
+#deck-line { text-transform: none; letter-spacing: 0; font-family: ui-monospace, monospace; color: var(--muted); }
+#deck-line:empty { display: none; }
+#duel-log .deck { color: var(--gold); }
 /* The hint LIST (2026-09-07): rank, move and eval per hint — the numbers
    live here, not on the arrows (designer: "I don't think the numbers are
    worth keeping" on the board). A swatch in the rank's arrow colour ties

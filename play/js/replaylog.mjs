@@ -78,6 +78,10 @@ export function buildLog({ duel, session = null, meta = {} }) {
     variant: d.variantName,
     variantIni: deal?.variantIni ?? null, // the deal's own rules, so the log replays without the catalog
     startFen: d.startFen,
+    // THE DECK (2026-09-25): both decks as shuffled for this duel, before the
+    // opening draw — with the states' per-ply `deck` (hand / pile / spent)
+    // and `metaPlays` below, the cards replay from the record.
+    decks: session?.decks0 ?? null,
     // The engine's limits — what every recorded search and probe ran under.
     go: d.go,
     mateGo: d.mateGo,
@@ -111,6 +115,7 @@ export function buildLog({ duel, session = null, meta = {} }) {
     quakeTraces: r.quakeTraces, // every ply's roll trace — inputs, timing, gate verdict, protected census
     attempts: r.attempts, // v4.3 compositions the eval gate rejected, in full
     anomalies: r.anomalies,
+    metaPlays: r.metaPlays ?? [], // THE DECK: every Reveal / Undo card played (ply, side, kind)
     log: r.log, // what the player was told
     flags: r.flags, // what the player marked
     // UNDO history: every branch is the tail an undo cut off (the same arrays

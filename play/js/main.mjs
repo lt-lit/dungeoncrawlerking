@@ -37,6 +37,7 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
+import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, openHands, glyphsOf, parseDeckParam, cloneDecks } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
@@ -239,7 +240,10 @@ function computeDeal() {
   const stage = currentStage();
   if (!stage) return { ok: false, error: 'pick a stage' };
   try {
-    return dealMatchup({
+    // THE DECK: the setup page deals both sides the chosen starter — the enemy its spells alone — shuffled by the master seed.
+    const spec = deckSpec();
+    const dk = spec ? dealDecks(setup.seed | 0 || 1, spec.cards, enemyCards(spec.cards), { fixed: spec.fixed }) : null;
+    const deal = dealMatchup({
       stage,
       flip: setup.flip,
       cropTop: setup.cropTop | 0,
@@ -248,11 +252,18 @@ function computeDeal() {
       black: sideSpec('black'),
       seed: setup.seed | 0 || 1,
       turn: setup.turn === 'b' ? 'b' : 'w',
-      portals: portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns
+      portals: dk ? dk.portals : portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns (with a deck: declared when either deck holds it)
       hammer: hammerOn(), // THE SLEDGEHAMMER: every king may crack an adjacent wall
-      ice: iceOn(), // THE ICE: one 3×3 patch per side
+      ice: dk ? dk.ice : iceOn(), // THE ICE: one 3×3 patch per side (with a deck: as above)
+      pocket: dk?.pocket ?? null, // THE DECK: the opening hands' scrolls
       ffish: app.ffish,
     });
+    if (deal.ok && dk) {
+      deal.decks = dk.decks;
+      deal.decks0 = dk.decks0;
+      deal.deckSpec = { starter: spec.starter, cards: spec.cards, fixed: !!spec.fixed };
+    }
+    return deal;
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -269,6 +280,9 @@ function makeSession(deal) {
     playerColor: 'white', // the player ALWAYS holds White (designer rule);
     enemyColor: 'black', // initiative is the deal's turn field, not a seat swap
     deal,
+    // THE DECK: both deck states after the opening draw (the controller refills from them), and as shuffled (the log).
+    decks: deal.decks ?? null,
+    decks0: deal.decks0 ?? null,
     // Knob snapshot at deal time — the export stays truthful even if the
     // setup panel is edited while this duel runs.
     specs: { white: { ...setup.white }, black: { ...setup.black } },
@@ -293,7 +307,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, hammer: true, ice: true };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, hammer: true, ice: true, deck: DEFAULT_STARTER };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -327,6 +341,7 @@ function loadOptions() {
     options.portals = options.portals !== false; // THE PORTAL SPELL (2026-09-17): everyone has it unless switched off
     options.hammer = options.hammer !== false; // THE SLEDGEHAMMER (2026-09-17): every king a sledge-king unless switched off
     options.ice = options.ice !== false; // THE ICE (2026-09-20): everyone has one ice scroll unless switched off
+    if (!(options.deck === 'off' || STARTER_DECKS[options.deck])) options.deck = DEFAULT_STARTER; // THE DECK (2026-09-25): a starter's name, or 'off' for the old stress-test set (every spell in hand, no deck)
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
     options.arrowWidth = Math.round(clampNum(options.arrowWidth, ARROW_WIDTH_RANGE, ARROW_STYLE_DEFAULT.width));
@@ -384,6 +399,33 @@ const hammerOn = () => params.get('hammer') !== 'off' && options.hammer !== fals
 // THE ICE (2026-09-20): one ice scroll a side, every duel — the stress test;
 // an upgrade later. `?ice=off` for a duel without it.
 const iceOn = () => params.get('ice') !== 'off' && options.ice !== false;
+// THE DECK (2026-09-25; brief §4.10): the cards a duel is dealt from —
+// `?deck=off|<starter>|<kind,kind,…>` over Options → Spells → Deck. Null =
+// no deck (every spell in hand, the stress-test set the spells shipped with).
+function deckSpec() {
+  const p = parseDeckParam(params.get('deck'));
+  if (p) return p.off ? null : { starter: p.starter, cards: p.cards, fixed: !!p.fixed };
+  if (options.deck === 'off') return null;
+  return { starter: options.deck, cards: starterCards(options.deck) ?? starterCards(DEFAULT_STARTER), fixed: false };
+}
+/** A deck's cards under the spell switches: `?portals=off` / `?ice=off` (and the options) take a kind out of every deck. */
+function deckCardsOf(cards) {
+  return (cards ?? []).filter((k) => (k !== 'portal' || portalsOn()) && (k !== 'ice' || iceOn()));
+}
+/** Both decks for one duel — shuffled by the deal's seed (deck.mjs deckSeeds), the opening hands drawn — as
+ *  { pocket (the holdings the deal writes), decks (after the draw), decks0 (as shuffled, for the log), portals, ice
+ *  (the kinds either deck holds, so the deal's variant declares them) }, or null without a player's deck. */
+function dealDecks(dealSeed, playerCards, enemyCardList, { fixed = false } = {}) {
+  if (!playerCards) return null;
+  const seeds = deckSeeds(dealSeed);
+  const decks = { w: newDeckState(deckCardsOf(playerCards), seeds.w, { fixed }), b: newDeckState(deckCardsOf(enemyCardList), seeds.b) };
+  const decks0 = cloneDecks(decks);
+  const { pocket } = openHands(decks, HAND_SIZE);
+  const all = [...decks0.w.pile, ...decks0.b.pile];
+  return { pocket, decks, decks0, portals: all.includes('portal'), ice: all.includes('ice') };
+}
+// THE DECK's Reveal card: played this ply, the oracle's lines show as Cheater Mode's hints would, for this turn alone.
+const revealOn = () => !!app.duel && app.duel.state === 'playing' && app.reveal === app.duel.ply;
 const cheatEval = () => options.cheat && options.evalBar;
 const cheatUndo = () => options.cheat && options.undo;
 // The Gods debug overlay (Phase 1.2) is a tuning instrument, not a cheat —
@@ -395,6 +437,7 @@ function syncOptionsUI() {
   $('optPortals').checked = options.portals !== false;
   $('optHammer').checked = options.hammer !== false;
   $('optIce').checked = options.ice !== false;
+  $('optDeck').value = options.deck === 'off' || STARTER_DECKS[options.deck] ? options.deck : DEFAULT_STARTER; // THE DECK
   $('optHints').checked = options.hints;
   $('optHintN').value = String(options.hintN);
   $('optHintCont').checked = !!options.hintCont;
@@ -931,7 +974,7 @@ function applyOptions() {
   remountBoard(); // a scaling change remounts the board
   applyTheme();
   applyDebrisOptions(); // after the theme: the debris is that theme's pixels
-  if (!cheatHints()) {
+  if (!cheatHints() && !revealOn()) {
     clearHints();
     if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
   }
@@ -1001,7 +1044,7 @@ async function cancelCheatSearch() {
 
 async function runCheatSearch() {
   if (!app.duel || app.duel.state !== 'playing' || app.busy) return;
-  if (!(cheatHints() || cheatEval())) return;
+  if (!(cheatHints() || cheatEval() || revealOn())) return; // THE DECK: a Reveal card played this ply asks for the lines too
   if (app.duel.turnColor() !== app.session.playerColor) return;
   await cancelCheatSearch();
   // Re-check after the await: the player's move can land in that gap (it
@@ -1012,7 +1055,7 @@ async function runCheatSearch() {
   const duel = app.duel;
   const engine = app.engine;
   const mySeq = ++cheat.seq;
-  const n = cheatHints() ? options.hintN : 1;
+  const n = revealOn() ? 3 : cheatHints() ? options.hintN : 1; // THE DECK: Reveal shows three lines
   const go = probeGo();
   const mt = go.match(/movetime (\d+)/);
   // Timeout matched to the search (movetime + 4 s) so a doomed probe fails
@@ -1092,7 +1135,7 @@ function applyHintLines(pvs, n, duel, partial) {
   const sorted = [...pvs].filter((pv) => pv.rank <= n).sort((a, b) => a.rank - b.rank);
   if (!sorted.length || sorted[0].rank !== 1) return;
   if (cheatEval()) updateEvalBar(sorted[0].score, app.session.playerColor);
-  if (!cheatHints()) return;
+  if (!cheatHints() && !revealOn()) return; // THE DECK: a Reveal card shows the lines without Cheater Mode
   // Arrow strength scales with how close each move is to the best one
   // (lichess-style): equal → full size, 300cp worse → minimum size. COLOUR
   // carries the rank (board-ui.mjs setArrows), so equal-eval moves still
@@ -1472,10 +1515,13 @@ function updateEvalBar(score, povColor) {
 
 /** Undo (cheat mode): rewind to the player's previous turn — works from a
  *  loss screen too, that being rather the point. */
-async function doUndo() {
-  if (!cheatUndo() || !app.duel || app.busy) return;
+async function doUndo({ card = false } = {}) {
+  // THE DECK: an Undo CARD takes the turn back without Cheater Mode — the card is spent in the restored state, below.
+  if (!(cheatUndo() || card === true) || !app.duel || app.busy) return;
   const duel = app.duel;
   if (duel.state === 'playing' && duel.turnColor() !== app.session.playerColor) return;
+  const me = app.session.playerColor === 'white' ? 'w' : 'b';
+  if (card === true && !(duel.decks?.[me]?.meta ?? []).includes('undo')) return;
   app.busy = true;
   godsBeforeOff({ repaint: false }); // the undo repaints the present itself
   await cancelIdleProbes();
@@ -1484,8 +1530,15 @@ async function doUndo() {
   app.busy = false;
   if (!did) {
     setStatus('nothing to undo');
+    refreshCheatUI();
     return;
   }
+  if (card === true) {
+    // The card goes from the hand of the state the undo restored (the snapshot under it follows, so no later undo hands it back).
+    duel.playMeta(me, 'undo');
+    log($('duel-log'), `${CARDS.undo.glyph} Undo — the last turn is taken back`, 'deck');
+  }
+  app.reveal = null;
   $('overlay').hidden = true;
   app.phase = 'playing';
   app.selectedSquare = null;
@@ -2462,6 +2515,8 @@ async function startDuel(session) {
     seed: intParam('dirseed', deal.directorSeed, 1),
   };
   clearHints();
+  app.reveal = null; // THE DECK: no Reveal played yet
+  app.drawLogged = -1;
   app.quakeMarks = null;
   app.residue = { opened: new Set(), rubble: new Set(), lastFen: null, lastHoles: null, lastCrates: null };
   if (onWorld) {
@@ -2521,6 +2576,9 @@ async function startDuel(session) {
     // gods' own ledgers from ply 0 (seeded before the terrain anchor).
     holes: onWorld ? session.layers.holes : undefined,
     godCrates: onWorld ? session.layers.godCrates : undefined,
+    // THE DECK (2026-09-25): both deck states after the opening draw; the controller draws the side to move up to the hand size at each turn's start.
+    decks: session.decks ?? undefined,
+    handSize: HAND_SIZE,
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
 
@@ -2540,6 +2598,7 @@ async function driveTurn() {
   const duel = app.duel;
   if (!duel || duel.state !== 'playing') return;
   autosaveLog(); // every completed ply lands in the autosave ring
+  logDraw(duel); // THE DECK: what the side to move drew at the start of this turn
   // PORTALS v3 (the one-turn cast, 2026-09-19): a side bound to ONE move — the
   // side an open half FREEZES, or a caster whose half no link can close — has
   // its pass played by the game, no search and no tap; a beat first, so the
@@ -3141,8 +3200,10 @@ function refreshSpellUI() {
   };
   for (const [kind, s] of Object.entries(SPELLS)) {
     const btn = $(s.btn);
-    const n = inDuel ? scrollsLeft(kind) : 0;
-    btn.hidden = !inDuel || n === 0;
+    const scrolls = inDuel ? scrollsLeft(kind) : 0;
+    // THE DECK: the count is CARDS under a deck (a portal card is two scrolls; a half-spent one still a card), scrolls without one.
+    const n = app.session?.decks ? Math.ceil(scrolls / CARDS[kind].scrolls) : scrolls;
+    btn.hidden = !inDuel || scrolls === 0;
     btn.disabled = !mine || !castTargets(kind).length;
     $(`${s.btn}N`).textContent = n ? `×${n}` : '';
     btn.title = titles[kind];
@@ -3151,6 +3212,99 @@ function refreshSpellUI() {
     app.castMode = null;
     for (const s of Object.values(SPELLS)) $(s.btn).classList.remove('active');
   }
+  refreshDeckUI(inDuel, mine);
+}
+
+// ------------------------------------------------------------------ THE DECK
+// (2026-09-25; brief §4.10; play/js/deck.mjs the pure half, duel.mjs the
+// refill and the record.) Spells as cards: a hand of four a side, drawn up
+// to at the start of each turn, both decks and both hands visible. The spell
+// cards ARE the pocket's scrolls, so the spell buttons above are the hand's
+// spells; the META cards — Reveal, Undo — are the player's alone, cost no
+// move and never reach the engine; the redraw spends the turn. The enemy's
+// hand and pile ride its bar. No card is ever valued by a number: the engine
+// casts a card when the cast is its best move and for no other reason.
+
+/** The deck row: the meta cards' buttons, the redraw, the player's pile in order; the enemy's hand and pile in its bar. */
+function refreshDeckUI(inDuel, mine) {
+  const duel = app.duel;
+  const hands = inDuel && app.session?.decks && duel?.decks ? duel.hands() : null;
+  const me = app.session?.playerColor === 'white' ? 'w' : 'b';
+  const foe = me === 'w' ? 'b' : 'w';
+  const meta = hands ? duel.decks[me].meta : [];
+  for (const [kind, id] of [['reveal', 'btnReveal'], ['undo', 'btnUndoCard']]) {
+    const btn = $(id);
+    const n = meta.filter((k) => k === kind).length;
+    btn.hidden = !hands || n === 0;
+    btn.disabled = !mine || (kind === 'reveal' && revealOn()) || (kind === 'undo' && !(duel && duel.ply > 0));
+    $(`${id}N`).textContent = n ? `×${n}` : '';
+  }
+  const mull = $('btnMulligan');
+  mull.hidden = !hands || !mine || !duel.canMulligan();
+  mull.disabled = !mine;
+  const line = $('deck-line');
+  if (!hands) {
+    line.textContent = '';
+    line.title = '';
+  } else {
+    const pile = duel.decks[me].pile;
+    line.textContent = pile.length ? `deck ${glyphsOf(pile)}` : 'deck empty';
+    line.title = pile.length ? `your deck, top first: ${pile.map((k) => CARDS[k].name).join(', ')}` : 'no cards left to draw';
+  }
+  if (hands) {
+    const base = app.session?.deal?.black?.army ? `enemy · black · ${app.session.deal.black.army.value} pts` : 'enemy · black';
+    const eh = hands[foe];
+    const ep = duel.decks[foe].pile;
+    $('enemy-bar').textContent = `${base} · hand ${eh.length ? glyphsOf(eh) : '—'} · deck ${ep.length ? glyphsOf(ep) : '—'}`;
+  }
+}
+
+/** THE DECK: the draw the side to move just made (duel.mjs #refill puts it on the state of record as `drew`), in the log once. */
+function logDraw(duel) {
+  const st = duel.record.states[duel.record.states.length - 1];
+  if (!st?.drew || st.ply !== duel.ply || app.drawLogged === duel.ply) return;
+  app.drawLogged = duel.ply;
+  const me = app.session?.playerColor === 'white' ? 'w' : 'b';
+  const who = st.drew.side === me ? 'you draw' : 'the enemy draws';
+  log($('duel-log'), `${who} ${st.drew.cards.map((k) => `${CARDS[k]?.glyph ?? ''} ${CARDS[k]?.name ?? k}`).join(', ')}`, 'deck');
+}
+
+/** Reveal — the engine's best lines for this turn, no move spent: the card goes and the hint probe runs as Cheater Mode's would, for this ply alone. */
+async function playRevealCard() {
+  const duel = app.duel;
+  if (!duel || duel.state !== 'playing' || app.busy || !app.session || duel.turnColor() !== app.session.playerColor) return false;
+  const me = app.session.playerColor === 'white' ? 'w' : 'b';
+  if (revealOn() || !duel.playMeta(me, 'reveal')) return false;
+  app.reveal = duel.ply;
+  log($('duel-log'), `${CARDS.reveal.glyph} Reveal — the oracle shows its lines for this turn`, 'deck');
+  refreshCheatUI();
+  autosaveLog();
+  void runIdleProbes();
+  return true;
+}
+
+/** The redraw (the mulligan): the hand discarded, a fresh one drawn, the turn spent — duel.mjs mulligan, a pass of the game's own. */
+async function playMulligan() {
+  const duel = app.duel;
+  if (!duel || duel.state !== 'playing' || app.busy || !app.session || duel.turnColor() !== app.session.playerColor || !duel.canMulligan()) return false;
+  app.busy = true;
+  app.boardUI.setInteractive(false);
+  setCastMode(null);
+  app.selectedSquare = null;
+  godsBeforeOff({ repaint: false });
+  await cancelIdleProbes();
+  if (app.duel !== duel || duel.state !== 'playing') return false;
+  const r = await duel.mulligan('player');
+  if (app.duel !== duel) return false;
+  if (!r.ok) {
+    app.busy = false;
+    setStatus('no redraw now');
+    refreshCheatUI();
+    return false;
+  }
+  autosaveLog();
+  if (!r.ended) await driveTurn();
+  return true;
 }
 
 function targetsFor(from) {
@@ -3344,7 +3498,11 @@ async function onMove({ uci, san, mover, ply }) {
   let note = '';
   {
     const P = parsePortalField(duel.fen());
-    if (pass) {
+    if (uci === '--') {
+      // THE DECK: the redraw — a pass of the game's own; the hand that went and the hand that came
+      const m = duel.lastMove?.mulligan;
+      note = ` — ${mover === 'player' ? 'you discard' : 'the enemy discards'} ${m?.discarded?.length ? glyphsOf(m.discarded) : 'nothing'} and ${mover === 'player' ? 'draw' : 'draws'} ${m?.drew?.length ? glyphsOf(m.drew) : 'nothing'}`;
+    } else if (pass) {
       // PORTALS v3: the frozen side's pass, or the caster's fizzle
       note = duel.lastMove?.cast === 'fizzle' ? ' — no square could hold the second portal: the cast fizzles' : mover === 'player' ? " — you are frozen while the enemy's portal opens" : ' — the enemy is frozen while your portal opens';
     } else if (castLetter(uci) === ICE_SCROLL) {
@@ -3630,6 +3788,12 @@ $('btnOptions').addEventListener('click', () => {
 $('btnOptionsClose').addEventListener('click', () => {
   $('options').hidden = true;
 });
+// THE DECK (2026-09-25): the starter deck a duel is dealt from, or the old stress-test set; a change re-deals a live preview (the hands change).
+$('optDeck').addEventListener('change', (e) => {
+  options.deck = STARTER_DECKS[e.target.value] ? e.target.value : 'off';
+  applyOptions();
+  if (app.phase === 'preview' && currentStage()) openStagePreview();
+});
 for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['optIce', 'ice'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
@@ -3638,6 +3802,10 @@ for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['o
 }
 $('btnPortal').addEventListener('click', () => setCastMode(app.castMode === 'portal' ? null : 'portal')); // THE PORTAL SPELL
 $('btnIce').addEventListener('click', () => setCastMode(app.castMode === 'ice' ? null : 'ice')); // THE ICE
+// THE DECK (2026-09-25): the meta cards and the redraw.
+$('btnReveal').addEventListener('click', () => void playRevealCard());
+$('btnUndoCard').addEventListener('click', () => void doUndo({ card: true }));
+$('btnMulligan').addEventListener('click', () => void playMulligan());
 $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
@@ -3988,7 +4156,9 @@ function beginRun(worldJson, { resume = null } = {}) {
       // the digit, its bag drawn from the run's seed, a sentry until it sees
       // the king; `?enemies=off` walks an empty floor (the labs, the smokes).
       enemies = params.get('enemies') === 'off' ? [] : spawnEnemies(world, seed, { mode: params.get('enemies') === 'sentry' ? 'sentry' : 'roam' });
-      run = newRun({ seed, worldId: world.id, world, army, enemies, build: APP_BUILD, options: { army: params.get('army') === 'setup' ? { ...setup.white } : 'kit', enemies: params.get('enemies') === 'off' ? 'off' : 'spawns' } });
+      // THE DECK (2026-09-25): the run's cards — the chosen starter (`?deck=` / Options → Spells → Deck), or none for the old stress-test set.
+      const deckChoice = deckSpec();
+      run = newRun({ seed, worldId: world.id, world, army, enemies, build: APP_BUILD, options: { army: params.get('army') === 'setup' ? { ...setup.white } : 'kit', enemies: params.get('enemies') === 'off' ? 'off' : 'spawns' }, deck: deckChoice ? { starter: deckChoice.starter, cards: deckChoice.cards, fixed: !!deckChoice.fixed } : null });
       saveRun(run);
     }
   } catch (e) {
@@ -4513,6 +4683,8 @@ function makeWorldSession(plan, W, enemyKnobs = setup.black, foe = null) {
     playerColor: 'white', // the player ALWAYS holds White; initiative is the deal's turn field
     enemyColor: 'black',
     deal,
+    decks: deal.decks ?? null, // THE DECK: both deck states after the opening draw, and as shuffled
+    decks0: deal.decks0 ?? null,
     specs: { white: { ...setup.white }, black: { ...enemyKnobs } },
     kind: 'world',
 
@@ -4617,9 +4789,19 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
       applyTurn(W.world, W.army, pv);
       pivoted = true;
     }
+    // THE DECK (2026-09-25): the run's cards shuffled by this duel's seed; the enemy's deck by its width, drawn from ITS seed
+    // (a map enemy's deck is its own for the run; the debug button's drawn enemy takes the deal's) — the opening hands'
+    // scrolls go into the deal's holdings, and the deal's variant declares the kinds either deck holds.
+    const enemyWidth = foe ? foe.width : (enemyKnobs.width | 0);
+    const dk = run.deck?.cards ? dealDecks(dealSeed, run.deck.cards, enemyDeck(enemyWidth, foe ? childSeed(run.seed >>> 0, `enemy-deck:${foe.id}`) : dealSeed), { fixed: !!run.deck.fixed }) : null;
+    const spells = { portals: dk ? dk.portals : portalsOn(), hammer: hammerOn(), ice: dk ? dk.ice : iceOn(), pocket: dk?.pocket ?? null };
     const plan = enemyFile !== null && enemyFile !== undefined
-      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn(), ice: iceOn() })
-      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, portals: portalsOn(), hammer: hammerOn(), ice: iceOn() });
+      ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, ...spells })
+      : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, ...spells });
+    if (plan.ok && dk) {
+      plan.deal.decks = dk.decks;
+      plan.deal.decks0 = dk.decks0;
+    }
     if (!plan.ok) {
       if (pivoted) {
         W.world = World.load(snapshot.world);
@@ -5434,6 +5616,19 @@ window.__DCK = {
   /** A tap on a square of the duel board, as the pointer would (the cast mode's targets included). */
   tap: (sq) => onSquareTap(sq),
   /** THE ICE (2026-09-20): the slide a move would make on the live board, and a piece's move aliases (the resting squares lit beside its destinations). */
+  // THE DECK (2026-09-25): the hands as the player sees them, the deck states, the cards' plays — the smoke's surface.
+  deck: {
+    spec: () => deckSpec(),
+    hands: () => app.duel?.hands() ?? null,
+    decks: () => cloneDecks(app.duel?.decks ?? null),
+    reveal: () => playRevealCard(),
+    undo: () => doUndo({ card: true }),
+    mulligan: () => playMulligan(),
+    canMulligan: () => !!app.duel?.canMulligan?.(),
+    revealOn: () => revealOn(),
+    run: () => app.walk?.run?.deck ?? null,
+    CARDS,
+  },
   ice: {
     outcome: (uci) => (app.duel ? slideOutcome(app.duel.fen(), uci) : null),
     aliases: (from) => (app.duel ? [...moveAliases(app.duel.fen(), from, targetsFor(from))] : []),
