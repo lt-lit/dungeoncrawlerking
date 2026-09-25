@@ -2570,7 +2570,12 @@ so because it's objectively the best move… If we don't like how often the
 engine plays spells, the answer is to change how the spells work"). Stage 1
 of the staging in the brief: the deck, no engine change. The stages after
 it (terrain edits, timers and piece states, materials and fire, physics and
-the run layer) are forge sessions of their own.
+the run layer) are forge sessions of their own — and THE FIRST OF THEM,
+Phase 3.3 (discussed 2026-09-25, brief §4.10 "Phase 3.3"), moves the deck
+itself into the engine before any terrain card: the pile in the FEN, the
+draw inside `do_move`, the hand as slot letters bound to catalog IDs, the
+mulligan as an engine move, the "You Win" test card as the horizon
+instrument, and NO CARD IN CHECK but Undo and Reveal.
 
 - **The idea in one sentence:** a shuffled deck both sides can read is
   perfect information — random once at the deal, like the floor — and the
@@ -2578,6 +2583,11 @@ the run layer) are forge sessions of their own.
   does not do natively is draw, and under draw-to-hand-size the hand it
   sees is next turn's hand but for the card it casts, so the game refilling
   the pocket between plies is nearly as good as a draw inside the engine.
+  `[OVERRULED 2026-09-25 — brief §4.10 "Phase 3.3": "nearly" is not the
+  standard ("The engine playing OPTIMALLY is non-negotiable"); the pile
+  goes into the FEN and the draw INSIDE the engine's move, the mulligan
+  becomes an engine move, and `#refill` retires with the first forge of
+  3.3. What follows describes the build as it stands.]`
 - **`js/deck.mjs`, the pure half.** `CARDS` is the catalog: `ice` (the ice
   scroll, one letter), `portal` (the pair's two scrolls), `reveal` and
   `undo` (meta cards — the player's alone, they cost no move and never reach
