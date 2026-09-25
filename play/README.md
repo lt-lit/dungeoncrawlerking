@@ -2674,6 +2674,10 @@ the run layer) are forge sessions of their own.
   on s59, Adept against a 3-wide enemy, depth 8 / 300 ms, gods off: the deck
   side cast on 5% of its castable turns, the enemy on 6%, every enemy cast
   while behind).
+- **Next: Phase 3.2, THE CARD UI** (brief §4.10 "The card UI" is the
+  proposal; §10 numbers the rest of Phase 3): the hand as a fan of cards,
+  drag to cast, the enemy's hand face-up, the piles, the redraw from the
+  deck. The buttons above are stage 1's stand-in.
 
 ## The portal spell (2026-09-17)
 
