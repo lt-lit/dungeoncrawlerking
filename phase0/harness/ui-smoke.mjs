@@ -56,6 +56,21 @@ await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
 const failures = [];
 const notes = [];
+let bootRetries = 0;
+/** A duel page's boot: wait for the duel to be playing. THE BOOT HANG (2026-09-25): three long runs saw a page never
+ *  reach 'playing' after 120 s while twelve isolated boots of the same URLs took 3.5 s each — so a page that has not
+ *  booted in 90 s is RELOADED once and waited for again; the retry is counted on the summary line, never hidden. */
+const bootWait = async (page) => {
+  try {
+    await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 90000 });
+  } catch (e) {
+    if (!/Timeout/.test(String(e))) throw e;
+    bootRetries++;
+    process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${(await page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`).catch(() => '?'))}) — reloading\n`);
+    await page.reload();
+    await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  }
+};
 const expect = (ok, what) => {
   process.stderr.write(`${ok ? 'ok ' : 'BAD'} ${what}\n`); // streamed as they land, so a hang is locatable
   if (ok) notes.push(`ok  ${what}`);
@@ -86,7 +101,7 @@ const q = new URLSearchParams({
   // idle window and would delay the hints this smoke times.
 });
 await page.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`);
-await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+await bootWait(page);
 // Cheater Mode + hints ON through the options surface (persisted, so the
 // probe fires on the very next player turn).
 await page.evaluate(() => {
@@ -949,7 +964,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   page2.on('pageerror', (e) => errs2.push(String(e).split('\n')[0]));
   const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', ...(THEME ? { theme: THEME } : {}) });
   await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`);
-  await page2.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page2);
   await page2.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const fl = await page2.evaluate(async () => {
     const K = window.__DCK;
@@ -985,7 +1000,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   page3.on('pageerror', (e) => errs3.push(String(e).split('\n')[0]));
   const q3 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', zoom: '12', viewport: 'screen', debris: 'off', fx: '0', ...(THEME ? { theme: THEME } : {}) });
   await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`);
-  await page3.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page3);
   await page3.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const win = await page3.evaluate(async () => {
     const K = window.__DCK;
@@ -1507,7 +1522,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs8 = [];
   page8.on('pageerror', (e) => errs8.push(String(e).split('\n')[0]));
   await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  await page8.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page8);
   await page8.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const ps = await page8.evaluate(async () => {
     const K = window.__DCK;
@@ -1631,7 +1646,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page9);
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const v2 = await page9.evaluate(async () => {
     const K = window.__DCK;
@@ -1757,7 +1772,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs11 = [];
   page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
   await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
-  await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page11);
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
   // supposed to know what spell it's suggesting?"): an ICE cast hint is its square framed at its edge with the SNOWFLAKE
@@ -1940,7 +1955,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // ?ice=off: no scroll, no button
   const page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
-  await page12.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page12);
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await page12.evaluate(() => ({ hidden: window.__DCK.cards.info('ice').n === 0, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
   expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no ice card in the fan, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
@@ -2006,7 +2021,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
   await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`);
-  await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page9);
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
   // in the list (a canvas per hammer hint, in the rank's colour, between the
@@ -2096,7 +2111,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // Plain kings: `?hammer=off` — the same tap lights no wall and the deal is plain.
   const page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page9b.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`);
-  await page9b.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(page9b);
   await page9b.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // (With plain kings the king at e1 has no move at all here — the walls, his own pawns and rook box him in — so nothing lights; the engine's list is the proof.)
   const plain = await page9b.evaluate(() => { const K = window.__DCK; K.tap('e1'); const lit = [...K.app.boardUI.marks.targets]; const legal = K.app.duel.legalMoves(); return { variant: K.app.duel.variantName, lit, walls: lit.filter((s) => ['d1', 'd2'].includes(s)), hammers: legal.filter((m) => m === 'e1d1' || m === 'e1d2'), legal: legal.length }; });
@@ -2175,7 +2190,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errsD = [];
   pageD.on('pageerror', (e) => errsD.push(String(e).split('\n')[0]));
   await pageD.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
-  await pageD.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(pageD);
   await pageD.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const dk = await pageD.evaluate(async () => {
     const K = window.__DCK;
@@ -2296,7 +2311,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // `?deck=off`: the stress-test set, nothing of the deck on screen
   const pageE = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await pageE.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`);
-  await pageE.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(pageE);
   await pageE.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck }));
   expect(off.spec === null && off.hands === null && off.holdings === 'IOOioo' && JSON.stringify(off.fan) === '["ice","portal"]' && off.piles === null && JSON.stringify(off.enemy) === '["ice","portal"]' && off.enemyPile === null, `?deck=off is the stress-test set: holdings ${off.holdings}, the fan the two spells in hand and no piles, the enemy's two minis and no stack`);
@@ -2355,7 +2370,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errsC = [];
   pageC.on('pageerror', (e) => errsC.push(String(e).split('\n')[0]));
   await pageC.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
-  await pageC.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(pageC);
   await pageC.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   await pageC.evaluate(() => { const o = window.__DCK.options; o.cheat = false; o.hints = false; o.evalBar = false; window.__DCK.applyOptions(); });
   const settleC = () => pageC.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state !== 'playing' || (window.__DCK.app.duel?.turnColor() === window.__DCK.app.session?.playerColor && !window.__DCK.app.busy), null, { timeout: 60000 });
@@ -2445,7 +2460,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errsB = [];
   pageB.on('pageerror', (e) => errsB.push(String(e).split('\n')[0]));
   await pageB.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`);
-  await pageB.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await bootWait(pageB);
   await pageB.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const beat = await pageB.evaluate(async () => {
     const K = window.__DCK;
@@ -2472,5 +2487,5 @@ server.close();
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(`rungs seen: weaken ${seen.weaken} · breach ${seen.breach} · displace ${seen.displace} · crumble ${seen.crumble}`);
-console.log(`SUMMARY: ${notes.length} ok, ${failures.length} failed${SHOTS ? ` — screenshots in ${OUT}` : ''}`);
+console.log(`SUMMARY: ${notes.length} ok, ${failures.length} failed${bootRetries ? `, ${bootRetries} boot retr${bootRetries === 1 ? 'y' : 'ies'}` : ''}${SHOTS ? ` — screenshots in ${OUT}` : ''}`);
 process.exit(failures.length ? 1 : 0);
