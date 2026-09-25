@@ -60,15 +60,22 @@ let bootRetries = 0;
 /** A duel page's boot: wait for the duel to be playing. THE BOOT HANG (2026-09-25): three long runs saw a page never
  *  reach 'playing' after 120 s while twelve isolated boots of the same URLs took 3.5 s each — so a page that has not
  *  booted in 90 s is RELOADED once and waited for again; the retry is counted on the summary line, never hidden. */
-const bootWait = async (page) => {
+const bootWait = async (page, make, url, hook) => {
+  const playing = (p, timeout) => p.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout });
   try {
-    await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 90000 });
+    await playing(page, 90000);
+    return page;
   } catch (e) {
-    if (!/Timeout/.test(String(e))) throw e;
+    if (!/Timeout|closed|crashed/i.test(String(e))) throw e;
     bootRetries++;
-    process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${(await page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`).catch(() => '?'))}) — reloading\n`);
-    await page.reload();
-    await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+    const where = await page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`).catch((err) => `unreachable: ${String(err).split('\n')[0]}`);
+    process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${where}) — a fresh page\n`);
+    await page.close().catch(() => {});
+    const fresh = await make();
+    if (hook) hook(fresh);
+    await fresh.goto(url);
+    await playing(fresh, 120000);
+    return fresh;
   }
 };
 const expect = (ok, what) => {
@@ -79,7 +86,7 @@ const expect = (ok, what) => {
 
 const executablePath = process.env.CHROMIUM ?? (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 const browser = await chromium.launch({ executablePath, args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+let page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0]));
 
@@ -101,7 +108,7 @@ const q = new URLSearchParams({
   // idle window and would delay the hints this smoke times.
 });
 await page.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`);
-await bootWait(page);
+page = await bootWait(page, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`, (p) => p.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0])));
 // Cheater Mode + hints ON through the options surface (persisted, so the
 // probe fires on the very next player turn).
 await page.evaluate(() => {
@@ -959,12 +966,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // --- THE FLIGHT: with motion on, the debris flies before it lands (the
 // board draws the flight's frames; the landing paints the squares). ---
 {
-  const page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs2 = [];
   page2.on('pageerror', (e) => errs2.push(String(e).split('\n')[0]));
   const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', ...(THEME ? { theme: THEME } : {}) });
   await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`);
-  await bootWait(page2);
+  page2 = await bootWait(page2, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`, (p) => p.on('pageerror', (e) => errs2.push(String(e).split('\n')[0])));
   await page2.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const fl = await page2.evaluate(async () => {
     const K = window.__DCK;
@@ -995,12 +1002,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // visible squares hit-testing back through the window, the diag naming the
 // fit — and the duel plays on unchanged.
 {
-  const page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs3 = [];
   page3.on('pageerror', (e) => errs3.push(String(e).split('\n')[0]));
   const q3 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', zoom: '12', viewport: 'screen', debris: 'off', fx: '0', ...(THEME ? { theme: THEME } : {}) });
   await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`);
-  await bootWait(page3);
+  page3 = await bootWait(page3, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`, (p) => p.on('pageerror', (e) => errs3.push(String(e).split('\n')[0])));
   await page3.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const win = await page3.evaluate(async () => {
     const K = window.__DCK;
@@ -1518,11 +1525,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // analyzer, replay-smoke). The debris is off so nothing lands on the rings;
 // hints off so no shaft crosses them.
 {
-  const page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs8 = [];
   page8.on('pageerror', (e) => errs8.push(String(e).split('\n')[0]));
   await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  await bootWait(page8);
+  page8 = await bootWait(page8, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs8.push(String(e).split('\n')[0])));
   await page8.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const ps = await page8.evaluate(async () => {
     const K = window.__DCK;
@@ -1642,11 +1649,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // the alias is read off the live duel when a landing on the player's own pair
 // is on offer.
 {
-  const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  await bootWait(page9);
+  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const v2 = await page9.evaluate(async () => {
     const K = window.__DCK;
@@ -1768,11 +1775,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // The block runs on a stage whose middle is open (`--icestage`, s73 by default: the cast rows 5–6 are floor, so a pawn on
   // rank 4 pushes onto the patch and slides); s59's cast rows are walls but for a corner, and no pawn can enter a patch there.
   const ICE_STAGE = arg('icestage', 's73-the-tower-room');
-  const page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs11 = [];
   page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
   await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
-  await bootWait(page11);
+  page11 = await bootWait(page11, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`, (p) => p.on('pageerror', (e) => errs11.push(String(e).split('\n')[0])));
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
   // supposed to know what spell it's suggesting?"): an ICE cast hint is its square framed at its edge with the SNOWFLAKE
@@ -1953,9 +1960,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs11.length === 0, `no page errors with the ice${errs11.length ? ` — ${errs11.join(' | ')}` : ''}`);
   await page11.close();
   // ?ice=off: no scroll, no button
-  const page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
-  await bootWait(page12);
+  page12 = await bootWait(page12, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`, null);
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await page12.evaluate(() => ({ hidden: window.__DCK.cards.info('ice').n === 0, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
   expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no ice card in the fan, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
@@ -2016,12 +2023,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // a wall beside him by a manual move (ruling 11) — nobody moves, the world's
 // ledger takes the cell, the crate is a capture next, the save carries it.
 {
-  const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
   await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`);
-  await bootWait(page9);
+  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
   // in the list (a canvas per hammer hint, in the rank's colour, between the
@@ -2109,9 +2116,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs9.length === 0, `no page errors with the sledgehammer${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
   await page9.close();
   // Plain kings: `?hammer=off` — the same tap lights no wall and the deal is plain.
-  const page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page9b.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`);
-  await bootWait(page9b);
+  page9b = await bootWait(page9b, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`, null);
   await page9b.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // (With plain kings the king at e1 has no move at all here — the walls, his own pawns and rook box him in — so nothing lights; the engine's list is the proof.)
   const plain = await page9b.evaluate(() => { const K = window.__DCK; K.tap('e1'); const lit = [...K.app.boardUI.marks.targets]; const legal = K.app.duel.legalMoves(); return { variant: K.app.duel.variantName, lit, walls: lit.filter((s) => ['d1', 'd2'].includes(s)), hammers: legal.filter((m) => m === 'e1d1' || m === 'e1d2'), legal: legal.length }; });
@@ -2186,11 +2193,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // and the plays. With `?deck=off` nothing of this shows and the holdings are
 // the stress-test set.
 {
-  const pageD = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageD = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errsD = [];
   pageD.on('pageerror', (e) => errsD.push(String(e).split('\n')[0]));
   await pageD.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
-  await bootWait(pageD);
+  pageD = await bootWait(pageD, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsD.push(String(e).split('\n')[0])));
   await pageD.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const dk = await pageD.evaluate(async () => {
     const K = window.__DCK;
@@ -2309,9 +2316,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageD.close();
 
   // `?deck=off`: the stress-test set, nothing of the deck on screen
-  const pageE = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageE = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await pageE.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`);
-  await bootWait(pageE);
+  pageE = await bootWait(pageE, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`, null);
   await pageE.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck }));
   expect(off.spec === null && off.hands === null && off.holdings === 'IOOioo' && JSON.stringify(off.fan) === '["ice","portal"]' && off.piles === null && JSON.stringify(off.enemy) === '["ice","portal"]' && off.enemyPile === null, `?deck=off is the stress-test set: holdings ${off.holdings}, the fan the two spells in hand and no piles, the enemy's two minis and no stack`);
@@ -2366,11 +2373,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // mode. The enemy's hand is face-up as mini cards in its bar; on the motion
 // page its played card flies to the board and holds for a beat.
 {
-  const pageC = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageC = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errsC = [];
   pageC.on('pageerror', (e) => errsC.push(String(e).split('\n')[0]));
   await pageC.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
-  await bootWait(pageC);
+  pageC = await bootWait(pageC, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsC.push(String(e).split('\n')[0])));
   await pageC.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   await pageC.evaluate(() => { const o = window.__DCK.options; o.cheat = false; o.hints = false; o.evalBar = false; window.__DCK.applyOptions(); });
   const settleC = () => pageC.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state !== 'playing' || (window.__DCK.app.duel?.turnColor() === window.__DCK.app.session?.playerColor && !window.__DCK.app.busy), null, { timeout: 60000 });
@@ -2456,11 +2463,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageC.close();
 
   // THE PLAYED-CARD BEAT on a motion page: the enemy's card flies to the board and holds enlarged (on demand — the engine casts when it likes)
-  const pageB = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageB = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errsB = [];
   pageB.on('pageerror', (e) => errsB.push(String(e).split('\n')[0]));
   await pageB.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`);
-  await bootWait(pageB);
+  pageB = await bootWait(pageB, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`, (p) => p.on('pageerror', (e) => errsB.push(String(e).split('\n')[0])));
   await pageB.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const beat = await pageB.evaluate(async () => {
     const K = window.__DCK;
