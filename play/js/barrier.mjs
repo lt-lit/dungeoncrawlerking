@@ -189,7 +189,7 @@ export function standingCells(army, crop, stage) {
  * }
  * Returns { ok: true, crop, stage, kingFile, enemyFile, axis, deal } or { ok: false, error, reasons }.
  */
-export function planBox(world, army, { enemy, enemyFile = null, axis = null, seed = 1, turn = 'w', ffish = null, attempts = 8, id = null, portals = false, hammer = false, ice = false } = {}) {
+export function planBox(world, army, { enemy, enemyFile = null, axis = null, seed = 1, turn = 'w', ffish = null, attempts = 8, id = null, portals = false, hammer = false, ice = false, pocket = null } = {}) {
   const facing = axis === null || axis === undefined ? army.facing : normFacing(axis);
   const box = boxAt(world, army, facing);
   if (!box.ok) return { ok: false, error: 'the army does not fit the box along this axis', reasons: ['box'] };
@@ -226,7 +226,8 @@ export function planBox(world, army, { enemy, enemyFile = null, axis = null, see
       break;
     }
     const variant = dealVariant(stage.files, stage.ranks, campLineRank(m.white.layout.cells, 1), campLineRank(m.black.layout.cells, -1), { portals, hammer, ice });
-    if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // THE PORTAL SPELL / THE ICE: the scrolls in hand, both sides
+    if (pocket !== null && pocket !== undefined) m.fen = withPocket(m.fen, pocket); // THE DECK (2026-09-25): the opening hands' scrolls
+    else if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // THE PORTAL SPELL / THE ICE: the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);
       const lint = lintMatchupFen(ffish, variant.name, m.fen);

@@ -56,6 +56,34 @@ await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
 const failures = [];
 const notes = [];
+let bootRetries = 0;
+/** A duel page's boot: wait for the duel to be playing. THE BOOT HANG (2026-09-25): three long runs saw a page never
+ *  reach 'playing' after 120 s while twelve isolated boots of the same URLs took 3.5 s each — so a page that has not
+ *  booted in 90 s is RELOADED once and waited for again; the retry is counted on the summary line, never hidden. */
+const bootWait = async (page, make, url, hook) => {
+  const playing = (p, timeout) => p.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout });
+  try {
+    await playing(page, 90000);
+    return page;
+  } catch (e) {
+    if (!/Timeout|closed|crashed/i.test(String(e))) throw e;
+    bootRetries++;
+    const where = await page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`).catch((err) => `unreachable: ${String(err).split('\n')[0]}`);
+    process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${where}) — a fresh browser and page\n`);
+    // THE LOST RENDERER (2026-09-25): after a run of pages in one Chromium a new page's target can die at its boot
+    // ("Target page, context or browser has been closed"; 45 boots in one browser reproduced it at the 25th, a fresh
+    // browser boots the same URL in 3.5 s) while the browser itself stays up — so the retry is a NEW BROWSER, not a new
+    // page in the old one. Every boot site's maker reads `browser` when called, so it makes its page in the new one.
+    await page.close().catch(() => {});
+    await browser.close().catch(() => {});
+    browser = await launch();
+    const fresh = await make();
+    if (hook) hook(fresh);
+    await fresh.goto(url);
+    await playing(fresh, 120000);
+    return fresh;
+  }
+};
 const expect = (ok, what) => {
   process.stderr.write(`${ok ? 'ok ' : 'BAD'} ${what}\n`); // streamed as they land, so a hang is locatable
   if (ok) notes.push(`ok  ${what}`);
@@ -63,8 +91,9 @@ const expect = (ok, what) => {
 };
 
 const executablePath = process.env.CHROMIUM ?? (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
-const browser = await chromium.launch({ executablePath, args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+const launch = () => chromium.launch({ executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+let browser = await launch();
+let page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0]));
 
@@ -85,8 +114,8 @@ const q = new URLSearchParams({
   // No gods overlay: its eval-delta probes run BEFORE the hint probe in the
   // idle window and would delay the hints this smoke times.
 });
-await page.goto(`http://127.0.0.1:${PORT}/play/index.html?${q}`);
-await page.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+await page.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`);
+page = await bootWait(page, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`, (p) => p.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0])));
 // Cheater Mode + hints ON through the options surface (persisted, so the
 // probe fires on the very next player turn).
 await page.evaluate(() => {
@@ -944,12 +973,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // --- THE FLIGHT: with motion on, the debris flies before it lands (the
 // board draws the flight's frames; the landing paints the squares). ---
 {
-  const page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs2 = [];
   page2.on('pageerror', (e) => errs2.push(String(e).split('\n')[0]));
   const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', ...(THEME ? { theme: THEME } : {}) });
-  await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?${q2}`);
-  await page2.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`);
+  page2 = await bootWait(page2, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`, (p) => p.on('pageerror', (e) => errs2.push(String(e).split('\n')[0])));
   await page2.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const fl = await page2.evaluate(async () => {
     const K = window.__DCK;
@@ -980,12 +1009,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // visible squares hit-testing back through the window, the diag naming the
 // fit — and the duel plays on unchanged.
 {
-  const page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs3 = [];
   page3.on('pageerror', (e) => errs3.push(String(e).split('\n')[0]));
   const q3 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', zoom: '12', viewport: 'screen', debris: 'off', fx: '0', ...(THEME ? { theme: THEME } : {}) });
-  await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?${q3}`);
-  await page3.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`);
+  page3 = await bootWait(page3, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`, (p) => p.on('pageerror', (e) => errs3.push(String(e).split('\n')[0])));
   await page3.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const win = await page3.evaluate(async () => {
     const K = window.__DCK;
@@ -1025,7 +1054,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // session, 2026-09-09): `?gen=` begins a run on a generated floor; the
 // inputs are WORLD-relative and the facing follows the step (a step in a
 // new direction pivots first), a `face` input turns in place for a move, a
-// wall refuses, the run saves after every turn (schema dck-run/5) and
+// wall refuses, the run saves after every turn (schema dck-run/6) and
 // exports as one object, a tapped piece marks its chess moves WITHOUT
 // moving the camera or the zoom (no box outline since 2026-09-10), the pad's tap turns
 // and the keys face, a DRAG looks around and the next move brings the
@@ -1035,7 +1064,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const page4 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs4 = [];
   page4.on('pageerror', (e) => errs4.push(String(e).split('\n')[0]));
-  await page4.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&fx=0&enemies=off`); // the enemies have their own block below; this one walks an empty floor
+  await page4.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&fx=0&enemies=off`); // the enemies have their own block below; this one walks an empty floor
   await page4.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const wk = await page4.evaluate(async () => {
     const K = window.__DCK;
@@ -1154,7 +1183,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.turn.ok && wk.turn.pivot && wk.turn.state.facing === (wk.start.facing + 1) % 4 && wk.turn.facing === 0 && wk.turn.state.king.f === wk.step.state.king.f && wk.turn.state.king.r === wk.step.state.king.r && wk.turn.state.turn === 2, `a face input pivots the army a quarter right for a move; the king stays and the board stays north-up (army facing ${wk.turn.state.facing}, board ${wk.turn.facing})`);
   expect(wk.wait.ok && wk.wait.turn === 3, 'a wait passes a turn');
   expect(wk.refused.reason === 'blocked' && /blocked/.test(wk.refused.status) && wk.refused.pivots === 1 && wk.refused.facing === 1, `stepping east pivots the army east once and walks until a wall refuses and says so (${wk.refused.reason}, turn ${wk.refused.turn}, ${wk.refused.pivots} pivot)`);
-  expect(wk.save.schema === 'dck-run/5' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
+  expect(wk.save.schema === 'dck-run/6' && wk.save.turn === wk.refused.turn && wk.save.turns === wk.refused.turn && wk.save.worldId === 'vaults-1' && wk.save.hasStart && wk.save.hasFloor && wk.save.key === 1, `the run saves after every turn under one key: schema ${wk.save.schema}, turn ${wk.save.turn}, ${wk.save.turns} inputs, the start and the floor inside`);
   expect(wk.tap.selected !== null && wk.tap.targets > 0 && wk.tap.z1 === wk.tap.z0 && wk.tap.z2 === wk.tap.z0 && wk.tap.focusSame && wk.tap.cleared && wk.tap.chessOnly, `a tapped piece marks ${wk.tap.targets} chess moves with the zoom (${wk.tap.z0}) and the focus unmoved; a tap elsewhere lets go`);
   expect(wk.tap.box && wk.tap.box.ok && wk.tap.box.rect.f1 - wk.tap.box.rect.f0 === 9 && wk.tap.box.rect.r1 - wk.tap.box.rect.r0 === 9, `the box the army must fit is a 10×10 on the king's rank, nobody behind him (${JSON.stringify(wk.tap.box?.rect)}, depth ${wk.tap.box?.minDy}…${wk.tap.box?.maxDy}, span ${wk.tap.box?.spread})`);
   expect(wk.tapKing.selected !== null && wk.tapKing.targets > 0 && wk.tapKing.allAdjacent, `the king can be tapped and offers his own chess moves (${wk.tapKing.targets}, all adjacent)`);
@@ -1188,7 +1217,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs5 = [];
   page5.on('pageerror', (e) => errs5.push(String(e).split('\n')[0]));
   const q5 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&enemies=off'; // an empty floor: the enemies have their own block below
-  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&${q5}`);
+  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&${q5}`);
   await page5.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const bar = await page5.evaluate(async () => {
     const K = window.__DCK;
@@ -1254,7 +1283,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(bar.pending && bar.pending.seed === dropSeed && bar.pending.turn === 'w' && bar.pending.at === bar.walkTurn + (bar.smash.found ? 1 : 0), `the run holds the pending duel (seed ${bar.pending?.seed}, at walk turn ${bar.pending?.at})`);
   expect(bar.log.world && bar.log.world.id === bar.world.id && bar.log.world.theme === bar.world.theme && bar.log.world.files === bar.drop.duel.files && bar.log.world.crop && bar.log.variantIni, `the replay log carries the world block (${bar.log.world?.stage})`);
   // The reload: the saved run resumes with the duel in flight and drops it again on the same seed.
-  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?run=resume&${q5}`);
+  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&run=resume&${q5}`);
   await page5.waitForFunction(() => window.__DCK?.app?.phase === 'playing' && window.__DCK.app.session?.kind === 'world', null, { timeout: 120000 });
   const re = await page5.evaluate(async () => {
     const K = window.__DCK;
@@ -1280,7 +1309,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // walk-out lands wherever the king ended, where no box is promised): a pit
   // dug by hand ahead of the start seeds the gods from ply 0; the player
   // loses by concession — the run is over, the save stays, resume refuses.
-  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&${q5}`);
+  await page5.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&${q5}`);
   await page5.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const re2 = await page5.evaluate(async () => {
     const K = window.__DCK;
@@ -1311,7 +1340,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(re2.lost.ended === 'ended' && /run is over/.test(re2.lost.label) && re2.over.phase === 'setup' && re2.over.ended?.termination === 'concede' && /Run over/.test(re2.over.resumeText) && re2.over.resumed === false && /run is over/.test(re2.over.note) && re2.over.exportable, `a loss ends the run: back to setup, "${re2.over.resumeText}", resume refused (${re2.over.note}), the save still exports`);
   expect(errs5.length === 0, `no page errors on the barrier${errs5.length ? ` — ${errs5.join(' | ')}` : ''}`);
   // The analyzer paints the barrier log from its world block (the crop's terrain and skins, the world's theme).
-  await page5.goto(`http://127.0.0.1:${PORT}/replay/index.html?latest=1`);
+  await page5.goto(`http://127.0.0.1:${PORT}/replay/index.html?deck=off&latest=1`);
   await page5.waitForFunction(() => window.__DCK?.replay?.log, null, { timeout: 60000 });
   const an = await page5.evaluate(async () => { const R = window.__DCK.replay; await R.waitIdle?.(); const v = R.view; return { world: R.log?.world?.id ?? null, stage: v.stage ?? null, theme: v.theme ?? null, skins: typeof v.skins === 'object' && v.skins ? Object.keys(v.skins).length : v.skins }; });
   expect(an.world === bar.world.id && typeof an.stage === 'string' && an.stage.startsWith(`${bar.world.id}@`) && an.theme === bar.world.theme, `the analyzer opens the barrier log on its own crop (${an.stage}, theme ${an.theme}, ${an.skins} skins)`);
@@ -1337,7 +1366,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs6 = [];
   page6.on('pageerror', (e) => errs6.push(String(e).split('\n')[0]));
   const q6 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
-  await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&enemies=sentry&${q6}`);
+  await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&enemies=sentry&${q6}`);
   await page6.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const en = await page6.evaluate(async () => {
     const K = window.__DCK;
@@ -1381,7 +1410,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     return out;
   });
   const hd = en.hunt.duel.duel, ad = en.ambush.duel.duel;
-  expect(en.start.schema === 'dck-run/5' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
+  expect(en.start.schema === 'dck-run/6' && en.start.enemies.length === 4 && en.start.enemies.every((e) => e.state === 'sentry' && e.width === 3 && e.pieces.length === 6 && /^[NBR]{2}$/.test(e.bag)) && en.start.lower === 24 && en.start.saved === 4, `four 3-wide sentries on the floor (bags ${en.start.enemies.map((e) => e.bag).join(' ')}), 24 letters, all in the save`);
   expect(!en.wait.moved && en.wait.states === 'sentry,sentry,sentry,sentry' && en.wait.threats === 0, `a wait moves no sentry, lights no threat (${en.wait.ms?.toFixed(1)} ms of enemy work)`);
   expect(en.hunt.placed && en.hunt.sight && /47,21/.test(en.hunt.goalsWest) && en.hunt.far > 0 && en.hunt.near > 0, `enemy 2 stood at (44, 21) sees the army; the west band offers (47, 21) on its far row (${en.hunt.far} far-row cells, ${en.hunt.near} nearer cells of the far half)`);
   expect(en.hunt.afterOne.state === 'hunt' && en.hunt.afterOne.threats > 0 && /sees you/.test(en.hunt.afterOne.status), `on the next input it hunts: the threat display lights ${en.hunt.afterOne.threats} cells, the strip says so (its king at ${en.hunt.afterOne.king.f}, ${en.hunt.afterOne.king.r}; ${en.hunt.afterOne.ms?.toFixed(1)} ms of enemy work)`);
@@ -1392,7 +1421,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(en.ambush.placed && en.ambush.off === 6 && en.ambush.sight && en.ambush.duel.phase === 'playing' && ad && ad.turn === 'w' && ad.enemyId === 3 && ad.axis === 0 && ad.pivoted && ad.enemyRow === 6 && en.ambush.duel.logRow === 6 && en.ambush.duel.facing === 0 && en.ambush.duel.crop?.facing === 0, `THE AMBUSH THROUGH THE PIVOT, IN THE FAR HALF: an enemy six ranks north is caught by the player's wait — his initiative (turn ${ad?.turn}), the army pivoted north (facing ${en.ambush.duel.facing}, pivoted ${ad?.pivoted}), the enemy's row ${ad?.enemyRow} in the run and ${en.ambush.duel.logRow} in the log`);
   expect(en.ambush.duel.pending && en.ambush.duel.pending.enemyId === 3 && en.ambush.duel.pending.axis === 0 && en.ambush.duel.pending.enemyRow === 6 && en.ambush.duel.pending.seed === ad?.seed, `the pending entry names the enemy, the axis, the row and the seed`);
   // A reload mid-duel: the same enemy, the same seed, from move one.
-  await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?run=resume&${q6}`);
+  await page6.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&run=resume&${q6}`);
   await page6.waitForFunction(() => window.__DCK?.app?.phase === 'playing' && window.__DCK.app.session?.kind === 'world', null, { timeout: 120000 });
   const en2 = await page6.evaluate(async () => {
     const K = window.__DCK;
@@ -1446,7 +1475,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   page7.on('pageerror', (e) => errs7.push(String(e).split('\n')[0]));
   const q7 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
   const roamRun = async (waits) => {
-    await page7.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&${q7}`);
+    await page7.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&${q7}`);
     await page7.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
     return page7.evaluate(async (waits) => {
       const K = window.__DCK;
@@ -1478,7 +1507,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   };
   const ra = await roamRun(30);
   const rb = await roamRun(30);
-  expect(ra.schema === 'dck-run/5' && ra.modes === 'roam,roam,roam,roam' && /roam/.test(ra.start), `four wanderers spawn on the fixture (${ra.start})`);
+  expect(ra.schema === 'dck-run/6' && ra.modes === 'roam,roam,roam,roam' && /roam/.test(ra.start), `four wanderers spawn on the fixture (${ra.start})`);
   expect(ra.trail.length >= 10 && ra.moved >= 2 && ra.draws.some((n) => n > 0), `after ${ra.trail.length} waits ${ra.moved} of four kings have left their spawns (draws ${ra.draws.join(',')}; phase ${ra.phase}${ra.phase === 'playing' ? ' — a wanderer walked into sight of the standing army and caught it' : ''})`);
   expect(ra.shared === 0 && ra.letters.every((n) => n === 24) && ra.leash.length > 0 && ra.leash.every((d) => d <= 12), `no two enemy pieces on one cell (${ra.shared} shared), 24 letters on every walk turn (min ${Math.min(...ra.letters)}), every wanderer that stayed on its beat within the leash (${ra.leash.join(',')} cells from the spawns; ${ra.hunted ? `enemy ${ra.hunted} hunted` : 'none hunted'})`);
   expect(/^(roam|hunt|search)(,(roam|hunt|search))*$/.test(ra.states), `the wanderers' states stay roam / hunt / search (${ra.states})`);
@@ -1503,11 +1532,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // analyzer, replay-smoke). The debris is off so nothing lands on the rings;
 // hints off so no shaft crosses them.
 {
-  const page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs8 = [];
   page8.on('pageerror', (e) => errs8.push(String(e).split('\n')[0]));
-  await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  await page8.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
+  page8 = await bootWait(page8, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs8.push(String(e).split('\n')[0])));
   await page8.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const ps = await page8.evaluate(async () => {
     const K = window.__DCK;
@@ -1528,9 +1557,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const lit = () => [...K.app.boardUI.marks.targets];
     const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /portal/i.test(t));
     const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
-    const btn = document.getElementById('btnPortal');
-    const out = { hidden0: btn.hidden, text0: btn.textContent.trim(), disabled0: btn.disabled };
-    btn.click();
+    // THE CARD UI (Phase 3.2): the spell button is the portal CARD in the fan — a tap lifts it into cast mode (the smoke's tap path)
+    const card = () => K.cards.info('portal');
+    const c0 = card();
+    const out = { hidden0: c0.n === 0, text0: `×${c0.n}`, disabled0: !c0.playable };
+    K.cards.tap('portal');
     out.castMode = K.app.castMode;
     const L0 = lit();
     out.litN = L0.length;
@@ -1541,14 +1572,15 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.leftAfterWallTap = !K.app.castMode && [...K.app.boardUI.marks.targets].length === 0;
     // The first cast: a lit square off the king rows with an empty square south of it (a piece there would rise over the ring).
     const pick = (avoid) => { const c = lit().filter((sq) => !avoid.includes(sq) && rankOf(sq) > 2 && rankOf(sq) < ranks - 1 && at(south(sq)) === '.'); return c[Math.floor(c.length / 2)] ?? lit().find((sq) => !avoid.includes(sq)); };
-    btn.click();
+    K.cards.tap('portal');
     const a = pick([]);
     K.tap(a);
     await settle();
     out.a = a;
     out.fieldA = field();
-    out.textA = btn.textContent.trim();
-    out.titleA = btn.title;
+    out.textA = `×${card().n}`;
+    out.titleA = card().hint;
+    out.liftedA = card().lifted;
     out.aEmpty = at(a) === '.' && at(south(a)) === '.';
     out.aBlue = count(a, BLUE);
     out.aOrange = count(a, ORANGE);
@@ -1562,13 +1594,13 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.statusA = document.getElementById('status').textContent;
     out.pieceMovesA = K.app.duel.legalMoves().filter((m) => !/^[A-Za-z]@/.test(m));
     if (K.app.duel.state === 'playing') {
-      if (!K.app.castMode) btn.click();
+      if (!K.app.castMode) K.cards.tap('portal');
       const b = pick([a]);
       K.tap(b);
       await settle();
       out.b = b;
       out.fieldB = field();
-      out.hiddenB = btn.hidden;
+      out.hiddenB = card().n === 0;
       out.aEmptyB = at(a) === '.' && at(south(a)) === '.';
       out.bEmpty = at(b) === '.' && at(south(b)) === '.';
       out.aBlueB = count(a, BLUE);
@@ -1587,10 +1619,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.state = K.app.duel.state;
     return out;
   });
-  expect(!ps.hidden0 && /×2/.test(ps.text0) && !ps.disabled0, `the Portal button shows on the player's turn with two scrolls (${ps.text0}${ps.hidden0 ? ', hidden' : ''}${ps.disabled0 ? ', disabled' : ''})`);
-  expect(ps.castMode && ps.litN > 0 && ps.litKingRow === 0 && ps.litEmpty, `the button enters cast mode with ${ps.litN} squares lit, none on a king row or the row beside it (${ps.litKingRow}), all empty`);
+  expect(!ps.hidden0 && /×1/.test(ps.text0) && !ps.disabled0, `the portal CARD is in the fan on the player's turn, one card of two scrolls, playable (${ps.text0}${ps.hidden0 ? ', none' : ''}${ps.disabled0 ? ', dimmed' : ''})`);
+  expect(ps.castMode && ps.litN > 0 && ps.litKingRow === 0 && ps.litEmpty, `a tap on the card enters cast mode with ${ps.litN} squares lit, none on a king row or the row beside it (${ps.litKingRow}), all empty`);
   expect(ps.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
-  expect(new RegExp(`(^|,)${ps.a}w(,|$)`).test(ps.fieldA) && /×1/.test(ps.textA) && /is open/.test(ps.titleA), `a tap on ${ps.a} casts: the field reads {${ps.fieldA}}, one scroll left (${ps.textA}), the title says the half is open`);
+  expect(new RegExp(`(^|,)${ps.a}w(,|$)`).test(ps.fieldA) && /×1/.test(ps.textA) && /is open/.test(ps.titleA), `a tap on ${ps.a} casts: the field reads {${ps.fieldA}}, the half-spent portal still a card (${ps.textA}), its line says the half is open`);
   expect(ps.logA.some((t) => t.includes(`a portal opens at ${ps.a}`)), `the log names the cast (${ps.logA.slice(-1)[0] ?? 'nothing about a portal'})`);
   // PORTALS v3
   if (ps.stateA === 'playing') {
@@ -1602,7 +1634,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   if (ps.aEmpty) expect(ps.aBlue >= 9 && ps.aBlue <= 18 && ps.aOrange === 0, `the half-open portal is a dashed ring in the player's BLUE (${ps.aBlue} blue pixels of 18, ${ps.aOrange} orange)`);
   else expect(ps.aBlue > 0 && ps.aOrange === 0, `the half-open portal at ${ps.a} shows blue beside the piece over it (${ps.aBlue} pixels)`);
   if (ps.b) {
-    expect(new RegExp(`(^|,)(${ps.a}-${ps.b}|${ps.b}-${ps.a})(,|$)`).test(ps.fieldB) && ps.hiddenB, `the second cast links the pair {${ps.fieldB}} and the button goes with the last scroll`);
+    expect(new RegExp(`(^|,)(${ps.a}-${ps.b}|${ps.b}-${ps.a})(,|$)`).test(ps.fieldB) && ps.hiddenB, `the second cast links the pair {${ps.fieldB}} and the card leaves the fan with the last scroll`);
     expect(ps.logB.some((t) => t.includes('the portals are linked')), 'the log says the portals are linked');
     expect(JSON.stringify(ps.kindsB.slice(0, 3)) === '["half","pass","link"]', `the record's cast kinds run half, pass, link (${ps.kindsB.join(',')})`);
     expect(ps.castPliesB.length >= 3 && ps.castPliesB.every(([ply, kind]) => (kind === 'link' || kind === 'fizzle' ? ps.tracesB.includes(ply) : !ps.tracesB.includes(ply))), `the gods rolled on the link ply and never inside the cast (kinds ${ps.castPliesB.map(([p, k]) => `${p}:${k}`).join(' ')}; traces at ${ps.tracesB.join(',')})`);
@@ -1624,11 +1656,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // the alias is read off the live duel when a landing on the player's own pair
 // is on offer.
 {
-  const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
-  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
+  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const v2 = await page9.evaluate(async () => {
     const K = window.__DCK;
@@ -1668,7 +1700,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
     const lit = () => [...K.app.boardUI.marks.targets];
     const legal = () => K.app.duel.legalMoves();
-    const btn = document.getElementById('btnPortal');
+    const btn = { get hidden() { return K.cards.info('portal').n === 0; }, click: () => K.cards.tap('portal') }; // THE CARD UI: the portal card stands in for the button
     const castable = () => lit().filter((sq) => { const r = parseInt(sq.slice(1), 10); return r > 2 && r < ranks - 1 && at(sq) === '.'; });
     out.alias = null;
     // Cast the player's pair DELIBERATELY: the first half on a square one of the
@@ -1750,11 +1782,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // The block runs on a stage whose middle is open (`--icestage`, s73 by default: the cast rows 5–6 are floor, so a pawn on
   // rank 4 pushes onto the patch and slides); s59's cast rows are walls but for a corner, and no pawn can enter a patch there.
   const ICE_STAGE = arg('icestage', 's73-the-tower-room');
-  const page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs11 = [];
   page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
-  await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
-  await page11.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
+  page11 = await bootWait(page11, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`, (p) => p.on('pageerror', (e) => errs11.push(String(e).split('\n')[0])));
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
   // supposed to know what spell it's suggesting?"): an ICE cast hint is its square framed at its edge with the SNOWFLAKE
@@ -1823,9 +1855,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const icy = (sq) => { K.renderer.paintNow(); const px = K.renderer.square(sq); if (!px) return -1; let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i + 3] === 255 && px[i + 2] > px[i] + 40 && px[i + 2] > px[i + 1] + 10) n++; return n; }; // cold pixels: blue well over red
     const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
     const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent);
-    const btn = document.getElementById('btnIce');
-    const out = { hidden0: btn.hidden, text0: btn.textContent.trim(), disabled0: btn.disabled, holdings0: holdings(), portalHidden0: document.getElementById('btnPortal').hidden };
-    btn.click();
+    // THE CARD UI (Phase 3.2): the Ice button is the ice CARD in the fan
+    const card = () => K.cards.info('ice');
+    const c0 = card();
+    const out = { hidden0: c0.n === 0, text0: `×${c0.n}`, disabled0: !c0.playable, holdings0: holdings(), portalHidden0: K.cards.info('portal').n === 0 };
+    K.cards.tap('ice');
     out.castMode = K.ice.castMode();
     const L0 = lit();
     out.litN = L0.length;
@@ -1835,7 +1869,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const wall = [...K.app.boardUI.cells.keys()].find((sq) => at(sq) === '*' && !L0.includes(sq));
     K.tap(wall);
     out.leftAfterWallTap = !K.ice.castMode() && lit().length === 0;
-    btn.click();
+    K.cards.tap('ice');
     // The cast: a lit square whose 3×3 has as much bare floor as possible (the ice reads on empty flagstones).
     const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = rankOf(sq); const o = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= ranks) o.push(String.fromCharCode(97 + f + df) + (r + dr)); return o; };
     const floorAround = (sq) => around(sq).filter((s) => at(s) === '.').length;
@@ -1859,7 +1893,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.fieldA = field();
     out.slickA = K.ice.slick().sort();
     out.holdingsA = holdings();
-    out.hiddenA = btn.hidden;
+    out.hiddenA = card().n === 0;
     out.castsA = K.app.duel.record.states.map((s) => s.cast ?? null).filter(Boolean);
     out.logA = logLines().filter((l) => /ice/i.test(l));
     out.stateA = K.app.duel.state;
@@ -1910,11 +1944,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.state = K.app.duel.state;
     return out;
   });
-  expect(!ic.hidden0 && /×1/.test(ic.text0) && !ic.disabled0 && /I/.test(ic.holdings0) && ic.portalHidden0, `the Ice button shows on the player's turn with one scroll (${ic.text0}${ic.hidden0 ? ', hidden' : ''}${ic.disabled0 ? ', disabled' : ''}; holdings [${ic.holdings0}], the portal button hidden under ?portals=off)`);
-  expect(ic.castMode === 'ice' && ic.litN > 0 && ic.litRows.join(',') === '5,6' && ic.litTerrain === 0 && ic.litN === ic.litMiddleFloor, `the button enters ice cast mode with ${ic.litN} centres lit — every non-terrain square of ranks ${ic.litRows.join(' and ')} (${ic.litMiddleFloor} such squares, ${ic.litTerrain} on terrain)`);
+  expect(!ic.hidden0 && /×1/.test(ic.text0) && !ic.disabled0 && /I/.test(ic.holdings0) && ic.portalHidden0, `the ice CARD is in the fan on the player's turn, one card, playable (${ic.text0}${ic.hidden0 ? ', none' : ''}${ic.disabled0 ? ', dimmed' : ''}; holdings [${ic.holdings0}], no portal card under ?portals=off)`);
+  expect(ic.castMode === 'ice' && ic.litN > 0 && ic.litRows.join(',') === '5,6' && ic.litTerrain === 0 && ic.litN === ic.litMiddleFloor, `a tap on the card enters ice cast mode with ${ic.litN} centres lit — every non-terrain square of ranks ${ic.litRows.join(' and ')} (${ic.litMiddleFloor} such squares, ${ic.litTerrain} on terrain)`);
   expect(ic.leftAfterWallTap, 'a tap on a wall leaves the spell with nothing lit');
   expect(ic.fieldA.split(',').filter((e) => e.startsWith('~')).length === ic.patchExpected.length && JSON.stringify(ic.slickA) === JSON.stringify(ic.patchExpected), `the cast at ${ic.centre} ices the floor of its 3×3: {${ic.fieldA}} (${ic.patchExpected.length} squares)`);
-  expect(!/I/.test(ic.holdingsA) && /i/.test(ic.holdingsA) && ic.hiddenA, `the scroll is spent and the button goes (holdings [${ic.holdingsA}]${ic.hiddenA ? '' : ', the button still shows'})`);
+  expect(!/I/.test(ic.holdingsA) && /i/.test(ic.holdingsA) && ic.hiddenA, `the scroll is spent and the card leaves the fan (holdings [${ic.holdingsA}]${ic.hiddenA ? '' : ', the card still shows'})`);
   expect(ic.castsA[0] === 'ice' && ic.logA.some((l) => /the ice is cast/.test(l)), `the record's state is a one-ply ice cast and the log says so (${ic.castsA.join(',')}; "${ic.logA[0] ?? ''}")`);
   expect(ic.icyAfter.every(([, n]) => n >= 60) && ic.icyBefore.every(([, n]) => n < 20), `the patch's empty squares paint the ice — cold pixels ${ic.icyAfter.map(([s, n]) => `${s}:${n}`).join(' ')} of 256 (before: ${ic.icyBefore.map(([, n]) => n).join(' ')})`);
   expect(ic.icyOff.every(([, n]) => n < 20), `no ice off the patch (${ic.icyOff.map(([s, n]) => `${s}:${n}`).join(' ')})`);
@@ -1933,12 +1967,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs11.length === 0, `no page errors with the ice${errs11.length ? ` — ${errs11.join(' | ')}` : ''}`);
   await page11.close();
   // ?ice=off: no scroll, no button
-  const page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
-  await page12.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  let page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
+  page12 = await bootWait(page12, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`, null);
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
-  const off = await page12.evaluate(() => ({ hidden: document.getElementById('btnIce').hidden, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
-  expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no Ice button, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
+  const off = await page12.evaluate(() => ({ hidden: window.__DCK.cards.info('ice').n === 0, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
+  expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no ice card in the fan, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
   // THE SPELL GLYPHS, the portal's: on this page (portals on) a PORTAL cast hint is its square framed at its edge with the
   // RING inside — hollow, in the rank's colour with the black drop shadow — and nothing framed beside it; the list wears the ring.
   const ip = await page12.evaluate(async () => {
@@ -1996,12 +2030,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // a wall beside him by a manual move (ruling 11) — nobody moves, the world's
 // ledger takes the cell, the crate is a capture next, the save carries it.
 {
-  const page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
-  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?${q9}`);
-  await page9.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`);
+  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
   // in the list (a canvas per hammer hint, in the rank's colour, between the
@@ -2089,9 +2123,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs9.length === 0, `no page errors with the sledgehammer${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
   await page9.close();
   // Plain kings: `?hammer=off` — the same tap lights no wall and the deal is plain.
-  const page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  await page9b.goto(`http://127.0.0.1:${PORT}/play/index.html?${q9}&hammer=off`);
-  await page9b.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout: 120000 });
+  let page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page9b.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`);
+  page9b = await bootWait(page9b, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`, null);
   await page9b.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // (With plain kings the king at e1 has no move at all here — the walls, his own pawns and rook box him in — so nothing lights; the engine's list is the proof.)
   const plain = await page9b.evaluate(() => { const K = window.__DCK; K.tap('e1'); const lit = [...K.app.boardUI.marks.targets]; const legal = K.app.duel.legalMoves(); return { variant: K.app.duel.variantName, lit, walls: lit.filter((s) => ['d1', 'd2'].includes(s)), hammers: legal.filter((m) => m === 'e1d1' || m === 'e1d2'), legal: legal.length }; });
@@ -2101,7 +2135,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const page10 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs10 = [];
   page10.on('pageerror', (e) => errs10.push(String(e).split('\n')[0]));
-  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&fx=0&enemies=off`);
+  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&fx=0&enemies=off`);
   await page10.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const hw = await page10.evaluate(async () => {
     const K = window.__DCK;
@@ -2152,6 +2186,314 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs10.length === 0, `no page errors on the walk's hammer${errs10.length ? ` — ${errs10.join(' | ')}` : ''}`);
   await page10.close();
 }
+
+// --- THE DECK (2026-09-25; brief §4.10; play/js/deck.mjs + duel.mjs): spells
+// as cards. A hand-built `?deck=` list deals in its own order, so the
+// opening hand is known: Reveal, Undo, Ice, Portal — the spell buttons show
+// one card each, the meta cards their buttons, the redraw its button, the
+// pile in order under the bar, the enemy's hand and pile in its bar. Reveal
+// shows the oracle's lines without Cheater Mode and is spent on the record;
+// an ice cast leaves three in hand and the refill at the next turn start
+// draws the pile's top (the log says so, the state carries `drew`); the Undo
+// card takes the turn back and stays spent; the redraw discards the hand,
+// draws four and spends the turn (a `--` ply); the export carries the decks
+// and the plays. With `?deck=off` nothing of this shows and the holdings are
+// the stress-test set.
+{
+  let pageD = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errsD = [];
+  pageD.on('pageerror', (e) => errsD.push(String(e).split('\n')[0]));
+  await pageD.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
+  pageD = await bootWait(pageD, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsD.push(String(e).split('\n')[0])));
+  await pageD.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const dk = await pageD.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    const btn = (id) => document.getElementById(id);
+    // THE CARD UI (Phase 3.2): the buttons are cards in the fan — hidden = no card of the kind, disabled = the card dimmed
+    const vis = (kind) => { const i = K.cards.info(kind); return { hidden: i.n === 0, disabled: !i.playable, text: `×${i.n}` }; };
+    const holdings = () => K.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '';
+    const logLines = () => [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent);
+    const out = {};
+    out.spec = K.deck.spec();
+    out.hands0 = K.deck.hands();
+    out.decks0 = K.deck.decks();
+    out.holdings0 = holdings();
+    out.btn0 = { portal: vis('portal'), ice: vis('ice'), reveal: vis('reveal'), undo: vis('undo'), mull: { hidden: K.cards.piles() === null, text: 'Redraw' } };
+    out.piles0 = K.cards.piles();
+    out.fan0 = K.cards.hand();
+    out.enemy0 = { hand: K.cards.enemy(), pile: K.cards.enemyPile() };
+    out.state0 = K.app.duel.record.states[0].deck;
+    // Reveal: the lines without Cheater Mode — a tap on the card
+    K.cards.tap('reveal');
+    await new Promise((r) => setTimeout(r, 50));
+    out.revealOn = K.deck.revealOn();
+    out.handsR = K.deck.hands();
+    out.metaR = K.app.duel.record.metaPlays.map((m) => [m.ply, m.side, m.kind]);
+    out.btnR = vis('reveal');
+    for (let i = 0; i < 200 && !btn('hint-line').textContent.trim(); i++) await new Promise((r) => setTimeout(r, 50));
+    out.hintR = btn('hint-line').textContent.trim();
+    out.arrowsR = K.app.cheatArrows?.length ?? 0;
+    out.cheatR = K.options.cheat;
+    // the ice cast: three in hand, then the refill at the next turn start
+    const ice = K.app.duel.legalMoves().find((m) => /^I@/.test(m));
+    out.iceMove = ice ?? null;
+    if (ice) {
+      const pileTop = K.deck.decks().w.pile[0];
+      await K.playerMove(ice);
+      await settle();
+      out.pileTop = pileTop;
+      out.handsC = K.deck.hands();
+      out.decksC = K.deck.decks();
+      out.plyC = K.app.duel.ply;
+      out.turnC = K.app.duel.turnColor();
+      const st = K.app.duel.record.states[K.app.duel.record.states.length - 1];
+      out.drewC = st.drew ?? null;
+      out.deckStC = st.deck;
+      out.logDraw = logLines().filter((t) => /you draw/.test(t));
+      out.hintC = btn('hint-line').textContent.trim();
+      out.revealC = K.deck.revealOn();
+      // the Undo card: back a turn, the card spent — a tap on the card
+      K.cards.tap('undo');
+      await settle();
+      out.plyU = K.app.duel.ply;
+      out.handsU = K.deck.hands();
+      out.decksU = K.deck.decks();
+      out.metaU = K.app.duel.record.metaPlays.map((m) => [m.ply, m.side, m.kind]);
+      out.logUndo = logLines().filter((t) => /Undo/.test(t));
+      out.btnU = vis('undo');
+      out.holdingsU = holdings();
+      out.branches = K.app.duel.record.branches.length;
+    }
+    // the redraw: the hand discarded, four drawn, the turn spent — a tap on the deck stack opens the sheet, Redraw asks for a confirm
+    out.canMull = K.deck.canMulligan();
+    const handBefore = K.deck.hands().w.slice();
+    const pileBefore = K.deck.decks().w.pile.slice();
+    btn('pile-deck').click();
+    out.sheet0 = K.cards.sheet();
+    btn('btnRedraw').click();
+    out.sheet1 = K.cards.sheet();
+    btn('btnRedrawCancel').click();
+    out.sheet2 = K.cards.sheet();
+    btn('btnRedraw').click();
+    btn('btnRedrawConfirm').click();
+    out.sheetGone = K.cards.sheet() === null;
+    await settle();
+    out.mull = { handBefore, pileBefore, moves: K.app.duel.record.moves.slice(-2), sans: K.app.duel.record.sans.slice(-2), hands: K.deck.hands(), decks: K.deck.decks(), ply: K.app.duel.ply, turn: K.app.duel.turnColor(), log: logLines().filter((t) => /discard/.test(t)), state: K.app.duel.record.states.find((s) => s.cast === 'mulligan') ?? null };
+    // the export
+    const L = K.log.build();
+    out.export = { decks: L.decks ? { w: L.decks.w.pile.length, b: L.decks.b.pile.length } : null, metaPlays: L.metaPlays?.length ?? -1, statesWithDeck: L.states.filter((s) => s.deck).length, states: L.states.length };
+    out.state = K.app.duel.state;
+    return out;
+  });
+  expect(dk.spec?.fixed === true && dk.spec.cards.length === 8, `?deck= with a list is a fixed-order deck of ${dk.spec?.cards?.length} cards`);
+  expect(JSON.stringify(dk.hands0?.w) === '["ice","portal","reveal","undo"]', `the opening hand is the list's top four: ${JSON.stringify(dk.hands0?.w)}`);
+  expect(dk.hands0?.b?.length === 4 && dk.decks0?.b?.pile?.length === 2 && dk.hands0.b.every((k) => k === 'ice' || k === 'portal'), `the enemy's hand is four of its six spells, two on its pile (${JSON.stringify(dk.hands0?.b)} + ${dk.decks0?.b?.pile?.length})`);
+  expect(/^IOO/.test(dk.holdings0) && dk.decks0?.w?.pile?.join(',') === 'ice,portal,ice,portal', `the holdings carry the hand's scrolls (${dk.holdings0}); the pile is the rest in order (${dk.decks0?.w?.pile?.join(',')})`);
+  expect(!dk.btn0.portal.hidden && /×1/.test(dk.btn0.portal.text) && !dk.btn0.ice.hidden && /×1/.test(dk.btn0.ice.text) && JSON.stringify(dk.fan0) === '["ice","portal","reveal","undo"]', `the fan holds the hand as CARDS, every copy its own: ${dk.fan0.join(' ')}`);
+  expect(!dk.btn0.reveal.hidden && !dk.btn0.reveal.disabled && /×1/.test(dk.btn0.reveal.text) && !dk.btn0.undo.hidden && /×1/.test(dk.btn0.undo.text) && dk.btn0.undo.disabled && !dk.btn0.mull.hidden, `the meta cards are in the fan — Reveal playable, Undo dimmed at ply 0 — and the piles show (${dk.btn0.reveal.text} · ${dk.btn0.undo.text})`);
+  expect(dk.piles0?.deck === '4' && dk.piles0?.spent === '0', `the deck stack counts the pile (${JSON.stringify(dk.piles0)})`);
+  expect(dk.enemy0.hand.length === 4 && dk.enemy0.pile === '2', `the enemy's bar shows its hand face-up (${dk.enemy0.hand.join(' ')}) and its pile (${dk.enemy0.pile})`);
+  expect(dk.state0?.w?.hand?.length === 4 && dk.state0.w.pile.length === 4 && dk.state0.b?.hand?.length === 4, 'the start state of record carries both decks');
+  expect(dk.revealOn && !dk.handsR.w.includes('reveal') && JSON.stringify(dk.metaR) === '[[0,"w","reveal"]]' && dk.btnR.hidden, `Reveal played: the card gone, on metaPlays (${JSON.stringify(dk.metaR)}), the button gone`);
+  expect(dk.hintR.length > 0 && dk.arrowsR > 0 && dk.cheatR === false, `Reveal shows the oracle's lines without Cheater Mode ("${dk.hintR}", ${dk.arrowsR} arrows)`);
+  expect(!!dk.iceMove, `an ice cast was legal (${dk.iceMove})`);
+  if (dk.iceMove) {
+    expect(dk.turnC === 'white' && dk.plyC === 2, `the enemy replied (ply ${dk.plyC}, ${dk.turnC} to move)`);
+    // Reveal spent one card and the cast another, so the refill draws TWO — the pile's top two, in order.
+    expect(dk.handsC.w.length === 4 && dk.decksC.w.pile.length === 2 && dk.drewC?.side === 'w' && dk.drewC.cards.length === 2 && dk.drewC.cards[0] === dk.pileTop, `after Reveal and the cast the refill drew the pile's top two at white's turn start: hand ${dk.handsC.w.join(',')}, drew ${JSON.stringify(dk.drewC)}, pile ${dk.decksC.w.pile.length}`);
+    expect(dk.deckStC?.w?.hand?.length === 4 && dk.logDraw.length === 1 && /you draw/.test(dk.logDraw[0]), `the state of record and the log carry the draw (${dk.logDraw[0] ?? '-'})`);
+    expect(!dk.revealC && dk.hintC === '', 'the reveal ended with the turn');
+    expect(dk.plyU === 0 && dk.branches === 1, `the Undo card takes the turn back (ply ${dk.plyU}, ${dk.branches} branch)`);
+    expect(!dk.handsU.w.includes('undo') && !dk.handsU.w.includes('reveal') && dk.decksU.w.spent.includes('undo') && dk.decksU.w.spent.includes('reveal') && dk.handsU.w.join(',') === 'ice,portal' && dk.decksU.w.pile.length === 4, `both meta cards stay spent through the undo; the hand is the two spells again (${dk.handsU.w.join(',')}), the pile whole (${dk.decksU.w.pile.length})`);
+    expect(JSON.stringify(dk.metaU) === '[[0,"w","reveal"],[0,"w","undo"]]' && dk.logUndo.length === 1 && dk.btnU.hidden, `the undo is on metaPlays (${JSON.stringify(dk.metaU)}) and in the log; the button is gone`);
+    expect(/^IOO/.test(dk.holdingsU), `the holdings are the pre-cast hand's again (${dk.holdingsU})`);
+  }
+  expect(dk.canMull, "the redraw is offered on the player's turn");
+  expect(dk.sheet0?.side === 'w' && dk.sheet0.redraw && !dk.sheet0.confirmBtn && dk.sheet0.pile.length === dk.mull.pileBefore.length && dk.sheet1?.confirmBtn && !dk.sheet1.redraw && dk.sheet2?.redraw && !dk.sheet2.confirmBtn && dk.sheetGone, `the deck sheet opens on the pile in order (${dk.sheet0?.pile?.join(',')}), Redraw asks for a confirm, Cancel withdraws it, the confirm closes the sheet`);
+  expect(dk.mull.moves[0] === '--' && dk.mull.sans[0] === '--' && dk.mull.state?.cast === 'mulligan' && dk.mull.state?.mulligan?.discarded?.join(',') === dk.mull.handBefore.join(','), `the redraw is a pass of the game's own on the record (${dk.mull.sans.join(' ')}; discarded ${dk.mull.state?.mulligan?.discarded?.join(',')})`);
+  expect(dk.mull.turn === 'white' && dk.mull.ply === 2 && dk.mull.hands.w.join(',') === dk.mull.pileBefore.slice(0, 4).join(',').split(',').sort().join(',') , `the enemy replied and the new hand is the pile's top four (${dk.mull.hands.w.join(',')} from ${dk.mull.pileBefore.join(',')})`);
+  expect(dk.mull.handBefore.every((k) => dk.mull.decks.w.spent.includes(k)) && dk.mull.log.length === 1, `the old hand is spent and the log says so (${dk.mull.log[0] ?? '-'})`);
+  expect(dk.export.decks?.w === 8 && dk.export.decks?.b === 6 && dk.export.metaPlays === 2 && dk.export.statesWithDeck === dk.export.states, `the export carries both decks as shuffled (${dk.export.decks?.w} / ${dk.export.decks?.b}), the plays (${dk.export.metaPlays}) and a deck on every state (${dk.export.statesWithDeck}/${dk.export.states})`);
+  expect(errsD.length === 0, `no page errors on the deck${errsD.length ? ` — ${errsD.join(' | ')}` : ''}`);
+  await pageD.close();
+
+  // `?deck=off`: the stress-test set, nothing of the deck on screen
+  let pageE = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await pageE.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`);
+  pageE = await bootWait(pageE, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`, null);
+  await pageE.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck }));
+  expect(off.spec === null && off.hands === null && off.holdings === 'IOOioo' && JSON.stringify(off.fan) === '["ice","portal"]' && off.piles === null && JSON.stringify(off.enemy) === '["ice","portal"]' && off.enemyPile === null, `?deck=off is the stress-test set: holdings ${off.holdings}, the fan the two spells in hand and no piles, the enemy's two minis and no stack`);
+  expect(off.optDefault === 'adept' && off.optDeck === 'adept', `Options → Spells → Deck defaults to the starter (${off.optDefault})`);
+  await pageE.close();
+
+  // THE WALK: the run carries the deck; the drop deals from it and by the enemy's width
+  const pageW = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errsW = [];
+  pageW.on('pageerror', (e) => errsW.push(String(e).split('\n')[0]));
+  await pageW.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&fx=0&enemies=off&deck=adept&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
+  await pageW.waitForFunction(() => window.__DCK?.app?.phase === 'walk' && !window.__DCK.app.busy, null, { timeout: 120000 });
+  const wk = await pageW.evaluate(async () => {
+    const K = window.__DCK;
+    const out = { run: K.deck.run() };
+    const plan = await K.walk.barrier();
+    out.planOk = !!plan?.ok;
+    for (let i = 0; i < 400 && !(K.app.duel && K.app.duel.state === 'playing' && !K.app.busy); i++) await new Promise((r) => setTimeout(r, 50));
+    out.hands = K.deck.hands();
+    out.decks = K.deck.decks();
+    out.holdings = K.app.duel?.fen().match(/\[([^\]]*)\]/)?.[1] ?? '';
+    out.enemy = { hand: K.cards.enemy(), pile: K.cards.enemyPile() };
+    out.enemyWidth = K.app.session?.specs?.black?.width ?? null;
+    const L = K.log.build();
+    out.export = { decks: !!L?.decks, world: !!L?.world };
+    out.save = K.walk.export()?.deck ?? null;
+    return out;
+  });
+  expect(wk.run?.starter === 'adept' && wk.run.cards.length === 8, `the run carries the starter deck (${wk.run?.starter}, ${wk.run?.cards?.length} cards)`);
+  expect(wk.planOk && wk.hands?.w?.length === 4, `the drop deals a hand of four from the run's deck (${JSON.stringify(wk.hands?.w)})`);
+  {
+    const n = Math.max(0, (wk.enemyWidth | 0) - 1);
+    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => k === 'ice' || k === 'portal'), `the enemy's deck is width − 1 spells, a hand of four at most and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
+  }
+  expect(wk.enemy.pile !== null && wk.export.decks && wk.export.world && wk.save?.starter === 'adept', `the enemy's bar, the log and the run save carry the decks (enemy ${wk.enemy.hand.join(' ')} + ${wk.enemy.pile})`);
+  expect(errsW.length === 0, `no page errors on the walk's deck${errsW.length ? ` — ${errsW.join(' | ')}` : ''}`);
+  await pageW.close();
+}
+
+// --- THE CARD UI (Phase 3.2, 2026-09-25; brief §4.10 "The card UI"; play/js/
+// cards.mjs + main.mjs § THE CARD UI): the hand is a FAN of cards under the
+// board — every copy its own card, laid out by fanLayout (the outer cards
+// tilted and dropped), the playable ones rimmed and the rest dimmed, a spell
+// card's art the hint's own glyph. ONE GESTURE PATH, driven here through REAL
+// POINTER EVENTS (Playwright's mouse): a DRAG of the ice card onto the board
+// lifts a ghost, lights the legal squares, frames the square under the pointer
+// and tints the 3×3 the patch would freeze (the board's hover / area marks),
+// the tip says what a release does, and the release casts through the tap
+// path's own playPlayerMove; a drag released OFF the board snaps the card back
+// with nothing played and cast mode left; a LONG PRESS opens the reader; a
+// TAP (the older blocks' path, K.cards.tap) still lifts a card into cast
+// mode. The enemy's hand is face-up as mini cards in its bar; on the motion
+// page its played card flies to the board and holds for a beat.
+{
+  let pageC = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errsC = [];
+  pageC.on('pageerror', (e) => errsC.push(String(e).split('\n')[0]));
+  await pageC.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
+  pageC = await bootWait(pageC, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsC.push(String(e).split('\n')[0])));
+  await pageC.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  await pageC.evaluate(() => { const o = window.__DCK.options; o.cheat = false; o.hints = false; o.evalBar = false; window.__DCK.applyOptions(); });
+  const settleC = () => pageC.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state !== 'playing' || (window.__DCK.app.duel?.turnColor() === window.__DCK.app.session?.playerColor && !window.__DCK.app.busy), null, { timeout: 60000 });
+  const fan = await pageC.evaluate(() => {
+    const K = window.__DCK;
+    const lay = K.cards.layout();
+    const row = document.getElementById('hand-row');
+    const cs = getComputedStyle(row);
+    const els = K.cards.els();
+    const arts = els.map((el) => { const c = el.querySelector('canvas.card-art'); return { w: c?.width, cssW: parseFloat(c?.style.width), name: el.querySelector('.card-name')?.textContent, text: el.querySelector('.card-text')?.textContent, pip: !!el.querySelector('.card-cost'), cls: el.className }; });
+    const rects = els.map((el) => el.getBoundingClientRect());
+    const board = document.getElementById('board').getBoundingClientRect();
+    return { lay, cardW: cs.getPropertyValue('--card-w').trim(), arts, rects: rects.map((r) => ({ l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom) })), boardBottom: Math.round(board.bottom), vw: window.innerWidth, rowHidden: K.cards.rowHidden() };
+  });
+  expect(!fan.rowHidden && fan.lay.length === 4 && fan.lay.map((c) => c.kind).join(',') === 'ice,portal,reveal,undo', `the fan holds the four cards of the hand (${fan.lay.map((c) => c.kind).join(' ')})`);
+  expect(fan.lay.every((c, i) => i === 0 || c.left > fan.lay[i - 1].left) && parseFloat(fan.lay[0].rot) < 0 && parseFloat(fan.lay[3].rot) > 0 && parseFloat(fan.lay[0].y) > parseFloat(fan.lay[1].y), `the cards run left to right, the outer ones tilted out (${fan.lay.map((c) => c.rot).join(' ')}) and dropped for the arc (${fan.lay.map((c) => c.y).join(' ')})`);
+  expect(fan.rects.every((r) => r.l >= 0 && r.r <= fan.vw) && fan.rects.every((r) => r.t >= fan.boardBottom), `every card sits inside the screen's width and under the board (${fan.rects.map((r) => `${r.l}–${r.r}`).join(' ')}; board bottom ${fan.boardBottom})`);
+  expect(fan.arts.every((a) => (a.w === 12 || a.w === 11) && a.cssW === a.w * 4 && a.pip) && fan.arts.map((a) => a.name).join(',') === 'Ice,Portal,Reveal,Undo' && fan.arts.every((a) => a.text.length > 0), `every face carries its art at 4× (${fan.arts.map((a) => `${a.w}→${a.cssW}`).join(' ')} px — the portal's ring is 10 wide, the rest 11, plus the shadow), a cost pip, its name and one line (${fan.arts.map((a) => a.text).join(' · ')})`);
+  expect(/\bspell\b/.test(fan.arts[0].cls) && /\bplayable\b/.test(fan.arts[0].cls) && /\bmeta\b/.test(fan.arts[3].cls) && /\bdim\b/.test(fan.arts[3].cls), `a spell card is rimmed as playable, the Undo card dimmed at ply 0 (${fan.arts[0].cls} · ${fan.arts[3].cls})`);
+  // THE DRAG: the ice card onto the board through the mouse
+  const iceBox = await pageC.locator('#hand .card[data-kind="ice"]').first().boundingBox();
+  const target = await pageC.evaluate(() => { const K = window.__DCK; const ts = K.app.duel.legalMoves().filter((m) => /^I@/.test(m)).map((m) => m.slice(2)); const sq = ts[Math.floor(ts.length / 2)]; return { sq, pt: K.app.boardUI.pointOfSquare(sq), n: ts.length }; });
+  await pageC.mouse.move(iceBox.x + iceBox.width / 2, iceBox.y + iceBox.height / 2);
+  await pageC.mouse.down();
+  await pageC.mouse.move(iceBox.x + iceBox.width / 2 + 3, iceBox.y + iceBox.height / 2 - 3); // inside the slop: no drag yet
+  const slop = await pageC.evaluate(() => ({ drag: window.__DCK.cards.drag(), castMode: window.__DCK.app.castMode }));
+  await pageC.mouse.move(iceBox.x + iceBox.width / 2 + 10, iceBox.y + iceBox.height / 2 - 30, { steps: 4 });
+  const lifted = await pageC.evaluate(() => { const K = window.__DCK; return { drag: K.cards.drag(), castMode: K.app.castMode, lit: [...K.app.boardUI.marks.targets].length, dragging: !!document.querySelector('#hand .card.dragging'), ghost: !!document.getElementById('card-ghost') }; });
+  await pageC.mouse.move(target.pt.x, target.pt.y, { steps: 12 });
+  await pageC.waitForTimeout(40);
+  const over = await pageC.evaluate((sq) => { const K = window.__DCK; K.renderer.paintNow(); const g = document.getElementById('card-ghost'); const r = g?.getBoundingClientRect(); const px = K.renderer.square(sq); let blue = 0; if (px) for (let i = 0; i < px.length; i += 4) if (px[i] === 0x7c && px[i + 1] === 0xc8 && px[i + 2] === 0xff && px[i + 3] === 255) blue++; return { drag: K.cards.drag(), cell: K.marks.cell(sq), ghost: r ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } : null, blue, areaCells: K.cards.drag()?.area.map((a) => [a, K.marks.cell(a).includes('area')]) ?? [] }; }, target.sq);
+  expect(!slop.drag && !slop.castMode, `a press that moves inside the slop drags nothing yet (drag ${JSON.stringify(slop.drag)}, cast mode ${slop.castMode ?? 'none'})`); // castMode is unset (undefined) until a mode was ever entered
+  expect(lifted.drag?.kind === 'ice' && lifted.ghost && lifted.dragging && lifted.castMode === 'ice' && lifted.lit === target.n, `past the slop the ice card lifts as a ghost, its slot in the fan emptied, and cast mode lights the ${lifted.lit} legal centres`);
+  expect(over.drag?.hover === target.sq && over.cell.includes('hover') && over.cell.includes('area') && over.cell.includes('target'), `over ${target.sq} the square under the pointer is framed and tinted (${over.cell.filter((c) => /hover|area|target/.test(c)).join(' ')})`);
+  expect(over.drag.area.length >= 4 && over.drag.area.includes(target.sq) && over.areaCells.every(([, on]) => on), `the 3×3 the patch would freeze is tinted: ${over.drag.area.join(' ')}`);
+  expect(over.blue >= 40, `the frame under the pointer paints in the spell blue (${over.blue} px of 60)`);
+  expect(over.drag.tip === `release to freeze the floor around ${target.sq}` && over.ghost && over.ghost.y + over.ghost.h < target.pt.y, `the ghost rides above the pointer (its bottom ${over.ghost?.y + over.ghost?.h} over ${Math.round(target.pt.y)}) and its tip reads "${over.drag.tip}"`);
+  await pageC.mouse.up();
+  await pageC.waitForTimeout(250);
+  await settleC();
+  const cast = await pageC.evaluate(() => { const K = window.__DCK; return { moves: K.app.duel.record.moves.slice(0, 2), ply: K.app.duel.ply, hand: K.cards.hand(), drag: K.cards.drag(), ghost: !!document.getElementById('card-ghost'), castMode: K.app.castMode, hover: K.app.boardUI.marks.hover, area: [...K.app.boardUI.marks.area], piles: K.cards.piles(), state: K.app.duel.state }; });
+  expect(cast.moves[0] === `I@${target.sq}` && cast.ply >= 2, `the release casts the ice on ${target.sq} through the tap path (${cast.moves.join(' ')})`);
+  expect(!cast.ghost && cast.drag === null && cast.hover === null && cast.area.length === 0 && cast.castMode === null, 'the ghost and the preview go with the release');
+  expect(cast.hand.length === 4 && cast.piles?.deck === '3', `the refill drew a card into the fan (${cast.hand.join(' ')}; deck ${cast.piles?.deck})`);
+  // A drag released OFF the board: the card snaps back, nothing is played, cast mode leaves
+  if (cast.state === 'playing') {
+    const pBox = await pageC.locator('#hand .card[data-kind="portal"]').first().boundingBox();
+    const eBox = await pageC.locator('#enemy-bar').boundingBox();
+    const before = await pageC.evaluate(() => window.__DCK.app.duel.record.moves.length);
+    await pageC.mouse.move(pBox.x + pBox.width / 2, pBox.y + pBox.height / 2);
+    await pageC.mouse.down();
+    await pageC.mouse.move(pBox.x + pBox.width / 2, pBox.y - 40, { steps: 5 });
+    const mid = await pageC.evaluate(() => ({ drag: window.__DCK.cards.drag(), castMode: window.__DCK.app.castMode }));
+    await pageC.mouse.move(eBox.x + 30, eBox.y + 6, { steps: 8 });
+    const offBoard = await pageC.evaluate(() => ({ drag: window.__DCK.cards.drag() }));
+    await pageC.mouse.up();
+    await pageC.waitForTimeout(250);
+    const snap = await pageC.evaluate((n) => { const K = window.__DCK; return { played: K.app.duel.record.moves.length - n, drag: K.cards.drag(), ghost: !!document.getElementById('card-ghost'), castMode: K.app.castMode, dragging: !!document.querySelector('#hand .card.dragging'), hand: K.cards.hand() }; }, before);
+    expect(mid.drag?.kind === 'portal' && mid.castMode === 'portal' && offBoard.drag?.hover === null && offBoard.drag?.tip === '', 'the portal card lifts into cast mode; over the enemy bar nothing is framed and the tip is empty');
+    expect(snap.played === 0 && !snap.ghost && snap.drag === null && !snap.dragging && snap.castMode === null && snap.hand.includes('portal'), 'released off the board the card snaps back: nothing played, the ghost gone, cast mode left');
+    // A LONG PRESS opens the reader; the release after it plays nothing
+    const uBox = await pageC.locator('#hand .card[data-kind="undo"]').first().boundingBox();
+    await pageC.mouse.move(uBox.x + uBox.width / 2, uBox.y + uBox.height / 2);
+    await pageC.mouse.down();
+    await pageC.waitForTimeout(650);
+    const reader = await pageC.evaluate(() => ({ reader: window.__DCK.cards.reader(), hidden: document.getElementById('card-reader').hidden, text: document.querySelector('#card-reader-card .card-text')?.textContent ?? '', cost: document.querySelector('#card-reader-card .reader-cost')?.textContent ?? '', art: document.querySelector('#card-reader-card canvas.card-art')?.style.width ?? '' }));
+    await pageC.mouse.up();
+    await pageC.waitForTimeout(80);
+    const held = await pageC.evaluate((n) => ({ played: window.__DCK.app.duel.record.moves.length - n, castMode: window.__DCK.app.castMode, reader: window.__DCK.cards.reader() }), before);
+    await pageC.click('#card-reader');
+    const closed = await pageC.evaluate(() => ({ reader: window.__DCK.cards.reader(), hidden: document.getElementById('card-reader').hidden }));
+    expect(reader.reader === 'undo' && !reader.hidden && /take back your last move and the enemy's reply/.test(reader.text) && reader.cost === 'costs no move' && reader.art === '96px', `a long press opens the reader on the Undo card — its full text, "${reader.cost}", the art at 8×`);
+    expect(held.played === 0 && held.castMode === null && held.reader === 'undo' && closed.reader === null && closed.hidden, 'the release after the hold plays nothing; a tap closes the reader');
+    // The Undo card is playable now (a turn to take back) — a tap plays it
+    const undo = await pageC.evaluate(async () => { const K = window.__DCK; const ply = K.app.duel.ply; const ok = K.cards.tap('undo'); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); return { ok, plyBefore: ply, ply: K.app.duel.ply, hand: K.cards.hand(), spent: K.deck.decks().w.spent }; });
+    expect(undo.ok && undo.ply === 0 && !undo.hand.includes('undo') && undo.spent.includes('undo'), `a tap on the Undo card takes the turn back (ply ${undo.plyBefore} → ${undo.ply}) and the card is spent`);
+  } else expect(true, `the duel ended on the cast (${cast.state}) — the snap-back, the reader and the Undo card stand on the scratch drive`);
+  // The enemy's hand, face-up: mini cards in its bar with the art in the enemy's red; its deck a mini stack
+  const foe = await pageC.evaluate(() => { const K = window.__DCK; const minis = [...document.querySelectorAll('#enemy-cards .mini')]; return { kinds: K.cards.enemy(), hands: K.deck.hands()?.b ?? null, pile: K.cards.enemyPile(), pileN: K.deck.decks()?.b?.pile?.length ?? null, red: minis.every((m) => m.classList.contains('enemy') && m.querySelector('canvas.card-art')), sheet: (() => { document.querySelector('#enemy-cards .mini-stack')?.click(); const s = K.cards.sheet(); K.cards.closeDeck(); return s; })() }; });
+  expect(foe.hands && foe.kinds.join(',') === foe.hands.join(',') && foe.pile === String(foe.pileN) && foe.red, `the enemy's minis are its hand (${foe.kinds.join(' ')}) in its red, its stack its pile (${foe.pile})`);
+  expect(foe.sheet?.side === 'b' && !foe.sheet.redraw && /enemy/i.test(foe.sheet.title) && foe.sheet.pile.length === foe.pileN, `a tap on the enemy's stack opens the sheet on its pile with no redraw (${foe.sheet?.title}: ${foe.sheet?.pile?.join(',')})`);
+  expect(errsC.length === 0, `no page errors on the card UI${errsC.length ? ` — ${errsC.join(' | ')}` : ''}`);
+  await pageC.close();
+
+  // THE PLAYED-CARD BEAT on a motion page: the enemy's card flies to the board and holds enlarged (on demand — the engine casts when it likes)
+  let pageB = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errsB = [];
+  pageB.on('pageerror', (e) => errsB.push(String(e).split('\n')[0]));
+  await pageB.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`);
+  pageB = await bootWait(pageB, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`, (p) => p.on('pageerror', (e) => errsB.push(String(e).split('\n')[0])));
+  await pageB.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const beat = await pageB.evaluate(async () => {
+    const K = window.__DCK;
+    const sq = K.app.duel.legalMoves().find((m) => /^I@/.test(m))?.slice(2) ?? null;
+    const p = K.cards.playBeat('ice', sq);
+    const samples = [];
+    for (let i = 0; i < 12; i++) { await new Promise((r) => setTimeout(r, 60)); const b = document.getElementById('card-beat'); const r = b?.getBoundingClientRect(); samples.push(r ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), op: getComputedStyle(b).opacity, enemy: !!b.querySelector('.card.enemy') } : null); }
+    await p;
+    const board = document.getElementById('board').getBoundingClientRect();
+    const pt = sq ? K.app.boardUI.pointOfSquare(sq) : null;
+    return { fx: K.options?.fx ?? null, samples, gone: !document.getElementById('card-beat'), board: { t: Math.round(board.top), b: Math.round(board.bottom) }, pt: pt ? { x: Math.round(pt.x), y: Math.round(pt.y) } : null, sq };
+  });
+  const held = beat.samples.filter((s) => s && s.w > 60);
+  expect(held.length >= 4 && held.every((s) => s.enemy) && held.some((s) => s.y > beat.board.t && s.y + s.h < beat.board.b + 40), `the enemy's card holds over the board for a beat (${held.length} samples over 60 px wide of ${beat.samples.filter(Boolean).length}; a frame at ${held[0]?.x},${held[0]?.y} ${held[0]?.w}×${held[0]?.h}, the square at ${beat.pt?.x},${beat.pt?.y})`);
+  expect(beat.gone, 'the beat is gone once it has played');
+  expect(errsB.length === 0, `no page errors on the beat${errsB.length ? ` — ${errsB.join(' | ')}` : ''}`);
+  await pageB.close();
+}
+
 await browser.close();
 
 server.close();
@@ -2159,5 +2501,5 @@ server.close();
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(`rungs seen: weaken ${seen.weaken} · breach ${seen.breach} · displace ${seen.displace} · crumble ${seen.crumble}`);
-console.log(`SUMMARY: ${notes.length} ok, ${failures.length} failed${SHOTS ? ` — screenshots in ${OUT}` : ''}`);
+console.log(`SUMMARY: ${notes.length} ok, ${failures.length} failed${bootRetries ? `, ${bootRetries} boot retr${bootRetries === 1 ? 'y' : 'ies'}` : ''}${SHOTS ? ` — screenshots in ${OUT}` : ''}`);
 process.exit(failures.length ? 1 : 0);

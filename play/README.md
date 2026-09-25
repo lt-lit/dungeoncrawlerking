@@ -81,6 +81,13 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 
 ## Layout
 
+- **`js/deck.mjs` — THE DECK (2026-09-25; brief §4.10; § "The deck" below):**
+  spells as cards — the catalog, the starter deck, the enemy's deck by
+  width, the seeded shuffle, the hand as the pocket's scrolls plus the meta
+  cards, the draw to four, the mulligan; `duel.mjs` refills at each turn's
+  start and records `deck` / `metaPlays`; `main.mjs` § THE DECK is the
+  card row. Node gates `phase0/harness/test-deck.mjs` and
+  `test-deck-duel.mjs`; `deck-stress.mjs` the instrument.
 - **THE DOM BOARD IS RETIRED (2026-09-07).** The board is `js/canvas-board.mjs`
   (one 16×16 buffer, scaled once — § "The canvas board" below) drawing off
   `js/atlas.mjs` (`img/tileset.png` + `img/pieces.png` + `img/tileset.json`,
@@ -2550,6 +2557,297 @@ legend with it) and 'auto' returning the stage's own; gates ui-smoke
 saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
 now holds across a reload and that the replay page wears crypt on the
 sample log.
+
+## The deck (2026-09-25)
+
+Brief §4.10 (the designer: "Could we have spells as cards drawn from a
+deck? … what if we just made both decks and hands fully visible to both
+players"; the rulings the same session — a hand of four, drawn up to at the
+start of each turn, a redraw that spends the turn, two decks, a shuffle and
+a fresh hand at every duel, and the standing rule that NO CARD IS EVER
+VALUED BY A NUMBER: "When the engine chooses to play a card, it should do
+so because it's objectively the best move… If we don't like how often the
+engine plays spells, the answer is to change how the spells work"). Stage 1
+of the staging in the brief: the deck, no engine change. The stages after
+it (terrain edits, timers and piece states, materials and fire, physics and
+the run layer) are forge sessions of their own.
+
+- **The idea in one sentence:** a shuffled deck both sides can read is
+  perfect information — random once at the deal, like the floor — and the
+  HAND IS THE POCKET the engine already searches; the only thing the engine
+  does not do natively is draw, and under draw-to-hand-size the hand it
+  sees is next turn's hand but for the card it casts, so the game refilling
+  the pocket between plies is nearly as good as a draw inside the engine.
+- **`js/deck.mjs`, the pure half.** `CARDS` is the catalog: `ice` (the ice
+  scroll, one letter), `portal` (the pair's two scrolls), `reveal` and
+  `undo` (meta cards — the player's alone, they cost no move and never reach
+  the engine). `STARTER_DECKS.adept` is three portals, three ice, Reveal and
+  Undo; `enemyDeck(width, seed)` is width − 1 spells drawn by seed (the
+  level telegraph, brief §8), `enemyCards` a list's spells alone (an engine
+  reveals nothing to itself and never undoes). A deck STATE per side is
+  `{ pile (top first), meta (the meta cards in hand), spent }`; the shuffle
+  is one seeded draw off the deal's seed (`deckSeeds`), a hand-built
+  `?deck=` list deals in its own order (`fixed`). THE POCKET IS THE TRUTH
+  for spells: a side's spell cards are read off the holdings at any moment
+  (`spellHand`: per kind, the scrolls over the card's scrolls, rounded up —
+  a portal with its half open and one scroll left is still a card), the hand
+  is that plus `meta` (`handOf`). `openHands` draws both opening hands into
+  a holdings string the deal writes (`withPocket`); `drawUp` draws the top
+  of the pile while the hand is short of `HAND_SIZE` (a spell's scrolls
+  join the pocket, a meta card `meta`); `mulligan` sends the whole hand to
+  `spent` and draws anew; `deckRecord` is the per-ply shape on the record;
+  `parseDeckParam` reads `?deck=off|adept|<kind,kind,…>`.
+- **`js/duel.mjs`.** `opts.decks` (after the opening draw) and `handSize`.
+  THE REFILL (`#refill`): after every ply that counts — inside `#afterPly`,
+  after the quake phase, before the snapshot — the side to move next draws
+  up to the hand size; a drawn spell rewrites the holdings through a BARE
+  POSITION for the engine and a fresh ffish board (`#adoptPostQuake`, the
+  path a quake takes), a meta card joins the deck state; the frozen side of
+  an open half (its one move the pass) and a caster on its link ply draw
+  nothing (that turn began before); the draw rides the state of record as
+  `drew`. Every state carries `deck` (hand / pile / spent per side);
+  `metaPlays` is a record array (the undo lens covers it); `playMeta(side,
+  kind)` spends a meta card outside the move grammar, records the play and
+  moves the top snapshot's decks and lens with it, so an undo back to that
+  state keeps the card spent and the play on the record; `hands()` is the
+  page's read; `canMulligan()` / `mulligan(mover)` — the hand replaced, the
+  turn field FLIPPED, the en passant square cleared, a bare position, a
+  `--` ply on the record with `cast: 'mulligan'` and the discards, then the
+  ordinary post-ply pipeline (the meters read a cold ply, the gods may
+  roll); the snapshot carries `decks` and `#restore` puts them back (a fixed
+  order — the same cards come up again after an undo).
+- **The deals.** `armygen.dealMatchup` and `barrier.planBox` take `pocket`
+  (the opening hands' holdings) in place of the stress-test set; the
+  variant still declares the scroll kinds the flags name, and with a deck
+  the page names the kinds EITHER deck holds.
+- **The run.** `run.deck` = `{ starter, cards, fixed }` — the collection;
+  every duel shuffles it by its own seed and deals four; spent cards come
+  back for the next duel. `dck-run/6`. The enemy's deck on the walk is by
+  its width, drawn from ITS seed (`enemy-deck:<id>` off the run's seed), so
+  a map enemy's deck is its own for the run.
+- **The log.** `decks` (both piles as shuffled, before the opening draw),
+  `metaPlays`, and `deck` on every state; the analyzer draws nothing for a
+  `--` ply.
+- **The page (`main.mjs` § THE DECK).** Options → Spells → Deck: the
+  starter, or "Everything, no deck" — the stress-test set every spell
+  shipped with, which the older smokes pin with `?deck=off`. The spell
+  buttons count CARDS under a deck (`×1` for a pair) and scrolls without
+  one; `btnReveal` / `btnUndoCard` (each `×n`), `btnMulligan`, `#deck-line`
+  (the pile in order, glyphs), the enemy's bar `… · hand ◎ ❄ · deck ◎`.
+  Reveal (`playRevealCard`): the card spent, `app.reveal = ply`, and the
+  hint probe runs as Cheater Mode's would (`revealOn()` beside `cheatHints()`
+  in `runCheatSearch` / `applyHintLines` / `applyOptions`), three lines,
+  gone with the turn. Undo (`doUndo({ card: true })`): the cheat undo's
+  path without Cheater Mode, the card spent in the RESTORED state. Redraw
+  (`playMulligan`): a turn spent. The log: "you draw ❄ Ice", "☉ Reveal —
+  …", "↺ Undo — …", "1. -- — you discard … and draw …". `__DCK.deck`:
+  `spec / hands / decks / reveal / undo / mulligan / canMulligan / revealOn
+  / run / CARDS`.
+- **Measured before the build** (the self-play instrument, engine vs
+  engine, gods off; the brief has the table): at value 0 the engine casts
+  on about one castable turn in twenty and every cast scores within a pawn
+  of its best plain move; the side behind casts most and early; situational
+  cards are held; casts are listed per card KIND in hand (copies are free),
+  and 68 casts at the root cost about two plies at the live ten seconds —
+  hand size in kinds is the engine's cost, range per card the rule-shaped
+  lever.
+- **Gates.** `phase0/harness/test-deck.mjs` (50: the catalog against the
+  scroll letters, the seeded shuffle, the opening hands, the hand off the
+  pocket with a half-spent portal, the draw, the meta cards, the mulligan,
+  the enemy's deck, the record's shape, `?deck=`), `test-deck-duel.mjs`
+  (36, on the vendored pair in Node: the deal's holdings, a quiet ply
+  drawing nothing, the refill after a cast at the caster's next turn start
+  as a bare position, no draw on the frozen pass or the link ply, the meta
+  cards spent on the record and kept spent through an undo to their own
+  state, the mulligan's `--` ply and the engine moving on from it, the undo
+  putting the hand and pile back, no decks = the old controller),
+  `ui-smoke.mjs` THE DECK block (a fixed-order deck's opening hand on the
+  bar, Reveal's lines without Cheater Mode, the refill after Reveal and a
+  cast, the Undo card, the redraw, the export; `?deck=off` the stress-test
+  set; the walk's run dealing from its deck and the enemy's by width), the
+  selftest unchanged (51), `deck-stress.mjs` — engine against engine on the
+  canon controller with two decks: per card kind the cast count, the median
+  ply, the share cast by the side behind, the cards dead in hand at the
+  end; per side the casts per 100 plies and the share of castable turns
+  cast (`--deck`, `--enemy width|adept`, `--gods`, `--out` JSONL); its first
+  batch is `phase0/results/deck-stress/adept-vs-width3-d8.jsonl` (four games
+  on s59, Adept against a 3-wide enemy, depth 8 / 300 ms, gods off: the deck
+  side cast on 5% of its castable turns, the enemy on 6%, every enemy cast
+  while behind).
+- **Built on: Phase 3.2, THE CARD UI** (the section below, the same day)
+  — the fan replaced the buttons and the deck line described above; the
+  record here stays as the deck's own.
+
+## The card UI (Phase 3.2, 2026-09-25)
+
+Brief §4.10 "The card UI" (the designer, on the deck's first card row:
+"These little buttons aren't gonna cut it. I wanna take notes from other
+card wielding games like mtg arena and hearthstone. Probably cast spells
+by dragging them from the hand to the field, that kind of thing"; the
+proposal's four calls agreed the same day: the drag preview tints an area
+card's whole shape, the enemy's played card holds for a beat, the redraw is
+a tap on the deck stack behind a confirm, the portal's second square is a
+tap with cast mode held — or the card dragged again). Game layer only;
+nothing aligns with the floor: the ghost is a fixed-position DOM card, the
+drop test is the board's own `squareAtPoint`, and the only thing drawn IN
+the board's buffer is two new marks (rule 18 untouched).
+
+- **`js/cards.mjs`, the pure half** (Node gate `test-cards.mjs`, 54):
+  `fanLayout(n, width, cardW)` — n cards side by side and centred while they
+  fit, overlapping in an even step from the row's left edge to its right
+  when they do not, each tilted from the middle out (±`FAN_MAX_ROT` 7° at
+  the outer cards) and the outer ones dropped `FAN_ARC` 5 px so the tops
+  trace an arc; `cardArt(kind)` — a spell card's art IS its hint's glyph
+  (`SPELL_GLYPHS` off pixelarrow: the portal's ring, the ice's snowflake —
+  one drawing, rule 19) and the meta cards have two drawings of their own at
+  the same 11×11 (`REVEAL_GLYPH` an eye, `UNDO_GLYPH` a counter-clockwise
+  arrow), `stampGlyph` stamping any of them with the spell glyphs' one-pixel
+  drop shadow; the GESTURE (`gestureStart` / `gestureMove` / `gestureHold` /
+  `gestureEnd`): one pointer path split into a TAP (under `DRAG_SLOP` 8 px
+  of travel), a DRAG (past it, once) and a HOLD (`LONG_PRESS_MS` 450 with
+  no travel; a release after it is nothing); `castArea(kind, sq, …)` — the
+  squares a drop would touch: the ice's 3×3 on the floor alone (the engine's
+  `ice_patch`: a wall, a crate, bedrock, a pit take none; a piece stands on
+  ice; clipped to the board), a portal's one square, nothing for a meta
+  card; the words (`cardHint` — the portal with its half open asks for the
+  link; `dropWords` — the ghost's tooltip; `costWords`). The catalog in
+  deck.mjs gained `short` (the face's one line) and `cost` ('move' | 'free').
+- **The fan** (`main.mjs` § THE CARD UI; `#hand-row` in index.html, the
+  styles in style.css): under the board, replacing the spell buttons, the
+  meta cards' buttons, the Redraw button and the deck line. Every copy of a
+  card is its own card (`handOfSide`: the pocket's spell cards then the meta
+  cards under a deck; the pocket's spells alone under `?deck=off`, with no
+  piles). A face (`makeCard`) is a CSS frame around the art at `--card-art`
+  times (4 on a phone, 5 on the wide layout; a canvas at 1× scaled by CSS,
+  pixelated), the name, the short line and a COST PIP (filled for a spell —
+  the cast is your move — a dash for a meta card). Rims: a spell card the
+  spell blue, a meta card the hint gold, the enemy's its red; a card that
+  cannot be played now (`cardPlayable`: a spell with no legal cast, Reveal
+  already played, Undo at ply 0, not your turn, the engine thinking) is
+  DIMMED. The layout is inline `left` plus two variables (`--fan-y`,
+  `--fan-rot`) the base transform reads, with `FAN_INSET` 8 px kept clear at
+  either end so a tilted corner never hangs off the row; a LIFTED card (cast
+  mode for its kind — `syncLiftedCards`, the first card of the kind) rises
+  14 px and grows. `renderHand` rebuilds only when the hand, the cards'
+  states, the open half or the row's width changed (a signature), never
+  mid-drag, and re-lays on a resize.
+- **The gesture** (`bindHand`, pointer capture on the fan): a TAP on a
+  playable spell card toggles cast mode for its kind (the link ply's portal
+  is held there), on a meta card plays it (`playMetaCard`: Reveal through
+  the hint probe, Undo through the cheat undo's path); a DRAG (`beginDrag`)
+  lifts a ghost — `#card-ghost`, a copy of the face at 1.15× riding 24 px
+  above the finger with a tooltip under it — empties the card's slot in the
+  fan and, for a spell, enters cast mode so the legal squares light;
+  `moveDrag` reads the square under the pointer through `squareAtPoint`:
+  a legal cast square (any square for a meta card) becomes the board's
+  `hover` mark and, for a spell, its `castArea` the board's `area` marks —
+  canvas-board `setMarks` gained both: the hover frame at the square's edge
+  in the spell blue (`#paintMarksOver`, like a proposed cast's frame), the
+  area a translucent blue tint under the pieces (`#paintUnderMarks`,
+  `AREA_TINT`; the classes surface reads `hover` / `area`) — and the tip
+  says what a release does ("release to freeze the floor around e5",
+  "release to open a portal at e5", "release to link the portals c4–e5");
+  a RELEASE on a lit square (`endDrag`) shrinks the ghost onto it and casts
+  through the tap path's own `playPlayerMove` (a meta card plays), a release
+  anywhere else (`snapBack`) glides the ghost back to its slot, plays
+  nothing and leaves cast mode (unless the link ply holds it); a LONG PRESS
+  opens THE READER (`#card-reader`: the card at 8× art with its full text,
+  what it costs and its line for the position — the portal's open half asks
+  for the link; a tap anywhere closes it; a desktop hover shows the same
+  text as the card's title). The area preview is a DRAG preview that
+  vanishes on release, so the ice HINT's "way too loud" ruling does not
+  reach it (agreed 2026-09-25).
+- **The piles and the sheet.** `#pile-deck` a stack with its count (a
+  three-plate shadow), `#pile-spent` beside it; a tap on the deck opens THE
+  DECK SHEET (`#deck-sheet`: the pile in order as mini cards, top first, the
+  spent pile, a note) and for the player THE REDRAW behind a confirm —
+  Redraw turns into "Confirm: discard the hand, draw four, spend the turn"
+  + Cancel, and only the confirm plays `playMulligan` — so a turn is never
+  spent by a slip. The enemy's mini stack opens the same sheet on its pile
+  (no redraw).
+- **The enemy's hand, face-up.** `#enemy-cards` in its bar (its text now
+  `#enemy-bar-text`, `setEnemyBarText`): a mini card (`miniCard`: the art at
+  2× in a 28×36 frame, the enemy's red) per card of its hand and its deck a
+  mini stack with a count. THE PLAYED-CARD BEAT (`enemyCardBeat`, awaited in
+  `onMove` before the spell paints, for the enemy's ice cast and the HALF of
+  its one-turn portal cast — the link is the same card): its card flies from
+  its mini in the bar to the cast square at 1.2×, holds ~half a second, fades
+  — Hearthstone's opponent-played-card reveal; nothing under `?fx=0`.
+- **The draw.** A card new to the hand starts on the deck stack (a
+  translate + scale from the stack's rect to its slot) and slides home
+  (`.dealt`, 260 ms; nothing under `?fx=0`) — the opening hand is dealt from
+  the stack the same way.
+- **Surface:** `__DCK.cards` — `hand()`, `els()`, `info(kind)` (n, playable,
+  lifted, hint, title), `layout()`, `tap(kind)`, `playable(kind)`, `drag()`
+  (kind, hover, area, tip, ghost), `ghost()`, `beat()`, `playBeat(kind,
+  sq)`, `reader()`, `openReader` / `closeReader`, `openDeck(side)` /
+  `closeDeck()`, `sheet()`, `piles()`, `enemy()`, `enemyPile()`,
+  `rowHidden()`.
+- **Gates:** `test-cards.mjs` 54 (the catalog's face fields, the glyphs'
+  shape and ink, the stamp's shadow rule, the fan centred / overlapping /
+  increasing / one card / many / narrower than a card, the gesture's tap /
+  drag / return-drag / hold / late timer, the ice area on floor alone
+  clipped at three corners and around a pit, the portal's one square, the
+  words), `ui-smoke.mjs` THE CARD UI block driven through REAL POINTER
+  EVENTS (the fan's four cards in order inside the screen and under the
+  board with their art, pips, names and lines, a spell rimmed and Undo dimmed
+  at ply 0; a press inside the slop dragging nothing; the ice card past the
+  slop lifting as a ghost with its slot emptied and cast mode lighting every
+  legal centre; over the target the hover frame in the spell blue, the 3×3
+  tinted, the tip; the release casting `I@sq` through the tap path with the
+  ghost and the preview gone and the refill's card in the fan; a drag
+  released over the enemy bar snapping back with nothing played; a long
+  press opening the reader on Undo with its full text, cost and 8× art, the
+  release after it playing nothing; a tap on the Undo card taking the turn
+  back; the enemy's minis its hand in its red with its stack its pile, and
+  its sheet with no redraw; the beat on a motion page holding the enemy's
+  card over the board for a beat and going) plus the older spell and deck
+  blocks moved onto the card surface (the tap path: `K.cards.tap` in place
+  of the buttons; the portal's half-spent card still a card; the deck sheet's
+  Redraw → confirm → the mulligan; `?deck=off` a fan of the two spells with
+  no piles) — 438 ok / 0 failed (three earlier full runs died on the
+  engine transport's GLUED READYOK — `bestmove … ponder …readyok` as one
+  message, on record since 2026-09-12 — so `js/engine.mjs` and
+  `phase0/lib/load.mjs` now split a glued `readyok` off any line before a
+  listener reads it, `splitGlued`; the binaries and the rules untouched —
+  and a lost renderer at a page's boot deep in a run, met by ui-smoke's
+  counted browser relaunch and Chromium's `--disable-dev-shm-usage`: 45 of
+  45 boots in one browser clean with the flag where the run without it
+  lost its 25th, one sample each way; the clean run needed no retry);
+  selftest 51 headless; replay-smoke 91 ok
+  (canvas-board's two new marks, `?sample=5`); test-deck 50, test-deck-duel
+  36, test-logreport 79, the other Node gates unchanged. Five phone-ratio shots (dpr 2.625: the hand, the
+  drag, the reader, the sheet, the beat) went to the designer.
+- **Held over:** a drag from the first portal SQUARE to the second (the
+  card dragged again works today); the wide layout's fan is in the panel
+  column beside the board, ungrown beyond `--card-w` 92 px; card backs (none
+  by the ruling); a sound.
+- **THE VERDICT (designer, 2026-09-25, with a log): "Pretty funky but it
+  works. Looking forward to more card variety."** The card UI is IN. The log
+  is THE FIFTH COMMITTED SAMPLE, THE FIRST DECK DUEL
+  (`replay/samples/dck-log_s77-the-smithy_s210339940.json`, `?sample=5`: s77
+  The Smithy flipped on the arena page, Firefox on Windows, the Adept deck
+  against the starter's six spells, restless, 85 plies, 8 quakes, 5 undos, 0
+  anomalies, 1-0 by checkmate at ply 85). What the record says: a Reveal at
+  ply 10 (the one meta play), six draws, the player casting an ice, a portal
+  pair and another ice; THE ENEMY CAST ITS WHOLE DECK FROM BEHIND — three
+  ices and three portal pairs, every one at an eval of −9 to −29 — and its
+  PORTAL PLACEMENT is what the designer called weird: a3–d3 deep in the
+  player's camp at ply 36–38, an ADJACENT pair g5–g6 at 40–42 (its line
+  `O@g6 d5c4 g9i8 e4f5 e9d8 c4d3 d8g5`: a bishop dropped through it one
+  square), j8–d4 at 70–72 with mate six plies off. Every square is inside
+  the cast rule (ranks 3…8) and the field is the engine's own, so this is
+  the no-values rule doing what it says: a linked pair is two BODIES the
+  opponent can never remove, and a losing engine casts the least-bad move
+  its eval finds — a two-square wall on the g-file beside the ice, not a
+  transport. If it should read differently the answer is a RULE of the
+  spell, never a value: a minimum spread between a pair's two squares (the
+  link's drop generator in portals-cast.patch — a forge), or a cast kept
+  out of the opponent's half. The designer's to rule on. `logreport.mjs`
+  reads the deck now: a `decks` line on the header (both decks as shuffled,
+  the draws, the meta plays, the hands at the end) and the timeline marking
+  a redraw, each draw at the next turn's start and each meta play
+  (`metaPlaysMap`); test-logreport 79, replay-smoke opens `?sample=5`.
 
 ## The portal spell (2026-09-17)
 

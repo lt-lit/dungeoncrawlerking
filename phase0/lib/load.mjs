@@ -70,6 +70,17 @@ export async function loadEngine() {
   return new UciEngine(sf);
 }
 
+/** THE GLUED LINE (2026-09-25; the same split as play/js/engine.mjs, which
+ *  is this class's port): the pthread build's stdout can hand one message
+ *  carrying two lines — `bestmove c4b5 ponder e7d8readyok` — so an
+ *  `isready` never saw its `readyok`. No UCI line ends in "readyok" but
+ *  "readyok" itself, so a longer line ending in it is two lines. */
+export function splitGlued(line) {
+  if (typeof line !== 'string') return [line];
+  if (line.length > 7 && line.endsWith('readyok')) return [line.slice(0, -7), 'readyok'];
+  return [line];
+}
+
 export class UciEngine {
   constructor(sf) {
     this.sf = sf;
@@ -77,8 +88,10 @@ export class UciEngine {
     this.log = [];
     this.logEnabled = false;
     sf.addMessageListener((line) => {
-      if (this.logEnabled) this.log.push(line);
-      for (const l of [...this.listeners]) l(line);
+      for (const one of splitGlued(line)) {
+        if (this.logEnabled) this.log.push(one);
+        for (const l of [...this.listeners]) l(one);
+      }
     });
   }
 

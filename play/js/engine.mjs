@@ -7,6 +7,20 @@
 // this module only wraps those globals. UciEngine itself is a verbatim port.
 // Importing this module never touches `window` — only the factories below do.
 
+/** THE GLUED LINE (2026-09-25): the pthread build's stdout can hand one
+ *  message carrying two lines — `bestmove c4b5 ponder e7d8readyok`, the
+ *  search thread's bestmove and the main thread's readyok with the newline
+ *  between them lost — so an `isready` never saw its `readyok` and the
+ *  duel stalled (on record since 2026-09-12; three of four smoke runs died
+ *  on it 2026-09-25). No UCI line ends in "readyok" but "readyok" itself,
+ *  so a longer line ending in it is two lines. The split happens before
+ *  any listener reads, so the log and every predicate see one line each. */
+export function splitGlued(line) {
+  if (typeof line !== 'string') return [line];
+  if (line.length > 7 && line.endsWith('readyok')) return [line.slice(0, -7), 'readyok'];
+  return [line];
+}
+
 export class UciEngine {
   constructor(sf) {
     this.sf = sf;
@@ -14,8 +28,10 @@ export class UciEngine {
     this.log = [];
     this.logEnabled = false;
     sf.addMessageListener((line) => {
-      if (this.logEnabled) this.log.push(line);
-      for (const l of [...this.listeners]) l(line);
+      for (const one of splitGlued(line)) {
+        if (this.logEnabled) this.log.push(one);
+        for (const l of [...this.listeners]) l(one);
+      }
     });
   }
 

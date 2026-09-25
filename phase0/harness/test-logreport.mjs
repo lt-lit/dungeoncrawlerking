@@ -196,6 +196,27 @@ if (!process.argv[2]) {
   expect((L4.quakes?.length ?? 0) === 3 && (L4.branches?.length ?? 0) === 6 && (L4.anomalies?.length ?? 0) === 0 && !L4.engine.some((e) => e.recovered), 'three quakes landed, six undos, no anomaly, no recovered search');
 }
 
+// THE DECK (2026-09-25): the fifth sample — THE FIRST DECK DUEL, the
+// designer's log on the card UI build (s77 The Smithy flipped, Firefox on
+// Windows, the Adept deck against the starter's six spells): the header's
+// decks line, the draws and the Reveal on the timeline, the enemy casting
+// its whole deck from behind, the hands on every state.
+if (!process.argv[2]) {
+  const L5 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_s77-the-smithy_s210339940.json'), 'utf8'));
+  const full5 = R.renderReport(L5, { sections: R.SECTION_NAMES });
+  const tl5 = R.timelineSection(L5);
+  expect(full5.length > 10000 && /stage s77-the-smithy/.test(full5) && /RESULT 1-0/.test(full5) && /checkmate/.test(full5) && /anomalies 0/.test(full5) && /undos 5/.test(full5), 'the deck duel sample renders: s77, 1-0 by checkmate, no anomaly, five undos');
+  expect(/decks  W 8 cards \/ B 6 cards \(as shuffled\)  draws 6  meta plays reveal @p10  hands at the end W \[Ice, Portal, Portal, Undo\] B \[—\]/.test(full5), `the header carries both decks, the six draws, the Reveal at ply 10 and the hands at the end (${full5.split('\n').find((l) => l.startsWith('decks')) ?? 'no decks line'})`);
+  expect(tl5.some((l) => /^p 10 /.test(l) && /☉ Reveal played/.test(l)) && tl5.some((l) => /^p 12 /.test(l) && /🂠 W draws Portal/.test(l)) && tl5.some((l) => /^p 15 /.test(l) && /🂠 B draws Ice/.test(l)), 'the timeline marks the Reveal at ply 10 and the draws at the turns\' starts (W a portal after ply 12, B an ice after ply 15)');
+  expect(tl5.some((l) => /^p 14 /.test(l) && /I@e5/.test(l) && /the ice is cast/.test(l)) && tl5.some((l) => /^p 36 /.test(l) && /O@a3/.test(l)) && tl5.some((l) => /^p 37 /.test(l) && /--/.test(l)) && tl5.some((l) => /^p 38 /.test(l) && /O@d3/.test(l)), "the enemy's casts read on the timeline: the ice at 14, a pair in one turn at 36–38");
+  const by = (mover, kind) => L5.states.filter((s) => s.mover === mover && s.cast === kind).length;
+  expect(by('engine', 'ice') === 3 && by('engine', 'link') === 3 && by('player', 'ice') === 2 && by('player', 'link') === 1, `the enemy cast its whole deck from behind — three ices and three portal pairs — the player two ices and a pair (${by('engine', 'ice')}/${by('engine', 'link')} vs ${by('player', 'ice')}/${by('player', 'link')})`);
+  const last5 = L5.states[L5.states.length - 1];
+  expect(L5.states[0].deck?.w?.hand?.length === 4 && L5.states[0].deck?.b?.hand?.length === 4 && L5.states.every((s) => s.deck) && last5.deck.w.spent.includes('reveal') && last5.deck.b.hand.length === 0 && last5.deck.b.pile.length === 0, 'every state carries both decks: hands of four at the start, the Reveal spent and the enemy\'s deck empty at the end');
+  expect(L5.metaPlays?.length === 1 && L5.metaPlays[0].kind === 'reveal' && L5.metaPlays[0].ply === 10 && L5.states.filter((s) => s.drew).length === 6, 'the record holds the one meta play and six draws');
+  expect((L5.quakes?.length ?? 0) === 8 && (L5.branches?.length ?? 0) === 5 && (L5.anomalies?.length ?? 0) === 0 && !L5.engine.some((e) => e.recovered), 'eight quakes landed, five undos, no anomaly, no recovered search');
+}
+
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(failures.length ? `\n${failures.length} FAILED` : `\nPASS (${notes.length} checks)`);

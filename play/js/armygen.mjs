@@ -436,6 +436,7 @@ export function dealMatchup({
   portals = false, // THE PORTAL SPELL (2026-09-17): both sides carry their scrolls, the deal's variant knows the rule
   hammer = false, // THE SLEDGEHAMMER (2026-09-17): every king may crack an adjacent wall — the deal's variant names the hammer types
   ice = false, // THE ICE (2026-09-20): one ice scroll a side in hand, the deal's variant knows the slide
+  pocket = null, // THE DECK (2026-09-25): the holdings string of the two opening hands (deck.mjs openHands) in place of the stress-test set — the variant still declares every scroll kind the flags name
 }) {
   let terrain;
   try {
@@ -490,7 +491,8 @@ export function dealMatchup({
       campLineRank(m.black.layout.cells, -1),
       { portals, hammer, ice }
     );
-    if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // the scrolls in hand, both sides
+    if (pocket !== null && pocket !== undefined) m.fen = withPocket(m.fen, pocket); // THE DECK: the opening hands' scrolls
+    else if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);
       const lint = lintMatchupFen(ffish, variant.name, m.fen);
