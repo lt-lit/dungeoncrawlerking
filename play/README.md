@@ -2809,7 +2809,11 @@ the board's buffer is two new marks (rule 18 untouched).
   engine transport's GLUED READYOK — `bestmove … ponder …readyok` as one
   message, on record since 2026-09-12 — so `js/engine.mjs` and
   `phase0/lib/load.mjs` now split a glued `readyok` off any line before a
-  listener reads it, `splitGlued`; the binaries and the rules untouched);
+  listener reads it, `splitGlued`; the binaries and the rules untouched —
+  and a lost renderer at a page's boot deep in a run, met by ui-smoke's
+  counted browser relaunch and Chromium's `--disable-dev-shm-usage`: 45 of
+  45 boots in one browser clean with the flag where the run without it
+  lost its 25th, one sample each way; the clean run needed no retry);
   selftest 51 headless; replay-smoke 91 ok
   (canvas-board's two new marks, `?sample=5`); test-deck 50, test-deck-duel
   36, test-logreport 79, the other Node gates unchanged. Five phone-ratio shots (dpr 2.625: the hand, the
