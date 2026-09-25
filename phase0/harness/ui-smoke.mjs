@@ -69,8 +69,14 @@ const bootWait = async (page, make, url, hook) => {
     if (!/Timeout|closed|crashed/i.test(String(e))) throw e;
     bootRetries++;
     const where = await page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`).catch((err) => `unreachable: ${String(err).split('\n')[0]}`);
-    process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${where}) — a fresh page\n`);
+    process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${where}) — a fresh browser and page\n`);
+    // THE LOST RENDERER (2026-09-25): after a run of pages in one Chromium a new page's target can die at its boot
+    // ("Target page, context or browser has been closed"; 45 boots in one browser reproduced it at the 25th, a fresh
+    // browser boots the same URL in 3.5 s) while the browser itself stays up — so the retry is a NEW BROWSER, not a new
+    // page in the old one. Every boot site's maker reads `browser` when called, so it makes its page in the new one.
     await page.close().catch(() => {});
+    await browser.close().catch(() => {});
+    browser = await launch();
     const fresh = await make();
     if (hook) hook(fresh);
     await fresh.goto(url);
@@ -85,7 +91,8 @@ const expect = (ok, what) => {
 };
 
 const executablePath = process.env.CHROMIUM ?? (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
-const browser = await chromium.launch({ executablePath, args: ['--no-sandbox'] });
+const launch = () => chromium.launch({ executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+let browser = await launch();
 let page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0]));
