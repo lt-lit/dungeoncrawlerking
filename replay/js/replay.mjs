@@ -67,8 +67,12 @@ const params = new URLSearchParams(location.search);
 // 4 — THE FIRST ICE DUEL (2026-09-24, vaults-2 at walk turn 24, the phone):
 // both sides cast the ice (the player's I@d6 at ply 26, the enemy's I@b6
 // overlapping it at 39), a pawn's double step sliding on to d8, a rook
-// stopped on c5, the enemy's portal pair after, both kings hammering.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json'];
+// stopped on c5, the enemy's portal pair after, both kings hammering;
+// 5 — THE FIRST DECK DUEL (2026-09-25, s77 The Smithy flipped, the designer's
+// log on the card UI build, Firefox/Windows): the Adept deck against the
+// starter's spells — a Reveal at ply 10, six draws, the enemy casting its
+// whole deck (three ices, three portal pairs) from behind, 1-0 by checkmate.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json', 'samples/dck-log_s77-the-smithy_s210339940.json']; // ?sample=5: THE FIRST DECK DUEL (2026-09-25, the designer's log on the card UI build)
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;

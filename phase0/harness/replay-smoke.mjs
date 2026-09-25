@@ -450,6 +450,21 @@ const ic = await page.evaluate(async () => {
   return out;
 });
 expect(/^vaults-2/.test(ic.stage) && ic.plies === 68, `?sample=4 opens the first ice duel (${ic.stage}, ${ic.plies} plies)`);
+// THE DECK (2026-09-25): the fifth sample — THE FIRST DECK DUEL, the designer's log on the card UI build — loads, and the report carries the decks, the draws and the Reveal.
+{
+  await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=5&fx=0`);
+  await page.evaluate(() => window.__DCK.ready);
+  const dk5 = await page.evaluate(async () => {
+    const Rp = window.__DCK.replay;
+    await Rp.boardReady();
+    Rp.goto(12);
+    const rep = typeof Rp.report === 'function' ? await Rp.report() : '';
+    return { stage: Rp.view.stage, plies: Rp.view.plies, line12: Rp.view.plyLine, decks: /decks  W 8 cards \/ B 6 cards/.test(rep), meta: /meta plays reveal @p10/.test(rep), draws: /draws 6/.test(rep) };
+  });
+  expect(/s77/.test(dk5.stage) && dk5.plies === 85, `?sample=5 opens the first deck duel (${dk5.stage}, ${dk5.plies} plies)`);
+  expect(dk5.decks && dk5.meta && dk5.draws, 'the report carries both decks, the six draws and the Reveal at ply 10');
+  expect(/W draws Portal/.test(dk5.line12), `ply 12's line marks the draw at the next turn's start (${dk5.line12})`);
+}
 expect(ic.before.field === '' && ic.before.d6 < 20 && ic.before.c7 < 20, `ply 25: no ice yet (${ic.before.d6} / ${ic.before.c7} cold pixels on d6 / c7)`);
 expect(ic.cast.field === '~c5,~d5,~c6,~d6,~e6,~c7,~d7,~e7' && ic.cast.empty.length >= 5 && ic.cast.empty.every(([, n]) => n >= 60) && ic.cast.e5[0] === '*' && ic.cast.e5[1] < 20 && ic.cast.d8 < 20, `ply 26: the player's I@d6 paints the ice on the patch's empty squares (${ic.cast.empty.map(([s, n]) => `${s}:${n}`).join(' ')}) and none on the wall e5 (${ic.cast.e5[1]}) or beyond it (d8 ${ic.cast.d8})`);
 {

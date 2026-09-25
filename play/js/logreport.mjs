@@ -12,6 +12,7 @@
 // `mover`, `candidates`, `pieceList`, …) degrade to shorter lines, never
 // throw — every read is optional.
 import { parseBoard, splitFen } from './fen.mjs';
+import { CARDS } from './deck.mjs'; // THE DECK (2026-09-25): the card names on the report
 
 /** jsonSafeNumbers' strings back to numbers ('Infinity', '-Infinity', 'NaN'). */
 export const num = (v) => (typeof v === 'string' && /^-?Infinity$|^NaN$/.test(v) ? Number(v) : v);
@@ -231,18 +232,18 @@ export const leftMateLine = (st) => st?.mover === 'player' && st.followed === fa
 
 /** The timeline: one line per ply — move, engine eval, the quake or veto,
  *  flags, where an undo resumed (`resumedAt`, the line of record only). */
-export function timelineLines(moves, sans, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], startPly = 0, resumedAt = null } = {}) {
+export function timelineLines(moves, sans, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], startPly = 0, resumedAt = null, meta = new Map() } = {}) {
   const lines = [];
   for (let i = 0; i < moves.length; i++) {
     const ply = startPly + i + 1;
-    lines.push(timelineLine(ply, sans?.[i] ?? moves[i], { engine, quakes, traces, flags, states }));
+    lines.push(timelineLine(ply, sans?.[i] ?? moves[i], { engine, quakes, traces, flags, states, meta }));
     if (resumedAt?.has(ply)) for (const k of resumedAt.get(ply)) lines.push(`      ↩ undo #${k} rewound to here (see branches)`);
   }
   return lines;
 }
 
 /** One timeline line (the replay screen's status line for a ply). */
-export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [] } = {}) {
+export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], meta = new Map() } = {}) {
   const n = Math.ceil(ply / 2);
   const white = ply % 2 === 1;
   const e = engine.get(ply);
@@ -253,6 +254,10 @@ export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(),
   line += e ? ` e:d${e.depth ?? '?'} ${fmtScore(e.score).padStart(6)} ${String(e.ms ?? '?').padStart(5)}ms${e.recovered ? ' RECOVERED' : ''}` : ' '.repeat(23);
   if (st?.slide) line += `  ❄ ${slideWords(st.slide)}`; // THE ICE (2026-09-20)
   else if (st?.cast === 'ice') line += `  ❄ the ice is cast`;
+  // THE DECK (2026-09-25): a redraw (a `--` ply of the game's own), the draw at the next turn's start (on the state of the ply before it), a meta card played this turn.
+  if (st?.cast === 'mulligan') line += `  🂠 redraws${st.mulligan ? `: discards ${cardNames(st.mulligan.discarded)}, draws ${cardNames(st.mulligan.drew)}` : ''}`;
+  if (st?.drew?.cards?.length) line += `  🂠 ${st.drew.side === 'w' ? 'W' : 'B'} draws ${cardNames(st.drew.cards)}`;
+  for (const m of meta.get(ply) ?? []) line += `  ${m.kind === 'reveal' ? '☉ Reveal' : m.kind === 'undo' ? '↺ Undo' : m.kind} played`;
   if (leftMateLine(st)) line += `  ⚠ left the engine's mate-in-${-st.engineSaw.value} line (it expected ${st.predicted})`;
   if (t && t.outcome !== 'quiet' && t.outcome !== 'vetoed') line += `  ⚡ ${q ? quakeSummary(q) : t.outcome}${t.evalGate?.attempt ? ` [draw ${t.evalGate.attempt + 1}]` : ''}`;
   else if (t?.outcome === 'vetoed') line += `  ⚡ VETOED (every draw softened)`;
@@ -297,6 +302,14 @@ export function headerLines(L) {
   if (L.tunes?.length) s.push(`tunes ${L.tunes.map((t) => `@p${t.ply} ${tuneWords(t)}`).join(' · ')}`);
   s.push(`RESULT ${L.result ?? '(unfinished)'}  ${L.termination ?? ''}  winner ${L.winner ?? '—'}${L.error ? `  ERROR ${L.error}` : ''}`);
   s.push(`plies ${L.plies}  quakes ${L.quakes?.length ?? 0}  rejected draws ${L.attempts?.length ?? 0}  undos ${L.branches?.length ?? 0}  flags ${L.flags?.length ?? 0}  anomalies ${L.anomalies?.length ?? 0}  events ${L.seq}`);
+  // THE DECK (2026-09-25): both decks as shuffled, the draws, the meta plays, the hands at the end.
+  if (L.decks) {
+    const lastDeck = (L.states ?? []).slice().reverse().find((x) => x.deck)?.deck ?? null;
+    const hand = (side) => (lastDeck?.[side]?.hand?.length ? cardNames(lastDeck[side].hand) : '—');
+    const draws = (L.states ?? []).filter((x) => x.drew?.cards?.length).length;
+    const plays = (L.metaPlays ?? []).map((m) => `${m.kind} @p${m.ply}`).join(', ');
+    s.push(`decks  W ${L.decks.w?.pile?.length ?? 0} cards / B ${L.decks.b?.pile?.length ?? 0} cards (as shuffled)  draws ${draws}  meta plays ${plays || '—'}  hands at the end W [${hand('w')}] B [${hand('b')}]`);
+  }
   // A mate the enemy's own search saw against itself, and the player then
   // walked away from: the commonest "the gods delayed my mate" false alarm.
   const leftMate = (L.states ?? []).filter(leftMateLine);
@@ -306,13 +319,25 @@ export function headerLines(L) {
   return s;
 }
 
+/** THE DECK's meta plays (Reveal, Undo) by the ply they were played at. */
+export function metaPlaysMap(L) {
+  const meta = new Map();
+  for (const m of L.metaPlays ?? []) {
+    if (!meta.has(m.ply)) meta.set(m.ply, []);
+    meta.get(m.ply).push(m);
+  }
+  return meta;
+}
+
+const cardNames = (kinds) => (kinds ?? []).map((k) => CARDS[k]?.name ?? k).join(', ');
+
 /** The line of record's timeline, then the final position. */
 export function timelineSection(L) {
   const s = [];
   const idx = indexLine(L);
   const resumedAt = resumedAtMap(L);
   if (resumedAt.has(0)) for (const k of resumedAt.get(0)) s.push(`      ↩ undo #${k} rewound to the start`);
-  s.push(...timelineLines(L.moves ?? [], L.sans ?? [], { ...idx, states: L.states ?? [], resumedAt }));
+  s.push(...timelineLines(L.moves ?? [], L.sans ?? [], { ...idx, states: L.states ?? [], resumedAt, meta: metaPlaysMap(L) }));
   const last = L.states?.[L.states.length - 1];
   if (last?.fen) {
     s.push('\nfinal position' + (last.ended ? ` (${last.result ?? ''} ${last.termination ?? last.error ?? ''})` : ''));
