@@ -37,7 +37,8 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
-import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, openHands, glyphsOf, parseDeckParam, cloneDecks } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards
+import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, openHands, glyphsOf, parseDeckParam, cloneDecks, spellHand } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards
+import { fanLayout, cardArt, artSize, stampGlyph, gestureStart, gestureMove, gestureHold, gestureEnd, castArea, cardHint, dropWords, costWords, LONG_PRESS_MS } from './cards.mjs'; // THE CARD UI (Phase 3.2, 2026-09-25): the fan, the art, the gesture, the drop preview
 import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
@@ -2376,7 +2377,7 @@ function refreshLiveDeal() {
     const t = terrainOnly();
     debrisBind(null); // the setup's flip and crop, no auto-crop
     mountPreviewBoard(t.files, t.ranks, t.fen, t.skins);
-    $('enemy-bar').textContent = 'enemy · black';
+    setEnemyBarText('enemy · black');
     setPlayerBarText('you · white');
     out.textContent = `✗ ${deal.error}`;
     out.className = 'bad';
@@ -2387,7 +2388,7 @@ function refreshLiveDeal() {
   app.session = makeSession(deal);
   debrisBind(deal); // the stage's ledger + this deal's transform into it
   mountPreviewBoard(deal.files, deal.ranks, deal.fen, stageSkins(deal.stage));
-  $('enemy-bar').textContent = `enemy · black · ${deal.black.army.value} pts`;
+  setEnemyBarText(`enemy · black · ${deal.black.army.value} pts`);
   setPlayerBarText(`you · white · ${deal.white.army.value} pts`);
   const edge = deal.edge > 0 ? `your edge +${deal.edge}` : deal.edge < 0 ? `enemy edge +${-deal.edge}` : 'even armies';
   const extras = [];
@@ -3141,6 +3142,11 @@ function renderPlayMarks() {
   }
   // THE PORTAL SPELL / THE ICE: in cast mode the targets are the squares the scroll may be cast on.
   if (app.castMode && app.duel && app.duel.state === 'playing') marks.targets = castTargets(app.castMode);
+  // THE CARD UI: under a dragged card the square under the finger is framed and an area card's shape tinted.
+  if (HAND.drag) {
+    marks.hover = HAND.drag.hover;
+    marks.area = HAND.drag.area;
+  }
   app.boardUI.setMarks(marks);
 }
 
@@ -3161,8 +3167,11 @@ function slideRest(fen, uci) {
 // player picks. Cast mode: the Portal button in the player's bar lights the
 // legal squares, a tap casts, a tap elsewhere leaves the spell.
 // THE ICE (2026-09-20) shares the cast path: `app.castMode` is the spell's
-// KIND ('portal' | 'ice') or null, each spell its own button and scroll letter.
-const SPELLS = { portal: { letter: PORTAL_SCROLL, btn: 'btnPortal' }, ice: { letter: ICE_SCROLL, btn: 'btnIce' } };
+// KIND ('portal' | 'ice') or null, each spell its own scroll letter. THE CARD
+// UI (Phase 3.2, 2026-09-25) retired the spell buttons: a spell's card in
+// the fan is what lifts into cast mode (a tap) or carries the cast to the
+// board (a drag) — § THE CARD UI, below.
+const SPELLS = { portal: { letter: PORTAL_SCROLL }, ice: { letter: ICE_SCROLL } };
 
 function castTargets(kind = app.castMode || 'portal') {
   if (!app.duel || app.duel.state !== 'playing') return [];
@@ -3184,79 +3193,563 @@ function setCastMode(kind) {
   const want = forced || kind === true ? 'portal' : kind && SPELLS[kind] ? kind : null;
   app.castMode = want && castTargets(want).length > 0 ? want : null;
   app.selectedSquare = null;
-  for (const [k, s] of Object.entries(SPELLS)) $(s.btn).classList.toggle('active', app.castMode === k);
+  syncLiftedCards(); // THE CARD UI: the mode's card rises in the fan
   renderPlayMarks();
 }
 
-/** The spell buttons: each shown through a duel while the player holds its
- *  scroll, enabled on the player's turn, its count and its title from the position. */
+/** The spell UI is the fan (THE CARD UI): the hand, the piles and the enemy's
+ *  cards follow the position on every refresh; a card that cannot be played
+ *  now is dimmed, cast mode leaves with the turn. */
 function refreshSpellUI() {
   const inDuel = !!app.duel && app.phase === 'playing' && app.duel.state === 'playing';
   const mine = inDuel && !!app.session && app.duel.turnColor() === app.session.playerColor && !app.busy;
-  const half = inDuel ? parsePortalField(app.duel.fen()).halves[app.session?.playerColor === 'white' ? 'w' : 'b'] : null;
-  const titles = {
-    portal: half ? `your portal at ${half} is open: pick the square it links to` : 'cast a portal: pick a square; the second cast links it to the first',
-    ice: 'cast ice: pick the centre of a 3×3 patch on the middle rows — a piece that moves onto the ice slides on until something stops it',
-  };
-  for (const [kind, s] of Object.entries(SPELLS)) {
-    const btn = $(s.btn);
-    const scrolls = inDuel ? scrollsLeft(kind) : 0;
-    // THE DECK: the count is CARDS under a deck (a portal card is two scrolls; a half-spent one still a card), scrolls without one.
-    const n = app.session?.decks ? Math.ceil(scrolls / CARDS[kind].scrolls) : scrolls;
-    btn.hidden = !inDuel || scrolls === 0;
-    btn.disabled = !mine || !castTargets(kind).length;
-    $(`${s.btn}N`).textContent = n ? `×${n}` : '';
-    btn.title = titles[kind];
-  }
-  if (!mine && app.castMode) {
-    app.castMode = null;
-    for (const s of Object.values(SPELLS)) $(s.btn).classList.remove('active');
-  }
-  refreshDeckUI(inDuel, mine);
+  if (!mine && app.castMode) app.castMode = null;
+  renderHand(inDuel, mine);
+  renderPiles(inDuel);
+  renderEnemyCards(inDuel);
+  if (!inDuel) {
+    closeDeckSheet();
+    closeReader();
+    if (HAND.drag) snapBack(HAND.drag);
+  } else if (HAND.sheet) renderDeckSheet();
 }
 
-// ------------------------------------------------------------------ THE DECK
-// (2026-09-25; brief §4.10; play/js/deck.mjs the pure half, duel.mjs the
-// refill and the record.) Spells as cards: a hand of four a side, drawn up
-// to at the start of each turn, both decks and both hands visible. The spell
-// cards ARE the pocket's scrolls, so the spell buttons above are the hand's
-// spells; the META cards — Reveal, Undo — are the player's alone, cost no
-// move and never reach the engine; the redraw spends the turn. The enemy's
-// hand and pile ride its bar. No card is ever valued by a number: the engine
-// casts a card when the cast is its best move and for no other reason.
+// ------------------------------------------------------------- THE CARD UI
+// (Phase 3.2, 2026-09-25 — the designer, on the deck's first card row:
+// "These little buttons aren't gonna cut it. I wanna take notes from other
+// card wielding games like mtg arena and hearthstone. Probably cast spells
+// by dragging them from the hand to the field, that kind of thing"; the
+// proposal in brief §4.10 "The card UI", its four calls agreed the same day:
+// the drag preview tints an area card's whole shape, the enemy's played card
+// holds for a beat, the redraw is a tap on the deck stack behind a confirm,
+// the portal's second square is a tap with cast mode held — or the card
+// dragged again. play/js/cards.mjs is the pure half: the fan's geometry, the
+// art, the gesture, the drop preview's squares, the words.)
+//
+// THE HAND IS A FAN under the board (#hand-row): every copy of a card its
+// own card, laid out by fanLayout, the playable ones rimmed and the rest
+// dimmed. A card face is a CSS frame around pixel art — the spell's own
+// glyph, the drawing its hint wears — with the name, one line of rules text
+// and a cost pip. ONE GESTURE PATH: a TAP lifts a spell card into cast mode
+// (the legal squares light; a tap on the board casts, as ever) or plays a
+// meta card; a DRAG (past DRAG_SLOP) carries a ghost of the card over the
+// board with the legal squares lit, the square under the finger framed and
+// an area card's shape tinted (the board's `hover` / `area` marks), a
+// release on a lit square casting through the tap path's own playPlayerMove
+// and a release anywhere else snapping the card back; a LONG PRESS opens
+// the reader (the card at twice its size with its full text). The enemy's
+// hand is face-up as mini cards in its bar and its deck a mini stack; when
+// the enemy casts, its card flies to the board and holds enlarged for a
+// beat before the spell lands (onMove). The draw slides a new card in from
+// the deck stack. The piles: the deck a stack with its count — a tap opens
+// THE DECK SHEET, the pile in order, the spent pile and THE REDRAW behind a
+// confirm — the spent pile beside it. Nothing here aligns with the floor:
+// the ghost is a fixed-position DOM card and the drop test is the board's
+// own squareAtPoint (rule 18 untouched). The tap path — and every smoke that
+// drives it — stays.
 
-/** The deck row: the meta cards' buttons, the redraw, the player's pile in order; the enemy's hand and pile in its bar. */
-function refreshDeckUI(inDuel, mine) {
+const CARD_COLOURS = { spell: '#7cc8ff', meta: '#d7b46a', enemy: '#e0443f' }; // style.css --gods, --gold, --last
+const FAN_INSET = 8; // CSS px kept clear at either end of the fan's row (a card tilted FAN_MAX_ROT degrees pushes a corner out this far)
+const HAND = { keys: [], sig: '', enemySig: '', press: null, drag: null, sheet: null, confirm: false, reader: null };
+
+const mySide = () => (app.session?.playerColor === 'white' ? 'w' : 'b');
+const foeSide = () => (mySide() === 'w' ? 'b' : 'w');
+const isMyTurn = () => !!app.duel && app.phase === 'playing' && app.duel.state === 'playing' && !!app.session && app.duel.turnColor() === app.session.playerColor && !app.busy;
+/** The player's own open portal half, or null. */
+const myHalf = () => (app.duel && app.duel.state === 'playing' ? parsePortalField(app.duel.fen()).halves[mySide()] ?? null : null);
+
+/** A side's hand as card kinds in the fan's order: the pocket's spell cards then the meta cards under a deck; the pocket's spells alone without one. */
+function handOfSide(side) {
   const duel = app.duel;
-  const hands = inDuel && app.session?.decks && duel?.decks ? duel.hands() : null;
-  const me = app.session?.playerColor === 'white' ? 'w' : 'b';
-  const foe = me === 'w' ? 'b' : 'w';
-  const meta = hands ? duel.decks[me].meta : [];
-  for (const [kind, id] of [['reveal', 'btnReveal'], ['undo', 'btnUndoCard']]) {
-    const btn = $(id);
-    const n = meta.filter((k) => k === kind).length;
-    btn.hidden = !hands || n === 0;
-    btn.disabled = !mine || (kind === 'reveal' && revealOn()) || (kind === 'undo' && !(duel && duel.ply > 0));
-    $(`${id}N`).textContent = n ? `×${n}` : '';
+  if (!duel || duel.state !== 'playing') return [];
+  const hands = app.session?.decks && duel.decks ? duel.hands() : null;
+  return hands ? hands[side] : spellHand(duel.fen(), side);
+}
+
+const metaInHand = (kind) => (app.duel?.decks?.[mySide()]?.meta ?? []).includes(kind);
+
+/** Can this card be played now — a spell with a legal cast (the link ply's own portal included), Reveal once a turn, Undo with a turn to take back? */
+function cardPlayable(kind, mine = isMyTurn()) {
+  if (!mine || !CARDS[kind]) return false;
+  if (CARDS[kind].cls === 'spell') return castTargets(kind).length > 0;
+  if (kind === 'reveal') return !revealOn() && metaInHand('reveal');
+  if (kind === 'undo') return app.duel.ply > 0 && metaInHand('undo');
+  return false;
+}
+
+/** The art's scale for the fan (style.css --card-art on #hand-row: 4 on a phone, 5 on the wide layout). */
+function artScale() {
+  const v = parseFloat(getComputedStyle($('hand-row')).getPropertyValue('--card-art'));
+  return Number.isFinite(v) && v > 0 ? v : 4;
+}
+
+/** The fan's card size in CSS pixels (style.css --card-w / --card-h on #hand-row). */
+function cardSize() {
+  const cs = getComputedStyle($('hand-row'));
+  const w = parseFloat(cs.getPropertyValue('--card-w')), h = parseFloat(cs.getPropertyValue('--card-h'));
+  return { w: Number.isFinite(w) && w > 0 ? w : 78, h: Number.isFinite(h) && h > 0 ? h : 116 };
+}
+
+/** A card's art: its glyph with the drop shadow on a canvas at 1×, shown at `scale` times (pixelated). */
+function cardArtCanvas(kind, colour, scale) {
+  const rows = cardArt(kind);
+  const { w, h } = artSize(kind);
+  const c = document.createElement('canvas');
+  c.className = 'card-art';
+  c.width = Math.max(1, w);
+  c.height = Math.max(1, h);
+  c.style.width = `${w * scale}px`;
+  c.style.height = `${h * scale}px`;
+  if (rows) stampGlyph(c.getContext('2d'), rows, 0, 0, colour);
+  return c;
+}
+
+/** THE FACE: a card element for a kind — the cost pip, the art, the name, the short line (the full text in the reader); the enemy's in its red. */
+function makeCard(kind, { enemy = false, scale = null, full = false } = {}) {
+  const c = CARDS[kind];
+  const el = document.createElement(enemy ? 'div' : 'button');
+  el.className = `card ${c.cls}${enemy ? ' enemy' : ''}`;
+  el.dataset.kind = kind;
+  if (!enemy) el.type = 'button';
+  const pip = document.createElement('span');
+  pip.className = 'card-cost';
+  pip.title = costWords(kind);
+  el.appendChild(pip);
+  el.appendChild(cardArtCanvas(kind, enemy ? CARD_COLOURS.enemy : CARD_COLOURS[c.cls], scale ?? artScale()));
+  const name = document.createElement('span');
+  name.className = 'card-name';
+  name.textContent = c.name;
+  el.appendChild(name);
+  const text = document.createElement('span');
+  text.className = 'card-text';
+  text.textContent = full ? c.text : c.short;
+  el.appendChild(text);
+  el.title = `${c.name} — ${c.text} (${costWords(kind)})`;
+  return el;
+}
+
+/** A mini card (the enemy's bar, the deck sheet): the art at 2× in a small frame. */
+function miniCard(kind, { enemy = false } = {}) {
+  const c = CARDS[kind];
+  const el = document.createElement('span');
+  el.className = `mini ${c.cls}${enemy ? ' enemy' : ''}`;
+  el.dataset.kind = kind;
+  el.title = `${c.name}: ${c.text}`;
+  el.appendChild(cardArtCanvas(kind, enemy ? CARD_COLOURS.enemy : CARD_COLOURS[c.cls], 2));
+  return el;
+}
+
+/** THE FAN: rebuild the hand's cards when the hand, their states or the row's width changed; lay them out by cards.mjs fanLayout;
+ *  a card new to the hand slides in from the deck stack (the draw). Never mid-drag — the dragged card's element must survive. */
+function renderHand(inDuel, mine) {
+  const row = $('hand-row');
+  const hand = inDuel ? handOfSide(mySide()) : [];
+  const deck = inDuel && app.session?.decks ? app.duel?.decks?.[mySide()] ?? null : null;
+  const show = inDuel && (hand.length > 0 || !!deck);
+  row.hidden = !show;
+  if (!show) {
+    $('hand').textContent = '';
+    HAND.keys = [];
+    HAND.sig = '';
+    return;
   }
-  const mull = $('btnMulligan');
-  mull.hidden = !hands || !mine || !duel.canMulligan();
-  mull.disabled = !mine;
-  const line = $('deck-line');
-  if (!hands) {
-    line.textContent = '';
-    line.title = '';
-  } else {
-    const pile = duel.decks[me].pile;
-    line.textContent = pile.length ? `deck ${glyphsOf(pile)}` : 'deck empty';
-    line.title = pile.length ? `your deck, top first: ${pile.map((k) => CARDS[k].name).join(', ')}` : 'no cards left to draw';
+  if (HAND.drag) return;
+  const half = myHalf();
+  const counts = {};
+  const cards = hand.map((kind) => {
+    const i = (counts[kind] = (counts[kind] ?? 0) + 1);
+    return { kind, key: `${kind}#${i}`, playable: cardPlayable(kind, mine) };
+  });
+  const box = $('hand');
+  const W = box.clientWidth;
+  const sig = `${cards.map((c) => `${c.key}:${c.playable ? 1 : 0}`).join(',')}|${half ?? ''}|${W}|${mine ? 1 : 0}`;
+  if (sig === HAND.sig) {
+    syncLiftedCards();
+    return;
   }
-  if (hands) {
-    const base = app.session?.deal?.black?.army ? `enemy · black · ${app.session.deal.black.army.value} pts` : 'enemy · black';
-    const eh = hands[foe];
-    const ep = duel.decks[foe].pile;
-    $('enemy-bar').textContent = `${base} · hand ${eh.length ? glyphsOf(eh) : '—'} · deck ${ep.length ? glyphsOf(ep) : '—'}`;
+  const fresh = cards.filter((c) => !HAND.keys.includes(c.key)).map((c) => c.key);
+  const { w: cw } = cardSize();
+  const lay = fanLayout(cards.length, Math.max(cw, W - 2 * FAN_INSET), cw); // FAN_INSET keeps a tilted outer card's corner inside the row
+  box.textContent = '';
+  const els = new Map();
+  cards.forEach((c, i) => {
+    const el = makeCard(c.kind);
+    el.dataset.key = c.key;
+    el.classList.toggle('playable', c.playable);
+    el.classList.toggle('dim', !c.playable);
+    el.title = `${CARDS[c.kind].name} — ${cardHint(c.kind, { halfAt: half })} (${costWords(c.kind)})`;
+    el.style.left = `${lay[i].x + FAN_INSET}px`;
+    el.style.setProperty('--fan-y', `${lay[i].y}px`);
+    el.style.setProperty('--fan-rot', `${lay[i].rot}deg`);
+    box.appendChild(el);
+    els.set(c.key, el);
+  });
+  HAND.keys = cards.map((c) => c.key);
+  HAND.sig = sig;
+  syncLiftedCards();
+  // THE DRAW: a card new to the hand starts on the deck stack and slides home (CSS carries it; nothing under ?fx=0).
+  if (fresh.length && FX(1) && deck) {
+    const pile = $('pile-deck');
+    const pr = pile.getBoundingClientRect();
+    const moving = [];
+    for (const key of fresh) {
+      const el = els.get(key);
+      const r = el.getBoundingClientRect();
+      if (!r.width || !pr.width) continue;
+      el.classList.add('dealt');
+      el.style.transform = `translate(${Math.round(pr.left + pr.width / 2 - (r.left + r.width / 2))}px, ${Math.round(pr.top + pr.height / 2 - (r.top + r.height / 2))}px) scale(.55)`;
+      el.style.opacity = '0.35';
+      moving.push(el);
+    }
+    if (moving.length) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        for (const el of moving) {
+          el.style.transform = '';
+          el.style.opacity = '';
+        }
+        setTimeout(() => { for (const el of moving) el.classList.remove('dealt'); }, FX(320));
+      }));
+    }
   }
+}
+
+/** Cast mode's lifted card: the first card of the mode's kind rises; every other card settles. */
+function syncLiftedCards() {
+  let done = false;
+  for (const el of $('hand').children) {
+    const lift = !done && !!app.castMode && el.dataset.kind === app.castMode;
+    el.classList.toggle('lifted', lift);
+    if (lift) done = true;
+  }
+}
+
+/** THE PILES: the deck a stack with its count, the spent pile beside it; hidden without a deck. */
+function renderPiles(inDuel) {
+  const deck = inDuel && app.session?.decks ? app.duel?.decks?.[mySide()] ?? null : null;
+  $('piles').hidden = !deck;
+  if (!deck) return;
+  const names = (kinds) => kinds.map((k) => CARDS[k]?.name ?? k).join(', ');
+  const pd = $('pile-deck');
+  pd.querySelector('.pile-n').textContent = String(deck.pile.length);
+  pd.classList.toggle('empty', deck.pile.length === 0);
+  pd.title = deck.pile.length ? `your deck, top first: ${names(deck.pile)} — tap to see it, or to redraw` : 'your deck is empty — tap to see the spent pile, or to redraw';
+  const ps = $('pile-spent');
+  ps.querySelector('.pile-n').textContent = String(deck.spent.length);
+  ps.classList.toggle('empty', deck.spent.length === 0);
+  ps.title = deck.spent.length ? `spent: ${names(deck.spent)}` : 'nothing spent yet';
+}
+
+/** THE ENEMY'S HAND, FACE-UP: mini cards along its bar (visible decks are the ruling — no card backs), its deck a mini stack with a count. */
+function renderEnemyCards(inDuel) {
+  const box = $('enemy-cards');
+  const duel = app.duel;
+  const foe = foeSide();
+  const hand = inDuel ? handOfSide(foe) : [];
+  const pile = inDuel && app.session?.decks ? duel?.decks?.[foe]?.pile ?? null : null;
+  const show = inDuel && (hand.length > 0 || pile !== null);
+  box.hidden = !show;
+  const sig = show ? `${hand.join(',')}|${pile ? pile.length : '-'}` : '';
+  if (sig === HAND.enemySig) return;
+  HAND.enemySig = sig;
+  box.textContent = '';
+  if (!show) return;
+  for (const kind of hand) box.appendChild(miniCard(kind, { enemy: true }));
+  if (pile) {
+    const st = document.createElement('button');
+    st.type = 'button';
+    st.className = `mini-stack${pile.length ? '' : ' empty'}`;
+    st.textContent = String(pile.length);
+    st.title = pile.length ? `the enemy's deck, top first: ${pile.map((k) => CARDS[k]?.name ?? k).join(', ')} — tap to see it` : "the enemy's deck is empty";
+    st.addEventListener('click', () => openDeckSheet(foe));
+    box.appendChild(st);
+  }
+}
+
+function setEnemyBarText(text) {
+  $('enemy-bar-text').textContent = text;
+}
+
+// --- the gesture: one pointer path on the fan, split by cards.mjs into a tap, a drag or a hold
+
+function bindHand() {
+  const hand = $('hand');
+  hand.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('.card');
+    if (!el || e.button) return;
+    e.preventDefault();
+    if (HAND.press) return;
+    try { hand.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
+    const press = { id: e.pointerId, el, kind: el.dataset.kind, g: gestureStart(e.clientX, e.clientY, performance.now()), timer: null };
+    press.timer = setTimeout(() => {
+      if (HAND.press !== press || !gestureHold(press.g)) return;
+      openReader(press.kind); // THE READER on a long press; the release after it is nothing
+    }, LONG_PRESS_MS);
+    HAND.press = press;
+  });
+  hand.addEventListener('pointermove', (e) => {
+    const p = HAND.press;
+    if (!p || e.pointerId !== p.id) return;
+    if (gestureMove(p.g, e.clientX, e.clientY)) {
+      clearTimeout(p.timer);
+      beginDrag(p, e);
+    }
+    if (HAND.drag && HAND.drag.press === p) moveDrag(e);
+  });
+  const end = (e, released) => {
+    const p = HAND.press;
+    if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
+    clearTimeout(p.timer);
+    HAND.press = null;
+    const g = gestureEnd(p.g);
+    if (g === 'drag') endDrag(released);
+    else if (g === 'tap') onCardTap(p.kind);
+  };
+  hand.addEventListener('pointerup', (e) => end(e, true));
+  hand.addEventListener('pointercancel', (e) => end(e, false));
+  hand.addEventListener('lostpointercapture', (e) => end(e, false)); // after a pointerup it finds no press and is nothing
+  hand.addEventListener('contextmenu', (e) => e.preventDefault());
+  hand.addEventListener('click', (e) => {
+    // A keyboard's Enter / Space on a card (a click with no pointer press behind it) is a tap; a pointer's click was handled on its pointerup.
+    if (e.detail !== 0) return;
+    const el = e.target.closest('.card');
+    if (el) onCardTap(el.dataset.kind);
+  });
+  // THE PILES and THE SHEET
+  $('pile-deck').addEventListener('click', () => openDeckSheet(mySide()));
+  $('btnRedraw').addEventListener('click', () => {
+    HAND.confirm = true;
+    renderDeckSheet();
+  });
+  $('btnRedrawCancel').addEventListener('click', () => {
+    HAND.confirm = false;
+    renderDeckSheet();
+  });
+  $('btnRedrawConfirm').addEventListener('click', () => {
+    closeDeckSheet();
+    void playMulligan();
+  });
+  $('btnDeckSheetClose').addEventListener('click', () => closeDeckSheet());
+  $('deck-sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeDeckSheet(); });
+  $('card-reader').addEventListener('click', () => closeReader());
+  // The fan re-lays on a resize (its width is in the layout's signature).
+  let raf = 0;
+  window.addEventListener('resize', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      HAND.sig = '';
+      if (app.phase === 'playing') refreshSpellUI();
+    });
+  });
+}
+
+/** A TAP on a card: a playable spell card toggles cast mode for its kind (the link ply's portal is held there), a meta card plays; a dimmed card is nothing. */
+function onCardTap(kind) {
+  if (!cardPlayable(kind)) return false;
+  if (CARDS[kind].cls === 'spell') {
+    setCastMode(app.castMode === kind && !app.duel.mustLink() ? null : kind);
+    return true;
+  }
+  void playMetaCard(kind);
+  return true;
+}
+
+/** A meta card's play: Reveal through the hint probe, Undo through the cheat undo's path (the card spent in the restored state). */
+function playMetaCard(kind) {
+  if (kind === 'reveal') return playRevealCard();
+  if (kind === 'undo') return doUndo({ card: true });
+  return Promise.resolve(false);
+}
+
+/** A DRAG begins: a ghost of the card lifts off the fan and follows the finger; a spell's legal squares light (cast mode). A card that cannot be played drags nothing. */
+function beginDrag(p, e) {
+  if (HAND.drag || !cardPlayable(p.kind)) return;
+  if (!p.el.isConnected) p.el = [...$('hand').children].find((el) => el.dataset.kind === p.kind) ?? p.el; // the fan re-rendered under the press
+  const r = p.el.getBoundingClientRect();
+  const { w, h } = cardSize();
+  const ghost = document.createElement('div');
+  ghost.id = 'card-ghost';
+  ghost.style.setProperty('--card-w', `${w}px`);
+  ghost.style.setProperty('--card-h', `${h}px`);
+  const face = makeCard(p.kind, { scale: artScale() });
+  face.classList.add('playable');
+  face.tabIndex = -1;
+  const tip = document.createElement('span');
+  tip.className = 'ghost-tip';
+  ghost.append(face, tip);
+  document.body.appendChild(ghost);
+  p.el.classList.add('dragging');
+  const spell = CARDS[p.kind].cls === 'spell';
+  HAND.drag = { press: p, kind: p.kind, el: p.el, ghost, face, tip, w, h, x0: r.left, y0: r.top, hover: null, area: [], spell, targets: spell ? castTargets(p.kind) : null }; // the legal squares, read once: nothing moves during a drag
+  if (HAND.drag.spell) setCastMode(p.kind);
+  moveDrag(e);
+}
+
+/** The ghost rides above the finger; over the board the square under it is judged — a legal cast square (or, for a meta card, any square) frames and the tip says what a release does. */
+function moveDrag(e) {
+  const d = HAND.drag;
+  if (!d) return;
+  const x = e.clientX - d.w / 2, y = e.clientY - d.h - 24;
+  d.ghost.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  const B = app.boardUI;
+  const sq = B && app.duel && app.duel.state === 'playing' ? B.squareAtPoint(e.clientX, e.clientY) : null;
+  const legal = sq && (d.spell ? d.targets.includes(sq) : true);
+  const hover = legal ? sq : null;
+  if (hover === d.hover) return;
+  d.hover = hover;
+  d.area = d.spell && hover ? castArea(d.kind, hover, { files: B.files, ranks: B.ranks, at: (s) => getSquare(app.duel.fen(), s) }) : [];
+  d.tip.textContent = hover ? dropWords(d.kind, hover, { halfAt: myHalf() }) : '';
+  renderPlayMarks();
+}
+
+/** The release: on a lit square the cast (or the meta play) goes through the tap path; anywhere else the card snaps back. */
+function endDrag(released) {
+  const d = HAND.drag;
+  if (!d) return;
+  const hover = released ? d.hover : null;
+  if (!hover || !cardPlayable(d.kind)) return snapBack(d);
+  // The ghost shrinks onto its square and goes; the fan's card leaves with the play (the refresh after the ply rebuilds the hand).
+  const p = app.boardUI.pointOfSquare(hover);
+  d.ghost.classList.add('snap');
+  if (p) d.ghost.style.transform = `translate(${Math.round(p.x - d.w / 2)}px, ${Math.round(p.y - d.h / 2)}px)`;
+  d.face.style.transform = 'scale(.35)';
+  d.face.style.opacity = '0';
+  const ghost = d.ghost;
+  setTimeout(() => ghost.remove(), FX(180));
+  HAND.drag = null;
+  renderPlayMarks(); // the preview goes with the finger
+  if (d.spell) void playPlayerMove(null, hover, [`${SPELLS[d.kind].letter.toUpperCase()}@${hover}`]);
+  else {
+    d.el.classList.remove('dragging');
+    void playMetaCard(d.kind);
+  }
+}
+
+/** The card glides back to its slot; cast mode leaves with it (unless the link ply holds it). */
+function snapBack(d) {
+  if (HAND.drag !== d) return;
+  d.ghost.classList.add('snap');
+  d.ghost.style.transform = `translate(${Math.round(d.x0)}px, ${Math.round(d.y0)}px)`;
+  d.face.style.transform = 'scale(1)';
+  const { ghost, el } = d;
+  setTimeout(() => {
+    ghost.remove();
+    el.classList.remove('dragging');
+  }, FX(160));
+  HAND.drag = null;
+  if (d.spell && !(app.duel && app.duel.state === 'playing' && app.duel.mustLink())) setCastMode(null);
+  else {
+    syncLiftedCards();
+    renderPlayMarks();
+  }
+}
+
+// --- the reader and the deck sheet
+
+/** THE READER: the card at twice its size with its full rules text, what it costs and its line for the position. A tap anywhere closes it. */
+function openReader(kind) {
+  if (!CARDS[kind]) return;
+  const box = $('card-reader-card');
+  box.textContent = '';
+  const face = makeCard(kind, { scale: 8, full: true });
+  face.classList.add('playable');
+  face.tabIndex = -1;
+  box.appendChild(face);
+  const cost = document.createElement('div');
+  cost.className = 'reader-cost';
+  cost.textContent = costWords(kind);
+  box.appendChild(cost);
+  const line = cardHint(kind, { halfAt: myHalf() });
+  if (line && line !== CARDS[kind].text) {
+    const hint = document.createElement('div');
+    hint.className = 'reader-hint';
+    hint.textContent = line;
+    box.appendChild(hint);
+  }
+  $('card-reader').hidden = false;
+  HAND.reader = kind;
+}
+
+function closeReader() {
+  if (HAND.reader === null) return;
+  HAND.reader = null;
+  $('card-reader').hidden = true;
+}
+
+/** THE DECK SHEET on a side's pile: the cards in order (top first), the spent pile, and for the player the redraw behind a confirm. */
+function openDeckSheet(side = mySide()) {
+  if (!app.duel?.decks?.[side]) return false;
+  HAND.sheet = side;
+  HAND.confirm = false;
+  renderDeckSheet();
+  $('deck-sheet').hidden = false;
+  return true;
+}
+
+function renderDeckSheet() {
+  const side = HAND.sheet;
+  const duel = app.duel;
+  const deck = side ? duel?.decks?.[side] : null;
+  if (!deck || duel.state !== 'playing') return closeDeckSheet();
+  const mine = side === mySide();
+  const enemy = !mine;
+  $('deck-sheet-title').textContent = mine ? 'Your deck' : "The enemy's deck";
+  $('deck-sheet-pile-label').textContent = `deck · ${deck.pile.length}`;
+  $('deck-sheet-spent-label').textContent = `spent · ${deck.spent.length}`;
+  const fill = (id, kinds) => {
+    const el = $(id);
+    el.textContent = '';
+    for (const k of kinds) el.appendChild(miniCard(k, { enemy }));
+  };
+  fill('deck-sheet-pile', deck.pile);
+  fill('deck-sheet-spent', deck.spent);
+  const hand = handOfSide(side);
+  const canRedraw = mine && isMyTurn() && duel.canMulligan();
+  $('deck-sheet-note').textContent = mine
+    ? `${deck.pile.length ? `${deck.pile.length} card${deck.pile.length === 1 ? '' : 's'} left to draw, top first.` : 'Nothing left to draw.'} ${canRedraw ? `Redraw discards your whole hand (${hand.map((k) => CARDS[k].name).join(', ')}) and draws four — it spends your turn.` : 'The redraw is offered on your turn, with no cast in progress.'}`
+    : `${deck.pile.length ? `${deck.pile.length} card${deck.pile.length === 1 ? '' : 's'} left to draw, top first.` : 'Nothing left to draw.'} The enemy's hand is ${hand.length ? hand.map((k) => CARDS[k].name).join(', ') : 'empty'}.`;
+  $('btnRedraw').hidden = !canRedraw || HAND.confirm;
+  $('btnRedrawConfirm').hidden = !canRedraw || !HAND.confirm;
+  $('btnRedrawCancel').hidden = !canRedraw || !HAND.confirm;
+}
+
+function closeDeckSheet() {
+  if (HAND.sheet === null) return;
+  HAND.sheet = null;
+  HAND.confirm = false;
+  $('deck-sheet').hidden = true;
+}
+
+/** THE PLAYED-CARD BEAT: the enemy's card flies from its bar to the board and holds enlarged before the spell lands
+ *  (Hearthstone's opponent-played-card reveal — the legibility beat; nothing under ?fx=0). */
+async function enemyCardBeat(kind, sq) {
+  if (!CARDS[kind] || !FX(1) || !app.boardUI) return;
+  const from = [...$('enemy-cards').querySelectorAll('.mini')].find((m) => m.dataset.kind === kind) ?? $('enemy-bar');
+  const r0 = from.getBoundingClientRect();
+  const br = app.boardUI.container.getBoundingClientRect();
+  const p = (sq && app.boardUI.pointOfSquare(sq)) || { x: br.left + br.width / 2, y: br.top + br.height / 2 };
+  const { w, h } = cardSize();
+  const beat = document.createElement('div');
+  beat.id = 'card-beat';
+  beat.style.setProperty('--card-w', `${w}px`);
+  beat.style.setProperty('--card-h', `${h}px`);
+  beat.style.transformOrigin = '0 0';
+  const face = makeCard(kind, { enemy: true, scale: artScale() });
+  face.classList.add('playable');
+  beat.appendChild(face);
+  document.body.appendChild(beat);
+  const s0 = r0.width ? Math.max(0.1, r0.width / w) : 0.3;
+  beat.style.transform = `translate(${Math.round(r0.left)}px, ${Math.round(r0.top)}px) scale(${s0})`;
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const S = 1.2;
+  // Over the cast square, but never off the screen (an edge-file cast would hang the card off the side).
+  const bx = Math.max(8, Math.min(window.innerWidth - w * S - 8, p.x - (w * S) / 2));
+  const by = Math.max(8, Math.min(window.innerHeight - h * S - 8, p.y - (h * S) / 2));
+  beat.style.transform = `translate(${Math.round(bx)}px, ${Math.round(by)}px) scale(${S})`;
+  await wait(FX(280 + 520));
+  beat.style.opacity = '0';
+  await wait(FX(200));
+  beat.remove();
 }
 
 /** THE DECK: the draw the side to move just made (duel.mjs #refill puts it on the state of record as `drew`), in the log once. */
@@ -3411,7 +3904,7 @@ async function playPlayerMove(from, to, matches) {
   app.busy = true;
   app.selectedSquare = null;
   app.castMode = null;
-  for (const s of Object.values(SPELLS)) $(s.btn).classList.remove('active');
+  syncLiftedCards(); // THE CARD UI: the mode's card settles
   app.boardUI.setInteractive(false);
   await cancelIdleProbes(); // the engine must be quiet before its reply search
   try {
@@ -3488,6 +3981,12 @@ async function onMove({ uci, san, mover, ply }) {
   if (mover === 'player') {
     app.quakeMarks = null;
     setGodsLine('');
+  }
+  // THE CARD UI (Phase 3.2): the enemy's cast is shown as its CARD first — it flies from its bar to the board and
+  // holds for a beat — then the spell lands. The half of a one-turn cast carries the card; the link is the same card.
+  if (mover === 'engine' && isCast(uci) && duel.lastMove?.cast !== 'link') {
+    await enemyCardBeat(spellOf(uci), uci.match(CAST_RE)?.[2] ?? null);
+    if (app.duel !== duel || !duel.board) return; // abandoned mid-beat
   }
   godsHeatOff(); // the census described the pre-move position
   paintBoard(app.duel.fen());
@@ -3800,12 +4299,7 @@ for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['o
     applyOptions();
   });
 }
-$('btnPortal').addEventListener('click', () => setCastMode(app.castMode === 'portal' ? null : 'portal')); // THE PORTAL SPELL
-$('btnIce').addEventListener('click', () => setCastMode(app.castMode === 'ice' ? null : 'ice')); // THE ICE
-// THE DECK (2026-09-25): the meta cards and the redraw.
-$('btnReveal').addEventListener('click', () => void playRevealCard());
-$('btnUndoCard').addEventListener('click', () => void doUndo({ card: true }));
-$('btnMulligan').addEventListener('click', () => void playMulligan());
+bindHand(); // THE CARD UI (Phase 3.2, 2026-09-25): the fan's gesture, the piles, the deck sheet, the reader
 $('optHintN').addEventListener('change', (e) => {
   options.hintN = parseInt(e.target.value, 10);
   applyOptions();
@@ -5628,6 +6122,32 @@ window.__DCK = {
     revealOn: () => revealOn(),
     run: () => app.walk?.run?.deck ?? null,
     CARDS,
+  },
+  // THE CARD UI (Phase 3.2, 2026-09-25): the fan as rendered, a card's state, the tap, the drag in flight, the sheet, the reader, the enemy's cards.
+  cards: {
+    hand: () => [...$('hand').children].map((el) => el.dataset.kind),
+    els: () => [...$('hand').children],
+    info: (kind) => {
+      const els = [...$('hand').children].filter((el) => el.dataset.kind === kind);
+      return { n: els.length, playable: els.some((el) => el.classList.contains('playable')), lifted: els.some((el) => el.classList.contains('lifted')), hint: cardHint(kind, { halfAt: myHalf() }), title: els[0]?.title ?? '' };
+    },
+    layout: () => [...$('hand').children].map((el) => ({ kind: el.dataset.kind, left: parseFloat(el.style.left), y: el.style.getPropertyValue('--fan-y'), rot: el.style.getPropertyValue('--fan-rot'), lifted: el.classList.contains('lifted'), dim: el.classList.contains('dim') })),
+    tap: (kind) => onCardTap(kind),
+    playable: (kind) => cardPlayable(kind),
+    drag: () => (HAND.drag ? { kind: HAND.drag.kind, hover: HAND.drag.hover, area: [...HAND.drag.area], tip: HAND.drag.tip.textContent, ghost: !!document.getElementById('card-ghost') } : null),
+    ghost: () => document.getElementById('card-ghost'),
+    beat: () => !!document.getElementById('card-beat'),
+    playBeat: (kind, sq = null) => enemyCardBeat(kind, sq), // the enemy's played-card beat on demand (nothing under ?fx=0)
+    reader: () => HAND.reader,
+    openReader: (kind) => openReader(kind),
+    closeReader: () => closeReader(),
+    openDeck: (side) => openDeckSheet(side),
+    closeDeck: () => closeDeckSheet(),
+    sheet: () => (HAND.sheet ? { side: HAND.sheet, confirm: HAND.confirm, pile: [...$('deck-sheet-pile').children].map((m) => m.dataset.kind), spent: [...$('deck-sheet-spent').children].map((m) => m.dataset.kind), redraw: !$('btnRedraw').hidden, confirmBtn: !$('btnRedrawConfirm').hidden, note: $('deck-sheet-note').textContent, title: $('deck-sheet-title').textContent } : null),
+    piles: () => ($('piles').hidden ? null : { deck: $('pile-deck').querySelector('.pile-n').textContent, spent: $('pile-spent').querySelector('.pile-n').textContent }),
+    enemy: () => [...$('enemy-cards').querySelectorAll('.mini')].map((m) => m.dataset.kind),
+    enemyPile: () => $('enemy-cards').querySelector('.mini-stack')?.textContent ?? null,
+    rowHidden: () => $('hand-row').hidden,
   },
   ice: {
     outcome: (uci) => (app.duel ? slideOutcome(app.duel.fen(), uci) : null),

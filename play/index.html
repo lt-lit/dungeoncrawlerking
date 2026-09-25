@@ -131,7 +131,11 @@
   </section>
 
   <section id="screen-duel" class="screen" hidden>
-    <div id="enemy-bar" class="side-bar"></div>
+    <!-- THE CARD UI (Phase 3.2, 2026-09-25): the enemy's hand face-up as mini
+         cards after its text (visible decks are the ruling; there are no card
+         backs), its deck a stack with a count — a tap on the stack opens the
+         deck sheet on its pile. -->
+    <div id="enemy-bar" class="side-bar"><span id="enemy-bar-text"></span><span id="enemy-cards" hidden></span></div>
     <div id="eval-bar" hidden><div id="eval-fill"></div><span id="eval-text"></span></div>
     <div id="board"></div>
     <!-- PHASE 2 — the 16×16 renderer (2026-09-07): while the canvas board is
@@ -142,7 +146,29 @@
     <!-- The player's bar also carries the hint list and the gods line (the
          last quake, held until the player moves) — folded in rather than
          a new row, to protect the board's height budget on a phone. -->
-    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><button id="btnPortal" hidden title="cast a portal: pick a square; the second cast links it to the first">&#9678; Portal <span id="btnPortalN"></span></button><button id="btnIce" hidden title="cast ice: pick the centre of a 3×3 patch on the middle rows">&#10052; Ice <span id="btnIceN"></span></button><!-- THE DECK (2026-09-25): the meta cards (the player's alone, no move spent), the redraw (a turn spent), the pile in order --><button id="btnReveal" class="card-btn" hidden title="Reveal: the oracle's best three lines for this turn — costs no move">&#9737; Reveal <span id="btnRevealN"></span></button><button id="btnUndoCard" class="card-btn" hidden title="Undo: take back your last move and the enemy's reply — costs no move">&#8634; Undo <span id="btnUndoCardN"></span></button><button id="btnMulligan" class="card-btn" hidden title="Redraw: discard your whole hand and draw a new one — this spends your turn">&#8635; Redraw</button><span id="deck-line"></span><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
+    <!-- THE CARD UI (Phase 3.2, 2026-09-25 — the designer: "These little
+         buttons aren't gonna cut it… take notes from other card wielding
+         games like mtg arena and hearthstone. Probably cast spells by
+         dragging them from the hand to the field"): THE HAND IS A FAN of
+         cards under the board — every copy its own card, the playable ones
+         rimmed, the rest dimmed; a tap lifts a card into cast mode, a drag
+         carries it to the board (the legal squares lit, the square under
+         the finger framed, an area card's shape tinted) and a release on a
+         lit square casts, a long press opens the reader. The piles beside
+         it: the deck a stack with its count (a tap opens the deck sheet —
+         the pile in order, the spent pile, THE REDRAW with a confirm), the
+         spent pile. The fan replaces the spell buttons, the meta cards'
+         buttons, the Redraw button and the deck line of the first card row.
+         Hidden outside a duel; empty under ?deck=off but for the spells in
+         hand. -->
+    <div id="hand-row" hidden>
+      <div id="hand" aria-label="your hand"></div>
+      <div id="piles">
+        <button id="pile-deck" class="pile" title="your deck, top first — tap to see it, or to redraw"><span class="pile-n"></span><span class="pile-label">deck</span></button>
+        <div id="pile-spent" class="pile spent" title="your spent cards"><span class="pile-n"></span><span class="pile-label">spent</span></div>
+      </div>
+    </div>
+    <div id="player-bar" class="side-bar"><span id="player-bar-text"></span><span id="hint-line"></span><span id="gods-line" aria-live="polite"></span></div>
     <div id="preview-controls" hidden>
       <button id="btnBegin" class="primary">Begin duel</button>
       <button id="btnRedeal">Re-deal</button>
@@ -219,6 +245,30 @@
   </section>
 </main>
 
+<!-- THE CARD UI (Phase 3.2): THE DECK SHEET — a tap on a deck stack opens it
+     on that side's pile: the cards in order (top first), the spent pile, and
+     for the player THE REDRAW behind a confirm ("discard your hand and draw
+     four; this spends your turn"), so a turn is never spent by a slip. -->
+<div id="deck-sheet" hidden role="dialog" aria-labelledby="deck-sheet-title">
+  <div id="deck-sheet-card">
+    <h2 id="deck-sheet-title">Your deck</h2>
+    <div class="sheet-row"><span class="sheet-label" id="deck-sheet-pile-label">deck</span><div id="deck-sheet-pile" class="mini-row"></div></div>
+    <div class="sheet-row"><span class="sheet-label" id="deck-sheet-spent-label">spent</span><div id="deck-sheet-spent" class="mini-row"></div></div>
+    <p id="deck-sheet-note" class="sheet-note"></p>
+    <div id="deck-sheet-actions">
+      <button id="btnRedraw" hidden title="discard your whole hand and draw a new one — this spends your turn">&#8635; Redraw</button>
+      <button id="btnRedrawConfirm" class="primary" hidden>Confirm: discard the hand, draw four, spend the turn</button>
+      <button id="btnRedrawCancel" hidden>Cancel</button>
+      <button id="btnDeckSheetClose">Close</button>
+    </div>
+  </div>
+</div>
+<!-- THE CARD READER — a long press on a card (a hover on a desktop shows the
+     same text as a title): the card at twice its size with its full rules
+     text and what it costs. A tap anywhere closes it. -->
+<div id="card-reader" hidden role="dialog" aria-label="card">
+  <div id="card-reader-card"></div>
+</div>
 <div id="overlay" hidden>
   <div id="overlay-card">
     <h2 id="overlay-title"></h2>

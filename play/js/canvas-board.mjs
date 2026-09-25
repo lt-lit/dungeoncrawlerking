@@ -214,6 +214,10 @@ export function portalTones(side, n = 0) {
 }
 const THREAT = 'rgba(229,72,77,0.55)'; // the threat display's far row (--bad at half)
 const THREAT_TINT = 'rgba(229,72,77,0.16)'; // the rest of the band (the far half of a hunter's box)
+// THE CARD UI (Phase 3.2, 2026-09-25): the drop preview under a dragged card — the
+// square under the finger framed at its edge in the spell blue (a proposed cast's
+// frame), an area card's whole shape tinted; both gone on release.
+const AREA_TINT = 'rgba(124,200,255,0.24)';
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
 const COORD = 'rgba(255,255,255,0.4)';
 const COORD_SHADOW = 'rgba(0,0,0,0.6)';
@@ -288,7 +292,7 @@ export class CanvasBoard {
     this.pieceBaked = Promise.resolve();
     // The board's state, all data: the world, the crop, what marks it wears.
     this.fen = null;
-    this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {} };
+    this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {}, hover: null, area: EMPTY };
     this.portals = null; // THE PORTAL SPELL: the position's pairs and halves (fen.mjs parsePortalField), painted on the floor
     this.slick = null; // THE ICE (2026-09-20): the position's slippery squares (fen.mjs slickSquares), the ice over their flagstones
     this.cellMarks = { selected: null, targets: new Map(), threats: new Map(), badges: new Map() }; // the walk's (setCellMarks): a selection, its targets, THE THREAT DISPLAY (milestone 6: the band where a hunter's duel would start — the far row framed, the rest tinted) and the badges over the enemy kings
@@ -925,7 +929,7 @@ export class CanvasBoard {
   }
 
   /** Replace ALL marks. */
-  setMarks({ selected = null, targets = [], check = null, arrows = [], pit = null, pits = [], cracked = [], breached = [], heat = {} } = {}) {
+  setMarks({ selected = null, targets = [], check = null, arrows = [], pit = null, pits = [], cracked = [], breached = [], heat = {}, hover = null, area = [] } = {}) {
     this.marks = {
       selected,
       targets: new Set(targets),
@@ -934,6 +938,8 @@ export class CanvasBoard {
       cracked: new Set(cracked),
       breached: new Set(breached),
       heat: heat ?? {},
+      hover, // THE CARD UI: the square under a dragged card
+      area: new Set(area), // … and the squares its cast would touch
     };
     this.setArrows(arrows);
     this.invalidate();
@@ -1146,6 +1152,8 @@ export class CanvasBoard {
     if (m.selected === sq) out.push('sel');
     if (m.targets.has(sq)) out.push('target');
     if (m.check === sq) out.push('check');
+    if (m.hover === sq) out.push('hover');
+    if (m.area.has(sq)) out.push('area');
     if (m.pits.has(sq)) out.push('fresh-pit');
     if (m.cracked.has(sq)) out.push('fresh-crack');
     if (m.breached.has(sq)) out.push('fresh-breach');
@@ -1966,6 +1974,11 @@ export class CanvasBoard {
   #paintUnderMarks(sq, x, y) {
     if (!sq) return;
     const m = this.marks;
+    if (m.area.has(sq)) {
+      // THE CARD UI's drop preview: the cast's shape tinted under whatever stands on it
+      this.bctx.fillStyle = AREA_TINT;
+      this.bctx.fillRect(x, y, T, T);
+    }
     const heat = m.heat[sq];
     if (heat && HEAT[heat]) this.#frame1(x, y, HEAT[heat]);
     if (m.pits.has(sq) || m.cracked.has(sq) || m.breached.has(sq)) this.#frame1(x, y, GODS);
@@ -2159,6 +2172,7 @@ export class CanvasBoard {
     const m = this.marks;
     if (m.selected === sq) this.#frame1(x, y, GOLD);
     if (m.check === sq) this.#frame1(x, y, BAD);
+    if (m.hover === sq) this.#frame1(x, y, GODS, 0); // THE CARD UI: the square under the dragged card, framed at its edge like a proposed cast
     if (m.targets.has(sq)) {
       const occupied = !!k?.v && !isWall(k.v);
       if (occupied) this.#frame1(x, y, TARGET, 1);

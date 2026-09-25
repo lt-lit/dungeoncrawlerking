@@ -27,12 +27,15 @@ export const HAND_SIZE = 4;
 
 /** THE CATALOG: every card kind this build knows. `scrolls` is the number of
  *  holdings letters one card is to the engine; `cls` 'spell' rides the
- *  pocket, 'meta' the deck state. */
+ *  pocket, 'meta' the deck state. THE CARD UI (Phase 3.2, 2026-09-25) reads
+ *  `cost` ('move': the cast is the caster's move; 'free': a meta card) for
+ *  the face's cost pip, `short` for the face's one line and `text` for the
+ *  reader (a long press) and the desktop's hover. */
 export const CARDS = {
-  ice: { kind: 'ice', name: 'Ice', glyph: '❄', letter: ICE_SCROLL, scrolls: ICE_SCROLLS_PER_SIDE, cls: 'spell', text: 'a 3×3 patch of ice on the middle rows; a piece that moves onto it slides on until something stops it' },
-  portal: { kind: 'portal', name: 'Portal', glyph: '◎', letter: PORTAL_SCROLL, scrolls: PORTAL_SCROLLS_PER_SIDE, cls: 'spell', text: 'a pair of portals, cast in one turn; a piece that moves onto one comes out of the other' },
-  reveal: { kind: 'reveal', name: 'Reveal', glyph: '☉', cls: 'meta', text: "the engine's best lines for this turn; costs no move" },
-  undo: { kind: 'undo', name: 'Undo', glyph: '↺', cls: 'meta', text: "take back your last move and the enemy's reply; costs no move" },
+  ice: { kind: 'ice', name: 'Ice', glyph: '❄', letter: ICE_SCROLL, scrolls: ICE_SCROLLS_PER_SIDE, cls: 'spell', cost: 'move', short: '3×3 ice, middle rows', text: 'a 3×3 patch of ice on the middle rows; a piece that moves onto it slides on until something stops it' },
+  portal: { kind: 'portal', name: 'Portal', glyph: '◎', letter: PORTAL_SCROLL, scrolls: PORTAL_SCROLLS_PER_SIDE, cls: 'spell', cost: 'move', short: 'a linked pair, one turn', text: 'a pair of portals, cast in one turn; a piece that moves onto one comes out of the other' },
+  reveal: { kind: 'reveal', name: 'Reveal', glyph: '☉', cls: 'meta', cost: 'free', short: "the oracle's three lines", text: "the engine's best lines for this turn; costs no move" },
+  undo: { kind: 'undo', name: 'Undo', glyph: '↺', cls: 'meta', cost: 'free', short: 'take back your last turn', text: "take back your last move and the enemy's reply; costs no move" },
 };
 export const CARD_KINDS = Object.keys(CARDS);
 export const SPELL_KINDS = CARD_KINDS.filter((k) => CARDS[k].cls === 'spell');
