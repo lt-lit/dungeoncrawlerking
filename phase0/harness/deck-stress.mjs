@@ -3,8 +3,9 @@
 // the deck read without a phone. Per card kind: how often it is cast, at
 // what ply, by the side ahead or behind (the enemy's own score at the cast,
 // mover POV), how many were dead in hand at the end; per game the plies,
-// the result, the casts per 100 plies, the redraws none (an engine never
-// mulligans). No card is ever valued by a number here either: the engine
+// the result, the casts per 100 plies, the redraws (THE DECK IN THE ENGINE,
+// 2026-09-26: the mulligan is an engine move, so an engine digs when its
+// search says so — counted per side). No card is ever valued by a number here either: the engine
 // casts when the cast is its best move, and this harness counts.
 //
 // Usage: cd phase0 && node harness/deck-stress.mjs [--stage s59-hall-corner]
@@ -20,10 +21,10 @@ import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { loadStageV2 } from '../../play/js/stage.mjs';
 import { dealMatchup } from '../../play/js/armygen.mjs';
 import { DuelController } from '../../play/js/duel.mjs';
-import { CARDS, SPELL_KINDS, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, cloneDecks, HAND_SIZE, parseDeckParam, pileOf } from '../../play/js/deck.mjs';
+import { CARDS, SPELL_KINDS, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, cloneDecks, HAND_SIZE, parseDeckParam, pileOf, cardOfCast } from '../../play/js/deck.mjs';
 import { GOD_PRESETS } from '../../play/js/director.mjs';
 import { childSeed } from '../../play/js/prng.mjs';
-import { castLetter } from '../../play/js/fen.mjs';
+import { isMulligan } from '../../play/js/fen.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -49,10 +50,10 @@ try { assertFurnitureSupport(ffish); } catch (e) { console.error(e.message); pro
 const stage = loadStageV2(JSON.parse(fs.readFileSync(path.join(ROOT, `play/stages/${STAGE}.json`), 'utf8')));
 const spec = parseDeckParam(DECK);
 if (!spec || spec.off) { console.error(`--deck ${DECK}: not a starter or a list`); process.exit(2); }
-const letterKind = Object.fromEntries(SPELL_KINDS.map((k) => [CARDS[k].letter, k]));
+// THE DECK IN THE ENGINE: a cast is its SLOT's drop (`U@e5`), the card read off the caster's bindings in the FEN before it (cardOfCast).
 
 const lines = [];
-const tally = { games: 0, plies: 0, casts: { w: {}, b: {} }, castable: { w: 0, b: 0 }, turns: { w: 0, b: 0 }, results: {}, deadInHand: { w: {}, b: {} }, bound: 0, searched: 0 };
+const tally = { games: 0, plies: 0, casts: { w: {}, b: {} }, castable: { w: 0, b: 0 }, turns: { w: 0, b: 0 }, results: {}, deadInHand: { w: {}, b: {} }, redraws: { w: 0, b: 0 }, bound: 0, searched: 0 };
 for (const k of SPELL_KINDS) { tally.casts.w[k] = []; tally.casts.b[k] = []; tally.deadInHand.w[k] = 0; tally.deadInHand.b[k] = 0; }
 const mt = GO.match(/movetime (\d+)/);
 const boundMs = mt ? parseInt(mt[1], 10) : Infinity;
@@ -72,24 +73,28 @@ for (let g = 0; g < GAMES; g++) {
   const duel = new DuelController({ ffish, engine, variantName: deal.variantName, startFen: deal.fen, files: deal.files, ranks: deal.ranks, director: god, go: GO, mateGo: null, evalGate: null, decks0, handSize: HAND_SIZE, hooks: {} });
   await duel.start();
   const casts = [];
+  const redraws = [];
   while (duel.state === 'playing' && duel.ply < PLIES) {
     const side = duel.board.turn() ? 'w' : 'b';
     const forced = duel.forcedMove();
     if (forced) { await duel.playForced('engine'); continue; }
-    const hand = duel.hands()[side];
+    const hands = duel.hands();
+    if (!hands) { console.error(`game ${g}: no hands at ply ${duel.ply} (state ${duel.state}, board ${!!duel.board}): ${duel.fen()} · last ${duel.record.moves.slice(-3).join(' ')}`); break; }
+    const hand = hands[side];
     const spellsInHand = hand.filter((k) => SPELL_KINDS.includes(k)).length;
     tally.turns[side]++;
     if (spellsInHand) tally.castable[side]++;
     const link = duel.mustLink();
+    const fenBefore = duel.fen();
     const r = await duel.engineMove();
     if (r.ended) break;
     const e = duel.record.engine[duel.record.engine.length - 1];
     tally.searched++;
     if (e && e.ms >= boundMs) tally.bound++;
     const uci = duel.record.moves[duel.record.moves.length - 1];
-    const letter = castLetter(uci);
-    if (letter && !link) { // the half or the ice: one card; the link is the same card
-      const kind = letterKind[letter];
+    if (isMulligan(uci)) { tally.redraws[side]++; redraws.push({ side, ply: duel.ply, depth: e?.depth ?? null }); continue; } // the engine's own redraw
+    const kind = cardOfCast(fenBefore, uci, side);
+    if (kind && SPELL_KINDS.includes(kind) && !link) { // the half or the ice: one card; the link is the same card
       const score = e?.score ? (e.score.type === 'mate' ? (e.score.value > 0 ? 9999 : -9999) : e.score.value) : null;
       casts.push({ side, kind, ply: duel.ply, score, depth: e?.depth ?? null });
       tally.casts[side][kind].push({ ply: duel.ply, score, depth: e?.depth ?? null, game: g });
@@ -98,12 +103,12 @@ for (let g = 0; g < GAMES; g++) {
   const r = duel.record;
   const hands = duel.hands() ?? { w: [], b: [] };
   for (const side of ['w', 'b']) for (const k of hands[side]) if (SPELL_KINDS.includes(k)) tally.deadInHand[side][k]++;
-  const line = { game: g, seed, plies: duel.ply, result: r.result, termination: r.termination, state: duel.state, casts, dead: { w: hands.w, b: hands.b }, piles: { w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b') }, decks0: { w: decks0.w.pile, b: decks0.b.pile } };
+  const line = { game: g, seed, plies: duel.ply, result: r.result, termination: r.termination, state: duel.state, casts, redraws, dead: { w: hands.w, b: hands.b }, piles: { w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b') }, decks0: { w: decks0.w.pile, b: decks0.b.pile } };
   lines.push(line);
   tally.games++;
   tally.plies += duel.ply;
   tally.results[`${r.result ?? 'unfinished'}:${r.termination ?? (duel.state === 'playing' ? 'ply-cap' : duel.state)}`] = (tally.results[`${r.result ?? 'unfinished'}:${r.termination ?? (duel.state === 'playing' ? 'ply-cap' : duel.state)}`] ?? 0) + 1;
-  console.error(`game ${g}: ${duel.ply} plies, ${r.result ?? '*'} ${r.termination ?? duel.state}, casts w ${casts.filter((c) => c.side === 'w').map((c) => `${c.kind}@${c.ply}`).join(' ') || '-'} · b ${casts.filter((c) => c.side === 'b').map((c) => `${c.kind}@${c.ply}`).join(' ') || '-'}`);
+  console.error(`game ${g}: ${duel.ply} plies, ${r.result ?? '*'} ${r.termination ?? duel.state}, casts w ${casts.filter((c) => c.side === 'w').map((c) => `${c.kind}@${c.ply}`).join(' ') || '-'} · b ${casts.filter((c) => c.side === 'b').map((c) => `${c.kind}@${c.ply}`).join(' ') || '-'}, redraws ${redraws.map((x) => `${x.side}@${x.ply}`).join(' ') || '-'}`);
   duel.destroy();
 }
 
@@ -113,7 +118,7 @@ console.log(`deck-stress: ${tally.games} games on ${STAGE}, deck ${DECK} vs enem
 console.log(`results: ${Object.entries(tally.results).map(([k, v]) => `${k} ×${v}`).join(', ')}`);
 for (const side of ['w', 'b']) {
   const n = SPELL_KINDS.reduce((a, k) => a + tally.casts[side][k].length, 0);
-  console.log(`${side === 'w' ? 'white (the deck)' : 'black (the enemy)'}: ${n} casts in ${tally.turns[side]} turns, ${tally.castable[side]} with a spell in hand → ${pct(n, tally.castable[side])} of castable turns; ${n && tally.plies ? ((100 * n) / tally.plies).toFixed(1) : '0'} casts per 100 plies`);
+  console.log(`${side === 'w' ? 'white (the deck)' : 'black (the enemy)'}: ${n} casts in ${tally.turns[side]} turns, ${tally.castable[side]} with a spell in hand → ${pct(n, tally.castable[side])} of castable turns; ${n && tally.plies ? ((100 * n) / tally.plies).toFixed(1) : '0'} casts per 100 plies; ${tally.redraws[side]} redraw${tally.redraws[side] === 1 ? '' : 's'}`);
   for (const k of SPELL_KINDS) {
     const cs = tally.casts[side][k];
     const behind = cs.filter((c) => c.score !== null && c.score < 0).length;

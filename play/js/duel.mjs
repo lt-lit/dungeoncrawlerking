@@ -260,12 +260,13 @@ export class DuelController {
     this.handSize = opts.handSize ?? HAND_SIZE;
   }
 
-  /** THE DECK: is a deck in play — does the position carry slots or piles? */
+  /** THE DECK: is a deck in play — was one dealt (`decks0`), or does the position carry slots or piles? A duel whose
+   *  decks are both SPENT (every card cast, nothing on either pile) carries no deck field at all, and is still a deck duel. */
   get hasDeck() {
-    return !!this.board && deckOn(this.board.fen());
+    return !!this.board && (!!this.decks0 || deckOn(this.board.fen()));
   }
 
-  /** THE DECK: each side's hand as the player sees it (the cards in its slots, one entry per copy) — or null without a deck. */
+  /** THE DECK: each side's hand as the player sees it (the cards in its slots, one entry per copy; empty once spent) — or null without a deck. */
   hands() {
     if (!this.hasDeck) return null;
     const fen = this.board.fen();
@@ -475,7 +476,7 @@ export class DuelController {
       godCrates: [...this.director.godCrates],
       meter: this.#meterReadout(),
       ...(this.lastMove ?? {}), // the move that produced this state (+ predicted / followed / engineSaw, see #push)
-      ...(fen && deckOn(fen) ? { deck: deckRecord(fen, this.decks0) } : {}), // THE DECK: each side's hand, pile and spent cards — visible decks, on the record
+      ...(fen && (this.decks0 || deckOn(fen)) ? { deck: deckRecord(fen, this.decks0) } : {}), // THE DECK: each side's hand, pile and spent cards — visible decks, on the record
       ...extra,
     });
   }

@@ -2619,7 +2619,18 @@ kept for the spent piles. **main.mjs:** the cast UCIs come from `castUci`,
 card off the live FEN and a PLAYED cast off the record (`lastMove.card`),
 `deckView(side)` feeds the fan, the piles, the enemy's minis and the deck
 sheet, the redraw is the engine's move (`isMulligan`), the Undo card checks
-the hand off the FEN. The analyzer names a cast's card off the state
+the hand off the FEN. THE FAN IS IN SLOT ORDER — the draw order at the
+start (a new card takes the lowest free slot, a second copy joins its
+card's), where stage 1 fanned the spells first and the meta cards after.
+A DUEL WHOSE DECKS ARE BOTH SPENT CARRIES NO DECK FIELD AT ALL (an empty
+pile and an empty slot emit nothing; a redraw near the pile's end discards
+the blanks too and draws only what is left, so a hand can empty), so the
+controller's `hasDeck` reads `decks0` as well as the FEN and `hands()` is
+then two empty lists, never null — the first deck-stress batch on the
+engine's deck died on exactly that position. And a quake's marks survive
+the player's FORCED PASS now (onMove cleared them on every player ply; the
+pass between the enemy's half and its link is the game's ply, not the
+player's answer — the smoke caught it). The analyzer names a cast's card off the state
 (`st.card`) or the board it was cast from; the report's timeline adds the win
 card's line. `run.mjs` is unchanged (`dck-run/6`: the run still carries
 `deck: { starter, cards }`).
@@ -2633,11 +2644,26 @@ undo, the mulligan as a move of the record, the win card ending the duel, a
 width-3 enemy's dry pile, a duel without a deck), selftest 52/52 headless
 (THE DECK IN THE ENGINE check: both binaries on the deal variant), the
 engine's own gates (`test-deck-ffish` 39, `test-deck-engine` 58 — the engine
-README), ui-smoke's DECK and CARD UI blocks on the engine's mulligan and the
-slot holdings, replay-smoke 91, test-logreport 79, test-cards 57 (the win
-card's star), the other Node gates unchanged. The instruments:
-`deck-stress.mjs` on the new API (task 3.3a's measurements),
-`engine/forge/horizon.py` (the win-card curve, native).
+README), ui-smoke 436 ok / 0 failed (its DECK and CARD UI blocks read the
+engine's mulligan, the slot holdings and the fan in slot order), replay-smoke
+91, test-logreport 79, test-cards 57 (the win card's star), the other Node
+gates unchanged. The instruments: `deck-stress.mjs` on the new API (a
+cast's card read off the caster's slot bindings in the FEN before it, the
+engine's REDRAWS counted per side — it could not before, an engine never
+redrew), `engine/forge/horizon.py` (the win-card curve, native). MEASURED
+(the stage-1 batch's own settings — s59, the Adept deck against a width-3
+enemy, depth 8 / 300 ms, gods off, four games;
+`phase0/results/deck-stress/adept-vs-width3-d8-engine-deck.jsonl`):
+the deck side cast on 12% of its castable turns (2.8 casts per 100 plies —
+5% and 2.4 on stage 1's batch), its portals at a median ply 11 and its ice
+at 35 (43 and 69 before), 4 spells dead in hand at the ends (8 before), and
+ONE REDRAW: at ply 25 of game 2 the engine threw back two ices and both
+blanks to draw the last portal on its pile and cast it eight plies later —
+the dig, in ordinary play at depth 8; the enemy (two spells) cast on 10% of
+its castable turns (6% before), every cast while behind, nothing left in
+hand, no redraw; 0 of 583 searches at the time bound; results a checkmate, a
+strip and two ply caps — and game 2 ended with both decks spent, the
+position the controller now reads through `decks0`.
 
 ## The deck (2026-09-25)
 

@@ -3978,8 +3978,10 @@ async function onMove({ uci, san, mover, ply }) {
   // the cells' own layer, so the commit below paints without it and the
   // landing fills it in.
   if (dz) void debrisFly(dz, { shatter: hitSrc, sq: hit.sq, ms: hitSrc ? 340 : 300 });
-  // The player has answered the gods; their residue has served its purpose.
-  if (mover === 'player') {
+  // The player has answered the gods; their residue has served its purpose. A FORCED PASS is the game's ply, not the
+  // player's answer (PORTALS v3: frozen while the enemy's portal opens, or a fizzle), so the residue stays until they
+  // move — the smoke caught a quake's marks wiped by the pass between the enemy's half and its link (2026-09-26).
+  if (mover === 'player' && !pass) {
     app.quakeMarks = null;
     setGodsLine('');
   }
