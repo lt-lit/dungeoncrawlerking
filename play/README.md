@@ -2644,9 +2644,10 @@ undo, the mulligan as a move of the record, the win card ending the duel, a
 width-3 enemy's dry pile, a duel without a deck), selftest 52/52 headless
 (THE DECK IN THE ENGINE check: both binaries on the deal variant), the
 engine's own gates (`test-deck-ffish` 39, `test-deck-engine` 58 — the engine
-README), ui-smoke 436 ok / 0 failed (its DECK and CARD UI blocks read the
-engine's mulligan, the slot holdings and the fan in slot order), replay-smoke
-91, test-logreport 79, test-cards 57 (the win card's star), the other Node
+README), ui-smoke 427 ok / 0 failed on the final build (436 the run before
+the spent-deck fix; the count moves with the random driver; its DECK and
+CARD UI blocks read the engine's mulligan, the slot holdings and the fan in
+slot order), replay-smoke 91, test-logreport 79, test-cards 57 (the win card's star), the other Node
 gates unchanged. The instruments: `deck-stress.mjs` on the new API (a
 cast's card read off the caster's slot bindings in the FEN before it, the
 engine's REDRAWS counted per side — it could not before, an engine never
