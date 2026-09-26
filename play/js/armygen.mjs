@@ -30,6 +30,7 @@
 import { mulberry32, childSeed } from './prng.mjs';
 import { emptyBoard, serializeBoard, isTerrain, withPocket, isWall } from './fen.mjs';
 import { catalogVariantName, dealVariant, spellPocket } from './variant.mjs';
+import { deckDeclaration, dealDeckFen } from './deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26): the deal declares the decks and deals the opening hands into the FEN
 import { flipStageVertical, cropStage } from './stage.mjs';
 
 export const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
@@ -436,7 +437,7 @@ export function dealMatchup({
   portals = false, // THE PORTAL SPELL (2026-09-17): both sides carry their scrolls, the deal's variant knows the rule
   hammer = false, // THE SLEDGEHAMMER (2026-09-17): every king may crack an adjacent wall — the deal's variant names the hammer types
   ice = false, // THE ICE (2026-09-20): one ice scroll a side in hand, the deal's variant knows the slide
-  pocket = null, // THE DECK (2026-09-25): the holdings string of the two opening hands (deck.mjs openHands) in place of the stress-test set — the variant still declares every scroll kind the flags name
+  decks = null, // THE DECK IN THE ENGINE (2026-09-26): the two shuffled piles ({ w: { pile }, b: { pile } }, deck.mjs) — the deal declares every card ID either holds to the engine (variant.mjs deckIniKeys) and writes the opening hands and the piles into the start FEN (deck.mjs dealDeckFen); null = no deck (the labs, the old stress-test set: every scroll the flags name in the pocket). The flags still declare the spell machinery the decks' kinds need.
 }) {
   let terrain;
   try {
@@ -489,9 +490,9 @@ export function dealMatchup({
       arena.ranks,
       campLineRank(m.white.layout.cells, 1),
       campLineRank(m.black.layout.cells, -1),
-      { portals, hammer, ice }
+      { portals, hammer, ice, deck: decks ? deckDeclaration(decks) : null }
     );
-    if (pocket !== null && pocket !== undefined) m.fen = withPocket(m.fen, pocket); // THE DECK: the opening hands' scrolls
+    if (decks) m.fen = dealDeckFen(m.fen, decks); // THE DECK IN THE ENGINE: the opening hands in the slots, the piles in the field
     else if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);

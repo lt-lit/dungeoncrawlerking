@@ -44,7 +44,13 @@ const KNOWN_INI_KEYS = new Set([
   'iceScroll',
   'mobilityRegionWhiteCustomPiece1',
   'mobilityRegionBlackCustomPiece1',
+  // THE DECK IN THE ENGINE (2026-09-26, engine/patches/deck.patch): the hand
+  // size, the slot letters, and `card<ID> = portal|ice|win|meta` per card ID
+  // (checked by pattern below — the IDs are the catalog's, deck.mjs).
+  'handSize',
+  'cardSlots',
 ]);
+const DECK_CARD_KEY = /^card\d+$/;
 
 // THE PORTAL SPELL (2026-09-17): the scroll is a piece type that only ever
 // lives in hand (FSF's own `immobile` piece, letter `o`), two per side per
@@ -60,8 +66,11 @@ const KNOWN_INI_KEYS = new Set([
 // change. The name suffix carries the margin, so a deal variant's name
 // encodes its region (rule 7; the one-row deals were `__portals`, and the
 // committed portal samples still carry them).
-// The scroll's value is the engine's eagerness knob: 0 leaves only FSF's
-// small in-hand bonus, so the enemy casts when the search sees a gain.
+// The scroll's value is 0 — and since THE DECK IN THE ENGINE (2026-09-26)
+// a scroll or a card in hand weighs NOTHING to the eval at all: FSF's flat
+// in-hand piece-square bonus (35–70 cp a piece, the "small in-hand bonus"
+// this comment used to count on) is zero for every spell type, so the enemy
+// casts when the position after the cast is better and for no other reason.
 export const PORTAL_SCROLL = 'o';
 export const PORTAL_SCROLLS_PER_SIDE = 2;
 export const PORTAL_SCROLL_VALUE = 0;
@@ -96,7 +105,7 @@ export function hammerIniKeys() {
 // than two rows to a king row on the 10-rank box (ranks 5–6 → rows 4–7;
 // 4–5 → 3–6 on the selftest's 8) — the portal's two-row promotion margin,
 // kept for the ice. The scroll's value is 0 like the portal scroll's (FSF's
-// own in-hand bonus is enough of a nudge). The name suffix `__ice` makes an
+// in-hand bonus is ZERO for a spell since 2026-09-26 — no nudge at all). The name suffix `__ice` makes an
 // ice deal its own variant (rule 7).
 export const ICE_SCROLL = 'i';
 export const ICE_SCROLLS_PER_SIDE = 1;
@@ -217,7 +226,7 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
     ...extra,
   };
   for (const k of Object.keys(opts)) {
-    if (!KNOWN_INI_KEYS.has(k)) {
+    if (!KNOWN_INI_KEYS.has(k) && !DECK_CARD_KEY.test(k)) {
       throw new Error(`unknown variants.ini key "${k}" — unknown keys are silently ignored by FSF/ffish (spike 6); add it to KNOWN_INI_KEYS deliberately if it is real`);
     }
   }
@@ -232,6 +241,47 @@ export function makeDuelVariantIni({ name = 'duel', files = 8, ranks = 8, extra 
 /** Catalog variant name for a board size. */
 export function catalogVariantName(files, ranks) {
   return `duel_${files}x${ranks}`;
+}
+
+// THE DECK IN THE ENGINE (2026-09-26; engine/patches/deck.patch + deck-search.patch;
+// brief §4.10 "Phase 3.3" — the designer: "I need an engine that actually sees the
+// deck and understands that both players will draw more cards"): a deal with
+// decks declares them to the engine — the HAND SIZE, the SLOT letters the hands
+// live in (custom immobile pieces s..z, bound per colour to card IDs by the FEN's
+// trailing field) and, per card ID either deck holds, the card's ENGINE KIND:
+// `portal` (a pair cast in one turn, the card spent on the link), `ice` (the
+// 3×3 patch), `win` (the test-only You Win card: cast on your own king, the
+// game over — the horizon instrument), `meta` (a blank to the engine: Reveal
+// and Undo, the player's alone). The engine then draws for the side about to
+// move inside every move that hands it the turn, offers the mulligan `@@@@`,
+// and searches through both piles. THE NAME CARRIES THE WHOLE DECLARATION
+// (rule 7): `__deck4_1i_2p_101m_102m` — the hand size, then each ID with its
+// kind's initial — so two deals that declare different cards are different
+// variants and a same-named re-registration is always an identical no-op.
+// No card is valued by a number (designer, standing): the slots are worth 0
+// to the engine (its custom pieces with an empty Betza have no material
+// value and the eval never counts a scroll), so the engine casts a card when
+// the cast is the best move and for no other reason.
+export const DECK_SLOT_LETTERS = 'stuvwxyz';
+export const DECK_HAND_SIZE = 4;
+export const DECK_VARIANT_SUFFIX = '__deck';
+/** The engine's card kinds a deal may declare, and the initial each wears in the variant name. */
+export const DECK_ENGINE_KINDS = { portal: 'p', ice: 'i', win: 'w', meta: 'm' };
+
+/** The variants.ini keys that declare a deck: `deck` = { handSize, cards: { <id>: <engine kind> } }. */
+export function deckIniKeys({ handSize = DECK_HAND_SIZE, cards = {} } = {}) {
+  const out = { handSize: String(handSize | 0), cardSlots: DECK_SLOT_LETTERS, pieceDrops: 'true' };
+  for (const id of Object.keys(cards).map(Number).sort((a, b) => a - b)) {
+    if (!DECK_ENGINE_KINDS[cards[id]]) throw new Error(`card ${id}: unknown engine kind "${cards[id]}"`);
+    out[`card${id}`] = cards[id];
+  }
+  return out;
+}
+
+/** The name suffix that encodes a deck declaration (rule 7): the hand size, then every ID with its kind's initial. */
+export function deckVariantSuffix({ handSize = DECK_HAND_SIZE, cards = {} } = {}) {
+  const ids = Object.keys(cards).map(Number).sort((a, b) => a - b);
+  return `${DECK_VARIANT_SUFFIX}${handSize | 0}${ids.map((id) => `_${id}${DECK_ENGINE_KINDS[cards[id]]}`).join('')}`;
 }
 
 /**
@@ -259,14 +309,14 @@ export function catalogVariantName(files, ranks) {
  * `loadVariantConfig(ini)` (dealMatchup does it), the engine via a
  * cumulative variants-ini reload (main.mjs appends to app.catalog).
  */
-export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false, hammer = false, ice = false } = {}) {
+export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portals = false, hammer = false, ice = false, deck = null } = {}) {
   const w = whiteLineRank | 0;
   const b = blackLineRank | 0;
   if (w < 1 || w > ranks || b < 1 || b > ranks) {
     throw new Error(`camp lines w${w}/b${b} outside 1-${ranks}`);
   }
   // The name encodes the config (rule 7): a portal deal, a sledge deal, an ice deal, is its own variant.
-  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}${hammer ? HAMMER_VARIANT_SUFFIX : ''}${ice ? ICE_VARIANT_SUFFIX : ''}`;
+  const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}${hammer ? HAMMER_VARIANT_SUFFIX : ''}${ice ? ICE_VARIANT_SUFFIX : ''}${deck ? deckVariantSuffix(deck) : ''}`;
   const ini = makeDuelVariantIni({
     name,
     files,
@@ -276,9 +326,10 @@ export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portal
       doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
       ...spellIniKeys(ranks, { portals, ice }),
       ...(hammer ? hammerIniKeys() : {}),
+      ...(deck ? deckIniKeys(deck) : {}), // THE DECK IN THE ENGINE: the hand size, the slots, every card ID's kind
     },
   });
-  return { name, ini, portals: !!portals, hammer: !!hammer, ice: !!ice };
+  return { name, ini, portals: !!portals, hammer: !!hammer, ice: !!ice, deck: deck ? { handSize: deck.handSize ?? DECK_HAND_SIZE, cards: { ...deck.cards } } : null };
 }
 
 /**

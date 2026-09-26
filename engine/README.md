@@ -562,6 +562,174 @@ wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
 `#` board ("Invalid piece character"), so a phase0 run that forgot the
 overlay dies at once instead of misplaying.
 
+## The deck patch and the deck-search patch (`patches/deck.patch`, `patches/deck-search.patch`) — 2026-09-26
+
+Canon: brief §4.10 "Phase 3.3 — the engine's deck" (the designer, 2026-09-25:
+"I need an engine that actually sees the deck and understands that both
+players will draw more cards. An engine that plays at a super human level
+is of upmost importance. I thought I was clear on the last session that the
+entire card and deck mechanic needs to work at the FSF engine level"; "will
+it see the crazy powerful card at the bottom of the deck and understand that
+it can repeatedly mulligan hands to get to it? I need that level of
+foresight"; the standing rule: NO CARD IS EVER VALUED BY A NUMBER; "The only
+cards you are legally allowed to play while in check are Undo and Reveal. No
+exceptions."). Authored on the pinned trees on top of the eight patches above
+(apply in this order: dead-squares, thread-stack, portals, wall-kinds, hammer,
+portals-body, portals-cast, ice, deck, deck-search). deck: `types.h`,
+`variant.h`, `parser.cpp`, `position.h`, `position.cpp`, `movegen.h`,
+`movegen.cpp`, `apiutil.h`, `uci.cpp`, `psqt.cpp`; deck-search:
+`movepick.cpp`, `search.cpp`. The source of both is
+`engine/forge/apply-deck.py` + `apply-deck-search.py` (anchor-based edits;
+the patch files are their diff against the eight-patch tree).
+
+Design, in the engine's own shapes — THE FEN IS THE DECK:
+
+- **Cards are SLOTS, not letters.** A hand lives in the holdings as custom
+  immobile pieces `s..z` (`cardSlots = stuvwxyz`; the parser adds them from
+  `CUSTOM_PIECES_END − 1` downward with an empty Betza), one letter per copy,
+  and every slot is BOUND per colour to a card ID by the FEN's trailing field
+  — `S=w12` (White's slot s holds card 12; `+` after the id marks the slot
+  whose portal half stands open), the binding read while the slot's count in
+  hand is > 0. The ini declares `card<ID> = portal | ice | win | meta` for
+  every ID a deal's decks hold and `handSize = 4`. So a deck of a hundred
+  unique cards costs no letters (the designer: "Expect full decks of entirely
+  unique cards"), identical cards share a slot (count 2 = two copies), and
+  what a slot DOES is a property of the deal, not of the engine.
+- **The pile rides the FEN** — `w|12.7.33`, top first, the cards still to
+  draw (both piles visible to both sides, the designer's ruling) — in
+  `Position::pile[c][MAX_PILE]` / `pileLen[c]`, and THE POINTER IS A COUNT OF
+  THE REMAINDER, `StateInfo::pileLeft[c]` (copied with the state): a search's
+  root position is re-set from `pos.fen()`, which prints the remainder alone,
+  with the setup state copied over it (`Threads::start_thinking`), so a
+  pointer that counted the DRAWN cards pointed past the re-parsed pile and
+  the mulligan vanished at every root reached by moves (the first cut's bug,
+  found by the dig probes: `go perft 1` on a position reached by moves listed
+  71 moves, the same FEN parsed fresh 72). A count of what remains is
+  invariant under the re-parse.
+- **THE DRAW is inside `do_move`.** At the end of every move, `refill(them)`
+  draws the side ABOUT TO MOVE up to the hand size (an identical card joins
+  its slot, a new card takes the lowest free slot that is not the open cast
+  slot; `st->rule50 = 0` — a draw is irreversible), recording each draw in the
+  state for undo — except while a portal half stands open (the frozen side's
+  pass and the caster's link ply: that turn began before) and after a win
+  card. So the search sees every draw within its horizon and the hand it
+  searches on is next turn's hand, both piles included.
+- **THE MULLIGAN is a move**: type `MULLIGAN` (11 in the 4-bit field, after
+  SLIDE), `make<MULLIGAN>(ksq, ksq)`, UCI `@@@@`, SAN `redraw`; generated in
+  QUIETS / NON_EVASIONS when `mulligan_allowed` (a deck on, a king, not in
+  check, no half open, a card left on the pile, no winner); `do_mulligan`
+  discards the whole hand (the discards vanish — the spent pile is the
+  game's to name from the deck as shuffled) and refills; legal by the rule,
+  never a check, `key_after` unchanged, undo by the state.
+- **A CAST is the slot's drop, by kind.** `generate_drops` reads
+  `card_kind(Us, pt)`: a PORTAL card opens a half like the scroll (the half
+  MARKS its slot with `castSlot`, spends nothing; the link — or the fizzle —
+  spends the card; `portal_cast_type` is the marked slot, so the one-turn
+  cast machinery is untouched); an ICE card casts on `ice_cast_region` (the
+  two middle rows of the board for a slot, the custom piece's mobility region
+  for the legacy scroll) — and NEVER A NULL CAST: a cast whose 3×3 would ice
+  nothing (every floor square of it already slippery) is not generated, for
+  the legacy scroll too, since a cast that changes nothing would be a pass
+  and the game has none (this re-pinned four ice perft-3 counts and the
+  10×10 duel shape's perft 2 in `test-ice-*`: 48,633 → 47,168 / 59,174 →
+  57,749 / 44,233 → 42,861 / 7,859 → 7,799 / 4,453 → 4,429); a WIN card casts
+  on the caster's own king (`!w` in the field, `is_immediate_game_end` first
+  — the other side has no move), the test-only You Win card; a META card
+  (Reveal, Undo — the player's alone) is a blank the engine never casts.
+  **No card is cast in check** (`generate_drops` returns at once; `legal()`
+  refuses a slot drop in check; the portal card's drop too) — the designer's
+  rule, no exceptions but the meta cards, which the game plays outside the
+  move grammar by rewriting the hand.
+- **Cards are never pieces** — `is_spell_scroll` covers the slots, so the
+  extinction count skips them (a bared king with a hand has lost),
+  `capture()` / `capture_or_promotion()` are false for a cast and a mulligan.
+- **THE HASH is content, not layout.** Zobrist `castSlot` / `cardWinner`
+  tables from their own PRNG (the stock key sequence untouched);
+  `card_key(c, id, n)` per slot with a card (the ID and the count, NOT the
+  slot letter — two layouts of one hand are one position), `pile_key(c,
+  fromBottom, id)` per remaining card by its index FROM THE BOTTOM, so a
+  fresh parse of the remainder hashes identically to the incremental state
+  (the xsweep found 274 "BAD state" lines when the pointer was hashed).
+- **A card in hand is worth NOTHING to the eval** (`psqt.cpp`): stock gives
+  every piece in hand its value plus a flat `(35, 10) × (1 + !isSlider)`, which
+  had priced a value-0 scroll at 35–70 centipawns since the portal patch — a
+  number on a spell. The in-hand piece-square score of a portal scroll, an
+  ice scroll or a card slot is `SCORE_ZERO` now (measured: `eval` on
+  `4k3/p7/8/8/8/8/8/R3K3` gives +3.62 with no cards, `[ST]`, `[STUV]` + a
+  pile, `[st]`, `[O]` and `[o]` alike; it had read +3.77 / +3.85 / +3.54 /
+  +3.85 / +3.46). The `hand()` term already skipped scrolls. So the engine
+  casts a card when the position after the cast is better and for no other
+  reason — the standing rule, in the engine.
+- **The FEN grammar** (`check_portal_field` in apiutil.h accepts it):
+  `{c3-h8,e4w,~e5,w|12.7.33,S=w12+,T=w7,b|1,S=b2,!w}` — the pairs, halves
+  and ice as before, then per colour its pile and its bindings, then the
+  winner; printed in that order, read in any.
+- **deck-search.patch — THE DIG IS NEVER PRUNED.** The mulligan and a win
+  card's cast (`is_dig_move`) are never skipped by move-count pruning (a
+  `generate_dig` list stands in for the quiets when `skipQuiets`, and the
+  QUIET stage's predicate lets a dig through), never pruned at shallow depth
+  (Step 13), never reduced by LMR (Step 16), and a win card's cast is ordered
+  first among the quiets (`+1 << 24` in `score<QUIETS>`). So the deck's
+  horizon is the search depth and nothing shorter: on a counterplay-free
+  board (kings, two blocked pawns sealed behind walls) with the win card
+  under A ice cards, the native release reports the exact mate — in 2 / 3 /
+  4 / 5 / 6 / 7 / 8 / 9 for A = 0 / 4 / 8 / 12 / 16 / 20 / 24 / 28 — at depth
+  3 / 5 / 7 / 9 / 12 / 13 / 22 / 23, the mate in 9 (eight mulligans deep) in
+  9.6 s (`engine/forge/horizon.py`; before the in-hand zero the same probe
+  read 3 / 6 / 8 / 16 / 16 / 15 / 17 / 17 — a hand that weighs nothing digs
+  cleaner). THE MIRROR (`horizon.py --mirror`: the deck on Black, White to
+  move with nothing to do): the engine reads the mate AGAINST it — mate −2 …
+  −9 at depth 4 / 6 / 8 / 17 / 19 / 20 / 22 / 24, the −9 in 8.8 s — so it sees
+  the opponent's dig as well as its own. The fixture is D11 in
+  `native-test-deck.py`. Scroll-free boards are node-identical to the
+  eight-patch build with the policy applied (perft 3 = 61,433 and the
+  depth-12 transcripts on five boards): the dig exists only where a deck is.
+- Not in this patch, on purpose: the pass-through tunnel, a value knob, a
+  per-card region, the meta cards' effects (the game's), and any card kind
+  beyond the four (the terrain interpreter is 3.3b's forge).
+
+### Native validation (2026-09-26)
+
+THE ORACLE FIRST: `engine/forge/oracle.py` grew the deck — slots, piles,
+the binding rule, the draw at the hand-over, the mulligan, the four kinds,
+the null-cast rule, `from_fen` with the deck field — and every fixture count
+in `native-test-deck.py` (D1–D13) was derived by it before the engine ran it
+(`deck.ini`: deck8 / deck6 / deck10, IDs 1–9 ice, 10–19 portal, 20–29 win,
+30–39 meta). On the release and the debug build with asserts on: the fixtures
+**55/55** (the start and the draw, the win card on the spot and black
+moveless after it, the mulligan and its clock reset, the portal card's half /
+frozen pass / link / spend, the fizzle spending the card, identical cards
+merging, no card in check, a bared king with cards lost, THE DIG on the
+sealed board — mates in 2 / 3 / 4 / 5 by depth 4 / 8 / 10 / 18 — and under
+counterplay, the 10×10 duel shape perft 2 = 6,930, and D13 THE ROOT BY MOVES:
+two mulligans and two pawn moves in, the position searches on the same 72
+moves as its own FEN and finds the third mulligan's mate in 2); **500 (seed
+21) + 400 (seed 7) random deck positions** (6×6 / 8×8 / 10×10, hands, piles,
+halves, ice, pits) equal to the oracle on perft-1 move sets and perft-2
+per-move counts under `xsweep 2` (pseudo_legal / legal / gives_check / the
+incremental state against a fresh parse / the undo); perft 4 on seven deck
+fixtures under asserts; the legacy suites on the deck build — portals
+63/63 + 300 random + sweep, ice 47/47 + 300 random + sweep; identity on
+scroll-free boards vs the eight-patch release (perft 3 and depth-12
+score / nodes / bestmove on five boards) IDENTICAL. Two bugs the sweeps and
+probes caught before any WASM was built: the drawn-count pointer at a
+re-parsed root (above) and the undo assert that had never learned the
+mulligan.
+
+### The rule-16 gate (both WASM binaries rebuilt from the clean pinned trees)
+
+`ffish.js` differs from the vendored in 11 bytes and `stockfish.js` in 9
+(the static memory layout constants) and the worker is byte-identical; the
+wasms +22,386 / +36,037 bytes.
+
+- [x] `test-deck-ffish.cjs` **39/39** — the deck field through validateFen and the round trip, the casts and the mulligan among the legal moves, SAN `S@e4` / `redraw` / `--`, the draw at the hand-over, push/pop through a cast and a mulligan, the one-turn portal card (the marked slot, the frozen pass, the link's spend, the fizzle's spend), identical cards in one slot, no card in check, a bared king with cards lost, the root by moves equal to its FEN, the 10×10 duel shape's 198 moves, a 3,917-move check-flag sweep with 0 mismatches
+- [x] `test-deck-engine.cjs` **58/58** — perft 1 sets and perft 3 totals pinned to the native build on every fixture (D1 24,842 · D2 10,654 · D3 7,447 · D4 9,310 · D5 130,298 / 15,562 · D6 42,190 / 1,793 / 50,387 / 25,697 · D7 13 / 4 / 4 · D8 7,395 · D9 11,593 · D11 10,599 · D13 45,461; the 10×10 duel shape perft 1 = 198, perft 2 = 12,316), the FEN after every key move through `d`, the win card played on the spot, THE DIG (mate in 2 / 3 / 4 by depth 4 / 8 / 10, the root by moves' mate in 2, mate in 3 under counterplay), a depth-12 search alive on the 10×10 shape with two decks
+- [x] `test-ice-ffish.cjs` 53, `test-ice-engine.cjs` 79 (re-pinned for the null-cast rule, above), `test-portals-ffish.cjs` 78, `test-portals-engine.cjs` 146, `test-hammer-ffish.cjs` 27, `test-hammer-engine.cjs` 25, `test-ffish.cjs` 19, `test-engine.cjs` 7
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored eight-patch engine at depth 12 (19,459 / 26,462 / 35,136 nodes)
+- [x] `depthcap.cjs` — d22 110/110 (slowest 1,392 ms), d60 30/30 (slowest 10,021 ms, the movetime) — **the cap stays at d22**
+- [x] the game's gates on the vendored pair: selftest **52/52** headless (THE DECK IN THE ENGINE check: the deal variant, the opening deal, 32 portal + 16 ice casts and the redraw, the engine's draw at the hand-over, the redraw merging two ices and drawing the win card, `U@e1` ending the game, engine perft = ffish, bestmove `@@@@` mate 2), test-deck 65, test-deck-duel 46, test-ice-game 42, test-portals-game 27, test-logreport 79, test-cards 57, test-barrier 170, test-armygen, test-world 132, test-enemy 100, test-army 131, test-dungeon 96, test-camera 80, test-debris 76 — and the page's, in `play/README.md` § "The deck in the engine"
+
 ## The ice patch (`patches/ice.patch`) — 2026-09-20
 
 Canon: brief §4.9 (the designer's rules, 2026-09-20: "a sliding piece

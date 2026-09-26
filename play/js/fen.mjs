@@ -55,6 +55,86 @@ export const isPass = (uci) => { const m = String(uci ?? '').match(/^([a-l](?:10
 /** THE ICE (2026-09-20): the letter a cast drops — 'o' the portal scroll, 'i' the ice scroll — lowercase, or null for a move. */
 export const castLetter = (uci) => { const m = String(uci ?? '').match(CAST_RE); return m ? m[1].toLowerCase() : null; };
 
+// THE DECK IN THE ENGINE (2026-09-26, engine/patches/deck.patch; brief §4.10
+// "Phase 3.3"): a side's HAND is card SLOTS in the holdings — custom immobile
+// pieces s..z, one letter per copy of a card (`[SSTst]`: White holds two of
+// one card in s and one of another in t, Black two cards) — each slot BOUND
+// to a card ID by the FEN's trailing field (`S=w12`: White's slot s holds
+// card 12; a `+` after the id marks the slot whose portal half stands open);
+// its PILE rides the same field (`w|12.7.33`, top first — the cards still to
+// draw, both piles visible to both sides, the designer's ruling); `!w` names
+// the side that played a win card. A cast is a DROP of the slot (`S@e4`),
+// the MULLIGAN the move `@@@@` (SAN `redraw`). The catalog that says which
+// ID is which card lives in deck.mjs; this layer reads and writes the field.
+export const DECK_SLOTS = 'stuvwxyz';
+export const MULLIGAN = '@@@@';
+export const isMulligan = (uci) => uci === MULLIGAN;
+/** The slot letter (s..z, lowercase) a cast drops, or null for a move or a legacy scroll cast. */
+export const castSlot = (uci) => { const l = castLetter(uci); return l && DECK_SLOTS.includes(l) ? l : null; };
+
+/**
+ * The deck field of a FEN: { present, piles: { w: [ids], b: [ids] } (top first), slots: { w: { s: { id, n, open } … },
+ * b: {…} } (the slots with a card in them — `n` copies, read off the holdings), winner: 'w' | 'b' | null }.
+ * `present` is false for a FEN without a deck (the legacy scroll pockets, the labs).
+ */
+export function parseDeckField(fen) {
+  const out = { present: false, piles: { w: [], b: [] }, slots: { w: {}, b: {} }, winner: null };
+  const pocket = splitFen(String(fen ?? '')).pocket ?? '';
+  const counts = { w: {}, b: {} };
+  for (const ch of pocket) {
+    const l = ch.toLowerCase();
+    if (!DECK_SLOTS.includes(l)) continue;
+    const c = ch === l ? 'b' : 'w';
+    counts[c][l] = (counts[c][l] ?? 0) + 1;
+    out.present = true;
+  }
+  const m = String(fen ?? '').match(/\{([^}]*)\}/);
+  for (const entry of m ? m[1].split(',') : []) {
+    const e = entry.trim();
+    let x;
+    if ((x = e.match(/^([wb])\|(.*)$/))) {
+      out.piles[x[1]] = x[2].split('.').filter(Boolean).map((s) => parseInt(s, 10));
+      out.present = true;
+    } else if ((x = e.match(/^([A-Za-z])=([wb])(\d+)(\+?)$/))) {
+      const l = x[1].toLowerCase();
+      if (!DECK_SLOTS.includes(l)) continue;
+      out.slots[x[2]][l] = { id: parseInt(x[3], 10), n: counts[x[2]][l] ?? 0, open: x[4] === '+' };
+      out.present = true;
+    } else if ((x = e.match(/^!([wb])$/))) {
+      out.winner = x[1];
+      out.present = true;
+    }
+  }
+  return out;
+}
+
+/** The holdings string for a set of deck slots: White's letters (uppercase, slot order, one per copy) then Black's. */
+export function deckPocket(slots) {
+  let s = '';
+  for (const c of ['w', 'b']) for (const l of DECK_SLOTS) for (let i = 0; i < (slots[c]?.[l]?.n ?? 0); i++) s += c === 'w' ? l.toUpperCase() : l;
+  return s;
+}
+
+/**
+ * Write a deck into a FEN: the holdings become the slots' letters (a deck deal never mixes them with the legacy
+ * scrolls) and the trailing field carries the piles, the bindings and the winner after whatever portal, half and
+ * ice entries it already had — the order the engine prints. `deck` is { piles, slots, winner } as parseDeckField reads it.
+ */
+export function withDeck(fen, deck) {
+  const P = parsePortalField(fen);
+  const entries = [...P.pairs.map(([a, b]) => `${a}-${b}`), ...['w', 'b'].filter((s) => P.halves[s]).map((s) => `${P.halves[s]}${s}`), ...[...P.slick].sort((a, b) => squareOrder(a) - squareOrder(b)).map((sq) => `~${sq}`)];
+  for (const c of ['w', 'b']) {
+    if (deck.piles?.[c]?.length) entries.push(`${c}|${deck.piles[c].join('.')}`);
+    for (const l of DECK_SLOTS) {
+      const s = deck.slots?.[c]?.[l];
+      if (s && s.n > 0) entries.push(`${l.toUpperCase()}=${c}${s.id}${s.open ? '+' : ''}`);
+    }
+  }
+  if (deck.winner) entries.push(`!${deck.winner}`);
+  const bare = withPocket(String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim(), deckPocket(deck.slots ?? {}));
+  return entries.length ? `${bare} {${entries.join(',')}}` : bare;
+}
+
 /** Is this cell terrain (a wall of either kind, a pit or furniture)? Safe on null/undefined. */
 export const isTerrain = (c) => c === WALL || c === FURNITURE || c === HARD || c === PIT;
 /** Is this cell a wall of either kind or a pit — stone, not a crate, and nothing a piece may enter? */

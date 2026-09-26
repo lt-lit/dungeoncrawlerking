@@ -37,9 +37,9 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
-import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, openHands, glyphsOf, parseDeckParam, cloneDecks, spellHand } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards
+import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, glyphsOf, parseDeckParam, cloneDecks, handOf, pileOf, spentOf, cardOfCast, castUci } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards — IN THE ENGINE since 2026-09-26 (the FEN is the deck)
 import { fanLayout, cardArt, artSize, stampGlyph, gestureStart, gestureMove, gestureHold, gestureEnd, castArea, cardHint, dropWords, costWords, LONG_PRESS_MS } from './cards.mjs'; // THE CARD UI (Phase 3.2, 2026-09-25): the fan, the art, the gesture, the drop preview
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, CAST_RE, HARD, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
@@ -256,7 +256,7 @@ function computeDeal() {
       portals: dk ? dk.portals : portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns (with a deck: declared when either deck holds it)
       hammer: hammerOn(), // THE SLEDGEHAMMER: every king may crack an adjacent wall
       ice: dk ? dk.ice : iceOn(), // THE ICE: one 3×3 patch per side (with a deck: as above)
-      pocket: dk?.pocket ?? null, // THE DECK: the opening hands' scrolls
+      decks: dk?.decks ?? null, // THE DECK IN THE ENGINE: the shuffled piles — the deal declares them and deals the opening hands into the FEN
       ffish: app.ffish,
     });
     if (deal.ok && dk) {
@@ -413,17 +413,16 @@ function deckSpec() {
 function deckCardsOf(cards) {
   return (cards ?? []).filter((k) => (k !== 'portal' || portalsOn()) && (k !== 'ice' || iceOn()));
 }
-/** Both decks for one duel — shuffled by the deal's seed (deck.mjs deckSeeds), the opening hands drawn — as
- *  { pocket (the holdings the deal writes), decks (after the draw), decks0 (as shuffled, for the log), portals, ice
- *  (the kinds either deck holds, so the deal's variant declares them) }, or null without a player's deck. */
+/** Both decks for one duel — shuffled by the deal's seed (deck.mjs deckSeeds) — as { decks (the piles the deal
+ *  declares to the engine and deals the opening hands from, into the start FEN), decks0 (the same, as shuffled, for
+ *  the log and the spent piles), portals, ice (the kinds either deck holds, so the deal's variant declares the spell
+ *  machinery) }, or null without a player's deck. */
 function dealDecks(dealSeed, playerCards, enemyCardList, { fixed = false } = {}) {
   if (!playerCards) return null;
   const seeds = deckSeeds(dealSeed);
   const decks = { w: newDeckState(deckCardsOf(playerCards), seeds.w, { fixed }), b: newDeckState(deckCardsOf(enemyCardList), seeds.b) };
-  const decks0 = cloneDecks(decks);
-  const { pocket } = openHands(decks, HAND_SIZE);
-  const all = [...decks0.w.pile, ...decks0.b.pile];
-  return { pocket, decks, decks0, portals: all.includes('portal'), ice: all.includes('ice') };
+  const all = [...decks.w.pile, ...decks.b.pile];
+  return { decks, decks0: cloneDecks(decks), portals: all.includes('portal'), ice: all.includes('ice') };
 }
 // THE DECK's Reveal card: played this ply, the oracle's lines show as Cheater Mode's hints would, for this turn alone.
 const revealOn = () => !!app.duel && app.duel.state === 'playing' && app.reveal === app.duel.ply;
@@ -1205,11 +1204,12 @@ function spellIcon(kind, rank) {
   return c;
 }
 
-/** Which spell a cast move is — 'ice' for the ice scroll, 'portal' for a portal scroll — or null for a move that is no cast
- *  (or a scroll the page does not know: the board then draws the bare frame and the list no icon). */
+/** Which card a cast move casts ON THE LIVE BOARD — 'ice', 'portal', 'win' by the slot's binding for the side to move
+ *  (THE DECK IN THE ENGINE, 2026-09-26; deck.mjs cardOfCast), the legacy scrolls by their letter — or null for a move
+ *  that is no cast (or a card the page does not know: the board then draws the bare frame and the list no icon). A
+ *  cast already PLAYED is named by the record (`duel.lastMove.card`), since its slot is spent on the board after it. */
 function spellOf(uci) {
-  const letter = castLetter(uci);
-  return letter === ICE_SCROLL ? 'ice' : letter === PORTAL_SCROLL ? 'portal' : null;
+  return app.duel ? cardOfCast(app.duel.fen(), uci) : null;
 }
 
 /** The hint list in the player's bar: one entry per rank — a swatch in the
@@ -1522,7 +1522,7 @@ async function doUndo({ card = false } = {}) {
   const duel = app.duel;
   if (duel.state === 'playing' && duel.turnColor() !== app.session.playerColor) return;
   const me = app.session.playerColor === 'white' ? 'w' : 'b';
-  if (card === true && !(duel.decks?.[me]?.meta ?? []).includes('undo')) return;
+  if (card === true && !handOf(duel.fen(), me).includes('undo')) return;
   app.busy = true;
   godsBeforeOff({ repaint: false }); // the undo repaints the present itself
   await cancelIdleProbes();
@@ -2577,8 +2577,8 @@ async function startDuel(session) {
     // gods' own ledgers from ply 0 (seeded before the terrain anchor).
     holes: onWorld ? session.layers.holes : undefined,
     godCrates: onWorld ? session.layers.godCrates : undefined,
-    // THE DECK (2026-09-25): both deck states after the opening draw; the controller draws the side to move up to the hand size at each turn's start.
-    decks: session.decks ?? undefined,
+    // THE DECK IN THE ENGINE (2026-09-26): the FEN carries the hands and the piles and the engine draws; the pair as shuffled names the spent cards.
+    decks0: session.decks0 ?? undefined,
     handSize: HAND_SIZE,
     hooks: { onMove, onQuake, onEnd, onEngineInfo, onEngineStall, onDirectorTrace },
   });
@@ -3171,26 +3171,20 @@ function slideRest(fen, uci) {
 // UI (Phase 3.2, 2026-09-25) retired the spell buttons: a spell's card in
 // the fan is what lifts into cast mode (a tap) or carries the cast to the
 // board (a drag) — § THE CARD UI, below.
-const SPELLS = { portal: { letter: PORTAL_SCROLL }, ice: { letter: ICE_SCROLL } };
-
+/** THE DECK IN THE ENGINE (2026-09-26): the squares a card of this kind may be cast on now — the legal drops of the
+ *  slots that hold it, read by the slot's binding (the legacy scroll's drops without a deck: deck.mjs cardOfCast). */
 function castTargets(kind = app.castMode || 'portal') {
   if (!app.duel || app.duel.state !== 'playing') return [];
-  const letter = (SPELLS[kind] ?? SPELLS.portal).letter;
-  return [...new Set(app.duel.legalMoves().filter((m) => castLetter(m) === letter).map((m) => m.match(CAST_RE)[2]))];
+  const fen = app.duel.fen();
+  return [...new Set(app.duel.legalMoves().filter((m) => isCast(m) && cardOfCast(fen, m) === kind).map((m) => m.match(CAST_RE)[2]))];
 }
 
-/** The player's scrolls of a spell still in hand, read off the FEN's holdings. */
-function scrollsLeft(kind = 'portal') {
-  const m = app.duel?.fen()?.match(/\[([^\]]*)\]/);
-  if (!m) return 0;
-  const letter = (SPELLS[kind] ?? SPELLS.portal).letter;
-  const mine = app.session?.playerColor === 'white' ? letter.toUpperCase() : letter;
-  return m[1].split('').filter((c) => c === mine).length;
-}
+/** The UCI that casts a kind on a square for the player now — the slot's drop (`S@e4`), or the legacy scroll's (deck.mjs castUci). */
+const castMove = (kind, sq) => castUci(app.duel.fen(), kind, sq);
 
 function setCastMode(kind) {
   const forced = !!app.duel && app.duel.state === 'playing' && app.duel.mustLink(); // PORTALS v3: the link ply cannot be left
-  const want = forced || kind === true ? 'portal' : kind && SPELLS[kind] ? kind : null;
+  const want = forced || kind === true ? 'portal' : kind && CARDS[kind]?.cls === 'spell' ? kind : null;
   app.castMode = want && castTargets(want).length > 0 ? want : null;
   app.selectedSquare = null;
   syncLiftedCards(); // THE CARD UI: the mode's card rises in the fan
@@ -3262,11 +3256,18 @@ const myHalf = () => (app.duel && app.duel.state === 'playing' ? parsePortalFiel
 function handOfSide(side) {
   const duel = app.duel;
   if (!duel || duel.state !== 'playing') return [];
-  const hands = app.session?.decks && duel.decks ? duel.hands() : null;
-  return hands ? hands[side] : spellHand(duel.fen(), side);
+  return handOf(duel.fen(), side); // the slots of the FEN's deck, or the legacy pocket's scrolls (`?deck=off`)
 }
 
-const metaInHand = (kind) => (app.duel?.decks?.[mySide()]?.meta ?? []).includes(kind);
+/** THE DECK IN THE ENGINE: a side's piles as the page shows them — { pile (top first), spent } off the FEN and the pair as shuffled — or null without a deck. */
+function deckView(side) {
+  const duel = app.duel;
+  if (!duel || duel.state !== 'playing' || !duel.hasDeck) return null;
+  const fen = duel.fen();
+  return { pile: pileOf(fen, side), spent: spentOf(fen, side, app.session?.decks0?.[side] ?? null) };
+}
+
+const metaInHand = (kind) => handOfSide(mySide()).includes(kind);
 
 /** Can this card be played now — a spell with a legal cast (the link ply's own portal included), Reveal once a turn, Undo with a turn to take back? */
 function cardPlayable(kind, mine = isMyTurn()) {
@@ -3344,7 +3345,7 @@ function miniCard(kind, { enemy = false } = {}) {
 function renderHand(inDuel, mine) {
   const row = $('hand-row');
   const hand = inDuel ? handOfSide(mySide()) : [];
-  const deck = inDuel && app.session?.decks ? app.duel?.decks?.[mySide()] ?? null : null;
+  const deck = inDuel ? deckView(mySide()) : null;
   const show = inDuel && (hand.length > 0 || !!deck);
   row.hidden = !show;
   if (!show) {
@@ -3425,7 +3426,7 @@ function syncLiftedCards() {
 
 /** THE PILES: the deck a stack with its count, the spent pile beside it; hidden without a deck. */
 function renderPiles(inDuel) {
-  const deck = inDuel && app.session?.decks ? app.duel?.decks?.[mySide()] ?? null : null;
+  const deck = inDuel ? deckView(mySide()) : null;
   $('piles').hidden = !deck;
   if (!deck) return;
   const names = (kinds) => kinds.map((k) => CARDS[k]?.name ?? k).join(', ');
@@ -3445,7 +3446,7 @@ function renderEnemyCards(inDuel) {
   const duel = app.duel;
   const foe = foeSide();
   const hand = inDuel ? handOfSide(foe) : [];
-  const pile = inDuel && app.session?.decks ? duel?.decks?.[foe]?.pile ?? null : null;
+  const pile = inDuel ? deckView(foe)?.pile ?? null : null;
   const show = inDuel && (hand.length > 0 || pile !== null);
   box.hidden = !show;
   const sig = show ? `${hand.join(',')}|${pile ? pile.length : '-'}` : '';
@@ -3618,7 +3619,7 @@ function endDrag(released) {
   setTimeout(() => ghost.remove(), FX(180));
   HAND.drag = null;
   renderPlayMarks(); // the preview goes with the finger
-  if (d.spell) void playPlayerMove(null, hover, [`${SPELLS[d.kind].letter.toUpperCase()}@${hover}`]);
+  if (d.spell) void playPlayerMove(null, hover, [castMove(d.kind, hover)]);
   else {
     d.el.classList.remove('dragging');
     void playMetaCard(d.kind);
@@ -3678,7 +3679,7 @@ function closeReader() {
 
 /** THE DECK SHEET on a side's pile: the cards in order (top first), the spent pile, and for the player the redraw behind a confirm. */
 function openDeckSheet(side = mySide()) {
-  if (!app.duel?.decks?.[side]) return false;
+  if (!deckView(side)) return false;
   HAND.sheet = side;
   HAND.confirm = false;
   renderDeckSheet();
@@ -3689,7 +3690,7 @@ function openDeckSheet(side = mySide()) {
 function renderDeckSheet() {
   const side = HAND.sheet;
   const duel = app.duel;
-  const deck = side ? duel?.decks?.[side] : null;
+  const deck = side ? deckView(side) : null;
   if (!deck || duel.state !== 'playing') return closeDeckSheet();
   const mine = side === mySide();
   const enemy = !mine;
@@ -3816,7 +3817,7 @@ function onSquareTap(sq) {
 
   // THE PORTAL SPELL / THE ICE: a tap on a lit square casts; a tap elsewhere leaves the spell.
   if (app.castMode) {
-    if (castTargets(app.castMode).includes(sq)) return void playPlayerMove(null, sq, [`${SPELLS[app.castMode].letter.toUpperCase()}@${sq}`]);
+    if (castTargets(app.castMode).includes(sq)) return void playPlayerMove(null, sq, [castMove(app.castMode, sq)]);
     if (app.duel.mustLink()) return; // PORTALS v3: on the link ply a tap elsewhere is nothing — the second portal is the move
     setCastMode(null);
   }
@@ -3870,7 +3871,7 @@ function lastMoveArrows() {
     return out;
   }
   const c = last.match(CAST_RE); // THE PORTAL SPELL / THE ICE: the enemy's cast — a PLAYED cast, the red frame on its square (the board shows the spell itself: the rune ring, the ice)
-  return c ? [{ from: c[2], to: c[2], strength: 1, kind: 'last', cast: spellOf(last), played: true }] : [];
+  return c ? [{ from: c[2], to: c[2], strength: 1, kind: 'last', cast: duel.lastMove?.move === last ? duel.lastMove.card ?? null : null, played: true }] : [];
 }
 
 /** THE ALIASES of a piece's moves — squares lit beside its destinations, a
@@ -3985,7 +3986,7 @@ async function onMove({ uci, san, mover, ply }) {
   // THE CARD UI (Phase 3.2): the enemy's cast is shown as its CARD first — it flies from its bar to the board and
   // holds for a beat — then the spell lands. The half of a one-turn cast carries the card; the link is the same card.
   if (mover === 'engine' && isCast(uci) && duel.lastMove?.cast !== 'link') {
-    await enemyCardBeat(spellOf(uci), uci.match(CAST_RE)?.[2] ?? null);
+    await enemyCardBeat(duel.lastMove?.card ?? spellOf(uci), uci.match(CAST_RE)?.[2] ?? null);
     if (app.duel !== duel || !duel.board) return; // abandoned mid-beat
   }
   godsHeatOff(); // the census described the pre-move position
@@ -3997,15 +3998,17 @@ async function onMove({ uci, san, mover, ply }) {
   let note = '';
   {
     const P = parsePortalField(duel.fen());
-    if (uci === '--') {
-      // THE DECK: the redraw — a pass of the game's own; the hand that went and the hand that came
+    if (isMulligan(uci)) {
+      // THE DECK: the redraw — the engine's move `@@@@`; the hand that went and the hand that came
       const m = duel.lastMove?.mulligan;
       note = ` — ${mover === 'player' ? 'you discard' : 'the enemy discards'} ${m?.discarded?.length ? glyphsOf(m.discarded) : 'nothing'} and ${mover === 'player' ? 'draw' : 'draws'} ${m?.drew?.length ? glyphsOf(m.drew) : 'nothing'}`;
     } else if (pass) {
       // PORTALS v3: the frozen side's pass, or the caster's fizzle
       note = duel.lastMove?.cast === 'fizzle' ? ' — no square could hold the second portal: the cast fizzles' : mover === 'player' ? " — you are frozen while the enemy's portal opens" : ' — the enemy is frozen while your portal opens';
-    } else if (castLetter(uci) === ICE_SCROLL) {
+    } else if (duel.lastMove?.cast === 'ice') {
       note = ` — the ice is cast: the floor around ${uci.match(CAST_RE)[2]} turns slippery`; // THE ICE
+    } else if (duel.lastMove?.cast === 'win') {
+      note = ' — the You Win card is played: the duel is over'; // THE DECK IN THE ENGINE: the test card
     } else if (isCast(uci)) {
       const half = P.halves[mover === 'player' ? 'w' : 'b'];
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
@@ -5288,7 +5291,7 @@ async function walkBarrier({ seed = null, turn = null, knobs = null, axis = null
     // scrolls go into the deal's holdings, and the deal's variant declares the kinds either deck holds.
     const enemyWidth = foe ? foe.width : (enemyKnobs.width | 0);
     const dk = run.deck?.cards ? dealDecks(dealSeed, run.deck.cards, enemyDeck(enemyWidth, foe ? childSeed(run.seed >>> 0, `enemy-deck:${foe.id}`) : dealSeed), { fixed: !!run.deck.fixed }) : null;
-    const spells = { portals: dk ? dk.portals : portalsOn(), hammer: hammerOn(), ice: dk ? dk.ice : iceOn(), pocket: dk?.pocket ?? null };
+    const spells = { portals: dk ? dk.portals : portalsOn(), hammer: hammerOn(), ice: dk ? dk.ice : iceOn(), decks: dk?.decks ?? null };
     const plan = enemyFile !== null && enemyFile !== undefined
       ? planBox(W.world, W.army, { enemy: enemySide, enemyFile, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, ...spells })
       : planBarrier(W.world, W.army, { enemy: enemySide, seed: dealSeed, turn: initiative, ffish: app.ffish, axis: wantAxis, ...spells });
@@ -6114,11 +6117,13 @@ window.__DCK = {
   deck: {
     spec: () => deckSpec(),
     hands: () => app.duel?.hands() ?? null,
-    decks: () => cloneDecks(app.duel?.decks ?? null),
+    decks: () => (app.duel?.hasDeck ? { w: deckView('w'), b: deckView('b') } : null), // { pile, spent } a side, off the FEN
     reveal: () => playRevealCard(),
     undo: () => doUndo({ card: true }),
     mulligan: () => playMulligan(),
     canMulligan: () => !!app.duel?.canMulligan?.(),
+    targets: (kind) => castTargets(kind), // THE DECK IN THE ENGINE: the squares a kind may be cast on now, and the UCI that casts it there (the slot's drop)
+    castUci: (kind, sq) => castMove(kind, sq),
     revealOn: () => revealOn(),
     run: () => app.walk?.run?.deck ?? null,
     CARDS,

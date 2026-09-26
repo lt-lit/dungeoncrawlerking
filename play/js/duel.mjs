@@ -21,22 +21,30 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, castLetter } from './fen.mjs';
+import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN } from './fen.mjs';
 import { slideOutcome, fallen } from './ice.mjs'; // THE ICE (2026-09-20): the slide a move makes, for the record
 import { flipTurn, evalSoftens } from './tactics.mjs';
 // THE DECK (2026-09-25): spells as cards — the hand is the pocket plus the meta cards, drawn up to at the start of each turn (deck.mjs).
-import { drawUp, spendMeta, mulligan as deckMulligan, deckRecord, handOf, cloneDecks, HAND_SIZE } from './deck.mjs';
+import { deckRecord, handOf, drawnBetween, cardOfCast, removeCard, mulliganOffered, mustLinkOf, deckOn, cloneDecks, HAND_SIZE } from './deck.mjs';
 import { joinFen } from './fen.mjs';
 
 /** PORTALS v3 (the one-turn cast, 2026-09-19): what a ply is inside a cast —
  *  'half' (a cast that opened the mover's half), 'link' (one that closed the
  *  pair), 'pass' (the frozen side's one move), 'fizzle' (the caster's pass that
  *  let a half no link could close go), 'ice' (THE ICE, 2026-09-20: the ice
- *  scroll's one-ply cast) — or null for an ordinary ply. */
+ *  scroll's one-ply cast), and since THE DECK IN THE ENGINE (2026-09-26)
+ *  'mulligan' (the move `@@@@`: the hand discarded and drawn anew) and 'win'
+ *  (the test-only You Win card) — a deck's cast is a slot's drop, read by the
+ *  card the slot holds — or null for an ordinary ply. */
 export function castKind(fenBefore, uci, fenAfter) {
   const side = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
-  if (castLetter(uci) === 'i') return 'ice';
-  if (isCast(uci)) return parsePortalField(fenAfter).halves[side] ? 'half' : 'link';
+  if (isMulligan(uci)) return 'mulligan';
+  if (isCast(uci)) {
+    const card = cardOfCast(fenBefore, uci);
+    if (card === 'ice') return 'ice';
+    if (card === 'win') return 'win';
+    return parsePortalField(fenAfter).halves[side] ? 'half' : 'link';
+  }
   if (isPass(uci)) return parsePortalField(fenBefore).halves[side] && !parsePortalField(fenAfter).halves[side] ? 'fizzle' : 'pass';
   return null;
 }
@@ -240,21 +248,28 @@ export class DuelController {
     // hook: the trigger is canon now (v3), so a host that forgot to wire it
     // would silently get a Director that never fires.
     this.positions = new PositionLog();
-    // THE DECK (2026-09-25): { w: DeckState, b: DeckState } after the opening
-    // draw (deck.mjs openHands — the start FEN's holdings ARE the opening
-    // hands' spells), or null for a duel without decks (the labs, the old
-    // stress-test set). The side to move draws up to `handSize` at the start
-    // of each of its turns (#refill); a meta card is played through playMeta.
-    this.decks = cloneDecks(opts.decks ?? null);
+    // THE DECK IN THE ENGINE (2026-09-26; deck.mjs): THE FEN IS THE DECK —
+    // the hands in the holdings' slots, the piles in the trailing field, the
+    // engine drawing at every hand-over and dealing the mulligan as a move.
+    // `decks0` is the pair as shuffled ({ w: { pile }, b: { pile } }), kept
+    // so the record can name each side's SPENT cards; a duel whose start FEN
+    // carries no deck (the labs, the old stress-test set) reads null hands
+    // and offers no card play. A meta card (Reveal, Undo) is played through
+    // playMeta — outside the move grammar, the hand rewritten.
+    this.decks0 = cloneDecks(opts.decks0 ?? opts.decks ?? null);
     this.handSize = opts.handSize ?? HAND_SIZE;
-    this.lastDraw = null;
   }
 
-  /** THE DECK: each side's hand as the player sees it — the pocket's spell cards plus the meta cards — or null without decks. */
+  /** THE DECK: is a deck in play — does the position carry slots or piles? */
+  get hasDeck() {
+    return !!this.board && deckOn(this.board.fen());
+  }
+
+  /** THE DECK: each side's hand as the player sees it (the cards in its slots, one entry per copy) — or null without a deck. */
   hands() {
-    if (!this.decks || !this.board) return null;
+    if (!this.hasDeck) return null;
     const fen = this.board.fen();
-    return { w: handOf(fen, 'w', this.decks.w), b: handOf(fen, 'b', this.decks.b) };
+    return { w: handOf(fen, 'w'), b: handOf(fen, 'b') };
   }
 
   /**
@@ -265,67 +280,46 @@ export class DuelController {
    * so a later undo to THIS state never hands the card back.
    */
   playMeta(side, kind) {
-    const deck = this.decks?.[side];
-    if (!deck || !spendMeta(deck, kind)) return false;
-    this.record.metaPlays.push(this.#stamp({ ply: this.ply, side, kind }));
+    if (this.state !== 'playing' || !this.board) return false;
+    const fen = removeCard(this.board.fen(), side, kind); // one copy out of the hand; the engine draws the side up at its next turn's start
+    if (!fen) return false;
+    if (this.ffish.validateFen(fen, this.variantName) !== 1) {
+      this.record.anomalies.push(`ply ${this.ply}: playing ${kind} produced an invalid FEN (${fen}) — refused`);
+      return false;
+    }
+    this.#adoptPostQuake(new this.ffish.Board(this.variantName, fen), fen); // the hand rewritten: a bare position for the engine
+    this.record.metaPlays.push(this.#stamp({ ply: this.ply, side, kind, fen }));
     const top = this.snapshots[this.snapshots.length - 1];
     if (top) {
-      top.decks = cloneDecks(this.decks);
-      if (top.lens) top.lens.metaPlays = this.record.metaPlays.length; // the play belongs to this state: an undo back to it keeps it on the record, as it keeps the card spent
+      // the play belongs to this state: an undo back to it keeps the card spent and the play on the record
+      top.fen = fen;
+      top.baseFen = fen;
+      top.moves = [];
+      if (top.lens) top.lens.metaPlays = this.record.metaPlays.length;
     }
     const st = this.record.states[this.record.states.length - 1];
-    if (st && st.ply === this.ply && this.board) st.deck = deckRecord(this.board.fen(), this.decks);
+    if (st && st.ply === this.ply) st.deck = deckRecord(fen, this.decks0);
     return true;
   }
 
-  /** THE DECK: may the side to move mulligan — a deck, an ordinary turn (no forced pass, no link ply), a hand or a pile to draw from? */
+  /** THE DECK: is the mulligan on offer — the engine lists `@@@@` among the legal moves (a deck, no forced pass, no link ply, out of check, a card to draw)? */
   canMulligan() {
-    if (!this.decks || this.state !== 'playing') return false;
-    const side = this.board.turn() ? 'w' : 'b';
-    const deck = this.decks[side];
-    if (!deck || this.forcedMove() || this.mustLink()) return false;
-    return handOf(this.board.fen(), side, deck).length > 0 || deck.pile.length > 0;
+    return this.state === 'playing' && mulliganOffered(this.legalMoves());
   }
 
   /**
    * THE MULLIGAN (designer 2026-09-25: "spend your turn discarding any cards
-   * you don't like and drawing a new hand"): the side to move discards its
-   * whole hand, draws a fresh one, and its turn is SPENT — a pass the game
-   * plays as a bare position (the turn field flipped, nothing moved on the
-   * board, the holdings rewritten), recorded as a ply of its own (`--`,
-   * cast 'mulligan') that the gods read as a cold ply — a player who
-   * mulligans to stall stirs them. `mover` names the seat for the record.
+   * you don't like and drawing a new hand") — THE ENGINE'S OWN MOVE since the
+   * deck went into it (2026-09-26): `@@@@`, SAN `redraw`, the hand discarded
+   * and a fresh one drawn inside the move, the turn spent; a ply of the record
+   * like any other (cast 'mulligan', `mulligan: { side, discarded, drew }`),
+   * cold to the gods — a player who mulligans to stall stirs them. `mover`
+   * names the seat for the record.
    */
   async mulligan(mover) {
     this.#assertPlaying();
     if (!this.canMulligan()) return { ok: false, ended: false };
-    const side = this.board.turn() ? 'w' : 'b';
-    const fenBefore = this.board.fen();
-    const decksBefore = cloneDecks(this.decks);
-    const { fen: f1, discarded, drew } = deckMulligan(fenBefore, side, this.decks[side], this.handSize);
-    const f = splitFen(f1);
-    f.turn = side === 'w' ? 'b' : 'w';
-    f.ep = '-';
-    if (side === 'b') f.fullmove = String((parseInt(f.fullmove, 10) || 1) + 1);
-    const fen = joinFen(f);
-    if (this.ffish.validateFen(fen, this.variantName) !== 1) {
-      this.decks = decksBefore;
-      this.record.anomalies.push(`ply ${this.ply}: the mulligan produced an invalid FEN — refused`);
-      return { ok: false, ended: false };
-    }
-    const next = new this.ffish.Board(this.variantName, fen);
-    this.#adoptPostQuake(next, fen); // a bare position for the engine, the board swapped — the path a quake takes
-    this.lastMove = { move: '--', san: '--', mover, cast: 'mulligan', mulligan: { side, discarded, drew } };
-    this.ply++;
-    this.record.moves.push('--');
-    this.record.sans.push('--');
-    if (this.hooks.onMove) await this.hooks.onMove({ uci: '--', san: '--', mover, ply: this.ply });
-    if (this.state !== 'playing') return { ok: true, ended: true };
-    if (gameEnded(this.board)) {
-      await this.#finish();
-      return { ok: true, ended: true };
-    }
-    const r = await this.#afterPly(fenBefore, '--', mover);
+    const r = await this.#push(MULLIGAN, mover);
     return { ok: true, ...r };
   }
 
@@ -370,8 +364,7 @@ export class DuelController {
 
   /** PORTALS v3: is the side to move bound to the link — its own half open, every legal move a linking PORTAL cast? */
   mustLink() {
-    const ms = this.state === 'playing' ? this.legalMoves() : [];
-    return ms.length > 0 && ms.every((m) => castLetter(m) === 'o');
+    return this.state === 'playing' && mustLinkOf(this.board.fen(), this.legalMoves());
   }
 
   /** Play the forced move (forcedMove) for whoever is to move; `mover` names the seat for the record. */
@@ -482,7 +475,7 @@ export class DuelController {
       godCrates: [...this.director.godCrates],
       meter: this.#meterReadout(),
       ...(this.lastMove ?? {}), // the move that produced this state (+ predicted / followed / engineSaw, see #push)
-      ...(this.decks ? { deck: deckRecord(fen, this.decks) } : {}), // THE DECK: each side's hand, pile and spent cards — visible decks, on the record
+      ...(fen && deckOn(fen) ? { deck: deckRecord(fen, this.decks0) } : {}), // THE DECK: each side's hand, pile and spent cards — visible decks, on the record
       ...extra,
     });
   }
@@ -617,6 +610,19 @@ export class DuelController {
     // record carries it, the page reads it, the gods skip the inside plies
     const cast = castKind(fenBefore, uci, this.board.fen());
     if (cast) this.lastMove.cast = cast;
+    // THE DECK IN THE ENGINE (2026-09-26): what the ply did to the hands, read
+    // off the two FENs — the card a cast cast (the slot's binding before the
+    // ply), a mulligan's discards and fresh hand, the draw the engine made for
+    // the side about to move (on this state: the turn starts here).
+    if (isCast(uci)) this.lastMove.card = cardOfCast(fenBefore, uci);
+    {
+      const fenAfter = this.board.fen();
+      const moverSide = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
+      const nextSide = moverSide === 'w' ? 'b' : 'w';
+      if (cast === 'mulligan') this.lastMove.mulligan = { side: moverSide, discarded: handOf(fenBefore, moverSide), drew: handOf(fenAfter, moverSide) }; // the whole hand went, a whole hand came
+      const drew = drawnBetween(fenBefore, fenAfter, nextSide);
+      if (drew.length) this.lastMove.drew = { side: nextSide, cards: drew };
+    }
     if (hammered) this.director.godCrates.add(hammered);
     this.movesSinceBase.push(uci);
     this.ply++;
@@ -630,7 +636,8 @@ export class DuelController {
       // `is_immediate_game_end`: the kingless side has no move) — named for
       // what did it, not for a capture.
       const kingFell = slide && fallen(slide).some((f) => f.piece.toLowerCase() === 'k');
-      await this.#finish(kingFell ? { termination: 'pit' } : null);
+      // THE DECK: the You Win card ends the duel on the spot (the engine's `is_immediate_game_end`: the other side has no move)
+      await this.#finish(kingFell ? { termination: 'pit' } : parseDeckField(this.board.fen()).winner ? { termination: 'win-card' } : null);
       return { ended: true };
     }
     // King-capture adjudication (§4.5 filter-miss safety net): a kingless
@@ -660,7 +667,7 @@ export class DuelController {
 
   /** The rest of the pipeline after a ply that counts: the meters, the quake
    *  phase, THE DECK's draw for the side to move next, the snapshot. Shared by
-   *  #push and the mulligan (a pass of the game's own, `uci` '--'). */
+   *  #push (the mulligan is a move of the engine's, `@@@@`, and comes this way). */
   async #afterPly(fenBefore, uci, mover) {
     // --- the trigger (v3): feed both meters BEFORE the quake phase ---------
     // The record meter classifies the move that was just played; staleness
@@ -744,44 +751,8 @@ export class DuelController {
         return { ended: true };
       }
     }
-    this.#refill();
     this.#takeSnapshot();
     return { ended: false };
-  }
-
-  /**
-   * THE DECK: the side to move next draws up to the hand size — here, before
-   * its search or its tap, so the engine sees the hand it has (the game
-   * refills the pocket between plies the way a quake writes a board; the
-   * engine never sees the pile, and under draw-to-hand-size the hand it sees
-   * is next turn's hand but for the card it casts). A frozen side (its one
-   * move the pass) or a caster on its link ply draws nothing: that turn
-   * began before. A drawn spell card's scrolls join the holdings through a
-   * bare position; a meta card joins the deck state. The draw rides the
-   * state of record as `drew`.
-   */
-  #refill() {
-    this.lastDraw = null;
-    if (!this.decks || this.state !== 'playing' || !this.board) return null;
-    const side = this.board.turn() ? 'w' : 'b';
-    const deck = this.decks[side];
-    if (!deck || !deck.pile.length) return null;
-    if (this.forcedMove() || this.mustLink()) return null;
-    const fen0 = this.board.fen();
-    const before = cloneDecks(this.decks);
-    const { fen, drew } = drawUp(fen0, side, deck, this.handSize);
-    if (!drew.length) return null;
-    if (fen !== fen0) {
-      if (this.ffish.validateFen(fen, this.variantName) !== 1) {
-        this.decks = before;
-        this.record.anomalies.push(`ply ${this.ply}: the draw produced an invalid FEN (${fen}) — the cards stay on the pile`);
-        return null;
-      }
-      const next = new this.ffish.Board(this.variantName, fen);
-      this.#adoptPostQuake(next, fen);
-    }
-    this.lastDraw = { side, cards: drew };
-    return drew;
   }
 
   // ---- v4.2: the gods' mate probes -----------------------------------------
@@ -938,10 +909,8 @@ export class DuelController {
    *  tool (quake determinism matters for harness replays, not take-backs). */
   #takeSnapshot() {
     // The replay log's per-ply state FIRST, so the lens below covers it.
-    this.record.states.push(this.#stateNow(this.lastDraw ? { drew: this.lastDraw } : {}));
-    this.lastDraw = null;
+    this.record.states.push(this.#stateNow());
     this.snapshots.push({
-      decks: cloneDecks(this.decks), // THE DECK: the piles and the meta cards as they stand (the hands' spells are in the fen)
       turn: this.board.turn() ? 'w' : 'b',
       fen: this.board.fen(),
       baseFen: this.baseFen,
@@ -1013,8 +982,6 @@ export class DuelController {
     else this.director.meter.restore(s.meter);
     this.director.ledger = s.ledger ?? null;
     this.director.restoreThreats(s.threats);
-    if (s.decks !== undefined) this.decks = cloneDecks(s.decks); // THE DECK: the piles rewind with the position (a fixed order — the same cards come up again)
-    this.lastDraw = null;
     for (const k of RECORD_ARRAYS) this.record[k].length = s.lens[k] ?? this.record[k].length;
     // record.tunes stays — dial changes are config history, and (like the RNG
     // stream and favor) director config is deliberately NOT rewound by undo.

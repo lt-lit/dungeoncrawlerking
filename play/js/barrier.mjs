@@ -50,6 +50,7 @@ import { normFacing } from './camera.mjs';
 import { rotateBody, bagOfPattern, boxOf } from './army.mjs';
 import { buildMatchup, armiesConnected, campLineRank, registerDealVariant, lintMatchupFen } from './armygen.mjs';
 import { dealVariant, spellPocket } from './variant.mjs';
+import { deckDeclaration, dealDeckFen } from './deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26)
 import { withPocket, isWall } from './fen.mjs';
 import { childSeed } from './prng.mjs';
 
@@ -189,7 +190,7 @@ export function standingCells(army, crop, stage) {
  * }
  * Returns { ok: true, crop, stage, kingFile, enemyFile, axis, deal } or { ok: false, error, reasons }.
  */
-export function planBox(world, army, { enemy, enemyFile = null, axis = null, seed = 1, turn = 'w', ffish = null, attempts = 8, id = null, portals = false, hammer = false, ice = false, pocket = null } = {}) {
+export function planBox(world, army, { enemy, enemyFile = null, axis = null, seed = 1, turn = 'w', ffish = null, attempts = 8, id = null, portals = false, hammer = false, ice = false, decks = null } = {}) {
   const facing = axis === null || axis === undefined ? army.facing : normFacing(axis);
   const box = boxAt(world, army, facing);
   if (!box.ok) return { ok: false, error: 'the army does not fit the box along this axis', reasons: ['box'] };
@@ -225,8 +226,8 @@ export function planBox(world, army, { enemy, enemyFile = null, axis = null, see
       reasons.push(`attempt ${attempt}: disconnected`);
       break;
     }
-    const variant = dealVariant(stage.files, stage.ranks, campLineRank(m.white.layout.cells, 1), campLineRank(m.black.layout.cells, -1), { portals, hammer, ice });
-    if (pocket !== null && pocket !== undefined) m.fen = withPocket(m.fen, pocket); // THE DECK (2026-09-25): the opening hands' scrolls
+    const variant = dealVariant(stage.files, stage.ranks, campLineRank(m.white.layout.cells, 1), campLineRank(m.black.layout.cells, -1), { portals, hammer, ice, deck: decks ? deckDeclaration(decks) : null });
+    if (decks) m.fen = dealDeckFen(m.fen, decks); // THE DECK IN THE ENGINE (2026-09-26): the opening hands in the slots, the piles in the field
     else if (portals || ice) m.fen = withPocket(m.fen, spellPocket({ portals, ice })); // THE PORTAL SPELL / THE ICE: the scrolls in hand, both sides
     if (ffish) {
       registerDealVariant(ffish, variant);

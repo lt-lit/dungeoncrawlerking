@@ -48,7 +48,8 @@ import { PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_R
 import { CanvasBoard } from '../../play/js/canvas-board.mjs'; // the one renderer (2026-09-07): the 16×16 canvas board, its art off play/img/
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '../../play/js/stage.mjs';
 import { createEngine } from '../../play/js/engine.mjs';
-import { makeCatalogIni, ICE_SCROLL, PORTAL_SCROLL } from '../../play/js/variant.mjs';
+import { makeCatalogIni } from '../../play/js/variant.mjs';
+import { cardOfCast } from '../../play/js/deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26): which card a slot's drop casts
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
 import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf, slickSquares } from '../../play/js/fen.mjs';
 import { slideOutcome } from '../../play/js/ice.mjs'; // THE ICE (2026-09-20): a line's first move ends where its piece rests
@@ -367,10 +368,11 @@ function quakeMarksOf(ev) {
   };
 }
 
-/** THE SPELL GLYPHS (2026-09-21): which spell a scroll letter casts — 'ice', 'portal', or null for one the page does not know (the bare frame then). */
-function spellOf(letter) {
-  const l = String(letter ?? '').toLowerCase();
-  return l === ICE_SCROLL ? 'ice' : l === PORTAL_SCROLL ? 'portal' : null;
+/** THE SPELL GLYPHS (2026-09-21): which spell a cast casts — 'ice', 'portal' (or 'win', the test card) — read by the
+ *  card its slot holds on the board the cast is made from (THE DECK IN THE ENGINE, 2026-09-26: deck.mjs cardOfCast;
+ *  the legacy scrolls `I@` / `O@` by their letter), or null for one the page does not know (the bare frame then). */
+function spellOf(fen, uci, side = null) {
+  return cardOfCast(fen, uci, side ?? undefined);
 }
 
 function moveArrow(st) {
@@ -382,8 +384,9 @@ function moveArrow(st) {
     // mark PROPOSED casts, the numbered lines' included, `pvArrows`).
     const c = st?.move?.match(CAST_RE);
     if (!c) return null;
-    const spell = spellOf(c[1]);
-    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: spell, played: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: spell, played: true };
+    const spell = st.card ?? null; // the state carries the card its cast cast (duel.mjs #push); an old log's scroll letter reads the same way
+    const spell2 = spell ?? spellOf(st.fen, st.move, st.mover === 'engine' ? 'b' : 'w');
+    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: spell2, played: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: spell2, played: true };
   }
   // Gold is the player's colour, red the enemy's last move (style.css roles).
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
@@ -549,7 +552,7 @@ function pvArrows(pv, fen) {
     if (!p) {
       // THE SPELL GLYPHS (2026-09-21): a cast in the line is its spell's glyph on its square, numbered like the arrows.
       const c = String(m).match(CAST_RE);
-      if (c) out.push({ from: c[2], to: c[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), cast: spellOf(c[1]) });
+      if (c) out.push({ from: c[2], to: c[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), cast: spellOf(fen, m, j % 2 === 0 ? null : (fen.split(' ')[1] === 'b' ? 'w' : 'b')) }); // a later cast in the line is the other side's every other ply
       return;
     }
     const hm = hammerOf(fen, `${p[1]}${p[2]}`);

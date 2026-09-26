@@ -20,7 +20,7 @@ import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { loadStageV2 } from '../../play/js/stage.mjs';
 import { dealMatchup } from '../../play/js/armygen.mjs';
 import { DuelController } from '../../play/js/duel.mjs';
-import { CARDS, SPELL_KINDS, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, openHands, cloneDecks, HAND_SIZE, parseDeckParam } from '../../play/js/deck.mjs';
+import { CARDS, SPELL_KINDS, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, cloneDecks, HAND_SIZE, parseDeckParam, pileOf } from '../../play/js/deck.mjs';
 import { GOD_PRESETS } from '../../play/js/director.mjs';
 import { childSeed } from '../../play/js/prng.mjs';
 import { castLetter } from '../../play/js/fen.mjs';
@@ -63,13 +63,13 @@ for (let g = 0; g < GAMES; g++) {
   const enemyList = ENEMY === 'width' ? enemyDeck(WIDTH, seed) : enemyCards(parseDeckParam(ENEMY)?.cards ?? starterCards(ENEMY) ?? []);
   const decks = { w: newDeckState(spec.cards, seeds.w, { fixed: !!spec.fixed }), b: newDeckState(enemyList, seeds.b) };
   const decks0 = cloneDecks(decks);
-  const { pocket } = openHands(decks, HAND_SIZE);
   const all = [...decks0.w.pile, ...decks0.b.pile];
-  const deal = dealMatchup({ stage, white: { spec: { width: 4, pieces: ['R', 'N', 'B'] }, archetype: 'heavies-deep' }, black: { spec: { width: WIDTH, budget: 12 }, archetype: 'heavies-deep' }, seed, turn: 'w', portals: all.includes('portal'), hammer: true, ice: all.includes('ice'), pocket, ffish });
+  // THE DECK IN THE ENGINE (2026-09-26): the deal declares the decks and deals the opening hands into the FEN; the engine draws and deals the mulligan
+  const deal = dealMatchup({ stage, white: { spec: { width: 4, pieces: ['R', 'N', 'B'] }, archetype: 'heavies-deep' }, black: { spec: { width: WIDTH, budget: 12 }, archetype: 'heavies-deep' }, seed, turn: 'w', portals: all.includes('portal'), hammer: true, ice: all.includes('ice'), decks, ffish });
   if (!deal.ok) { console.error(`game ${g}: deal failed: ${deal.error}`); continue; }
   await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni);
   const god = GODS === 'off' ? { seed: deal.directorSeed, onsetPly: 100000, rampPlies: 100000 } : { ...GOD_PRESETS[GODS] ?? GOD_PRESETS.restless, seed: deal.directorSeed };
-  const duel = new DuelController({ ffish, engine, variantName: deal.variantName, startFen: deal.fen, files: deal.files, ranks: deal.ranks, director: god, go: GO, mateGo: null, evalGate: null, decks, handSize: HAND_SIZE, hooks: {} });
+  const duel = new DuelController({ ffish, engine, variantName: deal.variantName, startFen: deal.fen, files: deal.files, ranks: deal.ranks, director: god, go: GO, mateGo: null, evalGate: null, decks0, handSize: HAND_SIZE, hooks: {} });
   await duel.start();
   const casts = [];
   while (duel.state === 'playing' && duel.ply < PLIES) {
@@ -98,7 +98,7 @@ for (let g = 0; g < GAMES; g++) {
   const r = duel.record;
   const hands = duel.hands() ?? { w: [], b: [] };
   for (const side of ['w', 'b']) for (const k of hands[side]) if (SPELL_KINDS.includes(k)) tally.deadInHand[side][k]++;
-  const line = { game: g, seed, plies: duel.ply, result: r.result, termination: r.termination, state: duel.state, casts, dead: { w: hands.w, b: hands.b }, piles: { w: duel.decks.w.pile, b: duel.decks.b.pile }, decks0: { w: decks0.w.pile, b: decks0.b.pile } };
+  const line = { game: g, seed, plies: duel.ply, result: r.result, termination: r.termination, state: duel.state, casts, dead: { w: hands.w, b: hands.b }, piles: { w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b') }, decks0: { w: decks0.w.pile, b: decks0.b.pile } };
   lines.push(line);
   tally.games++;
   tally.plies += duel.ply;

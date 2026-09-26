@@ -2558,6 +2558,87 @@ saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
 now holds across a reload and that the replay page wears crypt on the
 sample log.
 
+## The deck in the engine (Phase 3.3a, 2026-09-26)
+
+**THE FEN IS THE DECK.** The designer's standard for the deck was "an engine
+that actually sees the deck and understands that both players will draw more
+cards" (brief §4.10 "Phase 3.3"), and stage 1's refill between plies did not
+meet it. Now the engine holds the deck (`engine/patches/deck.patch` +
+`deck-search.patch`; `engine/README.md` § "The deck patch and the deck-search
+patch"): a side's hand is card SLOTS in the holdings — custom immobile pieces
+`s..z`, one letter per copy, identical cards sharing a slot — each bound per
+colour to a card ID by the FEN's trailing field (`S=w1`; `+` after the id
+marks the slot whose portal half stands open); its pile is the same field's
+`w|2.1.101` (top first, both piles visible to both sides); the engine DRAWS
+for the side about to move inside every move that hands it the turn (never
+the frozen side of an open half, never on the link ply), offers the
+MULLIGAN as the move `@@@@` (SAN `redraw`: the hand discarded, a fresh one
+drawn, the turn spent), casts a card as its slot's drop (`S@e4`) by the kind
+the deal declared for its ID, never casts in check, and searches through both
+piles — so the win card ten mulligans deep is a mate in eleven to it. No card
+is valued by a number: a card in hand is worth ZERO to the eval now (stock's
+flat in-hand bonus had priced a value-0 scroll at 35–70 centipawns since the
+portal patch; that term is zero for every spell type — the legacy scrolls
+too). THE WIN CARD (`win`, id 200, the designer's "You Win": cast on your own
+king, the game is over) is the horizon instrument — test-only, never in a
+starter, a `?deck=` list can name it — and the measured curve is in the
+engine README: mate in 2 … 9 found at depth 3 … 23, eight mulligans deep in
+ten seconds natively, and the mirror — the opponent's dig — read the same way.
+
+**The game's half (`deck.mjs`, rewritten around the FEN):** the catalog gained
+each card's `id` and engine kind (ice 1 / portal 2 / reveal 101 / undo 102 /
+win 200; `meta` for the two the engine never casts); `newDeckState` is the
+shuffle alone ({ pile }); THE OPENING DEAL (`openingDeck` / `dealDeckFen`)
+draws both hands into the start FEN by the engine's own binding rule
+(`slotFor`); `deckDeclaration(decks)` is what the deal declares —
+`variant.mjs deckIniKeys`: `handSize`, `cardSlots`, `card<ID> = kind` — and
+the deal variant's NAME carries it (`__deck4_1i_2p_101m_102m`, rule 7).
+Every reader is off a FEN: `handOf` (the slots' cards in slot order; the
+legacy pocket's scrolls under `?deck=off`), `pileOf`, `spentOf` (the deck as
+shuffled less the pile and the hand), `cardOfCast` (which card a slot's drop
+casts — by the caster's binding; `I@` / `O@` by their letter), `castUci`
+(the slot's drop for a kind, the open slot first on the link ply),
+`drawnBetween` / `handDelta`, `removeCard` (a meta card played: one copy out
+of the hand, the pile untouched), `mulliganOffered`, `mustLinkOf`,
+`deckRecord` ({ hand, pile, spent } a side). `fen.mjs` reads and writes the
+field (`parseDeckField`, `withDeck`, `deckPocket`, `castSlot`, `MULLIGAN`).
+`armygen.dealMatchup` and `barrier.planBox` take `decks` (the two piles) in
+place of the old `pocket`. **duel.mjs:** `#refill` is GONE; `hasDeck` reads
+the position; `hands()` and every state's `deck` are off the FEN;
+`canMulligan()` is `@@@@` among the legal moves and `mulligan()` pushes it
+like any move (`cast: 'mulligan'`, `mulligan: { side, discarded, drew }` the
+whole hands, cold to the gods as ever); `#push` names the card a cast cast
+(`lastMove.card`) and the draw the engine made for the side about to move
+(`drew` on the state — the same state as before); `playMeta` rewrites the
+hand through a bare position and moves the snapshot under it, so an undo to
+that state keeps the card spent (the engine draws the side up at its next
+turn's start); `castKind` adds `'mulligan'` and `'win'`; a duel that ends on
+the win card is termination `win-card`; `decks0` (the pair as shuffled) is
+kept for the spent piles. **main.mjs:** the cast UCIs come from `castUci`,
+`castTargets` reads a kind by the slot's binding, `spellOf` names a hint's
+card off the live FEN and a PLAYED cast off the record (`lastMove.card`),
+`deckView(side)` feeds the fan, the piles, the enemy's minis and the deck
+sheet, the redraw is the engine's move (`isMulligan`), the Undo card checks
+the hand off the FEN. The analyzer names a cast's card off the state
+(`st.card`) or the board it was cast from; the report's timeline adds the win
+card's line. `run.mjs` is unchanged (`dck-run/6`: the run still carries
+`deck: { starter, cards }`).
+
+**Gates:** `test-deck.mjs` 65 (the catalog's IDs, the binding rule, the
+opening deal into a FEN, the declaration and the variant name, every reader,
+the meta play, the legacy pocket), `test-deck-duel.mjs` 46 (on the vendored
+pair: the opening hands, the engine's draw at the hand-over with no bare
+position, the portal card's frozen pass and link, the meta cards through an
+undo, the mulligan as a move of the record, the win card ending the duel, a
+width-3 enemy's dry pile, a duel without a deck), selftest 52/52 headless
+(THE DECK IN THE ENGINE check: both binaries on the deal variant), the
+engine's own gates (`test-deck-ffish` 39, `test-deck-engine` 58 — the engine
+README), ui-smoke's DECK and CARD UI blocks on the engine's mulligan and the
+slot holdings, replay-smoke 91, test-logreport 79, test-cards 57 (the win
+card's star), the other Node gates unchanged. The instruments:
+`deck-stress.mjs` on the new API (task 3.3a's measurements),
+`engine/forge/horizon.py` (the win-card curve, native).
+
 ## The deck (2026-09-25)
 
 Brief §4.10 (the designer: "Could we have spells as cards drawn from a

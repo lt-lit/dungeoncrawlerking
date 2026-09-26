@@ -2196,9 +2196,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // an ice cast leaves three in hand and the refill at the next turn start
 // draws the pile's top (the log says so, the state carries `drew`); the Undo
 // card takes the turn back and stays spent; the redraw discards the hand,
-// draws four and spends the turn (a `--` ply); the export carries the decks
-// and the plays. With `?deck=off` nothing of this shows and the holdings are
-// the stress-test set.
+// draws four and spends the turn (THE DECK IN THE ENGINE, 2026-09-26: the
+// engine's move `@@@@`, SAN `redraw`; the hands are the FEN's slots — the
+// holdings spell them — and the engine draws at every hand-over); the export
+// carries the decks and the plays. With `?deck=off` nothing of this shows
+// and the holdings are the stress-test set.
 {
   let pageD = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errsD = [];
@@ -2240,7 +2242,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.arrowsR = K.app.cheatArrows?.length ?? 0;
     out.cheatR = K.options.cheat;
     // the ice cast: three in hand, then the refill at the next turn start
-    const ice = K.app.duel.legalMoves().find((m) => /^I@/.test(m));
+    const iceSq = K.deck.targets('ice')[0]; // THE DECK IN THE ENGINE: the cast is the slot's drop, found by kind
+    const ice = iceSq ? K.deck.castUci('ice', iceSq) : null;
     out.iceMove = ice ?? null;
     if (ice) {
       const pileTop = K.deck.decks().w.pile[0];
@@ -2291,10 +2294,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     return out;
   });
   expect(dk.spec?.fixed === true && dk.spec.cards.length === 8, `?deck= with a list is a fixed-order deck of ${dk.spec?.cards?.length} cards`);
-  expect(JSON.stringify(dk.hands0?.w) === '["ice","portal","reveal","undo"]', `the opening hand is the list's top four: ${JSON.stringify(dk.hands0?.w)}`);
+  expect(JSON.stringify(dk.hands0?.w) === '["reveal","undo","ice","portal"]', `the opening hand is the list's top four, in the slots' draw order: ${JSON.stringify(dk.hands0?.w)}`);
   expect(dk.hands0?.b?.length === 4 && dk.decks0?.b?.pile?.length === 2 && dk.hands0.b.every((k) => k === 'ice' || k === 'portal'), `the enemy's hand is four of its six spells, two on its pile (${JSON.stringify(dk.hands0?.b)} + ${dk.decks0?.b?.pile?.length})`);
-  expect(/^IOO/.test(dk.holdings0) && dk.decks0?.w?.pile?.join(',') === 'ice,portal,ice,portal', `the holdings carry the hand's scrolls (${dk.holdings0}); the pile is the rest in order (${dk.decks0?.w?.pile?.join(',')})`);
-  expect(!dk.btn0.portal.hidden && /×1/.test(dk.btn0.portal.text) && !dk.btn0.ice.hidden && /×1/.test(dk.btn0.ice.text) && JSON.stringify(dk.fan0) === '["ice","portal","reveal","undo"]', `the fan holds the hand as CARDS, every copy its own: ${dk.fan0.join(' ')}`);
+  expect(/^STUV/.test(dk.holdings0) && dk.decks0?.w?.pile?.join(',') === 'ice,portal,ice,portal', `the holdings carry the hand's four slots (${dk.holdings0}); the pile is the rest in order (${dk.decks0?.w?.pile?.join(',')})`);
+  expect(!dk.btn0.portal.hidden && /×1/.test(dk.btn0.portal.text) && !dk.btn0.ice.hidden && /×1/.test(dk.btn0.ice.text) && JSON.stringify(dk.fan0) === '["reveal","undo","ice","portal"]', `the fan holds the hand as CARDS, every copy its own: ${dk.fan0.join(' ')}`);
   expect(!dk.btn0.reveal.hidden && !dk.btn0.reveal.disabled && /×1/.test(dk.btn0.reveal.text) && !dk.btn0.undo.hidden && /×1/.test(dk.btn0.undo.text) && dk.btn0.undo.disabled && !dk.btn0.mull.hidden, `the meta cards are in the fan — Reveal playable, Undo dimmed at ply 0 — and the piles show (${dk.btn0.reveal.text} · ${dk.btn0.undo.text})`);
   expect(dk.piles0?.deck === '4' && dk.piles0?.spent === '0', `the deck stack counts the pile (${JSON.stringify(dk.piles0)})`);
   expect(dk.enemy0.hand.length === 4 && dk.enemy0.pile === '2', `the enemy's bar shows its hand face-up (${dk.enemy0.hand.join(' ')}) and its pile (${dk.enemy0.pile})`);
@@ -2311,11 +2314,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     expect(dk.plyU === 0 && dk.branches === 1, `the Undo card takes the turn back (ply ${dk.plyU}, ${dk.branches} branch)`);
     expect(!dk.handsU.w.includes('undo') && !dk.handsU.w.includes('reveal') && dk.decksU.w.spent.includes('undo') && dk.decksU.w.spent.includes('reveal') && dk.handsU.w.join(',') === 'ice,portal' && dk.decksU.w.pile.length === 4, `both meta cards stay spent through the undo; the hand is the two spells again (${dk.handsU.w.join(',')}), the pile whole (${dk.decksU.w.pile.length})`);
     expect(JSON.stringify(dk.metaU) === '[[0,"w","reveal"],[0,"w","undo"]]' && dk.logUndo.length === 1 && dk.btnU.hidden, `the undo is on metaPlays (${JSON.stringify(dk.metaU)}) and in the log; the button is gone`);
-    expect(/^IOO/.test(dk.holdingsU), `the holdings are the pre-cast hand's again (${dk.holdingsU})`);
+    expect(/^UV/.test(dk.holdingsU), `the holdings are the pre-cast hand's two spells again, in their slots (${dk.holdingsU})`);
   }
   expect(dk.canMull, "the redraw is offered on the player's turn");
   expect(dk.sheet0?.side === 'w' && dk.sheet0.redraw && !dk.sheet0.confirmBtn && dk.sheet0.pile.length === dk.mull.pileBefore.length && dk.sheet1?.confirmBtn && !dk.sheet1.redraw && dk.sheet2?.redraw && !dk.sheet2.confirmBtn && dk.sheetGone, `the deck sheet opens on the pile in order (${dk.sheet0?.pile?.join(',')}), Redraw asks for a confirm, Cancel withdraws it, the confirm closes the sheet`);
-  expect(dk.mull.moves[0] === '--' && dk.mull.sans[0] === '--' && dk.mull.state?.cast === 'mulligan' && dk.mull.state?.mulligan?.discarded?.join(',') === dk.mull.handBefore.join(','), `the redraw is a pass of the game's own on the record (${dk.mull.sans.join(' ')}; discarded ${dk.mull.state?.mulligan?.discarded?.join(',')})`);
+  expect(dk.mull.moves[0] === '@@@@' && dk.mull.sans[0] === 'redraw' && dk.mull.state?.cast === 'mulligan' && dk.mull.state?.mulligan?.discarded?.join(',') === dk.mull.handBefore.join(','), `the redraw is the engine's move on the record (${dk.mull.sans.join(' ')}; discarded ${dk.mull.state?.mulligan?.discarded?.join(',')})`);
   expect(dk.mull.turn === 'white' && dk.mull.ply === 2 && dk.mull.hands.w.join(',') === dk.mull.pileBefore.slice(0, 4).join(',').split(',').sort().join(',') , `the enemy replied and the new hand is the pile's top four (${dk.mull.hands.w.join(',')} from ${dk.mull.pileBefore.join(',')})`);
   expect(dk.mull.handBefore.every((k) => dk.mull.decks.w.spent.includes(k)) && dk.mull.log.length === 1, `the old hand is spent and the log says so (${dk.mull.log[0] ?? '-'})`);
   expect(dk.export.decks?.w === 8 && dk.export.decks?.b === 6 && dk.export.metaPlays === 2 && dk.export.statesWithDeck === dk.export.states, `the export carries both decks as shuffled (${dk.export.decks?.w} / ${dk.export.decks?.b}), the plays (${dk.export.metaPlays}) and a deck on every state (${dk.export.statesWithDeck}/${dk.export.states})`);
@@ -2406,7 +2409,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(/\bspell\b/.test(fan.arts[0].cls) && /\bplayable\b/.test(fan.arts[0].cls) && /\bmeta\b/.test(fan.arts[3].cls) && /\bdim\b/.test(fan.arts[3].cls), `a spell card is rimmed as playable, the Undo card dimmed at ply 0 (${fan.arts[0].cls} · ${fan.arts[3].cls})`);
   // THE DRAG: the ice card onto the board through the mouse
   const iceBox = await pageC.locator('#hand .card[data-kind="ice"]').first().boundingBox();
-  const target = await pageC.evaluate(() => { const K = window.__DCK; const ts = K.app.duel.legalMoves().filter((m) => /^I@/.test(m)).map((m) => m.slice(2)); const sq = ts[Math.floor(ts.length / 2)]; return { sq, pt: K.app.boardUI.pointOfSquare(sq), n: ts.length }; });
+  const target = await pageC.evaluate(() => { const K = window.__DCK; const ts = K.deck.targets('ice'); const sq = ts[Math.floor(ts.length / 2)]; return { sq, pt: K.app.boardUI.pointOfSquare(sq), n: ts.length }; });
   await pageC.mouse.move(iceBox.x + iceBox.width / 2, iceBox.y + iceBox.height / 2);
   await pageC.mouse.down();
   await pageC.mouse.move(iceBox.x + iceBox.width / 2 + 3, iceBox.y + iceBox.height / 2 - 3); // inside the slop: no drag yet
@@ -2426,7 +2429,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageC.waitForTimeout(250);
   await settleC();
   const cast = await pageC.evaluate(() => { const K = window.__DCK; return { moves: K.app.duel.record.moves.slice(0, 2), ply: K.app.duel.ply, hand: K.cards.hand(), drag: K.cards.drag(), ghost: !!document.getElementById('card-ghost'), castMode: K.app.castMode, hover: K.app.boardUI.marks.hover, area: [...K.app.boardUI.marks.area], piles: K.cards.piles(), state: K.app.duel.state }; });
-  expect(cast.moves[0] === `I@${target.sq}` && cast.ply >= 2, `the release casts the ice on ${target.sq} through the tap path (${cast.moves.join(' ')})`);
+  expect(/^[A-Z]@/.test(cast.moves[0] ?? '') && cast.moves[0].slice(2) === target.sq && cast.ply >= 2, `the release casts the ice on ${target.sq} through the tap path, as its slot's drop (${cast.moves.join(' ')})`);
   expect(!cast.ghost && cast.drag === null && cast.hover === null && cast.area.length === 0 && cast.castMode === null, 'the ghost and the preview go with the release');
   expect(cast.hand.length === 4 && cast.piles?.deck === '3', `the refill drew a card into the fan (${cast.hand.join(' ')}; deck ${cast.piles?.deck})`);
   // A drag released OFF the board: the card snaps back, nothing is played, cast mode leaves
@@ -2478,7 +2481,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageB.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const beat = await pageB.evaluate(async () => {
     const K = window.__DCK;
-    const sq = K.app.duel.legalMoves().find((m) => /^I@/.test(m))?.slice(2) ?? null;
+    const sq = K.deck.targets('ice')[0] ?? null;
     const p = K.cards.playBeat('ice', sq);
     const samples = [];
     for (let i = 0; i < 12; i++) { await new Promise((r) => setTimeout(r, 60)); const b = document.getElementById('card-beat'); const r = b?.getBoundingClientRect(); samples.push(r ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), op: getComputedStyle(b).opacity, enemy: !!b.querySelector('.card.enemy') } : null); }
