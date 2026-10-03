@@ -578,9 +578,10 @@ exceptions."). Authored on the pinned trees on top of the eight patches above
 portals-body, portals-cast, ice, deck, deck-search). deck: `types.h`,
 `variant.h`, `parser.cpp`, `position.h`, `position.cpp`, `movegen.h`,
 `movegen.cpp`, `apiutil.h`, `uci.cpp`, `psqt.cpp`; deck-search:
-`movepick.cpp`, `search.cpp`. The source of both is
-`engine/forge/apply-deck.py` + `apply-deck-search.py` (anchor-based edits;
-the patch files are their diff against the eight-patch tree).
+`movepick.cpp`, `search.cpp`. The patch files are the
+source: the anchor-edit scripts they were generated with (`apply-deck.py`,
+`apply-deck-search.py`) were never committed (noted 2026-10-03; the
+terrain forge's script, `engine/forge/apply-terrain.py`, is).
 
 Design, in the engine's own shapes — THE FEN IS THE DECK:
 
