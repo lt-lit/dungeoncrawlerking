@@ -2679,8 +2679,10 @@ enemy's two cards were both in hand from the deal, and the player never
 dug), two ices dead in the player's hand at the end. The phone's depth: 14
 of 35 searches at the 10 s bound at depth 14–22 (median 18), against 19 of
 34 and median 20 on the ice build's phone log — the cast-heavy roots cost
-depth before the deck did. test-logreport @@TLR@@ and replay-smoke @@RSM@@
-read it. `APP_BUILD` is `2026-10-03 deck-engine.1` now (it had read
+depth before the deck did. test-logreport 89 and replay-smoke 95
+read it. The page's ply line marks a Reveal or an
+Undo card now as the Node timeline does (it built the line without the
+meta-plays map; replay-smoke caught it on this sample). `APP_BUILD` is `2026-10-03 deck-engine.1` now (it had read
 2026-09-07 since the analyzer). The branch merged 2026-10-03 as it stood.
 
 ## The deck (2026-09-25)
