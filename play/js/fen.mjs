@@ -108,6 +108,20 @@ export function parseDeckField(fen) {
   return out;
 }
 
+/** THE TERRAIN INTERPRETER (2026-10-03): the sledge enchantment per colour — the field's `*w` / `*b` entries
+ *  (a colour's king may crack adjacent walls while its flag is on; the deal's sledge card sets it). */
+export function sledgeOf(fen) {
+  const out = { w: false, b: false };
+  const m = String(fen ?? '').match(/\{([^}]*)\}/);
+  for (const entry of m ? m[1].split(',') : []) {
+    const e = entry.trim();
+    if (e === '*w') out.w = true;
+    else if (e === '*b') out.b = true;
+  }
+  return out;
+}
+const sledgeEntries = (fen) => { const s = sledgeOf(fen); return [...(s.w ? ['*w'] : []), ...(s.b ? ['*b'] : [])]; };
+
 /** The holdings string for a set of deck slots: White's letters (uppercase, slot order, one per copy) then Black's. */
 export function deckPocket(slots) {
   let s = '';
@@ -131,6 +145,7 @@ export function withDeck(fen, deck) {
     }
   }
   if (deck.winner) entries.push(`!${deck.winner}`);
+  entries.push(...sledgeEntries(fen)); // the sledge flags ride along (terrain.patch prints them last)
   const bare = withPocket(String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim(), deckPocket(deck.slots ?? {}));
   return entries.length ? `${bare} {${entries.join(',')}}` : bare;
 }
@@ -277,7 +292,7 @@ export function slickSquares(fen) {
 export function withSlick(fen, squares) {
   const P = parsePortalField(fen);
   const all = new Set([...P.slick, ...squares]);
-  const entries = [...P.pairs.map(([a, b]) => `${a}-${b}`), ...['w', 'b'].filter((s) => P.halves[s]).map((s) => `${P.halves[s]}${s}`), ...[...all].sort((a, b) => squareOrder(a) - squareOrder(b)).map((sq) => `~${sq}`)];
+  const entries = [...P.pairs.map(([a, b]) => `${a}-${b}`), ...['w', 'b'].filter((s) => P.halves[s]).map((s) => `${P.halves[s]}${s}`), ...[...all].sort((a, b) => squareOrder(a) - squareOrder(b)).map((sq) => `~${sq}`), ...sledgeEntries(fen)];
   const bare = String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim();
   return entries.length ? `${bare} {${entries.join(',')}}` : bare;
 }
@@ -424,6 +439,26 @@ export function findSquares(fen, pred) {
     for (let file = 0; file < board[rt].length; file++) {
       const rb = ranks - 1 - rt;
       if (pred(board[rt][file], file, rb)) out.push({ file, rankFromBottom: rb, name: squareName(file, rb), cell: board[rt][file] });
+    }
+  }
+  return out;
+}
+
+/** PHASE 3.3b (2026-10-03, engine/patches/terrain.patch): every square whose
+ *  glyph differs between two FENs' board fields — `{ sq, from, to }` with null
+ *  for empty floor — the record of what a terrain cast did (duel.mjs #push
+ *  reads the engine's apply_cast off the two FENs rather than re-deriving the
+ *  rules), for the page's beats, the ledgers, the log's words. */
+export function squareChanges(fenBefore, fenAfter) {
+  const a = parseBoard(splitFen(fenBefore).board), b = parseBoard(splitFen(fenAfter).board);
+  const out = [];
+  const ranks = Math.max(a.length, b.length);
+  for (let r = 0; r < ranks; r++) {
+    const ra = a[r] ?? [], rb = b[r] ?? [];
+    const files = Math.max(ra.length, rb.length);
+    for (let f = 0; f < files; f++) {
+      const x = ra[f] ?? null, y = rb[f] ?? null;
+      if (x !== y) out.push({ sq: squareName(f, ranks - 1 - r), from: x, to: y });
     }
   }
   return out;

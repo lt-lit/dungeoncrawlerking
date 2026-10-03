@@ -10,8 +10,10 @@
 //
 // Usage: cd phase0 && node harness/deck-stress.mjs [--stage s59-hall-corner]
 //   [--games 4] [--seed 1] [--go "depth 8 movetime 300"] [--plies 200]
-//   [--deck adept | ice,portal,…] [--enemy width | adept] [--width 3]
-//   [--gods on] [--out results/deck-stress.jsonl]
+//   [--deck adept | sapper | random | ice,portal,…] [--enemy width | adept] [--width 3]
+//   [--gods on] [--hammer on] [--out results/deck-stress.jsonl]
+// PHASE 3.3b (2026-10-03): the Random starter draws its six spells by each game's seed; the hammer comes from a deck's
+// Sledge card (the deal declares it) — `--hammer on` deals every king a sledge-king as the retired option did.
 // Needs the play/vendor overlay in node_modules (engine/README.md).
 import fs from 'fs';
 import path from 'path';
@@ -38,6 +40,7 @@ const DECK = arg('deck', 'adept');
 const ENEMY = arg('enemy', 'width');
 const WIDTH = parseInt(arg('width', '3'), 10);
 const GODS = arg('gods', 'off');
+const HAMMER = arg('hammer', 'off') === 'on';
 const OUT = arg('out', null);
 
 const ffish = await loadFfish();
@@ -62,11 +65,12 @@ for (let g = 0; g < GAMES; g++) {
   const seed = childSeed(SEED, `game${g}`);
   const seeds = deckSeeds(seed);
   const enemyList = ENEMY === 'width' ? enemyDeck(WIDTH, seed) : enemyCards(parseDeckParam(ENEMY)?.cards ?? starterCards(ENEMY) ?? []);
-  const decks = { w: newDeckState(spec.cards, seeds.w, { fixed: !!spec.fixed }), b: newDeckState(enemyList, seeds.b) };
+  const playerList = spec.cards ?? starterCards(spec.starter, seed) ?? []; // the Random starter: six spells by this game's seed
+  const decks = { w: newDeckState(playerList, seeds.w, { fixed: !!spec.fixed }), b: newDeckState(enemyList, seeds.b) };
   const decks0 = cloneDecks(decks);
   const all = [...decks0.w.pile, ...decks0.b.pile];
   // THE DECK IN THE ENGINE (2026-09-26): the deal declares the decks and deals the opening hands into the FEN; the engine draws and deals the mulligan
-  const deal = dealMatchup({ stage, white: { spec: { width: 4, pieces: ['R', 'N', 'B'] }, archetype: 'heavies-deep' }, black: { spec: { width: WIDTH, budget: 12 }, archetype: 'heavies-deep' }, seed, turn: 'w', portals: all.includes('portal'), hammer: true, ice: all.includes('ice'), decks, ffish });
+  const deal = dealMatchup({ stage, white: { spec: { width: 4, pieces: ['R', 'N', 'B'] }, archetype: 'heavies-deep' }, black: { spec: { width: WIDTH, budget: 12 }, archetype: 'heavies-deep' }, seed, turn: 'w', portals: all.includes('portal'), hammer: HAMMER, ice: all.includes('ice'), decks, ffish });
   if (!deal.ok) { console.error(`game ${g}: deal failed: ${deal.error}`); continue; }
   await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni);
   const god = GODS === 'off' ? { seed: deal.directorSeed, onsetPly: 100000, rampPlies: 100000 } : { ...GOD_PRESETS[GODS] ?? GOD_PRESETS.restless, seed: deal.directorSeed };

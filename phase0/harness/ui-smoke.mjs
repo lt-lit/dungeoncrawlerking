@@ -2034,8 +2034,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
-  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`);
-  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
+  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&hammer=on&${q9}`);
+  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&hammer=on&${q9}`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
   // in the list (a canvas per hammer hint, in the rank's colour, between the
@@ -2089,7 +2089,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const kingSq = () => { const g = gridOf(K.app.duel.fen()); for (let i = 0; i < g.length; i++) for (let f = 0; f < g[i].length; f++) if (g[i][f] === 'K') return String.fromCharCode(97 + f) + (g.length - i); return null; };
     const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = parseInt(sq.slice(1), 10); const out = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) { if (!df && !dr) continue; if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= K.app.boardUI.ranks) out.push(String.fromCharCode(97 + f + df) + (r + dr)); } return out; };
     const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
-    const out = { variant: K.app.duel.variantName, king: kingSq(), optHammer: document.getElementById('optHammer').checked };
+    const out = { variant: K.app.duel.variantName, king: kingSq() };
     out.walls = around(out.king).filter((s) => at(s) === '*');
     K.tap(out.king);
     const lit = [...K.app.boardUI.marks.targets];
@@ -2113,7 +2113,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     };
     return out;
   });
-  expect(/__sledge/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
+  expect(/__sledge/.test(hm.variant), `the deal is a sledge deal under ?hammer=on (${hm.variant}) — the Sledge-kings option is retired (PHASE 3.3b: the Sledge card)`);
   expect(hm.king === 'e1' && hm.walls.length === 2 && hm.walls.includes('d1') && hm.walls.includes('d2'), `the kit's king at ${hm.king} with breakable walls beside him (${hm.walls.join(' ')})`);
   expect(hm.selected === hm.king && hm.wallsLit.length === hm.walls.length, `a tap on the king lights the walls beside him with his moves (${hm.wallsLit.join(' ')} of ${hm.lit.join(' ')})`);
   expect(hm.after.cell === '^' && hm.after.crate && hm.after.king === hm.king && hm.after.hammer === hm.target, `a tap on ${hm.target} cracks it: the state after the ply shows a crate in the ledger, the king still on ${hm.after.king}, the state marked hammer ${hm.after.hammer}`);
@@ -2135,7 +2135,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   const page10 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errs10 = [];
   page10.on('pageerror', (e) => errs10.push(String(e).split('\n')[0]));
-  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&fx=0&enemies=off`);
+  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&hammer=on&gen=vaults&seed=1&fx=0&enemies=off`);
   await page10.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const hw = await page10.evaluate(async () => {
     const K = window.__DCK;
@@ -2330,9 +2330,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageE.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`);
   pageE = await bootWait(pageE, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`, null);
   await pageE.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
-  const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck }));
+  const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck, variant: window.__DCK.app.duel.variantName }));
   expect(off.spec === null && off.hands === null && off.holdings === 'IOOioo' && JSON.stringify(off.fan) === '["ice","portal"]' && off.piles === null && JSON.stringify(off.enemy) === '["ice","portal"]' && off.enemyPile === null, `?deck=off is the stress-test set: holdings ${off.holdings}, the fan the two spells in hand and no piles, the enemy's two minis and no stack`);
-  expect(off.optDefault === 'adept' && off.optDeck === 'adept', `Options → Spells → Deck defaults to the starter (${off.optDefault})`);
+  expect(off.optDefault === 'random' && off.optDeck === 'random', `Options → Spells → Deck defaults to the Random starter (${off.optDefault}) — PHASE 3.3b`);
+  expect(!/__sledge/.test(off.variant), `the stress-test set deals plain kings — the Sledge-kings option is retired, the hammer is a card (${off.variant})`);
   await pageE.close();
 
   // THE WALK: the run carries the deck; the drop deals from it and by the enemy's width
@@ -2361,7 +2362,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.planOk && wk.hands?.w?.length === 4, `the drop deals a hand of four from the run's deck (${JSON.stringify(wk.hands?.w)})`);
   {
     const n = Math.max(0, (wk.enemyWidth | 0) - 1);
-    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => k === 'ice' || k === 'portal'), `the enemy's deck is width − 1 spells, a hand of four at most and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
+    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => !['reveal', 'undo', 'win'].includes(k)), `the enemy's deck is width − 1 spells (from the whole library since PHASE 3.3b), a hand of four at most and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
   }
   expect(wk.enemy.pile !== null && wk.export.decks && wk.export.world && wk.save?.starter === 'adept', `the enemy's bar, the log and the run save carry the decks (enemy ${wk.enemy.hand.join(' ')} + ${wk.enemy.pile})`);
   expect(errsW.length === 0, `no page errors on the walk's deck${errsW.length ? ` — ${errsW.join(' | ')}` : ''}`);
@@ -2495,6 +2496,185 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(beat.gone, 'the beat is gone once it has played');
   expect(errsB.length === 0, `no page errors on the beat${errsB.length ? ` — ${errsB.join(' | ')}` : ''}`);
   await pageB.close();
+}
+
+// --- THE TERRAIN CARDS (Phase 3.3b, 2026-10-03; brief §4.10 "Phase 3.3b";
+// engine/patches/terrain.patch; play/js/carddef.mjs): a card is a DEFINITION
+// the engine interprets — `<effect> <shape> <targeting>` — and the page reads
+// it for the face (the effect's glyph over a mini-map of the shape, the
+// targeting badge), the drag preview, the hint (the anchor framed with its
+// glyph, the shape a faint tint, the card in the fan rimmed in the rank's
+// colour) and the words. On s65-guard-post the kit's king deals at e1 with
+// breakable walls at d1 and d2: a fixed-order deck opens Crack, Sledge,
+// Reinforce and Demolish in hand. The kings do NOT hammer until the Sledge
+// card is cast (the Sledge-kings option is retired); a Crack dragged onto d2
+// cracks it into a crate (the state's `cast: 'hit'`, its `edits`, the crate
+// ledger, the weaken beat's debris, the log's words); the Sledge cast flags
+// its caster in the FEN and the king hammers from then on; Reinforce drops a
+// pawn in the camp. ---
+{
+  let pageT = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errsT = [];
+  pageT.on('pageerror', (e) => errsT.push(String(e).split('\n')[0]));
+  const qT = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&arrowalpha=1&arrowwidth=2&deck=crack,sledge,reinforce,demolish,wall-row,sink-row,petrify,lance,reveal,undo`;
+  await pageT.goto(`http://127.0.0.1:${PORT}/play/index.html?${qT}`);
+  pageT = await bootWait(pageT, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?${qT}`, (p) => p.on('pageerror', (e) => errsT.push(String(e).split('\n')[0])));
+  await pageT.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const markT = (what) => process.stderr.write(`... terrain: ${what}\n`); // the block's steps stream to stderr as they land, so a hang is locatable
+  markT('booted');
+  const settleT = () => pageT.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state !== 'playing' || (window.__DCK.app.duel?.turnColor() === window.__DCK.app.session?.playerColor && !window.__DCK.app.busy), null, { timeout: 60000 });
+  const t0 = await pageT.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = gridOf(K.app.duel.fen()); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+    const out = { variant: K.app.duel.variantName, hand: K.cards.hand(), piles: K.cards.piles() };
+    const legal0 = K.app.duel.legalMoves();
+    out.hammer0 = legal0.filter((m) => m === 'e1d1' || m === 'e1d2');
+    out.walls = ['d1', 'd2'].map((s) => at(s));
+    out.targets = { crack: K.deck.targets('crack'), sledge: K.deck.targets('sledge'), reinforce: K.deck.targets('reinforce'), demolish: K.deck.targets('demolish') };
+    out.campEmpty = out.targets.reinforce.every((s) => at(s) === '.');
+    out.campRanks = [...new Set(out.targets.reinforce.map((s) => parseInt(s.slice(1), 10)))].sort((a, b) => a - b);
+    out.faces = K.cards.els().map((el) => { const c = el.querySelector('canvas.card-art'); return { kind: el.dataset.kind, badge: el.querySelector('.card-badge')?.textContent ?? null, w: c?.width, h: c?.height, cls: el.className }; });
+    // THE HINT FOR A SHAPED CAST: lines injected through the probe's own paint path — Demolish (a 3×3 hit) best, Crack on d2 second, a plain move third
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.applyOptions();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const plain = legal0.find((m) => UCI.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m));
+    const anchor = out.targets.demolish.find((s) => s !== 'd2' && s !== 'd1') ?? out.targets.demolish[0];
+    out.anchor = anchor;
+    K.paintHints([{ rank: 1, move: K.deck.castUci('demolish', anchor), score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: K.deck.castUci('crack', 'd2'), score: { type: 'cp', value: 20 }, depth: 9 }, { rank: 3, move: plain, score: { type: 'cp', value: 10 }, depth: 9 }], 3);
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => { const c = s.querySelector('canvas.hint-glyph'); return `${s.dataset.rank}:${c ? `${c.dataset.spell}/${c.dataset.card}` : '-'}`; });
+    out.line = document.getElementById('hint-line').textContent;
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => ({ from: a.from, to: a.to, cast: a.cast ?? null, cells: a.cells ?? null, rank: a.rank }));
+    K.renderer.paintNow();
+    const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    const dem = out.arrows.find((a) => a.rank === 1);
+    const tinted = (dem?.cells ?? []).find((c) => c !== anchor && c !== 'd2' && c !== 'd1' && at(c) === '.' && !(plain && plain.includes(c)));
+    out.tinted = tinted ?? null;
+    out.pxHint = { frame: px(anchor, 0, 0), inset: px(anchor, 1, 1), hub: px(anchor, 7, 7), tint: tinted ? px(tinted, 8, 8) : null, tintFrame: tinted ? px(tinted, 0, 0) : null };
+    out.hinted = [...document.querySelectorAll('#hand .card.hinted')].map((el) => `${el.dataset.kind}:${el.style.getPropertyValue('--hint')}`);
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    K.renderer.paintNow();
+    out.pxAfter = { tint: tinted ? px(tinted, 8, 8) : null, frame: px(anchor, 0, 0) };
+    out.hintedAfter = document.querySelectorAll('#hand .card.hinted').length;
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  markT('the deal, the faces and the hint read');
+  const GOLD = '242,193,78,255';
+  expect(/__deck4_[0-9a-f]{8}$/.test(t0.variant) && !/__sledge/.test(t0.variant), `the deal's variant hashes the deck's declaration, no sledge suffix without ?hammer=on (${t0.variant})`);
+  expect(t0.hand.join(',') === 'crack,sledge,reinforce,demolish' && t0.piles?.deck === '6', `the fixed deck opens Crack, Sledge, Reinforce, Demolish in hand (${t0.hand.join(' ')}; ${t0.piles?.deck} on the pile)`);
+  expect(t0.walls.join('') === '**' && t0.hammer0.length === 0, `d1 and d2 are breakable walls beside the king and he does NOT hammer before the Sledge card (${t0.hammer0.join(' ') || 'no hammer move'})`);
+  expect(t0.targets.crack.includes('d1') && t0.targets.crack.includes('d2') && t0.targets.sledge.join(',') === 'e1', `Crack targets the walls beside the king (${t0.targets.crack.join(' ')}); Sledge targets his square alone (${t0.targets.sledge.join(' ')})`);
+  expect(t0.targets.reinforce.length > 0 && t0.campEmpty && t0.campRanks.every((r) => r <= 3), `Reinforce targets the empty squares of the camp — ranks ${t0.campRanks.join(',')} (${t0.targets.reinforce.length} squares)`);
+  expect(t0.targets.demolish.length > 0 && t0.targets.demolish.includes('d2'), `Demolish (a 3×3 hit beside your pieces) has ${t0.targets.demolish.length} anchors, d2 among them`);
+  {
+    const f = Object.fromEntries(t0.faces.map((x) => [x.kind, x]));
+    expect(f.crack?.badge === 'near' && f.sledge?.badge === 'king' && f.reinforce?.badge === 'camp' && f.demolish?.badge === 'near', `every face wears its targeting badge (${t0.faces.map((x) => `${x.kind}:${x.badge}`).join(' ')})`);
+    expect(f.crack?.h === 12 && f.demolish?.h === 16 && f.demolish?.w === 12 && f.sledge?.h === 12, `a shaped card's art carries the shape's mini-map under the glyph — Demolish 12×16, the one-square cards 12×12 (${t0.faces.map((x) => `${x.kind} ${x.w}×${x.h}`).join(', ')})`);
+  }
+  expect(t0.icons.join(' ') === '1:hit/demolish 2:hit/crack 3:-', `the hint list's glyphs name the effect and the card (${t0.icons.join(' ')})`);
+  expect(/^1 \S+@\S+ \+0\.4 · 2 \S+@d2 \+0\.2 · 3 .+ \+0\.1 · d9$/.test(t0.line), `the hint list reads as ever, the casts by their SAN ("${t0.line}")`);
+  {
+    const dem = t0.arrows.find((a) => a.rank === 1), cr = t0.arrows.find((a) => a.rank === 2);
+    expect(dem?.cast === 'hit' && dem.from === t0.anchor && Array.isArray(dem.cells) && dem.cells.length >= 4 && dem.cells.length <= 9 && dem.cells.includes(t0.anchor) && cr?.cast === 'hit' && cr.cells?.join(',') === 'd2', `the cast arrows carry the effect and the shape's squares — Demolish ${dem?.cells?.length} cells around ${t0.anchor}, Crack d2 alone`);
+    expect(t0.pxHint.frame === GOLD && t0.pxHint.inset !== GOLD && t0.pxHint.hub === GOLD, `${t0.anchor} is framed at its edge with the hit glyph inside (${t0.pxHint.frame} / ${t0.pxHint.inset} / hub ${t0.pxHint.hub})`);
+    expect(!!t0.tinted && t0.pxHint.tint !== t0.pxAfter.tint && t0.pxHint.tintFrame !== GOLD, `the shape's other squares are tinted, not framed (${t0.tinted}: ${t0.pxHint.tint} under the hint, ${t0.pxAfter.tint} without; its corner ${t0.pxHint.tintFrame})`);
+  }
+  expect(t0.hinted.length === 2 && t0.hinted.some((h) => /^demolish:#?[0-9a-f]{6}$/i.test(h)) && t0.hinted.some((h) => /^crack:#?[0-9a-f]{6}$/i.test(h)) && t0.hinted[0].split(':')[1] !== t0.hinted[1].split(':')[1], `the hinted cards in the fan wear their rank's rim (${t0.hinted.join(' ')})`);
+  expect(t0.cleared === 0 && t0.hintedAfter === 0 && t0.pxAfter.frame !== GOLD, 'hints off clears the glyph, the tint and the rims');
+  // THE DRAG: the Crack card onto d2 through the mouse — the anchor framed, no area beyond it, the tip, the cast on release
+  const cBox = await pageT.locator('#hand .card[data-kind="crack"]').first().boundingBox();
+  const d2pt = await pageT.evaluate(() => window.__DCK.app.boardUI.pointOfSquare('d2'));
+  await pageT.mouse.move(cBox.x + cBox.width / 2, cBox.y + cBox.height / 2);
+  await pageT.mouse.down();
+  await pageT.mouse.move(cBox.x + cBox.width / 2 + 10, cBox.y + cBox.height / 2 - 30, { steps: 4 });
+  await pageT.mouse.move(d2pt.x, d2pt.y, { steps: 12 });
+  await pageT.waitForTimeout(40);
+  const overT = await pageT.evaluate(() => { const K = window.__DCK; K.renderer.paintNow(); return { drag: K.cards.drag(), castMode: K.app.castMode, cell: K.marks.cell('d2') }; });
+  expect(overT.drag?.kind === 'crack' && overT.castMode === 'crack' && overT.drag.hover === 'd2' && overT.cell.includes('hover') && overT.cell.includes('target'), `the Crack card lifts into cast mode and frames d2 under the pointer (${overT.cell.filter((c) => /hover|area|target/.test(c)).join(' ')})`);
+  expect(overT.drag?.area?.join(',') === 'd2' && overT.drag.tip === 'release to crack at d2', `a one-square card previews its anchor alone and the tip says what the release does ("${overT.drag?.tip}")`);
+  await pageT.mouse.up();
+  await pageT.waitForTimeout(250);
+  markT('the Crack card released on d2');
+  await settleT();
+  markT('the reply is in');
+  const crack = await pageT.evaluate(() => {
+    const K = window.__DCK;
+    const st = K.app.duel.record.states[1];
+    const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const atIn = (fen, sq) => { const g = gridOf(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+    return { move: K.app.duel.record.moves[0], san: K.app.duel.record.sans[0], cast: st?.cast ?? null, card: st?.card ?? null, edits: st?.edits ?? null, crate: (st?.godCrates ?? []).includes('d2'), cell: st ? atIn(st.fen, 'd2') : null, live: atIn(K.app.duel.fen(), 'd2'), classes: K.marks.cell('d2'), log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Crack/.test(t)), weaken: K.debris.events().filter((e) => e.k === 'weaken').length, hand: K.cards.hand(), state: K.app.duel.state, ply: K.app.duel.ply };
+  });
+  expect(/^[A-Z]@d2$/.test(crack.move ?? '') && crack.cast === 'hit' && crack.card === 'crack', `the release casts Crack on d2 as its slot's drop (${crack.move}, SAN ${crack.san}): the state of record reads cast ${crack.cast}, card ${crack.card}`);
+  expect(JSON.stringify(crack.edits) === '[{"sq":"d2","from":"*","to":"^"}]' && crack.crate && crack.cell === '^', `the state carries the edit — d2 from a wall to a crate — and the crate joins the one ledger (${JSON.stringify(crack.edits)})`);
+  expect(crack.log.some((t) => /Crack — cracks the wall at d2/.test(t)), `the log says what the card did (${crack.log[0] ?? 'no line'})`);
+  expect(crack.weaken >= 1, `the crack dropped the weaken beat's chips (${crack.weaken} weaken event)`);
+  if (crack.live === '^') expect(crack.classes?.includes('cracked') && crack.classes?.includes('furniture'), `the board paints d2 as a cracked wall (${(crack.classes ?? []).filter((c) => /wall|crack|furn/.test(c)).join(' ')})`);
+  else expect(true, `d2 reads ${crack.live} now — the crate was taken on the reply`);
+  if (crack.state === 'playing') {
+    expect(crack.hand.length === 4 && crack.hand.includes('wall-row'), `the refill drew the next card into the fan (${crack.hand.join(' ')})`);
+    // THE SLEDGE: a tap on the card, a tap on the king's square — the caster's king hammers from now on
+    markT('the Sledge cast');
+    const sl = await pageT.evaluate(async () => {
+      const K = window.__DCK;
+      const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+      const out = { tapped: K.cards.tap('sledge'), castMode: K.app.castMode, lit: [...K.app.boardUI.marks.targets] };
+      K.tap('e1');
+      await settle();
+      const st = K.app.duel.record.states.find((s) => s.cast === 'sledge') ?? null;
+      out.state = st ? { cast: st.cast, card: st.card, sledge: st.sledge ?? null, edits: st.edits ?? null, mover: st.mover } : null;
+      out.fenFlag = /\*w/.test(K.app.duel.fen());
+      out.legal = K.app.duel.legalMoves().filter((m) => m === 'e1d1' || m === 'e1d2');
+      out.san = K.app.duel.record.sans.find((s, i) => K.app.duel.record.states[i + 1]?.cast === 'sledge') ?? null;
+      out.log = [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Sledge/.test(t));
+      out.live = K.app.duel.fen();
+      if (K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white') {
+        K.tap('e1');
+        out.kingLit = [...K.app.boardUI.marks.targets];
+        K.tap('e1');
+      } else out.kingLit = null;
+      out.state2 = K.app.duel.state;
+      return out;
+    });
+    expect(sl.tapped && sl.castMode === 'sledge' && sl.lit.join(',') === 'e1', `a tap on the Sledge card enters cast mode on the king's own square (${sl.lit.join(' ')})`);
+    expect(sl.state?.cast === 'sledge' && sl.state.card === 'sledge' && sl.state.sledge === 'w' && !sl.state.edits && sl.state.mover === 'player', `the cast is on the record — cast ${sl.state?.cast}, the caster ${sl.state?.sledge}, no square changed`);
+    expect(sl.fenFlag && sl.log.some((t) => /Sledge — your king carries the sledgehammer/.test(t)), `the FEN flags white's sledge (*w) and the log says so (${sl.log[0] ?? 'no line'})`);
+    if (sl.state2 === 'playing') expect(sl.legal.includes('e1d1') && (sl.kingLit === null || sl.kingLit.includes('d1')), `the king hammers from now on — e1d1 is legal (${sl.legal.join(' ')}) and a tap on him lights d1 (${sl.kingLit ? sl.kingLit.join(' ') : 'not his turn'})`);
+    else expect(true, `the duel ended on the reply (${sl.state2})`);
+    // REINFORCE: a pawn placed in the camp
+    if (sl.state2 === 'playing') {
+      markT('the Reinforce cast');
+      const rf = await pageT.evaluate(async () => {
+        const K = window.__DCK;
+        const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+        const sq = K.deck.targets('reinforce')[0] ?? null;
+        if (!sq) return { sq: null };
+        const uci = K.deck.castUci('reinforce', sq);
+        await K.playerMove(uci);
+        await settle();
+        const st = K.app.duel.record.states.find((s) => s.cast === 'drop' && s.mover === 'player') ?? null; // the enemy may have dropped its own pawn first
+        const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+        const atIn = (fen, sq2) => { const g = gridOf(fen); return g[g.length - parseInt(sq2.slice(1), 10)]?.[sq2.charCodeAt(0) - 97] ?? '?'; };
+        const L = K.log.build();
+        return { sq, uci, played: st ? { cast: st.cast, card: st.card, edits: st.edits ?? null, cell: atIn(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Reinforce/.test(t)), exportCasts: L.states.filter((s) => s.mover === 'player' && ['hit', 'sledge', 'drop'].includes(s.cast)).map((s) => s.cast), state: K.app.duel.state };
+      });
+      expect(!!rf.sq && /^[A-Z]@/.test(rf.uci ?? '') && rf.played?.cast === 'drop' && rf.played.card === 'reinforce' && rf.played.cell === 'P' && JSON.stringify(rf.played.edits) === JSON.stringify([{ sq: rf.sq, from: null, to: 'P' }]), `Reinforce places a pawn on ${rf.sq} (${rf.uci}): the state reads cast ${rf.played?.cast}, the edit ${JSON.stringify(rf.played?.edits)}`);
+      expect(rf.log.some((t) => new RegExp(`Reinforce — a pawn is placed on ${rf.sq}`).test(t)), `the log says so (${rf.log[0] ?? 'no line'})`);
+      expect(rf.exportCasts.join(',') === 'hit,sledge,drop', `the export's states carry the player's three casts by effect (${rf.exportCasts.join(' ')})`);
+    }
+  } else expect(true, `the duel ended on the crack's reply (${crack.state}) — the sledge and the pawn stand on the scratch drive`);
+  markT('done');
+  expect(errsT.length === 0, `no page errors with the terrain cards${errsT.length ? ` — ${errsT.join(' | ')}` : ''}`);
+  await pageT.close();
 }
 
 await browser.close();

@@ -30,6 +30,7 @@
 import { ICE_SCROLL, ICE_SCROLLS_PER_SIDE, PORTAL_SCROLL, PORTAL_SCROLLS_PER_SIDE, DECK_HAND_SIZE, DECK_SLOT_LETTERS } from './variant.mjs';
 import { mulberry32, childSeed, shuffle, pick } from './prng.mjs';
 import { splitFen, parseDeckField, withDeck, castLetter, isCast, MULLIGAN } from './fen.mjs';
+import { parseDef, defWords } from './carddef.mjs'; // THE TERRAIN INTERPRETER (2026-10-03): every card is a definition
 
 /** The hand's size — drawn up to at the start of each of a side's turns (designer 2026-09-25: "a hand size of four"). */
 export const HAND_SIZE = DECK_HAND_SIZE;
@@ -37,41 +38,92 @@ export { MULLIGAN };
 
 /** THE CATALOG: every card kind this build knows. `id` is the card's number
  *  to the engine (the FEN's bindings and piles carry it; a deal declares
- *  `card<id> = <engine>` for every ID its decks hold), `engine` what its cast
- *  does to the engine ('portal', 'ice', 'win', 'meta'), `cls` 'spell' (a
- *  move) or 'meta' (free, the player's alone), `test` a card that exists for
- *  the instruments and never in a starter. THE CARD UI (Phase 3.2) reads
- *  `cost`, `short` and `text`; the legacy readers `letter` / `scrolls`. */
+ *  `card<id> = <def>` for every ID its decks hold), `def` its DEFINITION —
+ *  `<effect> <shape> <targeting>` (carddef.mjs; THE TERRAIN INTERPRETER,
+ *  2026-10-03), the engine's whole knowledge of the card — and `engine` the
+ *  def's effect word ('hit', 'ice', 'wall', 'pit', 'harden', 'sledge', 'drop',
+ *  'win', 'portal', 'meta'); `cls` 'spell' (a move) or 'meta' (free, the
+ *  player's alone), `test` a card that exists for the instruments and never
+ *  in a starter. THE CARD UI (Phase 3.2) reads `cost`, `short` and `text`;
+ *  the legacy readers `letter` / `scrolls` (the `?deck=off` pocket). THE FIRST
+ *  LIBRARY is the 3.3b ruling's (brief §4.10 "3.3b RULED"): names systematic
+ *  until authored — the effect and the shape. IDs are stable: 1 ice, 2 portal,
+ *  101 / 102 the meta cards and 200 the win card as the committed samples
+ *  carry them; the terrain cards from 10 up by family. */
+const card = (kind, id, def, name, glyph, short, extra = {}) => {
+  const d = parseDef(def);
+  return { kind, id, def: d.text, engine: d.effect, name, glyph, cls: d.effect === 'meta' ? 'meta' : 'spell', cost: d.effect === 'meta' ? 'free' : 'move', short, text: extra.text ?? defWords(d), ...extra };
+};
 export const CARDS = {
-  ice: { kind: 'ice', id: 1, engine: 'ice', name: 'Ice', glyph: '❄', letter: ICE_SCROLL, scrolls: ICE_SCROLLS_PER_SIDE, cls: 'spell', cost: 'move', short: '3×3 ice, middle rows', text: 'a 3×3 patch of ice on the middle rows; a piece that moves onto it slides on until something stops it' },
-  portal: { kind: 'portal', id: 2, engine: 'portal', name: 'Portal', glyph: '◎', letter: PORTAL_SCROLL, scrolls: PORTAL_SCROLLS_PER_SIDE, cls: 'spell', cost: 'move', short: 'a linked pair, one turn', text: 'a pair of portals, cast in one turn; a piece that moves onto one comes out of the other' },
-  reveal: { kind: 'reveal', id: 101, engine: 'meta', name: 'Reveal', glyph: '☉', cls: 'meta', cost: 'free', short: "the oracle's three lines", text: "the engine's best lines for this turn; costs no move" },
-  undo: { kind: 'undo', id: 102, engine: 'meta', name: 'Undo', glyph: '↺', cls: 'meta', cost: 'free', short: 'take back your last turn', text: "take back your last move and the enemy's reply; costs no move" },
+  // the two spells that came first — the Ice goes ANYWHERE since the ruling (its middle-rows rule was the portal margin's carry-over)
+  ice: card('ice', 1, 'ice xxx/xox/xxx any', 'Ice', '❄', '3×3 ice, anywhere', { letter: ICE_SCROLL, scrolls: ICE_SCROLLS_PER_SIDE, text: 'a 3×3 patch of ice anywhere on the board; a piece that moves onto it slides on until something stops it' }),
+  portal: card('portal', 2, 'portal', 'Portal', '◎', 'a linked pair, one turn', { letter: PORTAL_SCROLL, scrolls: PORTAL_SCROLLS_PER_SIDE, text: 'a pair of portals, cast in one turn; a piece that moves onto one comes out of the other' }),
+  'ice-row': card('ice-row', 3, 'ice xox any', 'Ice row', '❄', 'three ice in a row'),
+  'ice-l': card('ice-l', 4, 'ice x./x./ox any', 'Ice L', '❄', 'an L of ice'),
+  // the hits: an intact wall cracks into a crate, a crate becomes floor; a smash does both at once
+  crack: card('crack', 10, 'hit1 o near', 'Crack', '✸', 'crack one square'),
+  smash: card('smash', 11, 'hit2 o near', 'Smash', '✸', 'smash one square'),
+  'crack-row': card('crack-row', 12, 'hit1 xox near', 'Crack row', '✸', 'crack three in a row'),
+  'crack-file': card('crack-file', 13, 'hit1 x/o/x near', 'Crack file', '✸', 'crack three in a file'),
+  demolish: card('demolish', 14, 'hit1 xxx/xox/xxx near', 'Demolish', '✸', 'crack a 3×3'),
+  blast: card('blast', 15, 'hit2 .x./xox/.x. near', 'Blast', '✸', 'smash a plus'),
+  lance: card('lance', 16, 'hit1 o ray', 'Lance', '➶', 'a ray from your king'),
+  // the builders: empty floor rises as breakable stone
+  'wall-file': card('wall-file', 20, 'wall x/o/x near', 'Wall file', '▦', 'raise three in a file'),
+  'wall-row': card('wall-row', 21, 'wall xox near', 'Wall row', '▦', 'raise three in a row'),
+  'wall-l1': card('wall-l1', 22, 'wall x./x./ox near', 'Wall L', '▦', 'raise an L'),
+  'wall-l2': card('wall-l2', 23, 'wall .x/.x/xo near', 'Wall L', '▦', 'raise an L'),
+  'wall-l3': card('wall-l3', 24, 'wall xo/.x/.x near', 'Wall L', '▦', 'raise an L'),
+  'wall-l4': card('wall-l4', 25, 'wall ox/x./x. near', 'Wall L', '▦', 'raise an L'),
+  // the pits: empty floor sinks; a sliding piece falls in
+  'sink-row': card('sink-row', 30, 'pit ox near', 'Sink row', '●', 'sink two in a row'),
+  'sink-file': card('sink-file', 31, 'pit o/x near', 'Sink file', '●', 'sink two in a file'),
+  // petrify: intact walls become bedrock
+  petrify: card('petrify', 40, 'harden xox near', 'Petrify', '◆', 'petrify three in a row'),
+  // the sledge enchantment: the hammer's home since the ruling (the always-on setting is gone)
+  sledge: card('sledge', 50, 'sledge o king', 'Sledge', '⚒', 'your king cracks walls'),
+  // reinforcement: a real pawn placed in your camp
+  reinforce: card('reinforce', 60, 'drop p o camp', 'Reinforce', '♟', 'a pawn in your camp'),
+  // the meta cards: the player's alone, free, never cast by the engine
+  reveal: card('reveal', 101, 'meta', 'Reveal', '☉', "the oracle's three lines", { text: "the engine's best lines for this turn; costs no move" }),
+  undo: card('undo', 102, 'meta', 'Undo', '↺', 'take back your last turn', { text: "take back your last move and the enemy's reply; costs no move" }),
   // THE YOU WIN CARD (designer 2026-09-25: "if you play it you win. Each player gets one copy, and it's always at the
   // bottom of the deck") — the engine's horizon instrument: cast on your own king, the game is over. Test only.
-  win: { kind: 'win', id: 200, engine: 'win', name: 'You Win', glyph: '★', cls: 'spell', cost: 'move', short: 'play it: you win', text: 'play it and you win — a test card, one copy at the bottom of each deck, so the engine can be watched digging for it', test: true },
+  win: card('win', 200, 'win', 'You Win', '★', 'play it: you win', { text: 'play it and you win — a test card, one copy at the bottom of each deck, so the engine can be watched digging for it', test: true }),
 };
 export const CARD_KINDS = Object.keys(CARDS);
 export const SPELL_KINDS = CARD_KINDS.filter((k) => CARDS[k].cls === 'spell' && !CARDS[k].test);
 export const META_KINDS = CARD_KINDS.filter((k) => CARDS[k].cls === 'meta');
+/** The parsed definition of a kind (carddef.mjs), or null. */
+export const defOf = (k) => (CARDS[k] ? parseDef(CARDS[k].def) : null);
 export const isCardKind = (k) => Object.prototype.hasOwnProperty.call(CARDS, k);
 const BY_ID = new Map(CARD_KINDS.map((k) => [CARDS[k].id, k]));
 /** The card kind of an engine ID, or `card<id>` for one the catalog does not know (an old log, a foreign deck). */
 export const kindOfId = (id) => BY_ID.get(id | 0) ?? `card${id}`;
 export const idOfKind = (k) => CARDS[k]?.id ?? null;
 
-/** THE STARTER DECKS — one for now, from the spells that exist; more once the
- *  library has axes (the designer: "a few starter decks the player could
- *  choose from"). Every deck carries one Reveal and one Undo. */
+/** THE STARTER DECKS (the designer: "a few starter decks the player could
+ *  choose from"): ADEPT (the two spells that came first), SAPPER (the terrain
+ *  set) and RANDOM — THE PHONE'S DEFAULT since the 3.3b ruling: six spells
+ *  drawn from the whole library by the run's seed, so every run stress-tests
+ *  different cards. Every deck carries one Reveal and one Undo. */
+export const RANDOM_STARTER_SPELLS = 6;
 export const STARTER_DECKS = {
+  random: { name: 'Random', random: RANDOM_STARTER_SPELLS },
   adept: { name: 'Adept', cards: ['portal', 'portal', 'portal', 'ice', 'ice', 'ice', 'reveal', 'undo'] },
+  sapper: { name: 'Sapper', cards: ['crack', 'smash', 'crack-row', 'demolish', 'blast', 'lance', 'wall-file', 'wall-row', 'sink-row', 'petrify', 'sledge', 'reinforce', 'reveal', 'undo'] },
 };
-export const DEFAULT_STARTER = 'adept';
+export const DEFAULT_STARTER = 'random';
 
-/** The cards of a starter deck by name, or null. */
-export function starterCards(name) {
+/** The cards of a starter deck by name, or null; the Random starter's six spells are drawn by `seed` (the run's). */
+export function starterCards(name, seed = 1) {
   const d = STARTER_DECKS[name];
-  return d ? d.cards.slice() : null;
+  if (!d) return null;
+  if (d.random) {
+    const rng = mulberry32(childSeed(seed >>> 0, 'starter:random'));
+    return [...Array.from({ length: d.random }, () => pick(rng, SPELL_KINDS)), 'reveal', 'undo'];
+  }
+  return d.cards.slice();
 }
 
 /** THE ENEMY'S DECK by its army's width (brief §8: the level telegraph; the
@@ -99,10 +151,10 @@ export const deckSeeds = (dealSeed) => ({ w: childSeed(dealSeed >>> 0, 'deck:w')
 export const cloneDeckState = (d) => (d ? { pile: [...d.pile] } : null);
 export const cloneDecks = (decks) => (decks ? { w: cloneDeckState(decks.w), b: cloneDeckState(decks.b) } : null);
 
-/** What a deal DECLARES to the engine for these two decks: the hand size and every card ID's engine kind (variant.mjs deckIniKeys). */
+/** What a deal DECLARES to the engine for these two decks: the hand size and every card ID's DEFINITION (variant.mjs deckIniKeys). */
 export function deckDeclaration(decks, handSize = HAND_SIZE) {
   const cards = {};
-  for (const side of ['w', 'b']) for (const k of decks?.[side]?.pile ?? []) if (CARDS[k]) cards[CARDS[k].id] = CARDS[k].engine;
+  for (const side of ['w', 'b']) for (const k of decks?.[side]?.pile ?? []) if (CARDS[k]) cards[CARDS[k].id] = CARDS[k].def;
   return { handSize, cards };
 }
 
@@ -279,7 +331,7 @@ export function parseDeckParam(v) {
   if (v == null) return null;
   const s = String(v).trim();
   if (!s || s === 'off' || s === '0' || s === 'none') return { off: true };
-  if (STARTER_DECKS[s]) return { starter: s, cards: starterCards(s) };
+  if (STARTER_DECKS[s]) return { starter: s, cards: STARTER_DECKS[s].random ? null : starterCards(s) }; // the Random starter's cards are drawn by the run's seed (null here)
   const cards = s.split(',').map((x) => x.trim()).filter(Boolean);
   if (cards.length && cards.every(isCardKind)) return { starter: null, cards, fixed: true }; // a hand-built list is dealt in its own order, top first
   return null;

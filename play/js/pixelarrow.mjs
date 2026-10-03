@@ -153,7 +153,93 @@ export const WIN_GLYPH = Object.freeze([
   'WW.......WW',
   'W.........W',
 ]);
-export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH, win: WIN_GLYPH });
+// THE TERRAIN INTERPRETER (2026-10-03, Phase 3.3b): a card's glyph is its
+// EFFECT's — one drawing per effect word (carddef.mjs), 11×11 in the spell
+// idiom, on the hint, the card face and the enemy's played-card beat: HIT a
+// crack (a jagged bolt with a fork), WALL a course of bricks, PIT a hole (a
+// ring around a filled floor), HARDEN a gem of bedrock, SLEDGE a hammer (a
+// head over a handle), DROP a pawn. The sledge and win cards are cast on the
+// king, so their glyph names the card, not a square.
+export const HIT_GLYPH = Object.freeze([
+  '.....H.....',
+  '....H......',
+  '....H......',
+  '.....H.....',
+  '......H....',
+  '.....H.....',
+  '....H......',
+  '...H.......',
+  '...H..H....',
+  '..H....H...',
+  '..H.....H..',
+]);
+export const WALL_GLYPH = Object.freeze([
+  'WWWWWWWWWWW',
+  'W....W....W',
+  'W....W....W',
+  'WWWWWWWWWWW',
+  'W.W.....W.W',
+  'W.W.....W.W',
+  'WWWWWWWWWWW',
+  'W....W....W',
+  'W....W....W',
+  'WWWWWWWWWWW',
+  '...........',
+]);
+export const PIT_GLYPH = Object.freeze([
+  '...........',
+  '...PPPPP...',
+  '..P.....P..',
+  '.P..PPP..P.',
+  '.P.PPPPP.P.',
+  '.P.PPPPP.P.',
+  '.P.PPPPP.P.',
+  '.P..PPP..P.',
+  '..P.....P..',
+  '...PPPPP...',
+  '...........',
+]);
+export const HARDEN_GLYPH = Object.freeze([
+  '.....D.....',
+  '....DDD....',
+  '...DD.DD...',
+  '..DD...DD..',
+  '.DD.....DD.',
+  'D.........D',
+  '.DD.....DD.',
+  '..DD...DD..',
+  '...DD.DD...',
+  '....DDD....',
+  '.....D.....',
+]);
+export const SLEDGE_GLYPH = Object.freeze([
+  '..SSSSSSS..',
+  '.SSSSSSSSS.',
+  '.SSSSSSSSS.',
+  '..SSSSSSS..',
+  '.....SS....',
+  '.....SS....',
+  '.....SS....',
+  '.....SS....',
+  '.....SS....',
+  '.....SS....',
+  '...........',
+]);
+export const DROP_GLYPH = Object.freeze([
+  '.....P.....',
+  '....PPP....',
+  '...PPPPP...',
+  '....PPP....',
+  '.....P.....',
+  '....PPP....',
+  '....PPP....',
+  '...PPPPP...',
+  '..PPPPPPP..',
+  '.PPPPPPPPP.',
+  '...........',
+]);
+/** The glyphs BY EFFECT WORD (a card's `engine` field is its effect): the three the spells shipped with, the terrain interpreter's six. */
+export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH, win: WIN_GLYPH, hit: HIT_GLYPH, wall: WALL_GLYPH, pit: PIT_GLYPH, harden: HARDEN_GLYPH, sledge: SLEDGE_GLYPH, drop: DROP_GLYPH });
 export const SPELL_SHADOW = HALO; // the drop shadow's colour
 
 /** A spell glyph's size: { w, h } — its shadow adds a pixel right and below. */

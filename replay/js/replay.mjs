@@ -49,7 +49,8 @@ import { CanvasBoard } from '../../play/js/canvas-board.mjs'; // the one rendere
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from '../../play/js/stage.mjs';
 import { createEngine } from '../../play/js/engine.mjs';
 import { makeCatalogIni } from '../../play/js/variant.mjs';
-import { cardOfCast } from '../../play/js/deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26): which card a slot's drop casts
+import { cardOfCast, CARDS } from '../../play/js/deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26): which card a slot's drop casts
+import { castAreaOnFen } from '../../play/js/cards.mjs'; // PHASE 3.3b (2026-10-03): a shaped cast's squares for the hint's tint
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
 import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf, slickSquares } from '../../play/js/fen.mjs';
 import { slideOutcome } from '../../play/js/ice.mjs'; // THE ICE (2026-09-20): a line's first move ends where its piece rests
@@ -374,6 +375,8 @@ function quakeMarksOf(ev) {
 function spellOf(fen, uci, side = null) {
   return cardOfCast(fen, uci, side ?? undefined);
 }
+/** PHASE 3.3b (2026-10-03): the card's EFFECT word, which names its glyph (pixelarrow SPELL_GLYPHS) — every ice shape 'ice', every hit 'hit'. */
+const effectOf = (k) => CARDS[k]?.engine ?? k;
 
 function moveArrow(st) {
   const p = st?.move?.match(R.UCI_MOVE_RE);
@@ -386,7 +389,7 @@ function moveArrow(st) {
     if (!c) return null;
     const spell = st.card ?? null; // the state carries the card its cast cast (duel.mjs #push); an old log's scroll letter reads the same way
     const spell2 = spell ?? spellOf(st.fen, st.move, st.mover === 'engine' ? 'b' : 'w');
-    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: spell2, played: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: spell2, played: true };
+    return st.mover === 'engine' ? { from: c[2], to: c[2], strength: 1, kind: 'last', cast: effectOf(spell2), played: true } : { from: c[2], to: c[2], strength: 0.9, rank: 1, kind: 'hint', cast: effectOf(spell2), played: true };
   }
   // Gold is the player's colour, red the enemy's last move (style.css roles).
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hammered ply ends in the hammer on its wall.
@@ -553,7 +556,11 @@ function pvArrows(pv, fen) {
     if (!p) {
       // THE SPELL GLYPHS (2026-09-21): a cast in the line is its spell's glyph on its square, numbered like the arrows.
       const c = String(m).match(CAST_RE);
-      if (c) out.push({ from: c[2], to: c[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), cast: spellOf(fen, m, j % 2 === 0 ? null : (fen.split(' ')[1] === 'b' ? 'w' : 'b')) }); // a later cast in the line is the other side's every other ply
+      if (c) {
+        const kind = spellOf(fen, m, j % 2 === 0 ? null : (fen.split(' ')[1] === 'b' ? 'w' : 'b')); // a later cast in the line is the other side's every other ply
+        // PHASE 3.3b: the line's FIRST cast is read on the board shown — its shape tints the squares it would cover (a later one's board is the line's)
+        out.push({ from: c[2], to: c[2], strength: Math.max(0.35, 1 - j * 0.13), rank: 1, kind: 'hint', label: String(j + 1), cast: effectOf(kind), ...(j === 0 ? { cells: castAreaOnFen(kind, c[2], fen) } : {}) });
+      }
       return;
     }
     const hm = hammerOf(fen, `${p[1]}${p[2]}`);

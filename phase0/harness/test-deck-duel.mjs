@@ -41,7 +41,7 @@ const decks = { w: newDeckState(starterCards('adept'), seeds.w), b: newDeckState
 const dealWith = (d) => dealMatchup({ stage, white: { spec: { width: 4, pieces: ['R', 'N', 'B'] }, archetype: 'heavies-deep' }, black: { spec: { width: 3, pieces: ['N', 'B'] }, archetype: 'heavies-deep' }, seed, turn: 'w', portals: true, hammer: true, ice: true, decks: d, ffish });
 const deal = dealWith(decks);
 if (!deal.ok) { console.error('deal failed:', deal.error); process.exit(2); }
-check(/__deck4_1i_2p_101m_102m$/.test(deal.variantName), `the deal's variant declares the deck (${deal.variantName})`);
+check(/__deck4_[0-9a-f]{8}$/.test(deal.variantName), `the deal's variant declares the deck (${deal.variantName})`);
 check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 2 && pileOf(deal.fen, 'b').length === 0, `the start FEN carries the hands and the piles (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
 await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni);
 
@@ -54,7 +54,7 @@ const mk = async (d0, dl = deal) => {
 const fixed = { w: { pile: ['portal', 'reveal', 'ice', 'undo', 'ice', 'portal', 'ice', 'win'] }, b: { pile: ['ice', 'portal'] } };
 const dealFixed = dealWith(cloneDecks(fixed));
 if (!dealFixed.ok) { console.error('fixed deal failed:', dealFixed.error); process.exit(2); }
-check(/__deck4_1i_2p_101m_102m_200w$/.test(dealFixed.variantName) && dealFixed.variantName !== deal.variantName, `a deck with the win card is another variant (${dealFixed.variantName})`);
+check(/__deck4_[0-9a-f]{8}$/.test(dealFixed.variantName) && dealFixed.variantName !== deal.variantName, `a deck with the win card is another variant (${dealFixed.variantName})`);
 check(handOf(dealFixed.fen, 'w').join(',') === 'portal,reveal,ice,undo' && pileOf(dealFixed.fen, 'w').join(',') === 'ice,portal,ice,win', 'the hand-built decks deal in their own order, the win card last on the pile');
 await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni + '\n' + dealFixed.variantIni);
 const plain = (duel) => duel.legalMoves().find((m) => /^[a-l]\d+[a-l]\d+[nbrq]?$/.test(m) && m.slice(0, 2) !== m.slice(2, 4));

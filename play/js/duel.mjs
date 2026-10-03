@@ -21,11 +21,12 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN } from './fen.mjs';
+import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN, squareChanges, WALL, FURNITURE, HARD, PIT } from './fen.mjs';
 import { slideOutcome, fallen } from './ice.mjs'; // THE ICE (2026-09-20): the slide a move makes, for the record
 import { flipTurn, evalSoftens } from './tactics.mjs';
 // THE DECK (2026-09-25): spells as cards — the hand is the pocket plus the meta cards, drawn up to at the start of each turn (deck.mjs).
-import { deckRecord, handOf, drawnBetween, cardOfCast, removeCard, mulliganOffered, mustLinkOf, deckOn, cloneDecks, HAND_SIZE } from './deck.mjs';
+import { deckRecord, handOf, drawnBetween, cardOfCast, removeCard, mulliganOffered, mustLinkOf, deckOn, cloneDecks, HAND_SIZE, CARDS } from './deck.mjs';
+import { TERRAIN_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): a terrain card's cast is recorded by its effect word
 import { joinFen } from './fen.mjs';
 
 /** PORTALS v3 (the one-turn cast, 2026-09-19): what a ply is inside a cast —
@@ -35,14 +36,19 @@ import { joinFen } from './fen.mjs';
  *  scroll's one-ply cast), and since THE DECK IN THE ENGINE (2026-09-26)
  *  'mulligan' (the move `@@@@`: the hand discarded and drawn anew) and 'win'
  *  (the test-only You Win card) — a deck's cast is a slot's drop, read by the
- *  card the slot holds — or null for an ordinary ply. */
+ *  card the slot holds — and since PHASE 3.3b (2026-10-03) a terrain card's
+ *  EFFECT word, 'hit' / 'wall' / 'pit' / 'harden' / 'sledge' / 'drop'
+ *  (carddef.mjs TERRAIN_EFFECTS; every ice shape reads 'ice') — or null for
+ *  an ordinary ply. */
 export function castKind(fenBefore, uci, fenAfter) {
   const side = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
   if (isMulligan(uci)) return 'mulligan';
   if (isCast(uci)) {
     const card = cardOfCast(fenBefore, uci);
-    if (card === 'ice') return 'ice';
-    if (card === 'win') return 'win';
+    const effect = CARDS[card]?.engine ?? card; // the card's EFFECT word (carddef.mjs): every ice shape is 'ice', every hit 'hit'
+    if (effect === 'ice') return 'ice';
+    if (effect === 'win') return 'win';
+    if (TERRAIN_EFFECTS.has(effect)) return effect;
     return parsePortalField(fenAfter).halves[side] ? 'half' : 'link';
   }
   if (isPass(uci)) return parsePortalField(fenBefore).halves[side] && !parsePortalField(fenAfter).halves[side] ? 'fizzle' : 'pass';
@@ -616,6 +622,24 @@ export class DuelController {
     // ply), a mulligan's discards and fresh hand, the draw the engine made for
     // the side about to move (on this state: the turn starts here).
     if (isCast(uci)) this.lastMove.card = cardOfCast(fenBefore, uci);
+    // PHASE 3.3b (2026-10-03): what a terrain cast did to the board — every
+    // square whose glyph changed, read off the two FENs (the engine's
+    // apply_cast is the one rule; the page animates and the log speaks from
+    // the record). A wall cracked by a card joins the ONE crate ledger (a
+    // cracked wall is a cracked wall, whoever cracked it), a crate smashed to
+    // the floor leaves it, a pit sunk by a card joins the holes ledger (the
+    // art paints a pit; the gods never crumble it twice), and a sledge cast
+    // marks its caster's colour on the state.
+    if (cast && TERRAIN_EFFECTS.has(cast)) {
+      const edits = squareChanges(fenBefore, this.board.fen());
+      if (edits.length) this.lastMove.edits = edits;
+      for (const e of edits) {
+        if (e.from === WALL && e.to === FURNITURE) this.director.godCrates.add(e.sq);
+        else if (e.from === FURNITURE && e.to !== FURNITURE) this.director.godCrates.delete(e.sq);
+        if (e.to === PIT) this.director.holes.add(e.sq);
+      }
+      if (cast === 'sledge') this.lastMove.sledge = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
+    }
     {
       const fenAfter = this.board.fen();
       const moverSide = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';

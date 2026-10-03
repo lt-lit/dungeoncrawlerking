@@ -253,6 +253,7 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .card.enemy { --rim: var(--last); }
 .card.playable { border-color: var(--rim); box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 0 8px 1px color-mix(in srgb, var(--rim) 55%, transparent), 0 2px 4px rgba(0, 0, 0, .55); }
 .card.dim { opacity: .5; }
+.card.hinted { border-color: var(--hint, var(--hint-1)); box-shadow: 0 0 0 2px var(--hint, var(--hint-1)), 0 0 8px 1px color-mix(in srgb, var(--hint, var(--hint-1)) 50%, transparent), 0 2px 4px rgba(0, 0, 0, .55); } /* PHASE 3.3b: a hinted card rimmed in its rank's colour (gold / silver / bronze) */
 .card.lifted { z-index: 5; border-color: var(--rim); box-shadow: 0 0 0 2px var(--rim), 0 6px 12px rgba(0, 0, 0, .6); transform: translateY(calc(var(--fan-y, 0px) - 14px)) rotate(0deg) scale(1.08); }
 .card.dragging { opacity: 0; }
 @media (hover: hover) { .card.playable:not(.lifted):hover { z-index: 4; transform: translateY(calc(var(--fan-y, 0px) - 8px)) rotate(var(--fan-rot, 0deg)); } }
@@ -261,6 +262,8 @@ button.primary:not(:disabled):active { background: var(--accent-2); }
 .card-text { font-size: .58rem; color: var(--muted); line-height: 1.15; padding: 0 1px; }
 .card-cost { position: absolute; top: 3px; left: 4px; width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--rim); background: var(--rim); box-shadow: 0 0 0 1px #000; }
 .card.meta .card-cost { background: transparent; height: 3px; border-radius: 2px; top: 6px; border-width: 1px; }
+.card-badge { position: absolute; top: 2px; right: 4px; font-size: .5rem; line-height: 1; color: var(--muted); letter-spacing: .03em; text-transform: uppercase; } /* PHASE 3.3b: the targeting word (any / near / mid / king / ray / camp) opposite the cost pip */
+#card-reader-card .card .card-badge { font-size: .7rem; top: 7px; right: 8px; }
 .card.enemy { pointer-events: none; }
 /* The draw: a new card slides in from the deck stack (the page sets the start offset, the transition carries it home). */
 .card.dealt { transition: transform .26s cubic-bezier(.2, .8, .3, 1), opacity .26s; }

@@ -11,8 +11,9 @@
 // slice of it) explicitly. Old logs (fields missing before replay-log.1/.2:
 // `mover`, `candidates`, `pieceList`, …) degrade to shorter lines, never
 // throw — every read is optional.
-import { parseBoard, splitFen } from './fen.mjs';
+import { parseBoard, splitFen, isTerrain } from './fen.mjs';
 import { CARDS } from './deck.mjs'; // THE DECK (2026-09-25): the card names on the report
+import { TERRAIN_EFFECTS, PIECE_NAMES } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): a terrain cast's words
 
 /** jsonSafeNumbers' strings back to numbers ('Infinity', '-Infinity', 'NaN'). */
 export const num = (v) => (typeof v === 'string' && /^-?Infinity$|^NaN$/.test(v) ? Number(v) : v);
@@ -257,6 +258,7 @@ export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(),
   // THE DECK (2026-09-25): a redraw (a `--` ply of the game's own), the draw at the next turn's start (on the state of the ply before it), a meta card played this turn.
   if (st?.cast === 'mulligan') line += `  🂠 redraws${st.mulligan ? `: discards ${cardNames(st.mulligan.discarded)}, draws ${cardNames(st.mulligan.drew)}` : ''}`;
   if (st?.cast === 'win') line += `  ★ the You Win card — the duel is over`; // THE DECK IN THE ENGINE (2026-09-26): the test card
+  if (TERRAIN_EFFECTS.has(st?.cast)) line += `  ✸ ${castWords(st, st.mover)}`; // PHASE 3.3b (2026-10-03): what the terrain card did
   if (st?.drew?.cards?.length) line += `  🂠 ${st.drew.side === 'w' ? 'W' : 'B'} draws ${cardNames(st.drew.cards)}`;
   for (const m of meta.get(ply) ?? []) line += `  ${m.kind === 'reveal' ? '☉ Reveal' : m.kind === 'undo' ? '↺ Undo' : m.kind} played`;
   if (leftMateLine(st)) line += `  ⚠ left the engine's mate-in-${-st.engineSaw.value} line (it expected ${st.predicted})`;
@@ -279,6 +281,33 @@ export function slideWords(slide) {
   const parts = [rest(steps[0])];
   for (let i = 1; i < steps.length; i++) parts.push(`shoves the ${name(steps[i])} on ${steps[i].from}, which ${rest(steps[i])}`);
   return parts.join(', ');
+}
+
+/** PHASE 3.3b (2026-10-03): what a terrain cast did, in words — the record's
+ *  `card`, `cast` (the effect word) and `edits` (every square whose glyph
+ *  changed, duel.mjs #push). The duel log, the timeline and the analyzer say
+ *  the same thing; an old log without `edits` names the card alone. */
+export function castWords(lm, mover = null) {
+  const name = CARDS[lm?.card]?.name ?? lm?.card ?? 'a card';
+  const edits = lm?.edits ?? [];
+  const list = (xs) => xs.join(', ');
+  const plural = (xs, one, many) => (xs.length > 1 ? many : one);
+  switch (lm?.cast) {
+    case 'hit': {
+      const cracked = edits.filter((e) => e.from === '*' && e.to === '^').map((e) => e.sq);
+      const floored = edits.filter((e) => (e.from === '^' || e.from === '*') && e.to == null).map((e) => e.sq);
+      const parts = [];
+      if (cracked.length) parts.push(`cracks the ${plural(cracked, 'wall', 'walls')} at ${list(cracked)}`);
+      if (floored.length) parts.push(`smashes ${list(floored)} to the floor`);
+      return `${name} — ${parts.join(', ') || 'nothing changes'}`;
+    }
+    case 'wall': { const sq = edits.filter((e) => e.to === '*').map((e) => e.sq); return `${name} — stone rises at ${list(sq) || '?'}`; }
+    case 'pit': { const sq = edits.filter((e) => e.to === '_').map((e) => e.sq); return `${name} — the floor sinks into a pit at ${list(sq) || '?'}`; }
+    case 'harden': { const sq = edits.filter((e) => e.to === '#').map((e) => e.sq); return `${name} — the ${plural(sq, 'wall', 'walls')} at ${list(sq) || '?'} ${plural(sq, 'turns', 'turn')} to bedrock`; }
+    case 'sledge': return `${name} — ${mover === 'engine' ? "the enemy's" : mover === 'player' ? 'your' : "the caster's"} king carries the sledgehammer`;
+    case 'drop': { const e = edits.find((x) => x.to && !isTerrain(x.to)); return `${name} — a ${PIECE_NAMES[String(e?.to ?? 'p').toLowerCase()] ?? 'piece'} is placed on ${e?.sq ?? '?'}`; }
+    default: return `${name} is cast`;
+  }
 }
 
 // ------------------------------------------------------------- sections

@@ -37,10 +37,11 @@
 //                    (drivers should pass fx=0 — animations gate app.busy)
 import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
-import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, glyphsOf, parseDeckParam, cloneDecks, handOf, pileOf, spentOf, cardOfCast, castUci } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards — IN THE ENGINE since 2026-09-26 (the FEN is the deck)
-import { fanLayout, cardArt, artSize, stampGlyph, gestureStart, gestureMove, gestureHold, gestureEnd, castArea, cardHint, dropWords, costWords, LONG_PRESS_MS } from './cards.mjs'; // THE CARD UI (Phase 3.2, 2026-09-25): the fan, the art, the gesture, the drop preview
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
+import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, glyphsOf, parseDeckParam, cloneDecks, handOf, pileOf, spentOf, cardOfCast, castUci, defOf } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards — IN THE ENGINE since 2026-09-26 (the FEN is the deck)
+import { fanLayout, cardArt, artSize, stampGlyph, gestureStart, gestureMove, gestureHold, gestureEnd, castArea, castAreaOnFen, cardHint, dropWords, costWords, LONG_PRESS_MS } from './cards.mjs'; // THE CARD UI (Phase 3.2, 2026-09-25): the fan, the art, the gesture, the drop preview
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, PIT, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
+import { shapeGrid, targetBadge, TERRAIN_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): the terrain interpreter's grammar on the page — a card's shape and targeting on its face, the casts recorded by their effect
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -65,12 +66,12 @@ import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylog.mjs';
-import { deltaWords, slideWords } from './logreport.mjs'; // the deep-Δ wording and THE ICE's slide words, shared with the report and the analyzer
+import { deltaWords, slideWords, castWords } from './logreport.mjs'; // the deep-Δ wording and THE ICE's slide words, shared with the report and the analyzer
 
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
 // that alters what the log records or how the gods decide.
-const APP_BUILD = '2026-10-03 deck-engine.1'; // bumped per build that ships (it had read 2026-09-07 since the analyzer, so phone logs could not be told apart by build)
+const APP_BUILD = '2026-10-03 terrain.1'; // bumped per build that ships (it had read 2026-09-07 since the analyzer, so phone logs could not be told apart by build)
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
@@ -242,7 +243,7 @@ function computeDeal() {
   if (!stage) return { ok: false, error: 'pick a stage' };
   try {
     // THE DECK: the setup page deals both sides the chosen starter — the enemy its spells alone — shuffled by the master seed.
-    const spec = deckSpec();
+    const spec = deckSpec(setup.seed | 0 || 1);
     const dk = spec ? dealDecks(setup.seed | 0 || 1, spec.cards, enemyCards(spec.cards), { fixed: spec.fixed }) : null;
     const deal = dealMatchup({
       stage,
@@ -254,7 +255,7 @@ function computeDeal() {
       seed: setup.seed | 0 || 1,
       turn: setup.turn === 'b' ? 'b' : 'w',
       portals: dk ? dk.portals : portalsOn(), // THE PORTAL SPELL: one pair per side, cast in two turns (with a deck: declared when either deck holds it)
-      hammer: hammerOn(), // THE SLEDGEHAMMER: every king may crack an adjacent wall
+      hammer: hammerOn(), // THE SLEDGEHAMMER: `?hammer=on` alone since PHASE 3.3b — the Sledge CARD declares the hammer keys through the deck (variant.mjs deckHasSledge)
       ice: dk ? dk.ice : iceOn(), // THE ICE: one 3×3 patch per side (with a deck: as above)
       decks: dk?.decks ?? null, // THE DECK IN THE ENGINE: the shuffled piles — the deal declares them and deals the opening hands into the FEN
       ffish: app.ffish,
@@ -308,7 +309,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, hammer: true, ice: true, deck: DEFAULT_STARTER };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, ice: true, deck: DEFAULT_STARTER };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -340,7 +341,6 @@ function loadOptions() {
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
     options.portals = options.portals !== false; // THE PORTAL SPELL (2026-09-17): everyone has it unless switched off
-    options.hammer = options.hammer !== false; // THE SLEDGEHAMMER (2026-09-17): every king a sledge-king unless switched off
     options.ice = options.ice !== false; // THE ICE (2026-09-20): everyone has one ice scroll unless switched off
     if (!(options.deck === 'off' || STARTER_DECKS[options.deck])) options.deck = DEFAULT_STARTER; // THE DECK (2026-09-25): a starter's name, or 'off' for the old stress-test set (every spell in hand, no deck)
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
@@ -394,20 +394,25 @@ const cheatHints = () => options.cheat && options.hints;
 // THE PORTAL SPELL (2026-09-17): on for every duel and every side — the
 // stress test; an upgrade later. `?portals=off` for a plain duel.
 const portalsOn = () => params.get('portals') !== 'off' && options.portals !== false;
-// THE SLEDGEHAMMER (2026-09-17): every king a sledge-king, both sides — the
-// stress test; an upgrade later. `?hammer=off` for plain kings.
-const hammerOn = () => params.get('hammer') !== 'off' && options.hammer !== false;
+// THE SLEDGEHAMMER (2026-09-17) is a CARD since PHASE 3.3b (2026-10-03, the
+// designer's ruling 7): the Sledge enchantment (deck.mjs 'sledge', the def
+// `sledge o king`) hands its caster's king the hammer for the rest of the
+// duel — the always-on Sledge-kings option and the walk's hammer are RETIRED
+// (a saved `hammer` option is not read). `?hammer=on` keeps every king a
+// sledge-king for the smokes and the labs.
+const hammerOn = () => params.get('hammer') === 'on';
 // THE ICE (2026-09-20): one ice scroll a side, every duel — the stress test;
 // an upgrade later. `?ice=off` for a duel without it.
 const iceOn = () => params.get('ice') !== 'off' && options.ice !== false;
 // THE DECK (2026-09-25; brief §4.10): the cards a duel is dealt from —
 // `?deck=off|<starter>|<kind,kind,…>` over Options → Spells → Deck. Null =
 // no deck (every spell in hand, the stress-test set the spells shipped with).
-function deckSpec() {
+function deckSpec(seed = 1) {
+  // `seed` draws THE RANDOM STARTER's six spells (PHASE 3.3b, the phone's default): the run's seed on the walk, the master seed on the arena page
   const p = parseDeckParam(params.get('deck'));
-  if (p) return p.off ? null : { starter: p.starter, cards: p.cards, fixed: !!p.fixed };
+  if (p) return p.off ? null : { starter: p.starter, cards: p.cards ?? starterCards(p.starter, seed), fixed: !!p.fixed };
   if (options.deck === 'off') return null;
-  return { starter: options.deck, cards: starterCards(options.deck) ?? starterCards(DEFAULT_STARTER), fixed: false };
+  return { starter: options.deck, cards: starterCards(options.deck, seed) ?? starterCards(DEFAULT_STARTER, seed), fixed: false };
 }
 /** A deck's cards under the spell switches: `?portals=off` / `?ice=off` (and the options) take a kind out of every deck. */
 function deckCardsOf(cards) {
@@ -435,7 +440,6 @@ const godsDebug = () => options.godsDebug;
 function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
   $('optPortals').checked = options.portals !== false;
-  $('optHammer').checked = options.hammer !== false;
   $('optIce').checked = options.ice !== false;
   $('optDeck').value = options.deck === 'off' || STARTER_DECKS[options.deck] ? options.deck : DEFAULT_STARTER; // THE DECK
   $('optHints').checked = options.hints;
@@ -1004,8 +1008,10 @@ function probeGo() {
 
 function clearHints() {
   app.cheatArrows = [];
+  app.hintCards = null; // PHASE 3.3b: the fan's rank rims go with the hints
   cheat.depth = null;
   setHintLine('');
+  syncHintCards();
 }
 
 /** Stop the running probe. Resolves false when the instance never answered
@@ -1149,23 +1155,30 @@ function applyHintLines(pvs, n, duel, partial) {
     const m = pv.move.match(UCI_MOVE_RE);
     const c = m ? null : pv.move.match(CAST_RE); // a cast hint: marked by its spell on the square (THE SPELL GLYPHS, 2026-09-21)
     if (!m && !c) continue;
-    const spell = c ? spellOf(pv.move) : null;
+    const card = c ? spellOf(pv.move) : null; // the CARD a cast hint casts (deck.mjs cardOfCast, by the slot's binding)
+    const spell = card ? CARDS[card]?.engine ?? card : null; // its EFFECT word names the glyph (PHASE 3.3b, 2026-10-03: hit / wall / pit / harden / sledge / drop beside ice / portal / win)
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
     // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a breakable wall is a
     // hammer — the arrow ends in the hammer on the wall, the list shows it.
     const hammer = !!m && !!hammerOf(fenNow, pv.move);
     // THE ICE (2026-09-20): a hint onto the ice ends where the piece comes to REST (the slide runs on along the arrow's own line).
     const end = m ? slideRest(fenNow, pv.move) ?? m[2] : null;
-    arrows.push(m ? { from: m[1], to: end, strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: spell });
+    // PHASE 3.3b — THE HINT FOR A SHAPED CAST (ruled 2026-09-25: the anchor outlined plus the shape as a faint tint, and
+    // the card itself outlined in the rank's colour): the arrow carries the squares the cast would cover (cards.mjs
+    // castAreaOnFen — the shape clipped to the board, a ray from the king); canvas-board tints them under the frame.
+    arrows.push(m ? { from: m[1], to: end, strength, rank: pv.rank, kind: 'hint', ...(hammer ? { hammer: true } : {}) } : { from: c[2], to: c[2], strength, rank: pv.rank, kind: 'hint', cast: spell, ...(card && CARDS[card] ? { cells: castAreaOnFen(card, c[2], fenNow) } : {}) });
     let san = pv.move;
     try {
       san = duel.board.sanMove(pv.move);
     } catch {
       /* keep uci */
     }
-    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer, spell });
+    items.push({ rank: pv.rank, san, score: pv.score ? fmtScore(pv.score) : null, hammer, spell, card });
   }
   app.cheatArrows = arrows;
+  app.hintCards = new Map(); // the best rank per hinted card kind — the fan's rims (syncHintCards)
+  for (const it of items) if (it.card && CARDS[it.card] && !app.hintCards.has(it.card)) app.hintCards.set(it.card, it.rank);
+  syncHintCards();
   renderPlayMarks();
   const depth = sorted[0].depth ?? cheat.depth;
   if (depth) cheat.depth = depth;
@@ -1192,14 +1205,15 @@ function hammerIcon(rank) {
  *  spell (pixelarrow.mjs drawSpell — the portal's ring, the ice's snowflake)
  *  on a small canvas in the rank's arrow colour, before the SAN of a cast
  *  hint. No text of its own, like the hammer's. */
-function spellIcon(kind, rank) {
+function spellIcon(kind, rank, card = null) {
   const { w, h } = spellGlyphSize(kind);
   const c = document.createElement('canvas');
   c.width = w + 2;
   c.height = h + 2;
   c.className = 'hint-glyph';
-  c.dataset.spell = kind;
-  c.title = kind === 'ice' ? 'the ice spell: this move freezes the floor' : 'the portal spell: this move opens a portal';
+  c.dataset.spell = kind; // the EFFECT word (PHASE 3.3b); the card's kind beside it
+  if (card) c.dataset.card = card;
+  c.title = CARDS[card] ? `${CARDS[card].name}: ${CARDS[card].short}` : kind === 'ice' ? 'the ice spell: this move freezes the floor' : kind === 'portal' ? 'the portal spell: this move opens a portal' : `the ${kind} spell`;
   drawSpell(c.getContext('2d'), kind, 1, 1, arrowColour({ kind: 'hint', rank }));
   return c;
 }
@@ -1227,7 +1241,7 @@ function setHintList(items, depthText) {
     span.dataset.rank = String(it.rank);
     span.append(`${it.rank} `);
     if (it.hammer) span.appendChild(hammerIcon(it.rank));
-    if (it.spell) span.appendChild(spellIcon(it.spell, it.rank));
+    if (it.spell) span.appendChild(spellIcon(it.spell, it.rank, it.card ?? null));
     span.append(it.san);
     if (it.score) {
       const b = document.createElement('b');
@@ -3295,13 +3309,30 @@ function cardSize() {
 function cardArtCanvas(kind, colour, scale) {
   const rows = cardArt(kind);
   const { w, h } = artSize(kind);
+  // PHASE 3.3b (2026-10-03): a SHAPED card's face is GENERATED from its def — the effect's glyph (one drawing per
+  // effect word) over a MINI-MAP of its shape, one pixel a cell, the anchor lit and the rest at half — so the four
+  // L's and the row and the file of one effect read apart (a single-cell shape and a ray draw none; the badge says it).
+  const def = defOf(kind);
+  const grid = def && def.cells.length > 1 && def.target !== 'ray' ? shapeGrid(def.shape) : null;
+  const W = Math.max(1, w, grid ? grid.w : 0), H = Math.max(1, h) + (grid ? 1 + grid.h : 0);
   const c = document.createElement('canvas');
   c.className = 'card-art';
-  c.width = Math.max(1, w);
-  c.height = Math.max(1, h);
-  c.style.width = `${w * scale}px`;
-  c.style.height = `${h * scale}px`;
-  if (rows) stampGlyph(c.getContext('2d'), rows, 0, 0, colour);
+  c.width = W;
+  c.height = H;
+  c.style.width = `${W * scale}px`;
+  c.style.height = `${H * scale}px`;
+  const g = c.getContext('2d');
+  if (rows) stampGlyph(g, rows, Math.floor((W - w) / 2), 0, colour);
+  if (grid) {
+    const x0 = Math.floor((W - grid.w) / 2), y0 = Math.max(1, h) + 1;
+    g.fillStyle = colour;
+    grid.rows.forEach((row, r) => row.forEach((v, q) => {
+      if (!v) return;
+      g.globalAlpha = v === 2 ? 1 : 0.5;
+      g.fillRect(x0 + q, y0 + r, 1, 1);
+    }));
+    g.globalAlpha = 1;
+  }
   return c;
 }
 
@@ -3325,6 +3356,15 @@ function makeCard(kind, { enemy = false, scale = null, full = false } = {}) {
   text.className = 'card-text';
   text.textContent = full ? c.text : c.short;
   el.appendChild(text);
+  // PHASE 3.3b: the TARGETING BADGE — where the card may be cast (carddef.mjs targetBadge: any / near / mid / m2 / king / ray / camp), top right, opposite the cost pip
+  const def = c.cls === 'spell' && c.engine !== 'portal' ? defOf(kind) : null;
+  if (def) {
+    const badge = document.createElement('span');
+    badge.className = 'card-badge';
+    badge.textContent = targetBadge(def);
+    badge.title = { any: 'cast anywhere it changes something', near: 'cast beside one of your pieces', middle: 'cast on the middle rows', margin: `cast ${def.targetArg} rows off the king rows`, king: 'cast on your king', ray: 'a ray from your king, in one of eight directions', camp: 'cast on an empty square of your camp' }[def.target] ?? def.target;
+    el.appendChild(badge);
+  }
   el.title = `${c.name} — ${c.text} (${costWords(kind)})`;
   return el;
 }
@@ -3366,6 +3406,7 @@ function renderHand(inDuel, mine) {
   const sig = `${cards.map((c) => `${c.key}:${c.playable ? 1 : 0}`).join(',')}|${half ?? ''}|${W}|${mine ? 1 : 0}`;
   if (sig === HAND.sig) {
     syncLiftedCards();
+    syncHintCards();
     return;
   }
   const fresh = cards.filter((c) => !HAND.keys.includes(c.key)).map((c) => c.key);
@@ -3388,6 +3429,7 @@ function renderHand(inDuel, mine) {
   HAND.keys = cards.map((c) => c.key);
   HAND.sig = sig;
   syncLiftedCards();
+  syncHintCards();
   // THE DRAW: a card new to the hand starts on the deck stack and slides home (CSS carries it; nothing under ?fx=0).
   if (fresh.length && FX(1) && deck) {
     const pile = $('pile-deck');
@@ -3411,6 +3453,20 @@ function renderHand(inDuel, mine) {
         setTimeout(() => { for (const el of moving) el.classList.remove('dealt'); }, FX(320));
       }));
     }
+  }
+}
+
+/** PHASE 3.3b (2026-10-03; the designer: "outline the card itself in gold/silver/bronze for further clarity"): the fan's
+ *  cards of a hinted kind wear their hint's rank colour as a rim (`.hinted`, `--hint`), set with the hint lines and
+ *  cleared with them (applyHintLines / clearHints). */
+function syncHintCards() {
+  const box = document.getElementById('hand');
+  if (!box) return;
+  for (const el of box.children) {
+    const rank = app.hintCards?.get(el.dataset.kind) ?? null;
+    el.classList.toggle('hinted', rank !== null);
+    if (rank !== null) el.style.setProperty('--hint', arrowColour({ kind: 'hint', rank }));
+    else el.style.removeProperty('--hint');
   }
 }
 
@@ -3598,7 +3654,7 @@ function moveDrag(e) {
   const hover = legal ? sq : null;
   if (hover === d.hover) return;
   d.hover = hover;
-  d.area = d.spell && hover ? castArea(d.kind, hover, { files: B.files, ranks: B.ranks, at: (s) => getSquare(app.duel.fen(), s) }) : [];
+  d.area = d.spell && hover ? castAreaOnFen(d.kind, hover, app.duel.fen(), mySide()) : []; // the shape at the anchor (a ray from the king): cards.mjs
   d.tip.textContent = hover ? dropWords(d.kind, hover, { halfAt: myHalf() }) : '';
   renderPlayMarks();
 }
@@ -3946,6 +4002,14 @@ async function onMove({ uci, san, mover, ply }) {
   // board before the move) — the mover glides on past its destination, every
   // piece it shoved glides after it, a fall sinks into the pit.
   const slide = parts && !pass ? duel.lastMove?.slide ?? null : null;
+  // PHASE 3.3b (2026-10-03): a TERRAIN CAST's edits — every square the card
+  // changed, recorded by duel.mjs off the two FENs — wear the gods' own beats:
+  // a wall cracked into a crate the weaken beat with its chips, a crate or a
+  // wall smashed to the floor the breach beat with its shatter, a floor sunk
+  // into a pit the crumble beat; all the squares of one cast at once (a shape
+  // lands as one). A raised wall, a petrified one and a placed pawn appear
+  // with the commit (no beat of their own yet).
+  const edits = isCast(uci) && TERRAIN_EFFECTS.has(duel.lastMove?.cast ?? '') ? duel.lastMove?.edits ?? [] : [];
   let hit = null, dz = null, hitSrc = null;
   if (parts && !hammered && !pass) {
     hit = debrisCaptureOf(app.residue.lastFen, duel.fen(), parts[1], parts[2]);
@@ -3991,6 +4055,20 @@ async function onMove({ uci, san, mover, ply }) {
     await enemyCardBeat(duel.lastMove?.card ?? spellOf(uci), uci.match(CAST_RE)?.[2] ?? null);
     if (app.duel !== duel || !duel.board) return; // abandoned mid-beat
   }
+  if (edits.length) {
+    const ui = app.boardUI;
+    const beats = [];
+    for (const e of edits) {
+      const kind = e.from === WALL && e.to === FURNITURE ? 'weaken' : (e.from === WALL || e.from === FURNITURE) && e.to == null ? 'breach' : e.to === PIT ? 'crumble' : null;
+      if (!kind) continue;
+      const src = debrisSrcOf(e.sq, app.debris.kinds?.get(e.sq));
+      const dzEv = await debrisEvent({ k: kind, sq: e.sq, src, ply });
+      const anim = ui.animateTerrain(e.sq, kind, FX(kind === 'crumble' ? 450 : kind === 'breach' ? 320 : 300), { hold: true });
+      beats.push(Promise.all([anim, dzEv ? debrisFly(dzEv, { shatter: kind === 'weaken' ? null : src, inward: kind === 'crumble', sq: e.sq, ms: kind === 'crumble' ? 450 : kind === 'breach' ? 340 : 300, after: anim }) : null]));
+    }
+    await Promise.all(beats);
+    if (app.duel !== duel || !duel.board) return; // abandoned mid-cast
+  }
   godsHeatOff(); // the census described the pre-move position
   paintBoard(app.duel.fen());
   renderPlayMarks();
@@ -4011,6 +4089,8 @@ async function onMove({ uci, san, mover, ply }) {
       note = ` — the ice is cast: the floor around ${uci.match(CAST_RE)[2]} turns slippery`; // THE ICE
     } else if (duel.lastMove?.cast === 'win') {
       note = ' — the You Win card is played: the duel is over'; // THE DECK IN THE ENGINE: the test card
+    } else if (TERRAIN_EFFECTS.has(duel.lastMove?.cast ?? '')) {
+      note = ` — ${castWords(duel.lastMove, mover)}`; // PHASE 3.3b: what the terrain card did (logreport.mjs — the report says it the same way)
     } else if (isCast(uci)) {
       const half = P.halves[mover === 'player' ? 'w' : 'b'];
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
@@ -4298,7 +4378,7 @@ $('optDeck').addEventListener('change', (e) => {
   applyOptions();
   if (app.phase === 'preview' && currentStage()) openStagePreview();
 });
-for (const [el, key] of [['optPortals', 'portals'], ['optHammer', 'hammer'], ['optIce', 'ice'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optPortals', 'portals'], ['optIce', 'ice'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
@@ -4656,7 +4736,7 @@ function beginRun(worldJson, { resume = null } = {}) {
       // the king; `?enemies=off` walks an empty floor (the labs, the smokes).
       enemies = params.get('enemies') === 'off' ? [] : spawnEnemies(world, seed, { mode: params.get('enemies') === 'sentry' ? 'sentry' : 'roam' });
       // THE DECK (2026-09-25): the run's cards — the chosen starter (`?deck=` / Options → Spells → Deck), or none for the old stress-test set.
-      const deckChoice = deckSpec();
+      const deckChoice = deckSpec(seed);
       run = newRun({ seed, worldId: world.id, world, army, enemies, build: APP_BUILD, options: { army: params.get('army') === 'setup' ? { ...setup.white } : 'kit', enemies: params.get('enemies') === 'off' ? 'off' : 'spawns' }, deck: deckChoice ? { starter: deckChoice.starter, cards: deckChoice.cards, fixed: !!deckChoice.fixed } : null });
       saveRun(run);
     }

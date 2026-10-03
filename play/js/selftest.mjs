@@ -678,7 +678,7 @@ async function main() {
     // black's deck is three ices (a portal card would let it FREEZE white a turn and push the dig's mate to three)
     const decks = { w: { pile: ['portal', 'reveal', 'ice', 'undo', 'ice', 'portal', 'ice', 'win'] }, b: { pile: ['ice', 'ice', 'ice'] } };
     const dv = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: deckDeclaration(decks) });
-    if (!/__deck4_1i_2p_101m_102m_200w$/.test(dv.name) || !/card200 = win\n/.test(dv.ini) || !/handSize = 4\n/.test(dv.ini)) throw new Error(`the deal variant ${dv.name}`);
+    if (!/__deck4_[0-9a-f]{8}$/.test(dv.name) || !/card200 = win\n/.test(dv.ini) || !/card1 = ice xxx\/xox\/xxx any\n/.test(dv.ini) || !/handSize = 4\n/.test(dv.ini)) throw new Error(`the deal variant ${dv.name}`); // PHASE 3.3b: the name hashes the declaration (defs, not kinds); the ice's def goes ANYWHERE
     ffish.loadVariantConfig(dv.ini);
     await engine.loadVariantsIni(catalogIni + '\n' + dv.ini);
     const f0 = dealDeckFen('4k3/pppp4/8/8/8/8/PPPP4/4K3 w - - 0 1', decks);
@@ -689,7 +689,8 @@ async function main() {
     if (b.fen() !== f0) throw new Error(`the FEN round-trips: ${b.fen()}`);
     const legal0 = lm(b);
     const portals = legal0.filter((m) => m.startsWith('S@')), ices = legal0.filter((m) => m.startsWith('U@'));
-    if (portals.length !== 32 || ices.length !== 16 || legal0.some((m) => /^[TV]@/.test(m)) || !legal0.includes(MULLIGAN)) throw new Error(`the casts: ${portals.length} portal, ${ices.length} ice, meta ${legal0.filter((m) => /^[TV]@/.test(m)).length}, mulligan ${legal0.includes(MULLIGAN)}`);
+    const ICE_ANCHORS = 64; // the ice goes ANYWHERE since PHASE 3.3b (2026-10-03): every square of the 8×8 is an anchor whose 3×3 would ice something (a piece stands on ice)
+    if (portals.length !== 32 || ices.length !== ICE_ANCHORS || legal0.some((m) => /^[TV]@/.test(m)) || !legal0.includes(MULLIGAN)) throw new Error(`the casts: ${portals.length} portal, ${ices.length} ice, meta ${legal0.filter((m) => /^[TV]@/.test(m)).length}, mulligan ${legal0.includes(MULLIGAN)}`);
     if (b.sanMove(MULLIGAN) !== 'redraw' || b.sanMove('U@e4') !== 'U@e4') throw new Error(`SAN ${b.sanMove(MULLIGAN)} ${b.sanMove('U@e4')}`);
     // the ice cast spends the card; nobody draws until the turn is handed back (black's pile is empty: it never draws)
     b.push('U@e4');
@@ -718,7 +719,7 @@ async function main() {
     const res = await engine.go('depth 6 movetime 5000');
     const mate = (res.infoLines ?? []).some((l) => / score mate 2 /.test(l));
     if (res.bestmove !== MULLIGAN || !mate) throw new Error(`the dig: bestmove ${res.bestmove}, mate 2 ${mate}`);
-    return `the deal variant declares four cards; the opening hands in s..v; 32 portal + 16 ice casts and the redraw, no meta cast; the engine draws at the hand-over; the redraw merges the two ices and draws the win card; U@e1 ends the game; engine perft ${n1} = ffish; bestmove ${res.bestmove} mate 2`;
+    return `the deal variant declares four cards; the opening hands in s..v; 32 portal + 64 ice casts (anywhere) and the redraw, no meta cast; the engine draws at the hand-over; the redraw merges the two ices and draws the win card; U@e1 ends the game; engine perft ${n1} = ffish; bestmove ${res.bestmove} mate 2`;
   });
 
   await check('duel startFen validateFen', async () => {

@@ -134,7 +134,7 @@
 // The atlas is play/js/atlas.mjs.
 import { WALL, isWall, parseSquare } from './fen.mjs';
 import { classifyCell, pairDoors, decorFor, crackVariantIndex, skinVariantIndex, floorVariantIndex, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, canonicalMask, WALL_RAISE, WALL_SPRITE_H, WALL_DY, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, wallFaceCols } from './board-ui.mjs';
-import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha, spellOrigin, drawSpell } from './pixelarrow.mjs';
+import { drawArrow, arrowColour, sortArrows, normalizeArrowStyle, arrowAlpha, spellOrigin, drawSpell, SPELL_GLYPHS } from './pixelarrow.mjs';
 import { Atlas, TILE } from './atlas.mjs';
 import { drawText, textWidth } from './pixelfont.mjs';
 import { normFacing, facingName, screenDims, toScreen, toWorld, pxToScreen, rotMask8, rotMask4, rotTile, doorHalf, edgeOn, coordEdges } from './camera.mjs';
@@ -2174,7 +2174,7 @@ export class CanvasBoard {
     if (m.check === sq) this.#frame1(x, y, BAD);
     if (m.hover === sq) this.#frame1(x, y, GODS, 0); // THE CARD UI: the square under the dragged card, framed at its edge like a proposed cast
     if (m.targets.has(sq)) {
-      const occupied = !!k?.v && !isWall(k.v);
+      const occupied = !!k?.v; // a piece, a crate or a wall under a legal target wears the frame (a card's anchor on a wall — a crack, a petrify — since PHASE 3.3b, 2026-10-03; the hammer's wall too), bare floor the dot
       if (occupied) this.#frame1(x, y, TARGET, 1);
       else {
         g.fillStyle = TARGET;
@@ -2214,8 +2214,24 @@ export class CanvasBoard {
         const col = arrowColour(a);
         const ga = this.bctx.globalAlpha;
         this.bctx.globalAlpha = Math.max(0.2, Math.min(1, a.strength ?? 1));
-        const kind = a.cast === 'ice' || a.cast === 'portal' || a.cast === 'win' ? a.cast : null; // no spell named (a pass, an old caller): the bare frame; 'win' the test card's star (2026-09-26)
+        const kind = a.cast && SPELL_GLYPHS[a.cast] ? a.cast : null; // the spell's EFFECT word (PHASE 3.3b: hit / wall / pit / harden / sledge / drop beside ice / portal / win); none named (a pass, an old caller): the bare frame
         const proposed = !!kind && !a.played;
+        if (proposed && a.cells?.length) {
+          // PHASE 3.3b (2026-10-03): a SHAPED cast's hint — the anchor framed
+          // with its glyph as ever, and the rest of the shape a FAINT TINT in
+          // the arrow's colour under it (the designer: "the anchor outlined
+          // plus the shape as a faint tint"; the ice's whole 3×3 framed was
+          // "way too loud", a tint is not a frame).
+          const ta = this.bctx.globalAlpha;
+          this.bctx.globalAlpha = ta * 0.28;
+          this.bctx.fillStyle = col;
+          for (const c of a.cells) {
+            if (c === a.from || !this.cells.has(c)) continue;
+            const p = this.#origin(c);
+            this.bctx.fillRect(p.x, p.y, T, T);
+          }
+          this.bctx.globalAlpha = ta;
+        }
         this.#frame1(o.x, o.y, col, 0);
         if (proposed) {
           const g = spellOrigin(kind, o.x, o.y, T);
