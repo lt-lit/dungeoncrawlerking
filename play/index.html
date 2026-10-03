@@ -316,17 +316,14 @@
       </select>
     </label>
     <span class="opt-hint">A hand of four, drawn up to at the start of each of your turns; the enemy's deck scales with its width and draws from the whole library. Reveal and Undo cost no move; Redraw spends the turn. Long-press a card to read it.</span>
-    <!-- THE PORTAL SPELL (2026-09-17): everyone has it for the stress test;
-         an upgrade later. One pair per side per duel, cast in two turns. -->
-    <label class="opt"><input type="checkbox" id="optPortals"> Portal spell — each side may cast one pair of portals per duel</label>
-    <!-- THE SLEDGEHAMMER (2026-09-17) is the SLEDGE CARD since PHASE 3.3b
-         (2026-10-03): its caster's king may spend a move cracking an adjacent
-         wall into a crate for the rest of the duel. The always-on Sledge-kings
-         setting and the walk's hammer are retired (`?hammer=on` for the labs). -->
-    <!-- THE ICE (2026-09-20): one scroll a side for the stress test; an upgrade
-         later. A cast turns the floor of a 3×3 slippery for the duel: a piece
-         that moves onto it slides on until something stops it. -->
-    <label class="opt"><input type="checkbox" id="optIce"> Ice spell — each side may cast one 3×3 patch of ice per duel; pieces that move onto it slide</label>
+    <!-- THE SPELL SWITCHES ARE GONE (2026-10-03; designer: "Why are there
+         check boxes for Portal spell and Ice spell?"): the Portal (2026-09-17),
+         Sledge-kings (2026-09-17) and Ice (2026-09-20) rows were the pre-deck
+         stress-test switches — everyone had every spell unless one was turned
+         off. THE DECK IS THE CHOICE now: a card is in a duel because a deck
+         holds it, and no card of the 22 gets a switch of its own. `?portals=off`
+         / `?ice=off` / `?hammer=on` stay as URL knobs for the labs and the
+         `?deck=off` stress-test set. -->
     <h2>Look</h2>
     <!-- THE 16×16 CANVAS BOARD is the one renderer (2026-09-07): one native
          buffer, scaled once to the screen. -->

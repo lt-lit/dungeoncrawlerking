@@ -309,7 +309,7 @@ const SCALINGS = ['integer', 'fill'];
  *  `?layout=wide|stack` pins it (test-only). */
 const WIDE_LAYOUT = '(min-width: 900px)';
 const wideMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_LAYOUT) : null;
-const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, portals: true, ice: true, deck: DEFAULT_STARTER };
+const options = { cheat: false, hints: false, hintN: 3, hintCont: false, undo: false, evalBar: false, godPreset: 'restless', godCustom: null, godLadder: null, godsDebug: false, scaling: 'integer', arrowWidth: ARROW_STYLE_DEFAULT.width, arrowAlpha: ARROW_STYLE_DEFAULT.alpha, art: 'crypt', pieces: 'nulltale', doors: 'auto', tones: {}, tileLift: DEFAULT_PIECE_FIT.tileLift, tileShift: DEFAULT_PIECE_FIT.tileShift, doorLift: DEFAULT_DOOR_FIT.doorLift, edgeLift: DEFAULT_DOOR_FIT.edgeLift, debris: { destruction: true, blood: true, skid: true, wear: true, fx: true, intensity: 1, v: 2 }, deck: DEFAULT_STARTER };
 
 // The Gods (Board State Director) — the preset table lives in director.mjs
 // now (ONE copy, shared with ladder-smoke and the god lab; retuned
@@ -340,8 +340,6 @@ function loadOptions() {
     for (const k of Object.keys(options)) if (k in saved) options[k] = saved[k];
     if (![1, 2, 3].includes(options.hintN)) options.hintN = 3;
     if (!(options.godPreset in GOD_PRESETS) && options.godPreset !== 'custom') options.godPreset = 'restless';
-    options.portals = options.portals !== false; // THE PORTAL SPELL (2026-09-17): everyone has it unless switched off
-    options.ice = options.ice !== false; // THE ICE (2026-09-20): everyone has one ice scroll unless switched off
     if (!(options.deck === 'off' || STARTER_DECKS[options.deck])) options.deck = DEFAULT_STARTER; // THE DECK (2026-09-25): a starter's name, or 'off' for the old stress-test set (every spell in hand, no deck)
     if (!SCALINGS.includes(options.scaling)) options.scaling = 'integer';
     // The arrow dials (2026-09-07): the shaft in whole floor pixels, the opacity.
@@ -393,7 +391,10 @@ function saveOptions() {
 const cheatHints = () => options.cheat && options.hints;
 // THE PORTAL SPELL (2026-09-17): on for every duel and every side — the
 // stress test; an upgrade later. `?portals=off` for a plain duel.
-const portalsOn = () => params.get('portals') !== 'off' && options.portals !== false;
+// THE SPELL SWITCHES ARE GONE (2026-10-03): the Portal and Ice rows in Options → Spells were the pre-deck stress-test
+// switches; the deck is the choice now (a saved `portals` / `ice` option is not read). The URL knobs stay for the labs
+// and the `?deck=off` stress-test set.
+const portalsOn = () => params.get('portals') !== 'off';
 // THE SLEDGEHAMMER (2026-09-17) is a CARD since PHASE 3.3b (2026-10-03, the
 // designer's ruling 7): the Sledge enchantment (deck.mjs 'sledge', the def
 // `sledge o king`) hands its caster's king the hammer for the rest of the
@@ -403,7 +404,7 @@ const portalsOn = () => params.get('portals') !== 'off' && options.portals !== f
 const hammerOn = () => params.get('hammer') === 'on';
 // THE ICE (2026-09-20): one ice scroll a side, every duel — the stress test;
 // an upgrade later. `?ice=off` for a duel without it.
-const iceOn = () => params.get('ice') !== 'off' && options.ice !== false;
+const iceOn = () => params.get('ice') !== 'off';
 // THE DECK (2026-09-25; brief §4.10): the cards a duel is dealt from —
 // `?deck=off|<starter>|<kind,kind,…>` over Options → Spells → Deck. Null =
 // no deck (every spell in hand, the stress-test set the spells shipped with).
@@ -439,8 +440,6 @@ const godsDebug = () => options.godsDebug;
 
 function syncOptionsUI() {
   $('optCheat').checked = options.cheat;
-  $('optPortals').checked = options.portals !== false;
-  $('optIce').checked = options.ice !== false;
   $('optDeck').value = options.deck === 'off' || STARTER_DECKS[options.deck] ? options.deck : DEFAULT_STARTER; // THE DECK
   $('optHints').checked = options.hints;
   $('optHintN').value = String(options.hintN);
@@ -4378,7 +4377,7 @@ $('optDeck').addEventListener('change', (e) => {
   applyOptions();
   if (app.phase === 'preview' && currentStage()) openStagePreview();
 });
-for (const [el, key] of [['optPortals', 'portals'], ['optIce', 'ice'], ['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
+for (const [el, key] of [['optCheat', 'cheat'], ['optHints', 'hints'], ['optHintCont', 'hintCont'], ['optUndo', 'undo'], ['optEval', 'evalBar'], ['optGodsDebug', 'godsDebug']]) {
   $(el).addEventListener('change', (e) => {
     options[key] = e.target.checked;
     applyOptions();
