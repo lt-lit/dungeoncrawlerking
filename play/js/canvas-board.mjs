@@ -2214,7 +2214,7 @@ export class CanvasBoard {
         const col = arrowColour(a);
         const ga = this.bctx.globalAlpha;
         this.bctx.globalAlpha = Math.max(0.2, Math.min(1, a.strength ?? 1));
-        const kind = a.cast === 'ice' || a.cast === 'portal' ? a.cast : null; // no spell named (a pass, an old caller): the bare frame
+        const kind = a.cast === 'ice' || a.cast === 'portal' || a.cast === 'win' ? a.cast : null; // no spell named (a pass, an old caller): the bare frame; 'win' the test card's star (2026-09-26)
         const proposed = !!kind && !a.played;
         this.#frame1(o.x, o.y, col, 0);
         if (proposed) {

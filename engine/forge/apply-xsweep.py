@@ -44,7 +44,7 @@ namespace {
           bool attacked = !kingGone && pos.attackers_to(pos.square<KING>(us), them);
           bool realLegal = !kingGone && !attacked;
           // a pass's legality is the rule's (the frozen side's, the fizzle's), not the king's
-          if (leg != realLegal && !is_pass(m))
+          if (leg != realLegal && !is_pass(m) && type_of(m) != MULLIGAN) // a mulligan's legality is the deck's rule (deck.patch)
           {
               sync_cout << "BAD legal " << leg << " real " << realLegal << " (kingGone " << kingGone << ") move " << UCI::move(pos, m) << " in " << before << sync_endl;
               ++xsweep_bad;

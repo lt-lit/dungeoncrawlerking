@@ -1,0 +1,80 @@
+diff --git a/src/movepick.cpp b/src/movepick.cpp
+index eac77e8..6c4e2e0 100644
+--- a/src/movepick.cpp
++++ b/src/movepick.cpp
+@@ -120,7 +120,8 @@ void MovePicker::score() {
+                    +     (*continuationHistory[1])[history_slot(pos.moved_piece(m))][to_sq(m)]
+                    +     (*continuationHistory[3])[history_slot(pos.moved_piece(m))][to_sq(m)]
+                    +     (*continuationHistory[5])[history_slot(pos.moved_piece(m))][to_sq(m)]
+-                   + (ply < MAX_LPH ? std::min(4, depth / 3) * (*lowPlyHistory)[ply][from_to(m)] : 0);
++                   + (ply < MAX_LPH ? std::min(4, depth / 3) * (*lowPlyHistory)[ply][from_to(m)] : 0)
++                   + (type_of(m) == DROP && pos.is_dig_move(m) ? (1 << 24) : 0); // THE DECK (deck-search.patch): a win card's cast first
+ 
+       else // Type == EVASIONS
+       {
+@@ -206,23 +207,30 @@ top:
+       [[fallthrough]];
+ 
+   case QUIET_INIT:
+-      if (!skipQuiets && !(pos.must_capture() && pos.has_capture()))
++      if (!(pos.must_capture() && pos.has_capture()))
+       {
+           cur = endBadCaptures;
+-          endMoves = generate<QUIETS>(pos, cur);
++          if (!skipQuiets)
++          {
++              endMoves = generate<QUIETS>(pos, cur);
+ 
+-          score<QUIETS>();
+-          partial_insertion_sort(cur, endMoves, -3000 * depth);
++              score<QUIETS>();
++              partial_insertion_sort(cur, endMoves, -3000 * depth);
++          }
++          else
++              // THE DECK (deck-search.patch): move-count pruning never skips the
++              // dig - the mulligan and a win card's cast are listed anyway
++              endMoves = pos.deck_on() ? generate_dig(pos, cur) : cur;
+       }
+ 
+       ++stage;
+       [[fallthrough]];
+ 
+   case QUIET:
+-      if (   !skipQuiets
+-          && select<Next>([&](){return   *cur != refutations[0].move
+-                                      && *cur != refutations[1].move
+-                                      && *cur != refutations[2].move;}))
++      if (select<Next>([&](){return   (!skipQuiets || pos.is_dig_move(*cur)) // THE DECK: the dig outlives the quiets' pruning
++                                   && *cur != refutations[0].move
++                                   && *cur != refutations[1].move
++                                   && *cur != refutations[2].move;}))
+           return *(cur - 1);
+ 
+       // Prepare the pointers to loop over the bad captures
+diff --git a/src/search.cpp b/src/search.cpp
+index 651f6bd..45ed5be 100644
+--- a/src/search.cpp
++++ b/src/search.cpp
+@@ -1135,12 +1135,14 @@ moves_loop: // When in check, search starts from here
+       captureOrPromotion = pos.capture_or_promotion(move);
+       movedPiece = pos.moved_piece(move);
+       givesCheck = pos.gives_check(move);
++      const bool isDig = pos.is_dig_move(move); // THE DECK (deck-search.patch): the mulligan and a win card's cast are never pruned or reduced
+ 
+       // Calculate new depth for this move
+       newDepth = depth - 1;
+ 
+       // Step 13. Pruning at shallow depth (~200 Elo)
+       if (  !rootNode
++          && !isDig
+           && (pos.non_pawn_material(us) || pos.count<ALL_PIECES>(us) == pos.count<PAWN>(us))
+           && bestValue > VALUE_TB_LOSS_IN_MAX_PLY)
+       {
+@@ -1282,6 +1284,7 @@ moves_loop: // When in check, search starts from here
+       // cases where we extend a son if it has good chances to be "interesting".
+       if (    depth >= 3
+           &&  moveCount > 1 + 2 * rootNode
++          && !isDig
+           && !(pos.must_capture() && pos.has_capture())
+           && (  !captureOrPromotion
+               || (cutNode && (ss-1)->moveCount > 1)

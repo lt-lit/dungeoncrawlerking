@@ -256,6 +256,7 @@ export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(),
   else if (st?.cast === 'ice') line += `  ❄ the ice is cast`;
   // THE DECK (2026-09-25): a redraw (a `--` ply of the game's own), the draw at the next turn's start (on the state of the ply before it), a meta card played this turn.
   if (st?.cast === 'mulligan') line += `  🂠 redraws${st.mulligan ? `: discards ${cardNames(st.mulligan.discarded)}, draws ${cardNames(st.mulligan.drew)}` : ''}`;
+  if (st?.cast === 'win') line += `  ★ the You Win card — the duel is over`; // THE DECK IN THE ENGINE (2026-09-26): the test card
   if (st?.drew?.cards?.length) line += `  🂠 ${st.drew.side === 'w' ? 'W' : 'B'} draws ${cardNames(st.drew.cards)}`;
   for (const m of meta.get(ply) ?? []) line += `  ${m.kind === 'reveal' ? '☉ Reveal' : m.kind === 'undo' ? '↺ Undo' : m.kind} played`;
   if (leftMateLine(st)) line += `  ⚠ left the engine's mate-in-${-st.engineSaw.value} line (it expected ${st.predicted})`;

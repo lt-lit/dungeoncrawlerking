@@ -1,0 +1,1147 @@
+diff --git a/src/types.h b/src/types.h
+index 8972998..8421c33 100644
+--- a/src/types.h
++++ b/src/types.h
+@@ -273,10 +273,20 @@ enum MoveType : int {
+   PORTAL             = 8 << (2 * SQUARE_BITS),
+   HAMMER             = 9 << (2 * SQUARE_BITS),
+   SLIDE              = 10 << (2 * SQUARE_BITS),
++  MULLIGAN           = 11 << (2 * SQUARE_BITS), // THE DECK (deck.patch): discard the hand, draw anew
+ };
+ 
+ constexpr int MOVE_TYPE_BITS = 4;
+ 
++// THE DECK (deck.patch, brief 4.10 "Phase 3.3a"): a hand of cards the engine
++// draws from a visible pile inside the move. A card in hand is a SLOT piece
++// type with a count, bound per colour to a card ID; a card's KIND names what
++// its cast does. The pile is a sequence of IDs in the position.
++constexpr int MAX_CARD_SLOTS = 8;
++constexpr int MAX_HAND = 8;
++constexpr int MAX_PILE = 128;
++enum CardKind : int { CARD_NONE, CARD_PORTAL, CARD_ICE, CARD_WIN, CARD_META };
++
+ enum Color {
+   WHITE, BLACK, COLOR_NB = 2
+ };
+@@ -867,7 +877,7 @@ inline bool is_custom(PieceType pt) {
+ }
+ 
+ inline bool is_ok(Move m) {
+-  return from_sq(m) != to_sq(m) || type_of(m) == PROMOTION || type_of(m) == SPECIAL; // Catch MOVE_NULL and MOVE_NONE
++  return from_sq(m) != to_sq(m) || type_of(m) == PROMOTION || type_of(m) == SPECIAL || type_of(m) == MULLIGAN; // Catch MOVE_NULL and MOVE_NONE
+ }
+ 
+ inline int dist(Direction d) {
+diff --git a/src/variant.h b/src/variant.h
+index 8fa3dfe..d0a6090 100644
+--- a/src/variant.h
++++ b/src/variant.h
+@@ -121,6 +121,15 @@ struct Variant {
+   PieceType portalScroll = NO_PIECE_TYPE;
+   PieceType iceScroll = NO_PIECE_TYPE; // THE ICE (ice.patch): the scroll whose cast ices the floor of the 3x3 around its square
+   PieceSet hammerPieceTypes[COLOR_NB] = {NO_PIECE_SET, NO_PIECE_SET}; // THE SLEDGEHAMMER (hammer.patch): the types that may crack an adjacent wall
++  // THE DECK (deck.patch, brief 4.10 "Phase 3.3a"): the hand size (0 = no
++  // deck), the slot piece types a hand binds to card IDs (cardSlots, each a
++  // custom immobile piece from the top of the custom range down), and the
++  // kind of every card the deal may draw (card<ID> = portal | ice | win | meta)
++  int handSize = 0;
++  int cardSlotCount = 0;
++  PieceType cardSlotType[MAX_CARD_SLOTS] = {};
++  PieceSet cardSlotTypes = NO_PIECE_SET;
++  std::map<int, int> cardKinds;
+ 
+   // game end
+   PieceSet nMoveRuleTypes[COLOR_NB] = {piece_set(PAWN), piece_set(PAWN)};
+diff --git a/src/parser.cpp b/src/parser.cpp
+index bf891fb..883ce1d 100644
+--- a/src/parser.cpp
++++ b/src/parser.cpp
+@@ -450,6 +450,50 @@ Variant* VariantParser<DoCheck>::parse(Variant* v) {
+     parse_attribute("hammerPieceTypes", v->hammerPieceTypes[BLACK], v->pieceToChar);
+     parse_attribute("hammerPieceTypesWhite", v->hammerPieceTypes[WHITE], v->pieceToChar);
+     parse_attribute("hammerPieceTypesBlack", v->hammerPieceTypes[BLACK], v->pieceToChar);
++    // THE DECK (deck.patch): the hand size, the slot letters (each a custom
++    // immobile piece type, taken from the top of the custom range down), and
++    // the card kinds by ID
++    parse_attribute("handSize", v->handSize);
++    if (v->handSize < 0 || v->handSize > MAX_HAND)
++    {
++        if (DoCheck)
++            std::cerr << "handSize - out of range: " << v->handSize << std::endl;
++        v->handSize = 0;
++    }
++    {
++        std::string slots;
++        if (parse_attribute("cardSlots", slots))
++        {
++            v->cardSlotCount = 0;
++            v->cardSlotTypes = NO_PIECE_SET;
++            for (char c : slots)
++            {
++                if (!isalpha((unsigned char)c) || v->cardSlotCount >= MAX_CARD_SLOTS)
++                {
++                    if (DoCheck)
++                        std::cerr << "cardSlots - invalid letter or too many: " << slots << std::endl;
++                    break;
++                }
++                PieceType pt = PieceType(int(CUSTOM_PIECES_END) - 1 - v->cardSlotCount);
++                v->add_piece(pt, c, "");
++                v->cardSlotType[v->cardSlotCount++] = pt;
++                v->cardSlotTypes |= pt;
++            }
++        }
++        std::vector<std::string> cardKeys;
++        for (const auto& kv : config)
++            if (kv.first.size() > 4 && kv.first.compare(0, 4, "card") == 0
++                && std::all_of(kv.first.begin() + 4, kv.first.end(), [](char ch) { return isdigit((unsigned char)ch) != 0; }))
++                cardKeys.push_back(kv.first);
++        for (const std::string& key : cardKeys)
++        {
++            const std::string kind = config.find(key)->second;
++            const int id = std::stoi(key.substr(4));
++            v->cardKinds[id] = kind == "portal" ? CARD_PORTAL : kind == "ice" ? CARD_ICE : kind == "win" ? CARD_WIN : kind == "meta" ? CARD_META : CARD_NONE;
++            if (DoCheck && v->cardKinds[id] == CARD_NONE)
++                std::cerr << key << " - unknown card kind: " << kind << std::endl;
++        }
++    }
+     parse_attribute("castlingRookKingsideFile", v->castlingRookKingsideFile);
+     parse_attribute("castlingRookQueensideFile", v->castlingRookQueensideFile);
+     parse_attribute("castlingRookPieces", v->castlingRookPieces[WHITE], v->pieceToChar);
+diff --git a/src/position.h b/src/position.h
+index 9224a50..623be76 100644
+--- a/src/position.h
++++ b/src/position.h
+@@ -76,6 +76,18 @@ struct StateInfo {
+   int8_t   portalTwin[SQUARE_NB];
+   Bitboard slickSquares;  // THE ICE (ice.patch): the slippery squares - a move that ends on one keeps sliding
+   Bitboard holeSquares;   // the pits ('_'), a subset of hardSquares: a wall to every move, a fall to a slide
++  // THE DECK (deck.patch): per colour the card ID and kind bound to each hand
++  // slot (read while the slot's count in hand is > 0), how many cards REMAIN on
++  // each side's pile (a count of the remainder, never of what was drawn: a
++  // search's root position is re-set from the FEN, which prints the remainder
++  // alone, with the setup state copied over it - a pointer into the old pile
++  // would then point past the new one), the slot whose portal half stands open
++  // (-1 none), and the side that played a win card (-1 none)
++  uint16_t cardId[COLOR_NB][MAX_CARD_SLOTS];
++  uint8_t  cardKind[COLOR_NB][MAX_CARD_SLOTS];
++  uint8_t  pileLeft[COLOR_NB];
++  int8_t   castSlot[COLOR_NB];
++  int8_t   cardWinner;
+   Bitboard gatesBB[COLOR_NB];
+ 
+   // Not copied when making a move (will be recomputed anyhow)
+@@ -95,6 +107,13 @@ struct StateInfo {
+   SlideStep  slideSteps[MAX_SLIDE_STEPS]; // THE ICE: the relocations a SLIDE move made, for undo
+   int        slideCount;
+   bool       slideEp;                     // a SLIDE that was an en passant capture (the victim on captureSquare)
++  uint8_t    drawnSlot[2 * MAX_HAND];      // THE DECK: the cards this move drew (slot and colour), for undo
++  uint8_t    drawnColor[2 * MAX_HAND];
++  int        drawnCount;
++  uint8_t    discardedSlot[MAX_CARD_SLOTS]; // a mulligan's discards (slot and count), for undo
++  uint8_t    discardedN[MAX_CARD_SLOTS];
++  int        discardedCount;
++  bool       fizzleSpent;                  // the fizzle spent the open half's card
+   Bitboard   nonSlidingRiders;
+   Bitboard   flippedPieces;
+   Bitboard   pseudoRoyalCandidates;
+@@ -172,6 +191,20 @@ public:
+   Piece slide_mover_piece(Move m) const;
+   int slide_outcome(Move m, SlideStep* steps) const;
+   bool slide_attacks_king(Move m, Color kingColor) const;
++  // THE DECK (deck.patch)
++  bool deck_on() const;
++  bool is_card_slot(PieceType pt) const;
++  int slot_index(PieceType pt) const;
++  CardKind card_kind_of(int id) const;
++  CardKind card_kind(Color c, PieceType pt) const;
++  int hand_count(Color c) const;
++  PieceType portal_cast_type(Color c) const;
++  bool mulligan_allowed(Color c) const;
++  Bitboard ice_cast_region(Color c, PieceType pt) const;
++  int card_slot_count() const;
++  PieceType card_slot_type(int s) const;
++  bool is_card_move(Move m) const;
++  bool is_dig_move(Move m) const;
+   // Portals v3 (the one-turn cast): a half open on either side; the same with nobody in check
+   bool half_open() const;
+   bool in_cast() const;
+@@ -434,6 +467,11 @@ private:
+   bool tsumeMode;
+   bool chess960;
+   int pieceCountInHand[COLOR_NB][PIECE_TYPE_NB];
++  uint16_t pile[COLOR_NB][MAX_PILE]; // THE DECK (deck.patch): each side's pile as card IDs, top first; the last st->pileLeft[c] of them remain
++  uint8_t pileLen[COLOR_NB];
++  int pile_top(Color c) const { return int(pileLen[c]) - int(st->pileLeft[c]); } // the index of the next card to draw
++  void refill(Color c, Key& k);
++  void do_mulligan(Color us, Key& k);
+   int virtualPieces;
+   Bitboard promotedPieces;
+   void add_to_hand(Piece pc);
+@@ -556,6 +594,9 @@ inline int Position::count_with_hand_spellfree(Color c, PieceType pt) const {
+       n -= pieceCountInHand[c][var->portalScroll];
+   if (var->iceScroll != NO_PIECE_TYPE && (pt == ALL_PIECES || pt == var->iceScroll))
+       n -= pieceCountInHand[c][var->iceScroll];
++  for (int s = 0; s < var->cardSlotCount; ++s) // THE DECK: a card in hand is never a piece
++      if (pt == ALL_PIECES || pt == var->cardSlotType[s])
++          n -= pieceCountInHand[c][var->cardSlotType[s]];
+   return n;
+ }
+ 
+@@ -584,7 +625,85 @@ inline bool Position::is_ice_scroll(PieceType pt) const {
+ }
+ 
+ inline bool Position::is_spell_scroll(PieceType pt) const {
+-  return is_portal_scroll(pt) || is_ice_scroll(pt);
++  return is_portal_scroll(pt) || is_ice_scroll(pt) || is_card_slot(pt);
++}
++
++// THE DECK (deck.patch, brief 4.10 "Phase 3.3a")
++inline bool Position::deck_on() const {
++  assert(var != nullptr);
++  return var->handSize > 0;
++}
++
++inline bool Position::is_card_slot(PieceType pt) const {
++  return pt != NO_PIECE_TYPE && (var->cardSlotTypes & pt);
++}
++
++// The slots are the custom piece types from the top of the custom range down
++inline int Position::slot_index(PieceType pt) const {
++  return is_card_slot(pt) ? int(CUSTOM_PIECES_END) - 1 - int(pt) : -1;
++}
++
++// What a card does: the variant's card<ID> entry; a card without one is a blank
++inline CardKind Position::card_kind_of(int id) const {
++  const auto it = var->cardKinds.find(id);
++  return it == var->cardKinds.end() ? CARD_META : CardKind(it->second);
++}
++
++// The kind of the card a piece type in a colour's hand is: a slot's binding
++// while it holds a card, or a legacy scroll's own kind
++inline CardKind Position::card_kind(Color c, PieceType pt) const {
++  const int s = slot_index(pt);
++  if (s >= 0)
++      return pieceCountInHand[c][pt] > 0 ? CardKind(st->cardKind[c][s]) : CARD_NONE;
++  if (pt != NO_PIECE_TYPE && pt == var->portalScroll)
++      return CARD_PORTAL;
++  if (pt != NO_PIECE_TYPE && pt == var->iceScroll)
++      return CARD_ICE;
++  return CARD_NONE;
++}
++
++inline int Position::hand_count(Color c) const {
++  int n = 0;
++  for (int s = 0; s < var->cardSlotCount; ++s)
++      n += pieceCountInHand[c][var->cardSlotType[s]];
++  return n;
++}
++
++// The piece type whose drop links an open half: the slot the half was cast from, or the legacy scroll
++inline PieceType Position::portal_cast_type(Color c) const {
++  return st->castSlot[c] >= 0 ? var->cardSlotType[st->castSlot[c]] : var->portalScroll;
++}
++
++// The mulligan: out of check, never while a portal half stands open, only while the pile has cards
++inline bool Position::mulligan_allowed(Color c) const {
++  return deck_on() && count<KING>(c) && !checkers() && !half_open() && st->pileLeft[c] > 0 && st->cardWinner < 0;
++}
++
++inline int Position::card_slot_count() const {
++  return var->cardSlotCount;
++}
++
++inline PieceType Position::card_slot_type(int s) const {
++  return var->cardSlotType[s];
++}
++
++// A cast (a scroll's or a slot card's drop) or the mulligan
++inline bool Position::is_card_move(Move m) const {
++  return type_of(m) == MULLIGAN || (type_of(m) == DROP && is_spell_scroll(dropped_piece_type(m)));
++}
++
++// THE DIG: the mulligan and a win card's cast - the moves the search must never
++// prune or reduce, so the deck's horizon is the search depth and nothing shorter
++inline bool Position::is_dig_move(Move m) const {
++  return type_of(m) == MULLIGAN || (type_of(m) == DROP && card_kind(sideToMove, dropped_piece_type(m)) == CARD_WIN);
++}
++
++// Where an ice card may be cast: a legacy scroll's own drop region, a slot's card the board's two middle ranks
++inline Bitboard Position::ice_cast_region(Color c, PieceType pt) const {
++  if (!is_card_slot(pt))
++      return drop_region(c, pt);
++  const int lo = (int(max_rank()) + 1) / 2 - 1;
++  return board_bb() & (rank_bb(Rank(lo)) | rank_bb(Rank(lo + 1)));
+ }
+ 
+ // The floor an ice cast on s ices: the 3x3 around it, walls, pits and crates skipped
+@@ -1600,13 +1719,19 @@ inline bool Position::is_chess960() const {
+ 
+ inline bool Position::capture_or_promotion(Move m) const {
+   assert(is_ok(m));
++  // A cast and the mulligan are neither (deck.patch): a cast lands under whatever stands on its square, a mulligan moves nothing
++  if (type_of(m) == MULLIGAN || (type_of(m) == DROP && is_spell_scroll(dropped_piece_type(m))))
++      return false;
+   return type_of(m) == PROMOTION || type_of(m) == EN_PASSANT || (type_of(m) != CASTLING && (!empty(to_sq(m)) || bool(st->deadSquares & to_sq(m))));
+ }
+ 
+ inline bool Position::capture(Move m) const {
+   assert(is_ok(m));
+   // Castling is encoded as "king captures rook"
+-  // A move onto a dead square removes it from the board and counts as a capture
++  // A move onto a dead square removes it from the board and counts as a capture;
++  // a cast never does (deck.patch: it lands under whatever stands on its square)
++  if (type_of(m) == DROP && is_spell_scroll(dropped_piece_type(m)))
++      return false;
+   return ((!empty(to_sq(m)) || bool(st->deadSquares & to_sq(m))) && type_of(m) != CASTLING && from_sq(m) != to_sq(m)) || type_of(m) == EN_PASSANT;
+ }
+ 
+diff --git a/src/position.cpp b/src/position.cpp
+index 7c96cbc..4b589a2 100644
+--- a/src/position.cpp
++++ b/src/position.cpp
+@@ -51,9 +51,36 @@ namespace Zobrist {
+   Key portalHalf[COLOR_NB][SQUARE_NB];
+   Key slick[SQUARE_NB];
+   Key hole[SQUARE_NB];
++  Key castSlot[COLOR_NB][MAX_CARD_SLOTS]; // THE DECK (deck.patch): the slot whose portal half stands open
++  Key cardWinner[COLOR_NB];            // the side that played a win card
+   Key endgame[EG_EVAL_NB];
+ }
+ 
++namespace {
++
++  // THE DECK (deck.patch): the key of a card in a colour's hand - by its ID and
++  // its count, never by its slot letter, so a hand's content hashes the same
++  // whichever slots hold it (a mixer, since IDs are unbounded)
++  inline Key mix_key(uint64_t x) {
++      x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL;
++      x ^= x >> 27; x *= 0x94D049BB133111EBULL;
++      x ^= x >> 31;
++      return Key(x);
++  }
++
++  inline Key card_key(Color c, int id, int n) {
++      return mix_key(uint64_t(id + 1) * 0x9E3779B97F4A7C15ULL + uint64_t(n) * 0xD1B54A32D192ED03ULL + (c == BLACK ? 0xBF58476D1CE4E5B9ULL : 0ULL));
++  }
++
++  // A card still in the pile, by its distance from the BOTTOM of the pile - a
++  // draw takes the top card away and leaves every other card's key as it was,
++  // and a fresh parse of the remaining pile hashes the same
++  inline Key pile_key(Color c, int fromBottom, int id) {
++      return mix_key(uint64_t(id + 1) * 0xD6E8FEB86659FD93ULL + uint64_t(fromBottom + 1) * 0x9E3779B97F4A7C15ULL + (c == BLACK ? 0x94D049BB133111EBULL : 0x3C79AC492BA7B653ULL));
++  }
++
++}
++
+ 
+ /// operator<<(Position) returns an ASCII representation of the position
+ 
+@@ -224,6 +251,16 @@ void Position::init() {
+       Zobrist::hole[s] = iceRng.rand<Key>();
+   }
+ 
++  // THE DECK (deck.patch): the open cast's slot and the win, likewise (the
++  // piles and the hands hash by content through mixers - see card_key)
++  PRNG deckRng(0xC2B2AE3D27D4EB4FULL);
++  for (Color c : {WHITE, BLACK})
++  {
++      for (int s = 0; s < MAX_CARD_SLOTS; ++s)
++          Zobrist::castSlot[c][s] = deckRng.rand<Key>();
++      Zobrist::cardWinner[c] = deckRng.rand<Key>();
++  }
++
+   for (int i = NO_EG_EVAL; i < EG_EVAL_NB; ++i)
+       Zobrist::endgame[i] = rng.rand<Key>();
+ 
+@@ -313,6 +350,8 @@ Position& Position::set(const Variant* v, const string& fenStr, bool isChess960,
+   std::memset(si, 0, sizeof(StateInfo));
+   st = si;
+   st->portalHalf[WHITE] = st->portalHalf[BLACK] = SQ_NONE;
++  st->castSlot[WHITE] = st->castSlot[BLACK] = -1; // THE DECK (deck.patch)
++  st->cardWinner = -1;
+ 
+   var = v;
+ 
+@@ -754,6 +793,23 @@ void Position::set_state(StateInfo* si) const {
+   for (Bitboard b = si->slickSquares; b; )
+       si->key ^= Zobrist::slick[pop_lsb(b)];
+ 
++  // THE DECK (deck.patch): the piles' remaining cards, the hand's cards by ID and count, the open cast's slot, the win
++  if (var->handSize)
++  {
++      for (Color c : {WHITE, BLACK})
++      {
++          for (int i = int(pileLen[c]) - int(si->pileLeft[c]); i < pileLen[c]; ++i)
++              si->key ^= pile_key(c, pileLen[c] - 1 - i, pile[c][i]);
++          for (int s = 0; s < var->cardSlotCount; ++s)
++              if (pieceCountInHand[c][var->cardSlotType[s]] > 0)
++                  si->key ^= card_key(c, si->cardId[c][s], pieceCountInHand[c][var->cardSlotType[s]]);
++          if (si->castSlot[c] >= 0)
++              si->key ^= Zobrist::castSlot[c][si->castSlot[c]];
++      }
++      if (si->cardWinner >= 0)
++          si->key ^= Zobrist::cardWinner[si->cardWinner];
++  }
++
+   for (Color c : {WHITE, BLACK})
+       for (PieceType pt = PAWN; pt <= KING; ++pt)
+       {
+@@ -938,8 +994,25 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+ 
+   ss << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+ 
+-  // Portal field (and the slippery squares, ice.patch: "~e4" each)
+-  if (st->portalSquares || st->portalHalf[WHITE] != SQ_NONE || st->portalHalf[BLACK] != SQ_NONE || st->slickSquares)
++  // Portal field (and the slippery squares, ice.patch: "~e4" each; and THE
++  // DECK, deck.patch: each side's remaining pile "w|12.7.33" top first, the
++  // hand's slot bindings "S=w12" - "+" marking the slot whose portal half
++  // stands open - and "!w" the side that played a win card)
++  bool deckField = false;
++  if (var->handSize)
++  {
++      for (Color c : {WHITE, BLACK})
++      {
++          if (st->pileLeft[c] > 0 || st->castSlot[c] >= 0)
++              deckField = true;
++          for (int s = 0; s < var->cardSlotCount; ++s)
++              if (pieceCountInHand[c][var->cardSlotType[s]] > 0)
++                  deckField = true;
++      }
++      if (st->cardWinner >= 0)
++          deckField = true;
++  }
++  if (st->portalSquares || st->portalHalf[WHITE] != SQ_NONE || st->portalHalf[BLACK] != SQ_NONE || st->slickSquares || deckField)
+   {
+       ss << " {";
+       bool first = true;
+@@ -964,6 +1037,31 @@ string Position::fen(bool sfen, bool showPromoted, int countStarted, std::string
+           ss << (first ? "" : ",") << "~" << UCI::square(*this, pop_lsb(b));
+           first = false;
+       }
++      if (deckField)
++      {
++          for (Color c : {WHITE, BLACK})
++          {
++              if (st->pileLeft[c] > 0)
++              {
++                  ss << (first ? "" : ",") << (c == WHITE ? "w|" : "b|");
++                  for (int i = pile_top(c); i < pileLen[c]; ++i)
++                      ss << (i > pile_top(c) ? "." : "") << int(pile[c][i]);
++                  first = false;
++              }
++              for (int s = 0; s < var->cardSlotCount; ++s)
++                  if (pieceCountInHand[c][var->cardSlotType[s]] > 0 || st->castSlot[c] == s)
++                  {
++                      ss << (first ? "" : ",") << piece_to_char()[make_piece(WHITE, var->cardSlotType[s])] << "=" << (c == WHITE ? "w" : "b")
++                         << int(st->cardId[c][s]) << (st->castSlot[c] == s ? "+" : "");
++                      first = false;
++                  }
++          }
++          if (st->cardWinner >= 0)
++          {
++              ss << (first ? "" : ",") << "!" << (st->cardWinner == WHITE ? "w" : "b");
++              first = false;
++          }
++      }
+       ss << "}";
+   }
+ 
+@@ -1214,6 +1312,10 @@ bool Position::legal(Move m) const {
+       return true;
+   }
+ 
++  // THE DECK (deck.patch): the mulligan's legality is the rule's own
++  if (type_of(m) == MULLIGAN)
++      return mulligan_allowed(us);
++
+   // Illegal checks
+   if ((!checking_permitted() || (sittuyin_promotion() && type_of(m) == PROMOTION) || (!drop_checks() && type_of(m) == DROP)) && gives_check(m))
+       return false;
+@@ -1389,15 +1491,18 @@ bool Position::legal(Move m) const {
+   if (type_of(m) == SLIDE)
+       return !slide_attacks_king(m, us);
+ 
+-  // An ice scroll cast moves nothing: never an answer to a check
+-  if (type_of(m) == DROP && is_ice_scroll(dropped_piece_type(m)))
+-      return !checkers();
+-
+-  // A portal scroll cast never answers a check and never lands on a portal
+-  // square (a linking cast adds two bodies, which can only close lines: it
+-  // never exposes the caster's own king)
+-  if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
+-      return !checkers() && !(portal_taken() & to);
++  // A cast moves nothing: never an answer to a check. A portal cast never
++  // lands on a portal square (a linking cast adds two bodies, which can only
++  // close lines: it never exposes the caster's own king); the ice and the win
++  // card likewise never in check; a blank (a meta card, deck.patch) is never
++  // cast
++  if (type_of(m) == DROP && is_spell_scroll(dropped_piece_type(m)))
++  {
++      const CardKind kind = card_kind(us, dropped_piece_type(m));
++      if (kind == CARD_PORTAL)
++          return !checkers() && !(portal_taken() & to);
++      return kind != CARD_NONE && kind != CARD_META && !checkers();
++  }
+ 
+   // En passant captures are a tricky special case. Because they are rather
+   // uncommon, we do it simply by testing whether the king is attacked after
+@@ -1515,6 +1620,14 @@ bool Position::pseudo_legal(const Move m) const {
+   if (type_of(m) == NORMAL && (slick_effective() & to) && slide_direction(from, to) != Direction(0))
+       return false;
+ 
++  // THE DECK (deck.patch): the mulligan and a slot card's cast are validated
++  // by regeneration - the rules are the cards' own (never in check, the
++  // null-cast rule, a card's kind) and the list is short
++  if (type_of(m) == MULLIGAN)
++      return from == to && count<KING>(us) && from == square<KING>(us) && mulligan_allowed(us);
++  if (type_of(m) == DROP && is_card_slot(in_hand_piece_type(m)))
++      return !checkers() && can_drop(us, in_hand_piece_type(m)) && MoveList<NON_EVASIONS>(*this).contains(m);
++
+   // Use a fast check for piece drops
+   if (type_of(m) == DROP)
+       return   piece_drops()
+@@ -1656,19 +1769,16 @@ bool Position::gives_check(Move m) const {
+   if (type_of(m) == HAMMER)
+       return false;
+ 
+-  // A portal scroll cast moves nothing on the board (a linking cast adds two
+-  // bodies, which can only close lines)
+-  if (type_of(m) == DROP && is_portal_scroll(dropped_piece_type(m)))
++  // A cast moves nothing on the board (a linking portal cast adds two bodies,
++  // which can only close lines; the ice, the win card alike); nor does the
++  // mulligan (deck.patch)
++  if (type_of(m) == MULLIGAN || (type_of(m) == DROP && is_spell_scroll(dropped_piece_type(m))))
+       return false;
+ 
+   // THE ICE (ice.patch): a slide relocates pieces - judge the enemy king where he ends
+   if (type_of(m) == SLIDE)
+       return slide_attacks_king(m, ~sideToMove);
+ 
+-  // An ice scroll cast moves nothing
+-  if (type_of(m) == DROP && is_ice_scroll(dropped_piece_type(m)))
+-      return false;
+-
+   Bitboard occupied = (type_of(m) != DROP ? pieces() ^ from : pieces()) | to;
+   Bitboard janggiCannons = pieces(JANGGI_CANNON);
+   if (type_of(moved_piece(m)) == JANGGI_CANNON)
+@@ -1817,6 +1927,10 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   Square to = to_sq(m);
+   Square dest = type_of(m) == PORTAL ? portal_twin(to) : to; // where the mover ends up
+   Piece pc = moved_piece(m);
++  // THE DECK (deck.patch): what this move draws, discards or spends, for undo
++  st->drawnCount = 0;
++  st->discardedCount = 0;
++  st->fizzleSpent = false;
+   // THE ICE (ice.patch): a SLIDE's relocations are computed on the board as it
+   // stands, before anything moves; its en passant form is a pawn's diagonal
+   // move onto the empty en passant square
+@@ -1825,11 +1939,11 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   if (type_of(m) == SLIDE)
+       st->slideCount = slide_outcome(m, st->slideSteps);
+   Piece captured = piece_on(type_of(m) == EN_PASSANT || st->slideEp ? capture_square(to) : to);
+-  if (type_of(m) == DROP && is_ice_scroll(type_of(pc)))
+-      captured = NO_PIECE; // an ice cast lands under whatever stands on its square
++  if (type_of(m) == DROP && is_spell_scroll(type_of(pc)))
++      captured = NO_PIECE; // a cast lands under whatever stands on its square (the ice under a piece, a win card on the caster's own king)
+   if (to == from)
+   {
+-      assert((type_of(m) == PROMOTION && sittuyin_promotion()) || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
++      assert((type_of(m) == PROMOTION && sittuyin_promotion()) || type_of(m) == MULLIGAN || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
+       captured = NO_PIECE;
+   }
+   st->capturedpromoted = is_promoted(to);
+@@ -1843,6 +1957,23 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   {
+       k ^= Zobrist::portalHalf[us][st->portalHalf[us]];
+       st->portalHalf[us] = SQ_NONE;
++      // THE DECK (deck.patch): the fizzle spends the card whose half it lets go
++      if (st->castSlot[us] >= 0)
++      {
++          const int slot = st->castSlot[us];
++          const Piece pc_hand = make_piece(us, var->cardSlotType[slot]);
++          const int n = pieceCountInHand[us][type_of(pc_hand)];
++          if (n > 0)
++          {
++              k ^= Zobrist::inHand[pc_hand][n - 1] ^ Zobrist::inHand[pc_hand][n]
++                 ^ card_key(us, st->cardId[us][slot], n) ^ (n > 1 ? card_key(us, st->cardId[us][slot], n - 1) : Key(0));
++              remove_from_hand(pc_hand);
++              st->fizzleSpent = true;
++              st->rule50 = 0;
++          }
++          k ^= Zobrist::castSlot[us][slot];
++          st->castSlot[us] = -1;
++      }
+   }
+ 
+   assert(color_of(pc) == us);
+@@ -1946,13 +2077,27 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+   if (type_of(m) == DROP)
+   {
+       Piece pc_hand = make_piece(us, in_hand_piece_type(m));
+-      k ^=  (is_spell_scroll(type_of(pc)) ? Key(0) : Zobrist::psq[pc][to])
+-          ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)] - 1]
+-          ^ Zobrist::inHand[pc_hand][pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)]];
++      // THE DECK (deck.patch): a slot's portal card is not spent by its opening
++      // half (the link spends it); every other cast and drop spends its card
++      const int slot = slot_index(type_of(pc_hand));
++      const bool spends = !(slot >= 0 && card_kind(us, type_of(pc_hand)) == CARD_PORTAL && st->portalHalf[us] == SQ_NONE);
++      const int n = pieceCountInHand[color_of(pc_hand)][type_of(pc_hand)];
++      k ^= (is_spell_scroll(type_of(pc)) ? Key(0) : Zobrist::psq[pc][to]);
++      if (spends)
++      {
++          k ^= Zobrist::inHand[pc_hand][n - 1] ^ Zobrist::inHand[pc_hand][n];
++          if (slot >= 0)
++              k ^= card_key(us, st->cardId[us][slot], n) ^ (n > 1 ? card_key(us, st->cardId[us][slot], n - 1) : Key(0));
++      }
+ 
+       // Reset rule 50 counter for irreversible drops
+       st->rule50 = 0;
+   }
++  else if (type_of(m) == MULLIGAN)
++  {
++      // THE DECK (deck.patch): the keys follow the discards and the draws below
++      st->rule50 = 0;
++  }
+   else if (type_of(m) == HAMMER)
+   {
+       // THE SLEDGEHAMMER (hammer.patch): the breakable wall on 'to' becomes a
+@@ -1986,7 +2131,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       k ^= Zobrist::enpassant[file_of(pop_lsb(st->epSquares))];
+ 
+   // Update castling rights if needed
+-  if (type_of(m) != DROP && type_of(m) != HAMMER && !is_pass(m) && st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]))
++  if (type_of(m) != DROP && type_of(m) != HAMMER && type_of(m) != MULLIGAN && !is_pass(m) && st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]))
+   {
+       k ^= Zobrist::castling[st->castlingRights];
+       st->castlingRights &= ~(castlingRightsMask[from] | castlingRightsMask[to] | castlingRightsMask[dest]);
+@@ -2002,7 +2147,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+ 
+   // Flip enclosed pieces
+   st->flippedPieces = 0;
+-  if (flip_enclosed_pieces() && !is_pass(m) && type_of(m) != HAMMER)
++  if (flip_enclosed_pieces() && !is_pass(m) && type_of(m) != HAMMER && type_of(m) != MULLIGAN)
+   {
+       // Find end of rows to be flipped
+       if (flip_enclosed_pieces() == REVERSI)
+@@ -2055,12 +2200,15 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+           dp.to[0] = to;
+       }
+ 
+-      if (is_portal_scroll(type_of(pc)))
++      const CardKind kind = card_kind(us, type_of(pc)); // a legacy scroll's kind, or the slot's card (deck.patch)
++      if (kind == CARD_PORTAL)
+       {
+           // A portal scroll cast: nothing lands. The hand loses the scroll and the
+           // portal state changes - the caster's open half closes into a pair with
+-          // this square, or this square becomes the caster's open half.
+-          remove_from_hand(make_piece(us, in_hand_piece_type(m)));
++          // this square, or this square becomes the caster's open half. Under
++          // the deck (deck.patch) the CARD is one for both squares: the half
++          // marks its slot and spends nothing, the link spends the card.
++          const int slot = slot_index(type_of(pc));
+           if (st->portalHalf[us] != SQ_NONE)
+           {
+               Square h = st->portalHalf[us];
+@@ -2069,14 +2217,27 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+               st->portalTwin[to] = int8_t(h);
+               k ^= Zobrist::portalHalf[us][h] ^ Zobrist::portalPair[std::min(h, to)][std::max(h, to)];
+               st->portalHalf[us] = SQ_NONE;
++              remove_from_hand(make_piece(us, in_hand_piece_type(m)));
++              if (slot >= 0)
++              {
++                  k ^= Zobrist::castSlot[us][slot];
++                  st->castSlot[us] = -1;
++              }
+           }
+           else
+           {
+               st->portalHalf[us] = to;
+               k ^= Zobrist::portalHalf[us][to];
++              if (slot >= 0)
++              {
++                  st->castSlot[us] = int8_t(slot);
++                  k ^= Zobrist::castSlot[us][slot];
++              }
++              else
++                  remove_from_hand(make_piece(us, in_hand_piece_type(m)));
+           }
+       }
+-      else if (is_ice_scroll(type_of(pc)))
++      else if (kind == CARD_ICE)
+       {
+           // THE ICE (ice.patch): an ice cast places nothing. The hand loses the
+           // scroll and the floor of the 3x3 around the square turns slippery,
+@@ -2087,6 +2248,13 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+           while (patch)
+               k ^= Zobrist::slick[pop_lsb(patch)];
+       }
++      else if (kind == CARD_WIN)
++      {
++          // THE DECK (deck.patch): the win card - the game is over, the caster has won
++          remove_from_hand(make_piece(us, in_hand_piece_type(m)));
++          st->cardWinner = int8_t(us);
++          k ^= Zobrist::cardWinner[us];
++      }
+       else
+       {
+       drop_piece(make_piece(us, in_hand_piece_type(m)), pc, to);
+@@ -2162,6 +2330,13 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       // THE SLEDGEHAMMER: nothing moves (the terrain changed above)
+       dp.dirty_num = 0;
+   }
++  else if (type_of(m) == MULLIGAN)
++  {
++      // THE DECK (deck.patch): the hand goes to the spent pile and a new hand
++      // is drawn from the pile; nothing on the board moves
++      do_mulligan(us, k);
++      dp.dirty_num = 0;
++  }
+   else if (type_of(m) == SLIDE)
+   {
+       // THE ICE (ice.patch): the mover lands on 'to' (the victim there is gone
+@@ -2490,6 +2665,13 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
+       k ^= Zobrist::wall[gating_square(m)];
+   }
+ 
++  // THE DECK (deck.patch): the side about to move draws up to the hand size,
++  // inside the move, so the search sees every draw - never while a portal half
++  // stands open (the frozen side's pass and the caster's link ply draw
++  // nothing) and never once a win card has ended the game
++  if (deck_on() && !half_open() && st->cardWinner < 0)
++      refill(them, k);
++
+   // Update the key with the final value
+   st->key = k;
+   // Calculate checkers bitboard (if move gives check)
+@@ -2554,10 +2736,21 @@ void Position::undo_move(Move m) {
+   Piece pc = piece_on(to);
+ 
+   assert(type_of(m) == DROP || type_of(m) == PORTAL || type_of(m) == HAMMER || type_of(m) == SLIDE || empty(from) || type_of(m) == CASTLING || is_gating(m)
+-         || (type_of(m) == PROMOTION && sittuyin_promotion())
++         || (type_of(m) == PROMOTION && sittuyin_promotion()) || type_of(m) == MULLIGAN
+          || (is_pass(m) && (pass(us) || var->wallOrMove || var->portalScroll != NO_PIECE_TYPE)));
+   assert(type_of(st->capturedPiece) != KING);
+ 
++  // THE DECK (deck.patch): the cards this move drew leave the hand (the pile
++  // pointer and the bindings return with st->previous), a mulligan's discards
++  // return, a fizzle's spent card returns
++  for (int i = st->drawnCount - 1; i >= 0; --i)
++      remove_from_hand(make_piece(Color(st->drawnColor[i]), var->cardSlotType[st->drawnSlot[i]]));
++  for (int i = st->discardedCount - 1; i >= 0; --i)
++      for (int j = 0; j < st->discardedN[i]; ++j)
++          add_to_hand(make_piece(us, var->cardSlotType[st->discardedSlot[i]]));
++  if (st->fizzleSpent)
++      add_to_hand(make_piece(us, var->cardSlotType[st->previous->castSlot[us]]));
++
+   // Reset wall squares
+   byTypeBB[ALL_PIECES] ^= st->wallSquares ^ st->previous->wallSquares;
+ 
+@@ -2632,7 +2825,15 @@ void Position::undo_move(Move m) {
+       if (type_of(m) == DROP)
+       {
+           if (is_spell_scroll(in_hand_piece_type(m)))
+-              add_to_hand(make_piece(us, in_hand_piece_type(m))); // A cast placed nothing; the portal / ice state returns with st->previous
++          {
++              // A cast placed nothing; the portal / ice / deck state returns with
++              // st->previous. A slot's portal card was not spent by its opening
++              // half (deck.patch), so it does not come back.
++              const bool openedHalf =   is_card_slot(in_hand_piece_type(m))
++                                     && st->portalHalf[us] != SQ_NONE && st->previous->portalHalf[us] == SQ_NONE;
++              if (!openedHalf)
++                  add_to_hand(make_piece(us, in_hand_piece_type(m)));
++          }
+           else
+               undrop_piece(make_piece(us, in_hand_piece_type(m)), to); // Remove the dropped piece
+       }
+@@ -2665,6 +2866,10 @@ void Position::undo_move(Move m) {
+           }
+           move_piece(to, from);
+       }
++      else if (type_of(m) == MULLIGAN)
++      {
++          // THE DECK: nothing moved; the hand was restored above
++      }
+       else
+           move_piece(to, from); // Put the piece back at the source square
+ 
+@@ -2815,6 +3020,10 @@ Key Position::key_after(Move m) const {
+   if (is_pass(m))
+       return half_open() && st->portalHalf[sideToMove] != SQ_NONE ? k ^ Zobrist::portalHalf[sideToMove][st->portalHalf[sideToMove]] : k;
+ 
++  // THE DECK (deck.patch): the mulligan's key is its draws' - approximated here (a prefetch hint)
++  if (type_of(m) == MULLIGAN)
++      return k;
++
+   if (captured)
+   {
+       k ^= Zobrist::psq[captured][to];
+@@ -3213,10 +3422,19 @@ bool Position::is_optional_game_end(Value& result, int ply, int countStarted) co
+ 
+ bool Position::is_immediate_game_end(Value& result, int ply) const {
+ 
++  // THE DECK (deck.patch): a played win card ends the game at once - the
++  // caster has won, whoever is to move
++  if (st->cardWinner >= 0)
++  {
++      result = Color(st->cardWinner) == sideToMove ? mate_in(ply) : mated_in(ply);
++      return true;
++  }
++
+   // THE ICE (ice.patch): a king that slid or was shoved into a pit is gone,
+   // and a side without its king has lost - as the game's own adjudication
+-  // reads it. Gated on the ice, so every other variant is untouched.
+-  if (st->slickSquares || var->iceScroll != NO_PIECE_TYPE)
++  // reads it. Gated on the ice (and the deck, whose cards may be ice), so
++  // every other variant is untouched.
++  if (st->slickSquares || var->iceScroll != NO_PIECE_TYPE || var->handSize)
+       for (Color c : { sideToMove, ~sideToMove })
+           if (!count<KING>(c) && count<KING>(~c))
+           {
+@@ -4108,6 +4326,62 @@ void Position::parse_portal_field(const std::string& field) {
+               st->slickSquares |= s;
+           continue;
+       }
++      // THE DECK (deck.patch): "w|12.7.33" a side's remaining pile, top first
++      if ((field[i] == 'w' || field[i] == 'b') && i + 1 < field.size() && field[i + 1] == '|')
++      {
++          Color c = field[i] == 'w' ? WHITE : BLACK;
++          i += 2;
++          pileLen[c] = 0;
++          st->pileLeft[c] = 0;
++          while (i < field.size() && isdigit((unsigned char)field[i]))
++          {
++              int id = 0;
++              while (i < field.size() && isdigit((unsigned char)field[i]))
++                  id = 10 * id + (field[i++] - '0');
++              if (var->handSize && pileLen[c] < MAX_PILE)
++                  pile[c][pileLen[c]++] = uint16_t(std::min(id, 65535));
++              if (i < field.size() && field[i] == '.')
++                  ++i;
++          }
++          st->pileLeft[c] = pileLen[c]; // the printed pile is the remainder, whole
++          continue;
++      }
++      // "S=w12" a hand slot bound to a card by ID, "+" marking the slot whose portal half stands open
++      if (isupper((unsigned char)field[i]) && i + 1 < field.size() && field[i + 1] == '=')
++      {
++          size_t idx = piece_to_char().find(field[i]);
++          int s = idx != std::string::npos ? slot_index(type_of(Piece(idx))) : -1;
++          i += 2;
++          Color c = i < field.size() && field[i] == 'b' ? BLACK : WHITE;
++          if (i < field.size() && (field[i] == 'w' || field[i] == 'b'))
++              ++i;
++          int id = 0;
++          while (i < field.size() && isdigit((unsigned char)field[i]))
++              id = 10 * id + (field[i++] - '0');
++          bool open = i < field.size() && field[i] == '+';
++          if (open)
++              ++i;
++          if (var->handSize && s >= 0)
++          {
++              st->cardId[c][s] = uint16_t(std::min(id, 65535));
++              st->cardKind[c][s] = uint8_t(card_kind_of(id));
++              if (open)
++                  st->castSlot[c] = int8_t(s);
++          }
++          continue;
++      }
++      // "!w" the side that played a win card
++      if (field[i] == '!')
++      {
++          ++i;
++          if (i < field.size() && (field[i] == 'w' || field[i] == 'b'))
++          {
++              if (var->handSize)
++                  st->cardWinner = field[i] == 'w' ? WHITE : BLACK;
++              ++i;
++          }
++          continue;
++      }
+       Square a = parse_square(i);
+       if (a == SQ_NONE)
+           break;
+@@ -4136,6 +4410,73 @@ void Position::parse_portal_field(const std::string& field) {
+ }
+ 
+ 
++/// THE DECK (deck.patch, brief 4.10 "Phase 3.3a"). The engine draws. A card in
++/// hand is a slot piece type with a count; the slot is bound per colour to a
++/// card ID whose kind the variant's card<ID> entry names. The pile is the
++/// position's (the FEN's trailing field, "w|12.7.33" top first) and never
++/// changes order; drawing advances a pointer. The side about to move draws up
++/// to the hand size at the end of every do_move - the frozen side of an open
++/// portal half and its caster on the link ply draw nothing - so the search
++/// sees every draw within its horizon. An identical card joins its slot
++/// (count + 1); a new card takes the lowest free slot. Undo: the counts come
++/// back off the recorded draws, the bindings and the pointer with the state.
++
++void Position::refill(Color c, Key& k) {
++
++  while (hand_count(c) < var->handSize && st->pileLeft[c] > 0 && st->drawnCount < 2 * MAX_HAND)
++  {
++      const int id = pile[c][pile_top(c)];
++      int s = -1;
++      for (int i = 0; i < var->cardSlotCount && s < 0; ++i)
++          if (pieceCountInHand[c][var->cardSlotType[i]] > 0 && st->cardId[c][i] == id)
++              s = i;
++      for (int i = 0; i < var->cardSlotCount && s < 0; ++i)
++          if (pieceCountInHand[c][var->cardSlotType[i]] == 0 && st->castSlot[c] != i)
++              s = i;
++      if (s < 0)
++          break; // no slot free: never on a legal deal, where the slots outnumber the hand
++
++      k ^= pile_key(c, st->pileLeft[c] - 1, id);
++      --st->pileLeft[c];
++
++      const Piece pc = make_piece(c, var->cardSlotType[s]);
++      const int n = pieceCountInHand[c][type_of(pc)];
++      st->cardId[c][s] = uint16_t(id);
++      st->cardKind[c][s] = uint8_t(card_kind_of(id));
++      add_to_hand(pc);
++      k ^= Zobrist::inHand[pc][n] ^ Zobrist::inHand[pc][n + 1]
++         ^ (n ? card_key(c, id, n) : Key(0)) ^ card_key(c, id, n + 1);
++      st->drawnSlot[st->drawnCount] = uint8_t(s);
++      st->drawnColor[st->drawnCount] = uint8_t(c);
++      ++st->drawnCount;
++      st->rule50 = 0;
++  }
++}
++
++
++/// Position::do_mulligan() discards the mover's whole hand (the blanks too)
++/// and draws anew from its pile.
++
++void Position::do_mulligan(Color us, Key& k) {
++
++  st->discardedCount = 0;
++  for (int s = 0; s < var->cardSlotCount; ++s)
++  {
++      const Piece pc = make_piece(us, var->cardSlotType[s]);
++      const int n = pieceCountInHand[us][type_of(pc)];
++      if (n <= 0)
++          continue;
++      st->discardedSlot[st->discardedCount] = uint8_t(s);
++      st->discardedN[st->discardedCount] = uint8_t(n);
++      ++st->discardedCount;
++      k ^= Zobrist::inHand[pc][n] ^ Zobrist::inHand[pc][0] ^ card_key(us, st->cardId[us][s], n);
++      for (int i = 0; i < n; ++i)
++          remove_from_hand(pc);
++  }
++  refill(us, k);
++}
++
++
+ bool Position::pos_is_ok() const {
+ 
+   constexpr bool Fast = true; // Quick (default) or full check?
+diff --git a/src/movegen.h b/src/movegen.h
+index 3047bf6..bb1a79e 100644
+--- a/src/movegen.h
++++ b/src/movegen.h
+@@ -55,6 +55,10 @@ inline bool operator<(const ExtMove& f, const ExtMove& s) {
+ template<GenType>
+ ExtMove* generate(const Position& pos, ExtMove* moveList);
+ 
++// THE DECK (deck.patch): the dig alone - the side to move's mulligan and its
++// win card's cast - for a move picker that is skipping the other quiet moves
++ExtMove* generate_dig(const Position& pos, ExtMove* moveList);
++
+ constexpr size_t moveListSize = sizeof(ExtMove) * MAX_MOVES;
+ 
+ /// The MoveList struct is a simple wrapper around generate(). It sometimes comes
+diff --git a/src/movegen.cpp b/src/movegen.cpp
+index 04f7291..0a3d370 100644
+--- a/src/movegen.cpp
++++ b/src/movegen.cpp
+@@ -172,21 +172,35 @@ namespace {
+         // Restrict to valid target
+         b &= pos.drop_region(Us, pt);
+ 
+-        // A portal scroll is cast on empty floor that is not already a portal, never while in check
+-        if (pos.is_portal_scroll(pt))
++        // A cast (a scroll's drop; under the deck, deck.patch, a slot's card) is
++        // never made in check, and it must change something - a cast that
++        // changes nothing would be a pass. A portal scroll is cast on empty
++        // floor that is not already a portal; an ice scroll (ice.patch) on any
++        // floor square of its cast rows, under whatever stands there, where its
++        // patch still has floor to ice; a win card on the caster's own king; a
++        // blank (a meta card) never.
++        const CardKind kind = pos.card_kind(Us, pt);
++        if (kind != CARD_NONE)
+         {
+             if (pos.checkers())
+                 return moveList;
+-            b &= ~pos.portal_taken();
+-        }
+-
+-        // An ice scroll (ice.patch) is cast on any floor square, under whatever
+-        // stands there, never while in check
+-        if (pos.is_ice_scroll(pt))
+-        {
+-            if (pos.checkers())
++            if (kind == CARD_PORTAL)
++                b &= ~pos.portal_taken();
++            else if (kind == CARD_ICE)
++            {
++                Bitboard cand = pos.ice_cast_region(Us, pt) & pos.board_bb() & ~pos.dead_squares();
++                b = 0;
++                while (cand)
++                {
++                    Square s = pop_lsb(cand);
++                    if (pos.ice_patch(s) & ~pos.slick_squares())
++                        b |= s;
++                }
++            }
++            else if (kind == CARD_WIN)
++                b = pos.count<KING>(Us) ? square_bb(pos.square<KING>(Us)) : Bitboard(0);
++            else
+                 return moveList;
+-            b = pos.drop_region(Us, pt) & pos.board_bb() & ~pos.dead_squares();
+         }
+ 
+         // Add to move list
+@@ -637,7 +651,7 @@ namespace {
+         if (Type == CAPTURES)
+             return moveList;
+         if (pos.portal_half(Us) != SQ_NONE)
+-            moveList = generate_drops<Us, Type>(pos, moveList, pos.portal_scroll(), ~pos.pieces() & ~pos.dead_squares() & pos.board_bb());
++            moveList = generate_drops<Us, Type>(pos, moveList, pos.portal_cast_type(Us), ~pos.pieces() & ~pos.dead_squares() & pos.board_bb()); // the slot the half was cast from (deck.patch), or the legacy scroll
+         if (Type != QUIET_CHECKS)
+             *moveList++ = make<SPECIAL>(ksq, ksq);
+         return moveList;
+@@ -683,6 +697,11 @@ namespace {
+         if (Type == QUIETS || Type == NON_EVASIONS)
+             moveList = generate_hammers<Us>(pos, moveList);
+ 
++        // THE DECK (deck.patch): the mulligan - discard the hand, draw anew; a
++        // quiet move, never in check, never while a portal half stands open
++        if ((Type == QUIETS || Type == NON_EVASIONS) && ksq != SQ_NONE && pos.mulligan_allowed(Us))
++            *moveList++ = make<MULLIGAN>(ksq, ksq);
++
+         // Castling with non-king piece
+         if (!pos.count<KING>(Us) && Type != CAPTURES && pos.can_castle(Us & ANY_CASTLING))
+         {
+@@ -783,6 +802,33 @@ template ExtMove* generate<QUIET_CHECKS>(const Position&, ExtMove*);
+ template ExtMove* generate<NON_EVASIONS>(const Position&, ExtMove*);
+ 
+ 
++/// THE DECK (deck.patch): generate_dig() lists the dig moves of the side to
++/// move - the mulligan and a win card's cast - and nothing else: what a move
++/// picker under move-count pruning must still try. Never inside a portal cast.
++
++namespace {
++  template<Color Us>
++  ExtMove* generate_dig_moves(const Position& pos, ExtMove* moveList) {
++    if (!pos.deck_on() || pos.checkers() || !pos.count<KING>(Us) || pos.in_cast())
++        return moveList;
++    for (int s = 0; s < pos.card_slot_count(); ++s)
++    {
++        PieceType pt = pos.card_slot_type(s);
++        if (pos.card_kind(Us, pt) == CARD_WIN)
++            moveList = generate_drops<Us, QUIETS>(pos, moveList, pt, AllSquares);
++    }
++    if (pos.mulligan_allowed(Us))
++        *moveList++ = make<MULLIGAN>(pos.square<KING>(Us), pos.square<KING>(Us));
++    return moveList;
++  }
++}
++
++ExtMove* generate_dig(const Position& pos, ExtMove* moveList) {
++  return pos.side_to_move() == WHITE ? generate_dig_moves<WHITE>(pos, moveList)
++                                     : generate_dig_moves<BLACK>(pos, moveList);
++}
++
++
+ /// generate<LEGAL> generates all the legal moves in the given position
+ 
+ template<>
+diff --git a/src/apiutil.h b/src/apiutil.h
+index f0e31f7..2524de8 100644
+--- a/src/apiutil.h
++++ b/src/apiutil.h
+@@ -302,6 +302,11 @@ inline const std::string move_to_san(Position& pos, Move m, Notation n) {
+         // PORTALS v3: the frozen side's pass, or a cast that fizzled - a null move
+         san += "--";
+     }
++    else if (type_of(m) == MULLIGAN)
++    {
++        // THE DECK (deck.patch): the redraw
++        san += "redraw";
++    }
+     else if (type_of(m) == HAMMER)
+     {
+         // THE SLEDGEHAMMER (hammer.patch): the piece, the wall glyph, the wall's square
+@@ -1052,6 +1057,38 @@ inline Validation check_portal_field(const std::string& field, const Variant* v)
+                 return NOK;
+             continue;
+         }
++        // THE DECK (deck.patch): "w|12.7.33" a pile, "S=w12+" a slot binding, "!w" a win
++        if ((body[i] == 'w' || body[i] == 'b') && i + 1 < body.size() && body[i + 1] == '|')
++        {
++            i += 2;
++            while (i < body.size() && (isdigit((unsigned char)body[i]) || body[i] == '.'))
++                ++i;
++            continue;
++        }
++        if (isupper((unsigned char)body[i]) && i + 1 < body.size() && body[i + 1] == '=')
++        {
++            i += 2;
++            if (i < body.size() && (body[i] == 'w' || body[i] == 'b'))
++                ++i;
++            else
++                return NOK;
++            if (i >= body.size() || !isdigit((unsigned char)body[i]))
++                return NOK;
++            while (i < body.size() && isdigit((unsigned char)body[i]))
++                ++i;
++            if (i < body.size() && body[i] == '+')
++                ++i;
++            continue;
++        }
++        if (body[i] == '!')
++        {
++            ++i;
++            if (i < body.size() && (body[i] == 'w' || body[i] == 'b'))
++                ++i;
++            else
++                return NOK;
++            continue;
++        }
+         Square a = parse_square(i);
+         if (!admit(a))
+             return NOK;
+diff --git a/src/uci.cpp b/src/uci.cpp
+index 10b3083..c18a76c 100644
+--- a/src/uci.cpp
++++ b/src/uci.cpp
+@@ -518,6 +518,10 @@ string UCI::move(const Position& pos, Move m) {
+   if (m == MOVE_NULL)
+       return "0000";
+ 
++  // THE DECK (deck.patch): the redraw
++  if (type_of(m) == MULLIGAN)
++      return "@@@@";
++
+   if (is_pass(m) && CurrentProtocol == XBOARD)
+       return "@@@@";
+ 
+diff --git a/src/psqt.cpp b/src/psqt.cpp
+index 25b5471..a8a8dbf 100644
+--- a/src/psqt.cpp
++++ b/src/psqt.cpp
+@@ -344,8 +344,13 @@ void init(const Variant* v) {
+               psq[pc][s] += make_score(100, 0);
+           psq[~pc][rank_of(s) <= v->maxRank ? flip_rank(s, v->maxRank) : s] = -psq[pc][s];
+       }
+-      // Pieces in hand
+-      psq[ pc][SQ_NONE] = score + make_score(35, 10) * (1 + !isSlider);
++      // Pieces in hand - but a SPELL in hand (a portal or ice scroll, a card
++      // slot; deck.patch) is worth NOTHING here: no card is ever valued by a
++      // number, so the engine casts one when the cast is the best move and
++      // for no other reason (stock gives every piece in hand its value plus
++      // a flat bonus, which had priced a value-0 scroll at 35-70 centipawns)
++      psq[ pc][SQ_NONE] = (pt == v->portalScroll || pt == v->iceScroll || (v->cardSlotTypes & pt)) ? SCORE_ZERO
++                        : score + make_score(35, 10) * (1 + !isSlider);
+       psq[~pc][SQ_NONE] = -psq[pc][SQ_NONE];
+   }
+ }

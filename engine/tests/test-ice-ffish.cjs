@@ -177,7 +177,8 @@ function run(ffish) {
   ok("I9: SAN 'I@e4'", b.sanMove('I@e4') === 'I@e4', b.sanMove('I@e4'));
   b.push('I@e4');
   ok('I9: I@e4 ices d3..f5, the scroll spent, black to move', b.fen() === '4k3/p7/8/8/8/8/8/R3K3[OOioo] b - - 0 1 {~d3,~e3,~f3,~d4,~e4,~f4,~d5,~e5,~f5}', b.fen());
-  ok('I9: black then has 70 moves: its 7 piece moves, 47 portal casts and 16 ice casts of its own', moves(b).length === 70 && moves(b).filter((m) => m.startsWith('I@')).length === 16, String(moves(b).length));
+  // (69 since deck.patch's NULL-CAST RULE, 2026-09-26: a cast on e4 would ice nothing — its patch is white's — so it is no move)
+  ok('I9: black then has 69 moves: its 7 piece moves, 47 portal casts and 15 ice casts of its own (not e4, iced through)', moves(b).length === 69 && moves(b).filter((m) => m.startsWith('I@')).length === 15 && !moves(b).includes('I@e4'), String(moves(b).length));
   b.pop();
   ok('I9: pop returns the scroll', b.fen() === fen, b.fen());
   b.delete();

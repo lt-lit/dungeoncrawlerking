@@ -84,6 +84,10 @@ Stockfish().then(async (sf) => {
   await ready();
 
   // Fixtures: [name, fen, perft 1, perft 3 (the native build's), exact move set or null, must-have, must-not]
+  // RE-PINNED 2026-09-26 for deck.patch's NULL-CAST RULE: a cast whose patch would ice nothing (every floor square of
+  // its 3x3 already slippery) is not a move — it would be a pass, and the game has none — so a second cast onto the
+  // first's patch is gone at ply 3: I9 48,633 → 47,168 / 59,174 → 57,749 / 44,233 → 42,861 / 7,859 → 7,799, the 10x10
+  // duel shape's perft 2 4,453 → 4,429 (the native deck build's numbers; the eight-patch build's stand in the history).
   const F = [
     ['I1 the slide', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {~a3,~a4,~a5}', 11, 981, ['a1a2', 'a1a6', 'a1a7', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'], 'a1a6', 'a1a3'],
     ['I2 the shove', '4k3/p7/8/n7/8/8/8/R3K3[] w - - 0 1 {~a3,~a4,~a5}', 11, 1486, ['a1a2', 'a1a4', 'a1a5', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'], 'a1a4', 'a1a3'],
@@ -101,10 +105,10 @@ Stockfish().then(async (sf) => {
     ['I8 the slide into a portal', '4k3/p7/8/8/8/8/8/R3K3[] w - - 0 1 {a5-h7,~a3,~a4,~h6,~h7}', 10, 946, ['a1a2', 'a1a5', 'a1b1', 'a1c1', 'a1d1', 'e1d1', 'e1d2', 'e1e2', 'e1f1', 'e1f2'], 'a1a5', 'a1a3'],
     ['I8 the king through a portal', '4k3/p7/8/8/8/8/8/R2K4[] w - - 0 1 {d5-h7,~d2,~d3,~d4,~h6,~h7}', 13, 1292, null, 'd1d2', null],
     ['I8 a piece on a portal square', '4k3/p7/8/n7/8/8/8/R3K3[] w - - 0 1 {a5-h7,~a3,~a4}', 11, 1468, null, 'a1a4', 'a1a3'],
-    ['I9 the casts', '4k3/p7/8/8/8/8/8/R3K3[IOOioo] w - - 0 1', 77, 48633, null, 'I@e4', 'I@e3'],
-    ['I9 a cast under a piece', '4k3/p7/8/8/3n4/8/8/R3K3[IOOioo] w - - 0 1', 75, 59174, null, 'I@d4', null],
-    ['I9 a wall in the patch', '4k3/p7/8/8/3*4/8/8/R3K3[IOOioo] w - - 0 1', 75, 44233, null, 'I@d5', 'I@d4'],
-    ['I9 no cast in check', '4k3/p7/8/8/8/8/8/r3K2R[IOOioo] w - - 0 1', 3, 7859, ['e1d2', 'e1e2', 'e1f2'], 'e1d2', 'I@e4'],
+    ['I9 the casts', '4k3/p7/8/8/8/8/8/R3K3[IOOioo] w - - 0 1', 77, 47168, null, 'I@e4', 'I@e3'],
+    ['I9 a cast under a piece', '4k3/p7/8/8/3n4/8/8/R3K3[IOOioo] w - - 0 1', 75, 57749, null, 'I@d4', null],
+    ['I9 a wall in the patch', '4k3/p7/8/8/3*4/8/8/R3K3[IOOioo] w - - 0 1', 75, 42861, null, 'I@d5', 'I@d4'],
+    ['I9 no cast in check', '4k3/p7/8/8/8/8/8/r3K2R[IOOioo] w - - 0 1', 3, 7799, ['e1d2', 'e1e2', 'e1f2'], 'e1d2', 'I@e4'],
     ['I10 the knight lands', '4k3/p7/8/8/8/8/8/N3K3[] w - - 0 1 {~b3,~c2,~c3,~c4}', 7, 454, null, 'a1b3', null],
     ['I11 evasions by a slide', '4k3/p7/8/8/8/1R6/8/K6r[] w - - 0 1 {~b2,~b1}', 3, 704, ['a1a2', 'a1b2', 'b3b1'], 'b3b1', 'b3b2'],
     ['I11 check by a shove', '8/p7/8/8/8/4B3/R7/KR1nk3[] w - - 0 1 {~c1,~d1,~e1,~f1}', 32, 2985, null, 'b1c1', null],
@@ -172,7 +176,7 @@ Stockfish().then(async (sf) => {
   const p1 = await perft(duel, 1);
   ok('10x10 duel shape: perft 1 = 107 (the native build\'s)', p1.total === 107, String(p1.total));
   const pd = await perft(duel, 2);
-  ok('10x10 duel shape: perft 2 = 4453 (the native build\'s)', pd.total === 4453, String(pd.total));
+  ok('10x10 duel shape: perft 2 = 4429 (the native build\'s)', pd.total === 4429, String(pd.total));
   send('position fen ' + duel);
   send('go depth 12 movetime 4000'); out = await until((l) => l.startsWith('bestmove'), 60000);
   bm = out.find((l) => l.startsWith('bestmove'));

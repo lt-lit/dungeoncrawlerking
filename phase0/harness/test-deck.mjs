@@ -1,26 +1,32 @@
-// THE DECK (2026-09-25, play/js/deck.mjs): the catalog against the engine's
-// scroll letters, a seeded shuffle that replays, the opening hands as a
-// pocket, the hand read off the pocket (a half-spent portal still a card),
-// the draw to the hand size, the meta cards beside the pocket, the mulligan,
-// the enemy's deck by width, the record's shape, the page's `?deck=` parser.
-// Node only, no engine. Usage: cd phase0 && node harness/test-deck.mjs
-import { CARDS, SPELL_KINDS, META_KINDS, HAND_SIZE, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, openHands, scrollCounts, spellHand, handOf, drawUp, spendMeta, mulligan, deckRecord, pocketString, glyphsOf, parseDeckParam, cloneDecks } from '../../play/js/deck.mjs';
-import { ICE_SCROLL, PORTAL_SCROLL, PORTAL_SCROLLS_PER_SIDE, ICE_SCROLLS_PER_SIDE, spellPocket } from '../../play/js/variant.mjs';
-import { splitFen, withPocket } from '../../play/js/fen.mjs';
+// THE DECK (2026-09-25, play/js/deck.mjs) — IN THE ENGINE since 2026-09-26
+// (deck.patch; brief §4.10 "Phase 3.3"): the catalog's IDs and engine kinds,
+// a seeded shuffle that replays, THE OPENING DEAL into a FEN by the engine's
+// own binding rule (identical cards share a slot, the lowest free slot
+// otherwise), the readers off a FEN (the hand, the pile, the spent cards,
+// what a cast casts, what a ply drew), a meta card taken out of the hand,
+// the deal's declaration and the variant it names, the enemy's deck by width,
+// the page's `?deck=` parser, and the legacy pocket (`?deck=off`) through the
+// same readers. Node only, no engine. Usage: cd phase0 && node harness/test-deck.mjs
+import { CARDS, CARD_KINDS, SPELL_KINDS, META_KINDS, HAND_SIZE, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, cloneDecks, deckDeclaration, slotFor, openingDeck, dealDeckFen, deckOn, handOf, pileOf, spentOf, minusCards, slotsOfKind, openSlotOf, cardOfCast, castUci, drawnBetween, handDelta, removeCard, mulliganOffered, mustLinkOf, deckRecord, glyphsOf, parseDeckParam, kindOfId, idOfKind, scrollCounts, spellHand, pocketString, MULLIGAN } from '../../play/js/deck.mjs';
+import { ICE_SCROLL, PORTAL_SCROLL, spellPocket, dealVariant, deckIniKeys, deckVariantSuffix, DECK_SLOT_LETTERS } from '../../play/js/variant.mjs';
+import { splitFen, parseDeckField, withDeck, deckPocket, castSlot, isMulligan } from '../../play/js/fen.mjs';
 
 let pass = 0, fail = 0;
 const check = (ok, what) => { if (ok) pass++; else { fail++; console.log(`FAIL ${what}`); } };
-const fenWith = (pocket) => `4k3/8/8/8/8/8/8/4K3[${pocket}] w - - 0 1`;
+const BARE = '4k3/pppp4/8/8/8/8/PPPP4/4K3[] w - - 0 1';
+const field = (f) => (f.match(/\{[^}]*\}/) || [''])[0];
+const pocket = (f) => splitFen(f).pocket ?? '';
 
-// ---- the catalog is the engine's letters
-check(CARDS.ice.letter === ICE_SCROLL && CARDS.ice.scrolls === ICE_SCROLLS_PER_SIDE, 'the ice card is the ice scroll');
-check(CARDS.portal.letter === PORTAL_SCROLL && CARDS.portal.scrolls === PORTAL_SCROLLS_PER_SIDE, 'the portal card is the pair of portal scrolls');
-check(SPELL_KINDS.join(',') === 'ice,portal' && META_KINDS.join(',') === 'reveal,undo', `spells ${SPELL_KINDS} · meta ${META_KINDS}`);
-check(HAND_SIZE === 4, 'a hand of four');
+// ---- the catalog: IDs, engine kinds, classes
+check(CARDS.ice.id === 1 && CARDS.ice.engine === 'ice' && CARDS.portal.id === 2 && CARDS.portal.engine === 'portal', 'the ice and portal cards carry their IDs and engine kinds');
+check(CARDS.reveal.engine === 'meta' && CARDS.undo.engine === 'meta' && CARDS.win.engine === 'win' && CARDS.win.test === true, 'the meta cards are blanks to the engine; You Win is the test card');
+check(new Set(CARD_KINDS.map((k) => CARDS[k].id)).size === CARD_KINDS.length && CARD_KINDS.every((k) => kindOfId(CARDS[k].id) === k && idOfKind(k) === CARDS[k].id), 'every card has its own ID and reads back by it');
+check(kindOfId(999) === 'card999' && idOfKind('nope') === null, 'an unknown ID reads as card<id>, an unknown kind has no ID');
+check(SPELL_KINDS.join(',') === 'ice,portal' && META_KINDS.join(',') === 'reveal,undo', `spells ${SPELL_KINDS} (the test card apart) · meta ${META_KINDS}`);
+check(CARDS.ice.letter === ICE_SCROLL && CARDS.portal.letter === PORTAL_SCROLL, 'the legacy letters stay on the two scroll cards');
+check(HAND_SIZE === 4 && MULLIGAN === '@@@@' && isMulligan(MULLIGAN), 'a hand of four; the mulligan is the move @@@@');
 check(STARTER_DECKS[DEFAULT_STARTER] && starterCards(DEFAULT_STARTER).length === 8 && starterCards('nope') === null, 'the default starter deck has eight cards; an unknown name is null');
-check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_STARTER).includes('undo'), 'every starter carries Reveal and Undo');
-// The old stress-test set reads as one ice card and one portal card a side through the same readers.
-check(spellHand(fenWith(spellPocket({ portals: true, ice: true })), 'w').join(',') === 'ice,portal' && spellHand(fenWith(spellPocket({ portals: true, ice: true })), 'b').join(',') === 'ice,portal', 'the stress-test pocket [IOOioo] reads as one ice and one portal card a side');
+check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_STARTER).includes('undo') && !starterCards(DEFAULT_STARTER).includes('win'), 'every starter carries Reveal and Undo and never the test card');
 
 // ---- a seeded shuffle replays; another seed differs; the cards are conserved
 {
@@ -28,98 +34,112 @@ check(spellHand(fenWith(spellPocket({ portals: true, ice: true })), 'w').join(',
   check(a.pile.join(',') === b.pile.join(','), 'the same seed shuffles the same');
   check(a.pile.join(',') !== c.pile.join(','), 'another seed shuffles differently');
   check([...a.pile].sort().join(',') === [...starterCards('adept')].sort().join(','), 'a shuffle conserves the cards');
-  check(a.meta.length === 0 && a.spent.length === 0, 'a fresh deck holds nothing in hand and nothing spent');
   const s = deckSeeds(777);
   check(s.w !== s.b && deckSeeds(777).w === s.w, 'the two decks draw different seeds off one deal seed, stably');
   check(newDeckState(['ice', 'bogus', 'portal'], 1).pile.length === 2, 'an unknown kind is dropped from a deck');
+  check(newDeckState(['ice', 'portal', 'win'], 1, { fixed: true }).pile.join(',') === 'ice,portal,win', 'a fixed list keeps its order');
+  const cl = cloneDecks({ w: a, b: c });
+  check(cl.w.pile.join(',') === a.pile.join(',') && cl.w !== a && cl.w.pile !== a.pile, 'a clone is a copy');
 }
 
-// ---- the opening hands: four cards each, the spells in the pocket, the meta cards beside it
+// ---- the engine's binding rule
 {
-  const decks = { w: newDeckState(starterCards('adept'), 1), b: newDeckState(enemyDeck(4, 1), 2) };
-  const before = cloneDecks(decks);
-  const { pocket } = openHands(decks);
-  const fen = fenWith(pocket);
-  const hw = handOf(fen, 'w', decks.w), hb = handOf(fen, 'b', decks.b);
-  check(hw.length === 4, `white's opening hand is four cards (${hw})`);
-  check(hb.length === 3, `a width-4 enemy's whole deck (three cards) is its hand (${hb})`);
-  check(decks.w.pile.length === 4 && decks.b.pile.length === 0, `the piles hold the rest (w ${decks.w.pile.length}, b ${decks.b.pile.length})`);
-  check(before.w.pile.slice(0, 4).join(',') === hw.slice().sort((x, y) => before.w.pile.indexOf(x) - before.w.pile.indexOf(y)).join(','), 'the hand is the top of the pile');
-  const counts = scrollCounts(fen, 'w');
-  check(counts.portal === 2 * hw.filter((k) => k === 'portal').length && counts.ice === hw.filter((k) => k === 'ice').length, `the pocket carries two scrolls per portal card and one per ice (${pocket})`);
-  check(decks.w.meta.every((k) => META_KINDS.includes(k)) && hw.filter((k) => META_KINDS.includes(k)).length === decks.w.meta.length, 'the meta cards sit beside the pocket');
-  check(/^[A-Z]*[a-z]*$/.test(pocket), `the pocket is canonical, white then black (${pocket})`);
+  const slots = {};
+  check(slotFor(slots, 1) === 's', 'an empty hand: the first card takes s');
+  slots.s = { id: 1, n: 1, open: false };
+  check(slotFor(slots, 1) === 's' && slotFor(slots, 2) === 't', 'a second copy joins its slot, a new card takes the next');
+  slots.t = { id: 2, n: 1, open: true };
+  slots.u = { id: 3, n: 0, open: false };
+  check(slotFor(slots, 5) === 'u', 'an emptied slot is free again; the slot with the open half is skipped when empty');
+  slots.t = { id: 2, n: 0, open: true };
+  check(slotFor(slots, 5) === 'u' && slotFor(slots, 2) === 'u', 'the open slot takes nothing new, its own card included');
 }
 
-// ---- the hand read off the pocket: a half-spent portal is still a card; the draw refills to four
+// ---- the opening deal: the hands into the slots, the piles into the field, both sides
 {
-  const deck = { pile: ['ice', 'reveal', 'portal'], meta: [], spent: [] };
-  let fen = fenWith('OOOioo'); // white: one pair and a HALF-SPENT pair (three scrolls)
-  check(spellHand(fen, 'w').join(',') === 'portal,portal', `three portal scrolls read as two cards, one mid-cast (${spellHand(fen, 'w')})`);
-  check(handOf(fen, 'w', deck).length === 2, 'the hand counts the mid-cast card');
-  const r = drawUp(fen, 'w', deck);
-  check(r.drew.join(',') === 'ice,reveal', `the draw takes two off the top to fill four (${r.drew})`);
-  fen = r.fen;
-  check(scrollCounts(fen, 'w').ice === 1 && deck.meta.join(',') === 'reveal' && deck.pile.join(',') === 'portal', `an ice card became a scroll, Reveal joined the meta hand, one card left on the pile (${splitFen(fen).pocket})`);
-  check(handOf(fen, 'w', deck).length === 4, 'the hand is four');
-  const r2 = drawUp(fen, 'w', deck);
-  check(r2.drew.length === 0 && r2.fen === fen, 'a full hand draws nothing');
-  // spend the ice (as a cast would: the letter leaves the pocket), then the next draw refills
-  fen = withPocket(fen, splitFen(fen).pocket.replace('I', ''));
-  const r3 = drawUp(fen, 'w', deck);
-  check(r3.drew.join(',') === 'portal' && deck.pile.length === 0 && scrollCounts(r3.fen, 'w').portal === 5, `after a cast the last card is drawn (${r3.drew}; portal scrolls ${scrollCounts(r3.fen, 'w').portal})`);
-  const r4 = drawUp(withPocket(r3.fen, ''), 'w', deck);
-  check(r4.drew.length === 0, 'an empty pile draws nothing');
-  check(scrollCounts(r3.fen, 'b').portal === 2 && spellHand(r3.fen, 'b').join(',') === 'ice,portal', "black's pocket is untouched by white's draws");
+  const decks = { w: newDeckState(['portal', 'reveal', 'ice', 'undo', 'ice', 'portal', 'ice', 'portal'], 1, { fixed: true }), b: newDeckState(['ice', 'portal', 'ice', 'portal', 'ice'], 1, { fixed: true }) };
+  const op = openingDeck(decks);
+  check(JSON.stringify(op.slots.w) === JSON.stringify({ s: { id: 2, n: 1, open: false }, t: { id: 101, n: 1, open: false }, u: { id: 1, n: 1, open: false }, v: { id: 102, n: 1, open: false } }), `white's four cards take s..v in draw order (${JSON.stringify(op.slots.w)})`);
+  check(op.piles.w.join('.') === '1.2.1.2' && op.piles.b.join('.') === '1', `the rest stays on the piles as IDs (w ${op.piles.w.join('.')} · b ${op.piles.b.join('.')})`);
+  check(JSON.stringify(op.slots.b) === JSON.stringify({ s: { id: 1, n: 2, open: false }, t: { id: 2, n: 2, open: false } }), `black's identical cards merge: two ice in s, two portals in t (${JSON.stringify(op.slots.b)})`);
+  const fen = dealDeckFen(BARE, decks);
+  check(fen === '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVsstt] w - - 0 1 {w|1.2.1.2,S=w2,T=w101,U=w1,V=w102,b|1,S=b1,T=b2}', `the start FEN carries the hands and the piles the way the engine prints them (${fen})`);
+  check(deckOn(fen) && !deckOn(BARE) && !deckOn('4k3/8/8/8/8/8/8/4K3[IOOioo] w - - 0 1'), 'a deck is on when the FEN carries slots or piles; the legacy pocket is not one');
+  check(handOf(fen, 'w').join(',') === 'portal,reveal,ice,undo' && handOf(fen, 'b').join(',') === 'ice,ice,portal,portal', `the hands read back in slot order (${handOf(fen, 'w')} · ${handOf(fen, 'b')})`);
+  check(pileOf(fen, 'w').join(',') === 'ice,portal,ice,portal' && pileOf(fen, 'b').join(',') === 'ice', 'the piles read back as kinds, top first');
+  check(spentOf(fen, 'w', decks.w).length === 0 && spentOf(fen, 'b', decks.b).length === 0, 'nothing is spent at the start');
+  const rec = deckRecord(fen, decks);
+  check(rec.w.hand.length === 4 && rec.w.pile.length === 4 && rec.w.spent.length === 0 && rec.b.hand.length === 4 && rec.b.pile.length === 1, 'the record carries both decks: hand, pile, spent');
+  check(deckRecord(fen).w.spent.length === 0, 'without the pair as shuffled the spent pile reads empty');
+  const decl = deckDeclaration(decks);
+  check(JSON.stringify(decl) === JSON.stringify({ handSize: 4, cards: { 1: 'ice', 2: 'portal', 101: 'meta', 102: 'meta' } }), `the declaration names every ID either deck holds (${JSON.stringify(decl)})`);
+  const v = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: decl });
+  check(v.name === 'duel_8x8__w2__b7__portals2__ice__deck4_1i_2p_101m_102m', `the deal's variant name carries the declaration (${v.name})`);
+  check(/handSize = 4\n/.test(v.ini) && /cardSlots = stuvwxyz\n/.test(v.ini) && /card1 = ice\n/.test(v.ini) && /card2 = portal\n/.test(v.ini) && /card101 = meta\n/.test(v.ini) && /card102 = meta\n/.test(v.ini) && /pieceDrops = true\n/.test(v.ini), 'the ini declares the hand size, the slots and every card');
+  check(deckVariantSuffix({ handSize: 4, cards: { 200: 'win', 1: 'ice' } }) === '__deck4_1i_200w' && DECK_SLOT_LETTERS === 'stuvwxyz', 'the suffix sorts the IDs; the slot letters are s..z');
+  let threw = false;
+  try { deckIniKeys({ cards: { 7: 'fire' } }); } catch { threw = true; }
+  check(threw, 'an unknown engine kind is refused');
+  // the writer round-trips through the reader, other field entries kept in the engine's order
+  const D = parseDeckField(fen);
+  check(withDeck('4k3/pppp4/8/8/8/8/PPPP4/4K3[IOOioo] w - - 0 1 {c3-h8,~e4}', D) === '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVsstt] w - - 0 1 {c3-h8,~e4,w|1.2.1.2,S=w2,T=w101,U=w1,V=w102,b|1,S=b1,T=b2}', 'withDeck keeps the pairs and the ice before the deck entries and replaces a legacy pocket');
+  check(deckPocket(D.slots) === 'STUVsstt', 'the holdings from the slots: white then black, one letter per copy');
 }
 
-// ---- meta cards: spend, refuse what is not held
+// ---- what a cast casts, the UCI that casts a kind, the link's slot
 {
-  const deck = { pile: [], meta: ['reveal', 'undo'], spent: [] };
-  check(spendMeta(deck, 'undo') && deck.meta.join(',') === 'reveal' && deck.spent.join(',') === 'undo', 'a meta card is spent from the hand');
-  check(!spendMeta(deck, 'undo') && deck.meta.length === 1, 'a card not held cannot be spent');
-  check(!spendMeta(null, 'reveal'), 'no deck, no spend');
+  const fen = '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVsstt] w - - 0 1 {w|1.2,S=w2,T=w101,U=w1,V=w102,S=b1,T=b2}';
+  check(cardOfCast(fen, 'S@e4') === 'portal' && cardOfCast(fen, 'U@e4') === 'ice' && cardOfCast(fen, 'T@e4') === 'reveal' && cardOfCast(fen, 'W@e4') === null && cardOfCast(fen, 'e2e4') === null, 'a slot drop casts the card its slot holds; an empty slot casts nothing; a move is no cast');
+  check(cardOfCast(fen, 'S@e4', 'b') === 'ice' && cardOfCast(fen.replace(' w ', ' b '), 'T@e4') === 'portal', "the other side's bindings read by side, or by the side to move");
+  check(cardOfCast(fen, 'I@e4') === 'ice' && cardOfCast(fen, 'O@e4') === 'portal', 'the legacy scrolls cast by their letter');
+  check(castUci(fen, 'ice', 'e4') === 'U@e4' && castUci(fen, 'portal', 'c5') === 'S@c5' && castUci(fen, 'win', 'e1') === null && castUci(fen, 'ice', 'e4', 'b') === 'S@e4', 'the UCI that casts a kind is its slot\'s drop; a kind not held casts nothing');
+  check(castSlot('U@e4') === 'u' && castSlot('I@e4') === null && castSlot('e2e4') === null, 'castSlot names a slot letter alone');
+  check(slotsOfKind(fen, 'w', 'ice').join('') === 'u' && slotsOfKind(fen, 'b', 'portal').join('') === 't' && openSlotOf(fen, 'w') === null, 'the slots of a kind; no open slot');
+  const half = '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVsstt] w - - 0 1 {e4w,w|1.2,S=w2+,T=w101,U=w1,V=w102,S=b1,T=b2}';
+  check(openSlotOf(half, 'w') === 's' && slotsOfKind(half, 'w', 'portal')[0] === 's' && castUci(half, 'portal', 'c5') === 'S@c5', 'the open slot is the link\'s: first among its kind');
+  check(mustLinkOf(half, ['S@c5', 'S@d5']) && !mustLinkOf(half, ['S@c5', 'e2e4']) && !mustLinkOf(half, ['U@c5']) && !mustLinkOf(half, []), 'the link ply: every legal move a cast of the open slot');
+  check(mustLinkOf('4k3/8/8/8/8/8/8/4K3[Ooo] w - - 0 1 {e4w}', ['O@c5', 'O@d5']), 'the legacy scroll\'s link ply reads the same');
+  check(mulliganOffered(['e2e4', '@@@@']) && !mulliganOffered(['e2e4']), 'the mulligan is on offer when the engine lists @@@@');
+  check(castUci('4k3/8/8/8/8/8/8/4K3[IOOioo] w - - 0 1', 'ice', 'e4') === 'I@e4' && castUci('4k3/8/8/8/8/8/8/4K3[IOOioo] w - - 0 1', 'portal', 'e4') === 'O@e4', 'without a deck a kind casts by its scroll letter');
 }
 
-// ---- the mulligan: the whole hand to spent, a fresh hand drawn, the other side untouched
+// ---- what a ply drew, a mulligan's hands, a meta card taken out
 {
-  const deck = { pile: ['ice', 'ice', 'portal', 'undo', 'ice'], meta: ['reveal'], spent: [] };
-  const fen = fenWith('IOOioo');
-  const m = mulligan(fen, 'w', deck);
-  check(m.discarded.join(',') === 'ice,portal,reveal', `the hand went to spent (${m.discarded})`);
-  check(m.drew.join(',') === 'ice,ice,portal,undo' && deck.pile.join(',') === 'ice', `a fresh four drawn off the top (${m.drew}); one left`);
-  check(deck.spent.join(',') === 'reveal,ice,portal', `spent lists the discards (${deck.spent})`);
-  check(scrollCounts(m.fen, 'w').ice === 2 && scrollCounts(m.fen, 'w').portal === 2 && deck.meta.join(',') === 'undo', `the new hand's spells are in the pocket (${splitFen(m.fen).pocket})`);
-  check(splitFen(m.fen).pocket.endsWith('ioo'), "black's scrolls stayed");
+  const before = '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUss] b - - 0 1 {w|1.2.1,S=w2,T=w101,U=w1,S=b1}';
+  const after = '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVss] w - - 0 2 {w|2.1,S=w2,T=w101,U=w1,V=w1,S=b1}'; // hmm: an ice would merge into u — a foreign layout, read as the engine wrote it
+  check(drawnBetween(before, after, 'w').join(',') === 'ice' && drawnBetween(before, after, 'b').length === 0, 'the draw is the multiset difference of the hands');
+  const m0 = '4k3/pppp4/8/8/8/8/PPPP4/4K3[SSTss] w - - 0 1 {w|2.1.2.1.101,S=w1,T=w2,S=b1}'; // ice, ice, portal
+  const m1 = '4k3/pppp4/8/8/8/8/PPPP4/4K3[SSTss] b - - 0 1 {w|101,S=w2,T=w101,S=b1}'; // portal, portal, reveal
+  const d = handDelta(m0, m1, 'w');
+  check(d.discarded.join(',') === 'ice,ice' && d.drew.join(',') === 'portal,reveal', `handDelta reads the multiset change (discarded ${d.discarded}, drew ${d.drew})`);
+  check(minusCards(['ice', 'portal', 'ice'], ['ice']).join(',') === 'portal,ice' && minusCards(['ice'], ['ice', 'ice']).length === 0, 'minusCards is a multiset difference, order kept');
+  const fen = '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVsstt] w - - 0 1 {w|1.2,S=w2,T=w101,U=w1,V=w102,S=b1,T=b2}';
+  const r = removeCard(fen, 'w', 'reveal');
+  check(r === '4k3/pppp4/8/8/8/8/PPPP4/4K3[SUVsstt] w - - 0 1 {w|1.2,S=w2,U=w1,V=w102,S=b1,T=b2}', `a meta card taken out: its slot emptied, the pile untouched (${r})`);
+  check(removeCard(fen, 'w', 'win') === null && removeCard(fen, 'b', 'reveal') === null && removeCard('4k3/8/8/8/8/8/8/4K3[IOOioo] w - - 0 1', 'w', 'ice') === null, 'nothing to take out: null');
+  const two = removeCard('4k3/pppp4/8/8/8/8/PPPP4/4K3[SSs] w - - 0 1 {S=w101,S=b1}', 'w', 'reveal');
+  check(two === '4k3/pppp4/8/8/8/8/PPPP4/4K3[Ss] w - - 0 1 {S=w101,S=b1}', 'one copy of a doubled card goes, the binding stays');
+  check(spentOf(r, 'w', { pile: ['portal', 'reveal', 'ice', 'undo', 'ice', 'portal'] }).join(',') === 'reveal', 'the spent pile is the deck less the pile and the hand');
 }
 
-// ---- the enemy's deck by width: width − 1 spells, by seed, spells only
+// ---- the enemy's deck by width, the page's parameter, the glyphs
 {
-  check(enemyDeck(3, 5).length === 2 && enemyDeck(4, 5).length === 3 && enemyDeck(1, 5).length === 0, 'width − 1 cards');
-  check(enemyDeck(3, 5).join(',') === enemyDeck(3, 5).join(','), 'the same seed, the same enemy deck');
-  check(enemyDeck(6, 5).every((k) => SPELL_KINDS.includes(k)), 'spells only');
-  check(enemyCards(starterCards('adept')).length === 6 && enemyCards(starterCards('adept')).every((k) => SPELL_KINDS.includes(k)), "the enemy's version of a starter is its spells alone");
+  check(enemyDeck(3, 1).length === 2 && enemyDeck(4, 1).length === 3 && enemyDeck(1, 1).length === 0, 'width − 1 spell cards');
+  check(enemyDeck(4, 5).join(',') === enemyDeck(4, 5).join(',') && enemyDeck(4, 5).every((k) => SPELL_KINDS.includes(k)), 'stable by seed, spells only');
+  check(enemyCards(['ice', 'reveal', 'portal', 'undo', 'win']).join(',') === 'ice,portal,win', 'the enemy keeps the spell cards alone');
+  check(parseDeckParam(null) === null && parseDeckParam('off').off && parseDeckParam('adept').starter === 'adept' && parseDeckParam('adept').cards.length === 8, '?deck=: off, a starter');
+  const list = parseDeckParam('ice,portal,win');
+  check(list.fixed === true && list.starter === null && list.cards.join(',') === 'ice,portal,win' && parseDeckParam('ice,bogus') === null, 'a hand-built list is fixed, the test card allowed; an unknown kind refuses the list');
+  check(glyphsOf(['ice', 'portal', 'undo']) === '❄ ◎ ↺' && glyphsOf(['nope']) === '?', 'glyphs');
 }
 
-// ---- the record's shape and the glyphs
+// ---- the legacy pocket (`?deck=off`) through the same readers
 {
-  const decks = { w: { pile: ['ice'], meta: ['undo'], spent: ['reveal'] }, b: { pile: [], meta: [], spent: [] } };
-  const rec = deckRecord(fenWith('OOioo'), decks);
-  check(rec.w.hand.join(',') === 'portal,undo' && rec.w.pile.join(',') === 'ice' && rec.w.spent.join(',') === 'reveal' && rec.b.hand.join(',') === 'ice,portal', `the record names hand / pile / spent per side (${JSON.stringify(rec.w)})`);
-  check(deckRecord(fenWith(''), null) === null, 'no decks, no record');
-  check(glyphsOf(['ice', 'portal', 'reveal', 'undo']) === '❄ ◎ ☉ ↺' && glyphsOf([]) === '', 'glyphs per card');
-  check(pocketString({ w: { ice: 1, portal: 2 }, b: { ice: 1, portal: 2 } }) === 'IOOioo', 'the canonical pocket string (scroll counts: one ice, two portal scrolls a side)');
-}
-
-// ---- the page's parameter
-{
-  check(parseDeckParam(null) === null && parseDeckParam('off').off === true && parseDeckParam('0').off === true, 'off and nothing');
-  const s = parseDeckParam('adept');
-  check(s.starter === 'adept' && s.cards.length === 8, 'a starter by name');
-  const h = parseDeckParam('ice,portal,reveal,undo');
-  check(h.starter === null && h.cards.join(',') === 'ice,portal,reveal,undo' && h.fixed === true, 'a hand-built list, dealt in its own order');
-  check(newDeckState(['undo', 'ice', 'portal'], 1, { fixed: true }).pile.join(',') === 'undo,ice,portal', 'a fixed deck keeps its order');
-  check(parseDeckParam('ice,bogus') === null, 'an unknown kind refuses the list');
+  const fen = `4k3/8/8/8/8/8/8/4K3[${spellPocket({ portals: true, ice: true })}] w - - 0 1`;
+  check(handOf(fen, 'w').join(',') === 'ice,portal' && handOf(fen, 'b').join(',') === 'ice,portal', 'the stress-test pocket [IOOioo] reads as one ice and one portal card a side');
+  check(spellHand('4k3/8/8/8/8/8/8/4K3[OOOioo] w - - 0 1', 'w').join(',') === 'portal,portal', 'three portal scrolls read as two cards, one mid-cast');
+  check(scrollCounts(fen, 'w').portal === 2 && scrollCounts(fen, 'w').ice === 1 && pocketString({ w: { ice: 1, portal: 2 }, b: { ice: 1, portal: 2 } }) === 'IOOioo', 'the legacy counts and the canonical pocket');
+  check(pileOf(fen, 'w').length === 0 && deckRecord(fen).w.hand.join(',') === 'ice,portal', 'no pile without a deck; the record still names the hand');
 }
 
 console.log(`test-deck: ${pass} passed, ${fail} failed`);

@@ -138,7 +138,22 @@ export const ICE_GLYPH = Object.freeze([
   '...I.I.I...',
   '.....I.....',
 ]);
-export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH });
+// THE YOU WIN CARD (THE DECK IN THE ENGINE, 2026-09-26): the test card's glyph — a five-pointed star, 11×11 — on
+// its hint and its card face; the card exists for the horizon instrument (designer 2026-09-25) and never in a starter.
+export const WIN_GLYPH = Object.freeze([
+  '.....W.....',
+  '.....W.....',
+  '....WWW....',
+  'WWWWWWWWWWW',
+  '.WWWWWWWWW.',
+  '..WWWWWWW..',
+  '..WWWWWWW..',
+  '.WWWW.WWWW.',
+  '.WWW...WWW.',
+  'WW.......WW',
+  'W.........W',
+]);
+export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH, win: WIN_GLYPH });
 export const SPELL_SHADOW = HALO; // the drop shadow's colour
 
 /** A spell glyph's size: { w, h } — its shadow adds a pixel right and below. */

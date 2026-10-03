@@ -13,6 +13,7 @@ import { createEngine, getFfish } from './engine.mjs';
 import { makeCatalogIni, catalogVariantName, buildDuelBoard, boardToFen, dealVariant, portalPocket, iceCastRanks, spellPocket } from './variant.mjs';
 import { splitFen, parseBoard, serializeBoard, setSquare, getSquare, findSquares, withPocket, parsePortalField, portalInfo, portalLedger, isCast, isPass, slickSquares, castLetter, PIT } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20)
+import { deckDeclaration, dealDeckFen, handOf, pileOf, MULLIGAN } from './deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26)
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
 import { fenGrid, Director, displacementCandidates, crumbleCandidates, lockedPawns, weakenCandidates, terrainCensus } from './director.mjs';
 import { DuelController, RECORD_ARRAYS } from './duel.mjs';
@@ -664,6 +665,61 @@ async function main() {
   const duelVariant = catalogVariantName(spec.files, spec.ranks);
   const startFen = boardToFen(buildDuelBoard(spec));
   let ffishMoves = [];
+
+  // --- THE DECK IN THE ENGINE (2026-09-26, engine/patches/deck.patch +
+  // deck-search.patch; brief §4.10 "Phase 3.3"): the deal declares both decks
+  // to the engine and writes the opening hands into the start FEN's slots and
+  // the piles into its field; the engine draws for the side about to move
+  // inside the move that hands it the turn, offers the mulligan `@@@@`
+  // (SAN `redraw`), casts a card as its slot's drop, and searches through the
+  // piles — the win card one redraw deep is a mate in two to it. Both
+  // binaries, the game's own deal variant. ---
+  await check('the deck in the engine: the deal, the slots, the draw, the redraw, the win card (ffish + engine, the deal variant)', async () => {
+    // black's deck is three ices (a portal card would let it FREEZE white a turn and push the dig's mate to three)
+    const decks = { w: { pile: ['portal', 'reveal', 'ice', 'undo', 'ice', 'portal', 'ice', 'win'] }, b: { pile: ['ice', 'ice', 'ice'] } };
+    const dv = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: deckDeclaration(decks) });
+    if (!/__deck4_1i_2p_101m_102m_200w$/.test(dv.name) || !/card200 = win\n/.test(dv.ini) || !/handSize = 4\n/.test(dv.ini)) throw new Error(`the deal variant ${dv.name}`);
+    ffish.loadVariantConfig(dv.ini);
+    await engine.loadVariantsIni(catalogIni + '\n' + dv.ini);
+    const f0 = dealDeckFen('4k3/pppp4/8/8/8/8/PPPP4/4K3 w - - 0 1', decks);
+    if (f0 !== '4k3/pppp4/8/8/8/8/PPPP4/4K3[STUVsss] w - - 0 1 {w|1.2.1.200,S=w2,T=w101,U=w1,V=w102,S=b1}') throw new Error(`the opening deal: ${f0}`);
+    if (ffish.validateFen(f0, dv.name) !== 1) throw new Error(`validateFen rejected ${f0}`);
+    const lm = (bd) => bd.legalMoves().trim().split(/\s+/).filter(Boolean);
+    const b = new ffish.Board(dv.name, f0);
+    if (b.fen() !== f0) throw new Error(`the FEN round-trips: ${b.fen()}`);
+    const legal0 = lm(b);
+    const portals = legal0.filter((m) => m.startsWith('S@')), ices = legal0.filter((m) => m.startsWith('U@'));
+    if (portals.length !== 32 || ices.length !== 16 || legal0.some((m) => /^[TV]@/.test(m)) || !legal0.includes(MULLIGAN)) throw new Error(`the casts: ${portals.length} portal, ${ices.length} ice, meta ${legal0.filter((m) => /^[TV]@/.test(m)).length}, mulligan ${legal0.includes(MULLIGAN)}`);
+    if (b.sanMove(MULLIGAN) !== 'redraw' || b.sanMove('U@e4') !== 'U@e4') throw new Error(`SAN ${b.sanMove(MULLIGAN)} ${b.sanMove('U@e4')}`);
+    // the ice cast spends the card; nobody draws until the turn is handed back (black's pile is empty: it never draws)
+    b.push('U@e4');
+    if (!/\[STVsss\]/.test(b.fen()) || !slickSquares(b.fen()).has('e4') || handOf(b.fen(), 'b').length !== 3) throw new Error(`after the cast: ${b.fen()}`);
+    b.push('e8d8');
+    if (!/\[STUVsss\]/.test(b.fen()) || pileOf(b.fen(), 'w').join(',') !== 'portal,ice,win' || handOf(b.fen(), 'w').join(',') !== 'portal,reveal,ice,undo') throw new Error(`the engine's draw at the hand-over: ${b.fen()}`);
+    b.pop();
+    b.pop();
+    if (b.fen() !== f0) throw new Error(`pop: ${b.fen()}`);
+    // the redraw: the hand discarded, four drawn — identical cards share a slot — the win card among them
+    b.push(MULLIGAN);
+    if (!/\[SSTUsss\]/.test(b.fen()) || handOf(b.fen(), 'w').join(',') !== 'ice,ice,portal,win' || pileOf(b.fen(), 'w').length !== 0 || b.turn()) throw new Error(`after the redraw: ${b.fen()}`);
+    b.push('e8d8');
+    const wins = lm(b).filter((m) => m.startsWith('U@'));
+    if (wins.length !== 1 || wins[0] !== 'U@e1') throw new Error(`the win card casts on the king's own square alone: ${wins.join(' ')}`);
+    b.push('U@e1');
+    if (!b.isGameOver() || lm(b).length !== 0 || !/!w\}$/.test(b.fen())) throw new Error(`the win: ${b.fen()} over ${b.isGameOver()}`);
+    b.delete();
+    // the engine: the same move set, and the dig — from the start it finds the mate in two through the redraw
+    engine.setoption('UCI_Variant', dv.name);
+    engine.position({ fen: f0 });
+    const pl = await engine.sendUntil('go perft 1', (l) => l.startsWith('Nodes searched'));
+    const n1 = parseInt(pl.find((l) => l.startsWith('Nodes searched')).split(':')[1], 10);
+    if (n1 !== legal0.length) throw new Error(`engine perft 1 = ${n1}, ffish ${legal0.length}`);
+    engine.position({ fen: f0 });
+    const res = await engine.go('depth 6 movetime 5000');
+    const mate = (res.infoLines ?? []).some((l) => / score mate 2 /.test(l));
+    if (res.bestmove !== MULLIGAN || !mate) throw new Error(`the dig: bestmove ${res.bestmove}, mate 2 ${mate}`);
+    return `the deal variant declares four cards; the opening hands in s..v; 32 portal + 16 ice casts and the redraw, no meta cast; the engine draws at the hand-over; the redraw merges the two ices and draws the win card; U@e1 ends the game; engine perft ${n1} = ffish; bestmove ${res.bestmove} mate 2`;
+  });
 
   await check('duel startFen validateFen', async () => {
     if (ffish.validateFen(startFen, duelVariant) !== 1) throw new Error(`validateFen rejected ${startFen}`);

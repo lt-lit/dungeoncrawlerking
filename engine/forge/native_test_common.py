@@ -36,7 +36,7 @@ class Engine:
         out = self.wait('Nodes searched')
         per = {}
         for l in out:
-            m = re.match(r'^([a-l]\d+[a-l]\d+[nbrqkNBRQK]?|[A-Z]@[a-l]\d+): (\d+)$', l.strip())
+            m = re.match(r'^([a-l]\d+[a-l]\d+[nbrqkNBRQK]?|[A-Z]@[a-l]\d+|@@@@): (\d+)$', l.strip()) # @@@@ the mulligan (deck.patch)
             if m:
                 per[m.group(1)] = int(m.group(2))
         total = int(out[-1].split(':')[1])
@@ -58,6 +58,13 @@ class Engine:
         self.send(f'go depth {depth}')
         out = self.wait('bestmove')
         return out[-1].split()[1]
+    def bestmove_info(self, fen, depth, moves=()):
+        """The last `info depth` line of a fixed-depth search (score, nodes, pv) - what the search reports."""
+        self.send('position fen ' + fen + (' moves ' + ' '.join(moves) if moves else ''))
+        self.send(f'go depth {depth}')
+        out = self.wait('bestmove')
+        infos = [l for l in out if l.startswith('info depth') and ' pv ' in l]
+        return infos[-1] if infos else out[-1]
     def sweep(self, fen, depth):
         self.send('position fen ' + fen)
         self.send(f'xsweep {depth}')
