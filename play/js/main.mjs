@@ -6197,7 +6197,7 @@ window.__DCK = {
   /** THE ICE (2026-09-20): the slide a move would make on the live board, and a piece's move aliases (the resting squares lit beside its destinations). */
   // THE DECK (2026-09-25): the hands as the player sees them, the deck states, the cards' plays — the smoke's surface.
   deck: {
-    spec: () => deckSpec(),
+    spec: () => deckSpec(app.walk?.run?.seed ?? (setup.seed | 0 || 1)), // the deck as dealt: the Random starter's six are drawn by the run's seed on the walk, the master seed on the arena page
     hands: () => app.duel?.hands() ?? null,
     decks: () => (app.duel?.hasDeck ? { w: deckView('w'), b: deckView('b') } : null), // { pile, spent } a side, off the FEN
     reveal: () => playRevealCard(),
