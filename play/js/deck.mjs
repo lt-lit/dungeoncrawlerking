@@ -103,36 +103,38 @@ export const kindOfId = (id) => BY_ID.get(id | 0) ?? `card${id}`;
 export const idOfKind = (k) => CARDS[k]?.id ?? null;
 
 /** THE STARTER DECKS (the designer: "a few starter decks the player could
- *  choose from"): ADEPT (the two spells that came first), SAPPER (the terrain
- *  set) and RANDOM — THE PHONE'S DEFAULT since the 3.3b ruling: six spells
- *  drawn from the whole library by the run's seed, so every run stress-tests
- *  different cards. Every deck carries one Reveal and one Undo. */
-export const RANDOM_STARTER_SPELLS = 6;
+ *  choose from"): THE LIBRARY — THE DEFAULT since 2026-10-03 — every spell in
+ *  the library ONCE plus Reveal and Undo, shuffled by the deal's seed like
+ *  every deck (24 cards today, and every card the library gains joins it);
+ *  ADEPT (the two spells that came first) and SAPPER (the terrain set) the
+ *  authored sets. The library replaced a six-spell Random starter the same
+ *  day it shipped — the designer, on the first play: "We just got thru
+ *  refactoring the fucking game to support large decks, and the setting to
+ *  test it gives the enemy TWO cards. Not even a full hand." The stress-test
+ *  setting deals full decks to both sides. */
 export const STARTER_DECKS = {
-  random: { name: 'Random', random: RANDOM_STARTER_SPELLS },
+  library: { name: 'The library', library: true },
   adept: { name: 'Adept', cards: ['portal', 'portal', 'portal', 'ice', 'ice', 'ice', 'reveal', 'undo'] },
   sapper: { name: 'Sapper', cards: ['crack', 'smash', 'crack-row', 'demolish', 'blast', 'lance', 'wall-file', 'wall-row', 'sink-row', 'petrify', 'sledge', 'reinforce', 'reveal', 'undo'] },
 };
-export const DEFAULT_STARTER = 'random';
+export const DEFAULT_STARTER = 'library';
 
-/** The cards of a starter deck by name, or null; the Random starter's six spells are drawn by `seed` (the run's). */
-export function starterCards(name, seed = 1) {
+/** The cards of a starter deck by name, or null — the library is every spell once (catalog order; the deal shuffles it). `seed` is unused since the library replaced the drawn starter and stays for the callers. */
+export function starterCards(name, seed = 1) { // eslint-disable-line no-unused-vars
   const d = STARTER_DECKS[name];
   if (!d) return null;
-  if (d.random) {
-    const rng = mulberry32(childSeed(seed >>> 0, 'starter:random'));
-    return [...Array.from({ length: d.random }, () => pick(rng, SPELL_KINDS)), 'reveal', 'undo'];
-  }
+  if (d.library) return [...SPELL_KINDS, 'reveal', 'undo'];
   return d.cards.slice();
 }
 
-/** THE ENEMY'S DECK by its army's width (brief §8: the level telegraph; the
- *  designer: "deck strength would roughly scale with army size"): width − 1
- *  spell cards drawn by the seed — two at width 3, three at 4. Spells only. */
-export function enemyDeck(width, seed) {
-  const n = Math.max(0, (width | 0) - 1);
-  const rng = mulberry32(childSeed(seed >>> 0, 'enemy-deck'));
-  return Array.from({ length: n }, () => pick(rng, SPELL_KINDS));
+/** THE ENEMY'S DECK: THE WHOLE LIBRARY, every spell once (the deal shuffles
+ *  it by the enemy's seed) — the stress-test regime since 2026-10-03. It was
+ *  width − 1 spells (two at width 3), a rule written when the library held two
+ *  cards; "deck strength scaling with army size" (brief §8) returns as THE
+ *  RUN'S ECONOMY in Phase 3.6, where the size is a rule of the floor. `width`
+ *  and `seed` stay for the callers. Spells only. */
+export function enemyDeck(width, seed) { // eslint-disable-line no-unused-vars
+  return SPELL_KINDS.slice();
 }
 
 /** The enemy's version of any card list: the spell cards alone (an engine reveals nothing to itself and never undoes). */
@@ -331,7 +333,7 @@ export function parseDeckParam(v) {
   if (v == null) return null;
   const s = String(v).trim();
   if (!s || s === 'off' || s === '0' || s === 'none') return { off: true };
-  if (STARTER_DECKS[s]) return { starter: s, cards: STARTER_DECKS[s].random ? null : starterCards(s) }; // the Random starter's cards are drawn by the run's seed (null here)
+  if (STARTER_DECKS[s]) return { starter: s, cards: starterCards(s) };
   const cards = s.split(',').map((x) => x.trim()).filter(Boolean);
   if (cards.length && cards.every(isCardKind)) return { starter: null, cards, fixed: true }; // a hand-built list is dealt in its own order, top first
   return null;

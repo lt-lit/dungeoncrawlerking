@@ -409,7 +409,7 @@ const iceOn = () => params.get('ice') !== 'off';
 // `?deck=off|<starter>|<kind,kind,…>` over Options → Spells → Deck. Null =
 // no deck (every spell in hand, the stress-test set the spells shipped with).
 function deckSpec(seed = 1) {
-  // `seed` draws THE RANDOM STARTER's six spells (PHASE 3.3b, the phone's default): the run's seed on the walk, the master seed on the arena page
+  // `seed` is the deal's — the run's on the walk, the master seed on the arena page (a drawn starter read it; the library needs none, the deal shuffles)
   const p = parseDeckParam(params.get('deck'));
   if (p) return p.off ? null : { starter: p.starter, cards: p.cards ?? starterCards(p.starter, seed), fixed: !!p.fixed };
   if (options.deck === 'off') return null;
@@ -6196,7 +6196,7 @@ window.__DCK = {
   /** THE ICE (2026-09-20): the slide a move would make on the live board, and a piece's move aliases (the resting squares lit beside its destinations). */
   // THE DECK (2026-09-25): the hands as the player sees them, the deck states, the cards' plays — the smoke's surface.
   deck: {
-    spec: () => deckSpec(app.walk?.run?.seed ?? (setup.seed | 0 || 1)), // the deck as dealt: the Random starter's six are drawn by the run's seed on the walk, the master seed on the arena page
+    spec: () => deckSpec(app.walk?.run?.seed ?? (setup.seed | 0 || 1)), // the deck as dealt, with the deal's own seed
     hands: () => app.duel?.hands() ?? null,
     decks: () => (app.duel?.hasDeck ? { w: deckView('w'), b: deckView('b') } : null), // { pile, spent } a side, off the FEN
     reveal: () => playRevealCard(),

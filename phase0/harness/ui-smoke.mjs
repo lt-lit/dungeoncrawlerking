@@ -2373,7 +2373,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageE.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck, variant: window.__DCK.app.duel.variantName }));
   expect(off.spec === null && off.hands === null && off.holdings === 'IOOioo' && JSON.stringify(off.fan) === '["ice","portal"]' && off.piles === null && JSON.stringify(off.enemy) === '["ice","portal"]' && off.enemyPile === null, `?deck=off is the stress-test set: holdings ${off.holdings}, the fan the two spells in hand and no piles, the enemy's two minis and no stack`);
-  expect(off.optDefault === 'random' && off.optDeck === 'random', `Options → Spells → Deck defaults to the Random starter (${off.optDefault}) — PHASE 3.3b`);
+  expect(off.optDefault === 'library' && off.optDeck === 'library', `Options → Spells → Deck defaults to the library (${off.optDefault}) — PHASE 3.3b`);
   expect(!/__sledge/.test(off.variant), `the stress-test set deals plain kings — the Sledge-kings option is retired, the hammer is a card (${off.variant})`);
   await pageE.close();
 
@@ -2402,8 +2402,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.run?.starter === 'adept' && wk.run.cards.length === 8, `the run carries the starter deck (${wk.run?.starter}, ${wk.run?.cards?.length} cards)`);
   expect(wk.planOk && wk.hands?.w?.length === 4, `the drop deals a hand of four from the run's deck (${JSON.stringify(wk.hands?.w)})`);
   {
-    const n = Math.max(0, (wk.enemyWidth | 0) - 1);
-    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => !['reveal', 'undo', 'win'].includes(k)), `the enemy's deck is width − 1 spells (from the whole library since PHASE 3.3b), a hand of four at most and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
+    const n = 22; // the whole library, every spell once (2026-10-03: the width − 1 rule waits for the economy)
+    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => !['reveal', 'undo', 'win'].includes(k)), `the enemy's deck is the whole library — a hand of four and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
   }
   expect(wk.enemy.pile !== null && wk.export.decks && wk.export.world && wk.save?.starter === 'adept', `the enemy's bar, the log and the run save carry the decks (enemy ${wk.enemy.hand.join(' ')} + ${wk.enemy.pile})`);
   expect(errsW.length === 0, `no page errors on the walk's deck${errsW.length ? ` — ${errsW.join(' | ')}` : ''}`);

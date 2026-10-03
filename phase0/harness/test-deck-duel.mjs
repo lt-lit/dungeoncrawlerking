@@ -42,7 +42,7 @@ const dealWith = (d) => dealMatchup({ stage, white: { spec: { width: 4, pieces: 
 const deal = dealWith(decks);
 if (!deal.ok) { console.error('deal failed:', deal.error); process.exit(2); }
 check(/__deck4_[0-9a-f]{8}$/.test(deal.variantName), `the deal's variant declares the deck (${deal.variantName})`);
-check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 2 && pileOf(deal.fen, 'b').length === 0, `the start FEN carries the hands and the piles (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
+check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 4 && pileOf(deal.fen, 'b').length === 18, `the start FEN carries the hands and the piles (the enemy's deck the whole library since 2026-10-03: four in hand, eighteen on the pile) (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
 await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni);
 
 const mk = async (d0, dl = deal) => {
@@ -68,7 +68,7 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
 {
   const duel = await mk(decks);
   const h = hands(duel);
-  check(duel.hasDeck && h.w.length === 4 && h.b.length === 2, `opening hands: white ${h.w.join(',')} · black ${h.b.join(',')}`);
+  check(duel.hasDeck && h.w.length === 4 && h.b.length === 4, `opening hands: white ${h.w.join(',')} · black ${h.b.join(',')}`);
   check(duel.record.states[0].deck?.w?.hand?.length === 4 && duel.record.states[0].deck.w.pile.length === 4 && duel.record.states[0].deck.w.spent.length === 0, 'the start state carries the hands, the piles and an empty spent list');
   const pile0 = piles(duel).w.length;
   await duel.playerMove(plain(duel));
@@ -188,10 +188,10 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
   duel.destroy();
 }
 
-// ---- the enemy's hand runs dry: a width-3 enemy holds two cards and draws nothing more
+// ---- the enemy's deck is the whole library (2026-10-03; it was width − 1 spells, a hand that ran dry at once): a hand of four, the rest on its pile
 {
   const duel = await mk(cloneDecks(decks));
-  check(piles(duel).b.length === 0 && hands(duel).b.length === 2, `the enemy's whole deck is its hand (${hands(duel).b.join(',')})`);
+  check(piles(duel).b.length === 18 && hands(duel).b.length === 4 && new Set([...hands(duel).b, ...piles(duel).b]).size === 22, `the enemy holds four of the library's 22 and the other eighteen wait on its pile (${hands(duel).b.join(',')})`);
   duel.destroy();
 }
 

@@ -2614,21 +2614,24 @@ Sink row / Sink file (30–31), Petrify (40), Sledge (50, `sledge o king`),
 Reinforce (60, `drop p o camp`), Reveal / Undo (101–102, `meta`), You Win
 (200, test). `defOf(kind)` is the parsed def.
 
-**The starters.** THE RANDOM STARTER IS THE PHONE'S DEFAULT (ruling 8;
-`DEFAULT_STARTER` 'random'): six spells drawn from the whole library by the
-run's seed (`starterCards('random', seed)` — `childSeed(seed, 'starter:random')`;
-main.mjs `deckSpec(seed)` takes the run's seed on the walk and the master seed
-on the arena page, and the run save records the six it drew) plus Reveal and
-Undo; ADEPT stays (3 portals, 3 ice); SAPPER is the terrain set (Crack, Smash,
-Crack row, Demolish, Blast, Lance, Wall file, Wall row, Sink row, Petrify,
-Sledge, Reinforce, Reveal, Undo). The enemy's deck (`enemyDeck`, width − 1
-spells) draws from the whole library too. THE PER-SPELL SWITCHES ARE GONE
-(2026-10-03; designer: "Why are there check boxes for Portal spell and Ice
-spell?"): the Portal and Ice rows were the pre-deck stress-test switches, and
-with the deck in the engine no card of the 22 gets a switch of its own — the
-deck is the choice (`?portals=off` / `?ice=off` stay as URL knobs for the labs
-and the `?deck=off` set). Options → Spells → Deck lists the
-three and "Everything, no deck"; `?deck=random|adept|sapper|off|<list>`.
+**The starters.** THE LIBRARY IS THE DEFAULT (2026-10-03; `DEFAULT_STARTER`
+'library'): every spell in the library once plus Reveal and Undo — 24 cards
+today, every card the library gains joins it — shuffled by the deal's seed
+like every deck; ADEPT stays (3 portals, 3 ice); SAPPER is the terrain set
+(Crack, Smash, Crack row, Demolish, Blast, Lance, Wall file, Wall row, Sink
+row, Petrify, Sledge, Reinforce, Reveal, Undo). THE ENEMY'S DECK IS THE WHOLE
+LIBRARY TOO (`enemyDeck`, every spell once, shuffled by its own seed). Both
+replaced, the day they shipped, ruling 8's six-spell Random starter and the
+width − 1 enemy deck (two spells at width 3 — a rule written when the library
+held two cards) — the designer, on the first play: "We just got thru
+refactoring the fucking game to support large decks, and the setting to test
+it gives the enemy TWO cards. Not even a full hand. What is the point of
+this?" The stress-test setting deals full decks to both sides; "deck strength
+scaling with army size" (brief §8) returns as the run's economy in Phase 3.6,
+where the size is a rule of the floor. Options → Spells → Deck lists the three
+and "Everything, no deck"; `?deck=library|adept|sapper|off|<list>`. On the
+arena page the enemy mirrors the player's spells (a hand-built `?deck=` list
+included); on the walk it carries the library.
 
 **THE SLEDGE-KINGS OPTION IS RETIRED (ruling 7).** The hammer lives in the
 Sledge card: its caster's king hammers for the rest of the duel, nobody else
@@ -2699,7 +2702,7 @@ tint.
 legacy words, the shapes as offsets north-first, the numbers, the refusals;
 the grid; the lance over a pit and stopped by bedrock; the per-square table;
 the words), `test-deck` 68 (the def declaration, the hashed name, a sledge
-deck's hammer keys, the 22 spell kinds, the random starter), `test-cards` 117
+deck's hammer keys, the 22 spell kinds, the library starter and the library enemy deck), `test-cards` 117
 (every kind's art by effect), `test-deck-duel` 46 on the vendored pair,
 `test-logreport` 89, `test-barrier` 170, selftest 52/52 headless (the deck
 check reads the hashed name and 64 ice anchors — anywhere on the 8×8 deal
@@ -2717,7 +2720,7 @@ event, the log's words, the board painting a cracked wall — the Sledge cast
 flagging `*w` with e1d1 legal and the wall lit after it, Reinforce placing a
 pawn on a1 with its edit, the export's casts by effect; the sledgehammer
 block under `?hammer=on`; `?deck=off` dealing plain kings; the deck block's
-default 'random'), replay-smoke 95 ok. THE RENDERER THAT STOPS ANSWERING, found and answered the same day: three of five full ui-smoke runs on this build sat for good on a fresh page's BOOT — the load event fired, the duel never read 'playing', the renderer processes idle, no error, no boot retry, Playwright's 90 s deadline never firing — at a different block each time (the terrain block twice, the window page, the flight page), never standalone; Playwright's API trace (`DEBUG=pw:api`) put every stall inside `waitForFunction` right after `page.goto` succeeded, and its server installs that poll through an evaluate it marks UNCANCELLABLE, so a renderer that takes the load and then stops answering CDP leaves the deadline nothing to cancel. The harness answers from the Node side now (`ui-smoke.mjs`): every page comes through `newPageSafe` (30 s, else a fresh browser), `bootWait`'s waits are raced by Node timers with the poll on an interval, a wedged browser is KILLED rather than closed, and the page retries join the boot retries on the summary line; `atlas.mjs loadImage` waits on the image's load event rather than `img.decode()` alone (a decode can stay pending on a page Chromium has stopped rendering — a robustness fix made on the way, not the cause). The run after: ui-smoke 439 ok / 0 failed (the run before it met the stall at a page's boot and the harness caught it — the readout evaluate hung too, the browser was replaced — then crashed on Playwright 1.63's missing process handle, fixed with a bounded close plus a kill of our Chromium tree), selftest 52/52, facing-walk 108/108, replay-smoke 95 ok. Measured with `deck-stress.mjs`:
+default 'random'), replay-smoke 95 ok. THE RENDERER THAT STOPS ANSWERING, found and answered the same day: three of five full ui-smoke runs on this build sat for good on a fresh page's BOOT — the load event fired, the duel never read 'playing', the renderer processes idle, no error, no boot retry, Playwright's 90 s deadline never firing — at a different block each time (the terrain block twice, the window page, the flight page), never standalone; Playwright's API trace (`DEBUG=pw:api`) put every stall inside `waitForFunction` right after `page.goto` succeeded, and its server installs that poll through an evaluate it marks UNCANCELLABLE, so a renderer that takes the load and then stops answering CDP leaves the deadline nothing to cancel. The harness answers from the Node side now (`ui-smoke.mjs`): every page comes through `newPageSafe` (30 s, else a fresh browser), `bootWait`'s waits are raced by Node timers with the poll on an interval, a wedged browser is KILLED rather than closed, and the page retries join the boot retries on the summary line; `atlas.mjs loadImage` waits on the image's load event rather than `img.decode()` alone (a decode can stay pending on a page Chromium has stopped rendering — a robustness fix made on the way, not the cause). The run after: ui-smoke 439 ok / 0 failed (the run before it met the stall at a page's boot and the harness caught it — the readout evaluate hung too, the browser was replaced — then crashed on Playwright 1.63's missing process handle, fixed with a bounded close plus a kill of our Chromium tree), selftest 52/52, facing-walk 108/108, replay-smoke 95 ok. The run after that met the stall again at a page's boot and came through the new path to a green summary — 497 ok / 0 failed, 1 boot retry. Measured with `deck-stress.mjs`:
 Sapper (the 12 terrain spells + Reveal + Undo) against a width-3 enemy whose two spells are drawn from the whole library, on s59, gods off, four games each at depth 8 / 300 ms (`results/deck-stress/sapper-vs-width3-d8.jsonl`) and at depth 12 / 2,000 ms (`sapper-vs-width3-d12.jsonl`; 0 of 741 and 0 of 799 searches at the time bound). THE SAME 35 CASTS AT BOTH DEPTHS, by the deck side, and the same 8 by the enemy: at depth 8 the deck side cast on 24% of its castable turns (4.7 casts per 100 plies, 4 redraws), at depth 12 on 17% (4.4 per 100 plies, 4 redraws — the share fell because the games ran longer with a spell in hand, not because fewer casts were played); the enemy on 11% and 12% (1.1 and 1.0 per 100 plies), every one of its casts while behind, no redraw. THE DECK SIDE OPENS WITH A CAST IN EVERY GAME (Smash, Blast or Reinforce at ply 1, the next at ply 3 or 5) and spends its whole terrain set by the end — Reinforce at a median ply 3, Blast 3, Smash 5 / 11, Crack row 15 / 13, Lance 13 / 25, Crack 33 / 39, Wall row 29 / 99, Sink row 31 / 65, Petrify 39 / 67, Wall file 61, Demolish 55 / 75, Sledge 103 / 55 — nothing dead in hand; the enemy's two cards go at plies 8–62. THE GAMES DO NOT END: one checkmate and three ply caps at depth 8, FOUR PLY CAPS AT DEPTH 12 — with the gods off, a board the terrain set has walled and pitted closes up (the Adept batches ended a strip and a mate in four; the gods are the closer in play and were off here), so the terrain set's pacing is the god lab's to read with the gods on before anything is called a problem.
 
 **Held over:** a beat for a raised wall, a petrified one and a placed pawn

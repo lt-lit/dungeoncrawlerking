@@ -24,10 +24,10 @@ check(new Set(CARD_KINDS.map((k) => CARDS[k].id)).size === CARD_KINDS.length && 
 check(kindOfId(999) === 'card999' && idOfKind('nope') === null, 'an unknown ID reads as card<id>, an unknown kind has no ID');
 check(SPELL_KINDS.length === 22 && SPELL_KINDS.includes('ice') && SPELL_KINDS.includes('portal') && SPELL_KINDS.includes('crack') && SPELL_KINDS.includes('lance') && SPELL_KINDS.includes('sledge') && SPELL_KINDS.includes('reinforce') && !SPELL_KINDS.includes('win') && META_KINDS.join(',') === 'reveal,undo', `spells ${SPELL_KINDS} (the test card apart) · meta ${META_KINDS}`);
 check(CARDS.crack.def === 'hit1 o near' && CARDS.crack.engine === 'hit' && CARDS.lance.def === 'hit1 o ray' && CARDS.reinforce.def === 'drop p o camp' && CARDS.reinforce.engine === 'drop' && CARDS.sledge.def === 'sledge o king' && CARDS.ice.def === 'ice xxx/xox/xxx any', 'the library carries its definitions (the Ice anywhere since the 3.3b ruling)');
-check(STARTER_DECKS.random && DEFAULT_STARTER === 'random' && starterCards('random', 7).length === 8 && starterCards('random', 7).join(',') === starterCards('random', 7).join(',') && starterCards('random', 7).join(',') !== starterCards('random', 8).join(',') && starterCards('random', 7).slice(-2).join(',') === 'reveal,undo' && STARTER_DECKS.sapper.cards.includes('sledge'), 'the Random starter is the default: six spells by the seed plus Reveal and Undo; Sapper carries the terrain set');
+check(STARTER_DECKS.library && DEFAULT_STARTER === 'library' && starterCards('library').length === SPELL_KINDS.length + 2 && new Set(starterCards('library')).size === SPELL_KINDS.length + 2 && SPELL_KINDS.every((k) => starterCards('library').includes(k)) && starterCards('library').includes('reveal') && starterCards('library').includes('undo'), 'the library starter is every spell once plus Reveal and Undo, and the default');
 check(CARDS.ice.letter === ICE_SCROLL && CARDS.portal.letter === PORTAL_SCROLL, 'the legacy letters stay on the two scroll cards');
 check(HAND_SIZE === 4 && MULLIGAN === '@@@@' && isMulligan(MULLIGAN), 'a hand of four; the mulligan is the move @@@@');
-check(STARTER_DECKS[DEFAULT_STARTER] && starterCards(DEFAULT_STARTER).length === 8 && starterCards('nope') === null, 'the default starter deck has eight cards; an unknown name is null');
+check(STARTER_DECKS[DEFAULT_STARTER] && starterCards(DEFAULT_STARTER).length === SPELL_KINDS.length + 2 && starterCards('adept').length === 8 && starterCards('nope') === null, 'the default starter is the library (every spell + 2); Adept has eight cards; an unknown name is null');
 check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_STARTER).includes('undo') && !starterCards(DEFAULT_STARTER).includes('win'), 'every starter carries Reveal and Undo and never the test card');
 
 // ---- a seeded shuffle replays; another seed differs; the cards are conserved
@@ -129,8 +129,8 @@ check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_S
 
 // ---- the enemy's deck by width, the page's parameter, the glyphs
 {
-  check(enemyDeck(3, 1).length === 2 && enemyDeck(4, 1).length === 3 && enemyDeck(1, 1).length === 0, 'width − 1 spell cards');
-  check(enemyDeck(4, 5).join(',') === enemyDeck(4, 5).join(',') && enemyDeck(4, 5).every((k) => SPELL_KINDS.includes(k)), 'stable by seed, spells only');
+  check(enemyDeck(3, 1).length === SPELL_KINDS.length && enemyDeck(8, 1).length === SPELL_KINDS.length && new Set(enemyDeck(3, 1)).size === SPELL_KINDS.length, 'the enemy deck is the whole library, every spell once, at any width (the width rule waits for the economy)');
+  check(enemyDeck(4, 5).every((k) => SPELL_KINDS.includes(k)), 'spells only');
   check(enemyCards(['ice', 'reveal', 'portal', 'undo', 'win']).join(',') === 'ice,portal,win', 'the enemy keeps the spell cards alone');
   check(parseDeckParam(null) === null && parseDeckParam('off').off && parseDeckParam('adept').starter === 'adept' && parseDeckParam('adept').cards.length === 8, '?deck=: off, a starter');
   const list = parseDeckParam('ice,portal,win');

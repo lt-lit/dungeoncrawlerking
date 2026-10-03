@@ -304,18 +304,20 @@
          shuffled at every duel, a hand of four drawn up to at the start of
          each turn, both decks and hands visible; or the stress-test set the
          spells shipped with (every spell in hand, no deck). PHASE 3.3b
-         (2026-10-03): the RANDOM starter is the default — six spells from the
-         whole library by the run's seed, so every run stress-tests different
-         cards — beside Adept and the terrain set, Sapper. -->
+         (2026-10-03): THE LIBRARY is the default — every spell once, Reveal
+         and Undo, shuffled each duel; the enemy's deck is the whole library
+         too, for now (a six-spell Random starter and a width − 1 enemy deck
+         lasted a day: "the setting to test it gives the enemy TWO cards").
+         Adept and the terrain set, Sapper, are the authored starters. -->
     <label class="opt">Deck
       <select id="optDeck">
-        <option value="random" selected>Random — six spells from the whole library, Reveal, Undo</option>
+        <option value="library" selected>The library — every spell once, Reveal, Undo</option>
         <option value="adept">Adept — 3 portals, 3 ice, Reveal, Undo</option>
         <option value="sapper">Sapper — the terrain set: hits, walls, pits, petrify, the sledge, a pawn</option>
         <option value="off">Everything, no deck (the stress-test set)</option>
       </select>
     </label>
-    <span class="opt-hint">A hand of four, drawn up to at the start of each of your turns; the enemy's deck scales with its width and draws from the whole library. Reveal and Undo cost no move; Redraw spends the turn. Long-press a card to read it.</span>
+    <span class="opt-hint">A hand of four, drawn up to at the start of each of your turns; the enemy's deck is the whole library too for now (the run's economy will size it). Reveal and Undo cost no move; Redraw spends the turn. Long-press a card to read it.</span>
     <!-- THE SPELL SWITCHES ARE GONE (2026-10-03; designer: "Why are there
          check boxes for Portal spell and Ice spell?"): the Portal (2026-09-17),
          Sledge-kings (2026-09-17) and Ice (2026-09-20) rows were the pre-deck
