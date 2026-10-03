@@ -466,6 +466,30 @@ edit('position.cpp', [
               first = false;
           }
       ss << "}";'''),
+# pseudo_legal(): a cast's anchor may be a wall square - validate a slot card's drop by regeneration BEFORE the
+# board check (as the hammer is), not after it
+('''  // A hammer's destination IS a wall square: validate a TT hammer by regeneration
+  if (type_of(m) == HAMMER)
+      return !checkers() && MoveList<NON_EVASIONS>(*this).contains(m);
+''',
+'''  // A hammer's destination IS a wall square: validate a TT hammer by regeneration
+  if (type_of(m) == HAMMER)
+      return !checkers() && MoveList<NON_EVASIONS>(*this).contains(m);
+
+  // THE TERRAIN INTERPRETER (terrain.patch): a slot card's cast is validated by
+  // regeneration - its anchor may be a wall square (a hit, a petrify, a ray's
+  // first square), so this comes before the board check below
+  if (type_of(m) == DROP && is_card_slot(in_hand_piece_type(m)))
+      return !checkers() && can_drop(us, in_hand_piece_type(m)) && MoveList<NON_EVASIONS>(*this).contains(m);
+'''),
+('''  if (type_of(m) == MULLIGAN)
+      return from == to && count<KING>(us) && from == square<KING>(us) && mulligan_allowed(us);
+  if (type_of(m) == DROP && is_card_slot(in_hand_piece_type(m)))
+      return !checkers() && can_drop(us, in_hand_piece_type(m)) && MoveList<NON_EVASIONS>(*this).contains(m);
+''',
+'''  if (type_of(m) == MULLIGAN)
+      return from == to && count<KING>(us) && from == square<KING>(us) && mulligan_allowed(us);
+'''),
 # legal(): the assert on 'to', and the cast section
 ('''  assert((board_bb() & to) || type_of(m) == HAMMER);
 

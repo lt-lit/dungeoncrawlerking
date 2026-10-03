@@ -73,8 +73,36 @@ extinction: a side down to one piece has lost, so the position has no moves):
     a META card (a blank) is never cast. THE MULLIGAN ("@@@@"): out of check,
     with no half open and cards left in the pile, discard the whole hand
     (blanks included) and draw anew. No card is cast in check, ever.
+  * THE TERRAIN INTERPRETER (2026-10-03, brief 4.10 "Phase 3.3b" and "3.3b
+    RULED"; engine/patches/terrain.patch): a card is a DEFINITION, `<effect>
+    <shape> <targeting>`, read from the ini (set_defs). The SHAPE is a picture
+    string (rows north to south, 'x' a cell, 'o' the anchor, '.' nothing), no
+    rotation, clipped at the edge. TARGETING: any (every anchor where the
+    effect changes something), near (the anchor within a king's step of one of
+    the caster's pieces), middle (the two middle rows), margin<n> (every cell
+    n rows off both king rows), king (the caster's king's square), ray /
+    ray<n> (from the king's neighbour on in that direction, through pieces and
+    over pits, to bedrock '#' or the edge, n squares at most), camp (the
+    caster's double-step region - every non-king row in the test variants).
+    The anchor candidates per effect: a hit's any square that is not bedrock
+    or a pit; harden's a floor square or an intact wall; a drop's an empty
+    floor square; ice / wall / pit's a floor square, occupied or not; win and
+    sledge's the king's square. EFFECTS, per square of the shape: hit1 - a
+    crate '^' becomes floor, an intact wall '*' becomes a crate; hit2 - both
+    become floor; bedrock, pits and pieces untouched. ice - every floor cell
+    turns slippery (occupied too). wall / pit - every EMPTY floor cell that is
+    not a portal square or a half becomes '*' / '_', its ice cleared. harden -
+    every intact '*' becomes '#'. sledge - the caster's colour may hammer from
+    now on (the flag "*w" in the field). drop <letter> - a piece of the caster
+    is placed on the anchor (empty, not a portal square, never on its promotion
+    zone). win as before. THE NULL RULE: a cast that changes nothing is no
+    move. A hit that leaves the caster's own king attacked (a line opened by
+    the demolition) is illegal. A cast draws like any move. THE HAMMER: a king
+    may crack an adjacent intact wall into a crate (uci from-to, never in
+    check) when the variant declares hammerPieceTypes - and, once a sledge
+    card is in the library, only while its colour's enchantment is on.
 """
-import random, sys
+import random, sys, re
 
 WHITE, BLACK = 0, 1
 TERRAIN = set('*#^_')
@@ -90,17 +118,80 @@ def colour(ch):
 
 SLOT_LETTERS = 'stuvwxyz'
 
+# ---- THE TERRAIN INTERPRETER: the card library as definitions
+DEFS = None           # {id: def} once a terrain ini is loaded (set_defs); None = the deck tests' ID ranges
+HAMMER = False        # the variant declares hammerPieceTypes (the king hammers)
+SLEDGE_CARDS = False  # a sledge card is in the library: the hammer needs the colour's enchantment
+
+def parse_def(value):
+    """`<effect> <shape> <targeting>` as {kind, arg, cells: [(df, dr)], target, targ}; a one-word value is a legacy kind."""
+    tok = value.split()
+    word = tok[0]
+    p = 0
+    while p < len(word) and word[p].isalpha():
+        p += 1
+    eff, num = word[:p], (int(word[p:]) if p < len(word) else None)
+    d = {'kind': eff, 'arg': None, 'cells': [(0, 0)], 'target': 'any', 'targ': 0}
+    at = 1
+    if eff == 'hit':
+        d['arg'] = num or 1
+    if eff == 'drop':
+        d['arg'] = tok[at]
+        at += 1
+    if eff in ('portal', 'meta'):
+        return d
+    if len(tok) == at:
+        shape, target = ('xxx/xox/xxx', 'middle') if eff == 'ice' else ('o', 'king')
+    else:
+        shape, target = tok[at], tok[at + 1]
+    cells, o = [], None
+    for r, row in enumerate(shape.split('/')):
+        for c, ch in enumerate(row):
+            if ch in 'xo':
+                cells.append((r, c))
+            if ch == 'o':
+                o = (r, c)
+    d['cells'] = [(c - o[1], o[0] - r) for r, c in cells]   # (df, dr): the first row is the north
+    q = 0
+    while q < len(target) and target[q].isalpha():
+        q += 1
+    d['target'] = target[:q]
+    d['targ'] = int(target[q:]) if q < len(target) else (2 if d['target'] == 'margin' else 0)
+    return d
+
+def set_defs(ini_text):
+    """Load a terrain ini's card<ID> definitions (and whether the king hammers)."""
+    global DEFS, HAMMER, SLEDGE_CARDS
+    DEFS = {}
+    HAMMER = 'hammerPieceTypes' in ini_text
+    for line in ini_text.splitlines():
+        m = re.match(r'^card(\d+)\s*=\s*(.+?)\s*$', line)
+        if m:
+            DEFS[int(m.group(1))] = parse_def(m.group(2))
+    SLEDGE_CARDS = any(d['kind'] == 'sledge' for d in DEFS.values())
+
 def kind_of(cid):
-    """The test variants' card kinds by ID (deck.ini)."""
+    """The card kind by ID: the loaded library's, else the deck tests' ranges (deck.ini)."""
+    if DEFS is not None:
+        return DEFS[cid]['kind'] if cid in DEFS else 'meta'
     return 'ice' if 1 <= cid <= 9 else 'portal' if 10 <= cid <= 19 else 'win' if 20 <= cid <= 29 else 'meta'
+
+def def_of(cid):
+    """The card's definition: the library's, else the legacy kind with its old default (ice 3x3 on the middle rows, win on the king)."""
+    if DEFS is not None:
+        return DEFS.get(cid, {'kind': 'meta', 'arg': None, 'cells': [(0, 0)], 'target': 'any', 'targ': 0})
+    k = kind_of(cid)
+    cells = [(df, dr) for df in (-1, 0, 1) for dr in (-1, 0, 1)] if k == 'ice' else [(0, 0)]
+    return {'kind': k, 'arg': None, 'cells': cells, 'target': 'middle' if k == 'ice' else 'king' if k == 'win' else 'any', 'targ': 0}
 
 def ice_rows(R):
     """The cast rows of the test variants (0-based): the two middle rows."""
     return {R // 2 - 1, R // 2}
 
 class Pos:
-    def __init__(self, files, ranks, board, twin, side, ep=None, hand=(0, 0), half=(None, None), slick=None, icehand=(0, 0), deck=None):
+    def __init__(self, files, ranks, board, twin, side, ep=None, hand=(0, 0), half=(None, None), slick=None, icehand=(0, 0), deck=None, sledge=(False, False)):
         self.F, self.R = files, ranks
+        self.sledge = list(sledge)  # THE TERRAIN INTERPRETER: the hammer enchantment per colour
         # THE DECK: deck = {handsize, slots: [[ [id, count] | None ]*8 per colour], pile: [[ids], [ids]], castslot: [slot | None]*2, winner}
         self.deck = deck
         self.board = board          # dict (f, r) -> char; absent = empty
@@ -367,7 +458,7 @@ class Pos:
             b[to] = ch
             if ch.lower() == 'p' and abs(to[1] - frm[1]) == 2:
                 ep = (frm[0], frm[1] + up)
-        return self.after(Pos(self.F, self.R, b, self.twin, 1 - self.side, ep, self.hand, self.half, self.slick, self.icehand, self.deck_copy()))
+        return self.after(Pos(self.F, self.R, b, self.twin, 1 - self.side, ep, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge))
 
     def cast_half(self, sq, slot=None):
         """The opening cast: the caster's half stands on sq; a legacy scroll leaves the hand, a deck card marks its slot and stays."""
@@ -378,7 +469,7 @@ class Pos:
         else:
             deck['castslot'][self.side] = slot
         half = list(self.half); half[self.side] = sq
-        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck))
+        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck, self.sledge))
 
     def link(self, sq, slot=None):
         """The linking cast: the caster's half and sq become a pair; a scroll (or the deck card) leaves the hand."""
@@ -387,7 +478,7 @@ class Pos:
         hand = list(self.hand)
         deck = self.deck_copy()
         half = list(self.half); half[self.side] = None
-        nxt = Pos(self.F, self.R, dict(self.board), twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck)
+        nxt = Pos(self.F, self.R, dict(self.board), twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck, self.sledge)
         if slot is None:
             nxt.hand[self.side] -= 1
         else:
@@ -405,7 +496,7 @@ class Pos:
                     slick.add(s)
         icehand = list(self.icehand)
         deck = self.deck_copy()
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, slick, icehand, deck)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, slick, icehand, deck, self.sledge)
         if slot is None:
             nxt.icehand[self.side] -= 1
         else:
@@ -415,7 +506,7 @@ class Pos:
     def cast_win(self, slot):
         """THE DECK: the win card, cast on the caster's own king square - the game is over."""
         deck = self.deck_copy()
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck, self.sledge)
         nxt.spend(self.side, slot)
         nxt.deck['winner'] = self.side
         return nxt
@@ -423,19 +514,19 @@ class Pos:
     def mulligan(self):
         """THE DECK: discard the whole hand (blanks included) and draw anew; then the other side's turn."""
         deck = self.deck_copy()
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck, self.sledge)
         nxt.deck['slots'][self.side] = [None] * 8
         nxt.refill(self.side)
         return self.after(nxt)
 
     def passed(self):
         """The frozen side's pass: nothing changes but the turn."""
-        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy()))
+        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge))
 
     def fizzle(self):
         """The caster's pass when no link is legal: the half is gone, its scroll (or the deck card) spent."""
         half = list(self.half); half[self.side] = None
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, half, self.slick, self.icehand, self.deck_copy())
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, half, self.slick, self.icehand, self.deck_copy(), self.sledge)
         if nxt.deck and nxt.deck['castslot'][self.side] is not None:
             nxt.spend(self.side, nxt.deck['castslot'][self.side])
             nxt.deck['castslot'][self.side] = None
@@ -457,6 +548,130 @@ class Pos:
             if x == marker:
                 return s
         return None
+
+    # ---- THE TERRAIN INTERPRETER (terrain.patch)
+    def hammer_on(self, c):
+        return HAMMER and (self.sledge[c] if SLEDGE_CARDS else True)
+
+    def cells_of(self, d, a):
+        """The squares a cast at anchor a covers: the shape clipped to the board, or the ray from the king's neighbour."""
+        if d['target'] == 'ray':
+            k = self.king(self.side)
+            df, dr = a[0] - k[0], a[1] - k[1]
+            out, (f, r), n = [], a, 0
+            while self.on(f, r):
+                if self.board.get((f, r)) == '#':
+                    break                                 # bedrock stops the ray; a pit is passed over
+                out.append((f, r))
+                n += 1
+                if d['targ'] and n >= d['targ']:
+                    break
+                f += df; r += dr
+            return out
+        return [(a[0] + df, a[1] + dr) for df, dr in d['cells'] if self.on(a[0] + df, a[1] + dr)]
+
+    def changes(self, d, cells, a):
+        """The null rule: does the cast change anything? The per-square table of the ruling."""
+        kind = d['kind']
+        if kind == 'win':
+            return self.deck['winner'] is None
+        if kind == 'sledge':
+            return not self.sledge[self.side]
+        if kind == 'drop':
+            zone = self.R - 1 if self.side == WHITE else 0
+            return a not in self.board and a not in self.twin and a not in self.half and a[1] != zone
+        if kind == 'ice':
+            return any(self.board.get(c) not in TERRAIN and c not in self.slick for c in cells)
+        if kind == 'hit':
+            return any(self.board.get(c) in ('*', '^') for c in cells)
+        if kind in ('wall', 'pit'):
+            return any(c not in self.board and c not in self.twin and c not in self.half for c in cells)
+        if kind == 'harden':
+            return any(self.board.get(c) == '*' for c in cells)
+        return False
+
+    def anchors(self, d):
+        """Where a card may be cast: the effect's candidate squares, narrowed by its targeting, kept by the null rule."""
+        us = self.side
+        k = self.king(us)
+        kind, target = d['kind'], d['target']
+        allsq = [(f, r) for f in range(self.F) for r in range(self.R)]
+        if kind in ('win', 'sledge'):
+            cand = [k] if k else []
+        elif kind == 'hit':
+            cand = [s for s in allsq if self.board.get(s) not in ('#', '_')]           # a wall, a crate or a floor square
+        elif kind == 'harden':
+            cand = [s for s in allsq if self.board.get(s) not in ('#', '_', '^')]      # a floor square or an intact wall
+        elif kind == 'drop':
+            cand = [s for s in allsq if s not in self.board]                           # empty floor
+        else:
+            cand = [s for s in allsq if self.board.get(s) not in TERRAIN]              # ice, wall, pit: a floor square, occupied or not
+        if target == 'king':
+            cand = [s for s in cand if s == k]
+        elif target == 'near':
+            mine = [s for s, ch in self.board.items() if ch not in TERRAIN and colour(ch) == us]
+            cand = [s for s in cand if any(max(abs(s[0] - m[0]), abs(s[1] - m[1])) <= 1 for m in mine)]
+        elif target == 'middle':
+            cand = [s for s in cand if s[1] in ice_rows(self.R)]
+        elif target == 'camp':
+            cand = [s for s in cand if 0 < s[1] < self.R - 1]                          # the test variants' double-step region: every non-king row
+        elif target == 'ray':
+            if k is None:
+                return []
+            cand = [(k[0] + df, k[1] + dr) for df, dr in ORTHO + DIAG if self.on(k[0] + df, k[1] + dr)]
+        out = []
+        for a in cand:
+            cells = self.cells_of(d, a)
+            if target == 'margin' and any(not (d['targ'] <= c[1] <= self.R - 1 - d['targ']) for c in cells):
+                continue
+            if self.changes(d, cells, a):
+                out.append(a)
+        return out
+
+    def cast_def(self, d, slot, a):
+        """The position after a slot card's cast at anchor a: the def applied over the board, the card spent, the draw."""
+        kind = d['kind']
+        if kind == 'win':
+            return self.cast_win(slot)
+        b = dict(self.board)
+        slick = set(self.slick)
+        sledge = list(self.sledge)
+        cells = self.cells_of(d, a)
+        if kind == 'ice':
+            for c in cells:
+                if b.get(c) not in TERRAIN:
+                    slick.add(c)
+        elif kind == 'hit':
+            for c in cells:
+                if b.get(c) == '^':
+                    del b[c]
+                elif b.get(c) == '*':
+                    if d['arg'] >= 2:
+                        del b[c]
+                    else:
+                        b[c] = '^'
+        elif kind in ('wall', 'pit'):
+            for c in cells:
+                if c not in b and c not in self.twin and c not in self.half:
+                    b[c] = '*' if kind == 'wall' else '_'
+                    slick.discard(c)
+        elif kind == 'harden':
+            for c in cells:
+                if b.get(c) == '*':
+                    b[c] = '#'
+        elif kind == 'sledge':
+            sledge[self.side] = True
+        elif kind == 'drop':
+            b[a] = d['arg'].upper() if self.side == WHITE else d['arg'].lower()
+        nxt = Pos(self.F, self.R, b, self.twin, 1 - self.side, None, self.hand, self.half, slick, self.icehand, self.deck_copy(), sledge)
+        nxt.spend(self.side, slot)
+        return self.after(nxt)
+
+    def make_hammer(self, frm, to):
+        """The king cracks the adjacent wall on `to` into a crate; nothing moves."""
+        b = dict(self.board)
+        b[to] = '^'
+        return self.after(Pos(self.F, self.R, b, self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge))
 
     def legal_moves(self):
         """Moves as (from, to, promo, next): promo is a letter for a promotion,
@@ -519,23 +734,37 @@ class Pos:
         if not in_check and self.icehand[us] > 0:
             for sq in self.ice_castables():
                 res.append((None, sq, 'ice', self.cast_ice(sq)))
-        # THE DECK: each slot's card by its kind, never in check; the mulligan while the pile has cards
+        # THE DECK: each slot's card by its definition, never in check (a portal card its half; the
+        # rest the interpreter's anchors - a hit judged for the caster's own king); the mulligan while
+        # the pile has cards
         if not in_check and self.deck:
             for slot, e in enumerate(self.deck['slots'][us]):
                 if not e or e[1] <= 0:
                     continue
                 L = SLOT_LETTERS[slot].upper()
-                kind = kind_of(e[0])
+                d = def_of(e[0])
+                kind = d['kind']
                 if kind == 'portal':
                     for sq in self.castables():
                         res.append((None, sq, 'cast:' + L, self.cast_half(sq, slot)))
-                elif kind == 'ice':
-                    for sq in self.ice_castables():
-                        res.append((None, sq, 'ice:' + L, self.cast_ice(sq, slot)))
-                elif kind == 'win' and k is not None:
-                    res.append((None, k, 'win:' + L, self.cast_win(slot)))
+                elif kind == 'meta':
+                    continue
+                else:
+                    for sq in self.anchors(d):
+                        nxt = self.cast_def(d, slot, sq)
+                        if kind == 'hit':
+                            kk = nxt.king(us)
+                            if kk is None or nxt.attacked(kk, them):
+                                continue                   # the demolition opened a line onto the caster's own king
+                        res.append((None, sq, 'card:' + L, nxt))
             if k is not None and self.deck['pile'][us]:
                 res.append((k, k, 'mulligan', self.mulligan()))
+        # THE HAMMER: the king cracks an adjacent intact wall, never in check, while his colour's hammer is on
+        if not in_check and k is not None and self.hammer_on(us):
+            for df, dr in ORTHO + DIAG:
+                w = (k[0] + df, k[1] + dr)
+                if self.on(*w) and self.board.get(w) == '*':
+                    res.append((k, w, 'hammer', self.make_hammer(k, w)))
         return res
 
 def sqname(sq):
@@ -551,6 +780,8 @@ def uci(m):
         return sqname(s) + sqname(to)
     if pr == 'mulligan':
         return '@@@@'
+    if pr == 'hammer':
+        return sqname(s) + sqname(to)
     if pr and ':' in pr:
         return pr.split(':')[1] + '@' + sqname(to)   # a deck card: its slot letter
     return sqname(s) + sqname(to) + (pr or '')
@@ -591,6 +822,9 @@ def to_fen(pos):
                     entries.append(SLOT_LETTERS[slot].upper() + '=' + letter + str(e[0] if e else 0) + ('+' if pos.deck['castslot'][c] == slot else ''))
         if pos.deck['winner'] is not None:
             entries.append('!' + ('w' if pos.deck['winner'] == WHITE else 'b'))
+    for c, letter in ((WHITE, 'w'), (BLACK, 'b')):
+        if pos.sledge[c]:
+            entries.append('*' + letter)
     field = (' {' + ','.join(entries) + '}') if entries else ''
     ep = sqname(pos.ep) if pos.ep else '-'
     return '/'.join(rows) + pocket + ' ' + ('w' if pos.side == WHITE else 'b') + ' - ' + ep + ' 0 1' + field
@@ -649,7 +883,11 @@ def from_fen(fen, handsize=0):
                     deck['slots'][c][slot][1] += 1
                 else:
                     deck['slots'][c][slot] = [0, 1]
+    sledge = [False, False]
     for e in entries:
+        if e[0] == '*':
+            sledge[WHITE if e[1] == 'w' else BLACK] = True
+            continue
         if e[0] == '~':
             slick.add(sq(e[1:]))
         elif deck is not None and len(e) > 1 and e[1] == '|':
@@ -680,7 +918,7 @@ def from_fen(fen, handsize=0):
                 e = deck['slots'][c][slot]
                 if e and e[1] <= 0 and deck['castslot'][c] != slot:
                     deck['slots'][c][slot] = None
-    return Pos(F, R, board, twin, side, ep, hand, half, slick, icehand, deck)
+    return Pos(F, R, board, twin, side, ep, hand, half, slick, icehand, deck, sledge)
 
 def perft(pos, depth):
     if depth == 0:
@@ -693,6 +931,11 @@ def perft(pos, depth):
 def random_deck(rng, handsize=4, win_p=0.12):
     """A random deck state: 0-4 cards a side in the lowest slots (identical IDs merged), a pile of 0-6 IDs, no half."""
     def card():
+        if DEFS is not None:
+            while True:
+                cid = rng.choice(sorted(DEFS))
+                if DEFS[cid]['kind'] != 'win' or rng.random() < win_p:
+                    return cid
         r = rng.random()
         return rng.randint(20, 29) if r < win_p else rng.randint(1, 9) if r < 0.45 else rng.randint(10, 19) if r < 0.8 else rng.randint(30, 39)
     d = {'handsize': handsize, 'slots': [[None] * 8, [None] * 8], 'pile': [[], []], 'castslot': [None, None], 'winner': None}
@@ -731,7 +974,7 @@ def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3, 
                     ch = 'N'
                 board[sq] = ch if c == WHITE else ch.lower()
         for _ in range(rng.randint(*terrain)):
-            board[next(it)] = rng.choice('*^^#' + ('__' if ice else ''))
+            board[next(it)] = rng.choice('*^^#' + ('__' if ice else '') + ('***^' if DEFS is not None else ''))
         mid = [(f, r) for f in range(F) for r in range(1, R - 1)]
         rng.shuffle(mid)
         used = set()
@@ -778,7 +1021,8 @@ def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3, 
                 if ps and cand:
                     half[c] = cand[0]
                     d['castslot'][c] = ps[0]
-        pos = Pos(F, R, board, twin, side, None, hand, half, slick, icehand, d)
+        sledge = [rng.random() < 0.4, rng.random() < 0.4] if (deck and DEFS is not None) else [False, False]
+        pos = Pos(F, R, board, twin, side, None, hand, half, slick, icehand, d, sledge)
         kw, kb = pos.king(WHITE), pos.king(BLACK)
         # the side not to move may not be in check, nobody may have lost already
         if pos.attacked(kw if side == BLACK else kb, side):

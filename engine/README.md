@@ -91,6 +91,24 @@ in the tree, where the rules differ), so the identity check reads boards
 with no pair and no scroll. Verdict 2026-09-20 (designer): "Alright this
 works pretty good" — IN.
 
+**Status 2026-10-03: THE TERRAIN PATCH shipped — Phase 3.3b, the second
+forge.** `patches/terrain.patch` (938 lines, 703+/23− across `types.h`,
+`variant.h`, `parser.cpp`, `position.h`, `position.cpp`, `movegen.cpp`,
+`apiutil.h`; applied on top of the ten above — ELEVEN patches now, in order
+dead-squares, thread-stack, portals, wall-kinds, hammer, portals-body,
+portals-cast, ice, deck, deck-search, terrain) gives the engine brief §4.10
+"Phase 3.3b": THE TERRAIN INTERPRETER — a card is a DEFINITION, `card<ID> =
+<effect> <shape> <targeting>`, the engine interprets over the board (hits,
+ice, walls, pits, petrify, the sledge enchantment, a dropped piece, the win
+card; shapes as picture strings with an anchor; targeting any / near / middle
+/ margin / king / ray / camp; the null rule; check by demolition). Its source
+is `forge/apply-terrain.py` (committed, unlike the deck's). Both artifacts
+rebuilt from the clean pinned trees; validated natively against the Python
+oracle grown for the interpreter (84 fixtures, 1,400 random positions, the
+sweep, perft 4 under asserts) before any WASM was built; card-free boards
+node-identical to the ten-patch build; the rule-16 gate ran green end to end
+(see "The terrain patch" below).
+
 **Status 2026-09-20: THE ICE PATCH shipped.** `patches/ice.patch` (1,095
 lines, +677/−21 across nine files — `types.h`, `variant.h`, `parser.cpp`,
 `evaluate.cpp`, `position.h`, `position.cpp`, `movegen.cpp`, `apiutil.h`,
@@ -561,6 +579,177 @@ took about twenty minutes wall-clock, scripted in the session's scratch);
 wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
 `#` board ("Invalid piece character"), so a phase0 run that forgot the
 overlay dies at once instead of misplaying.
+
+## The terrain patch (`patches/terrain.patch`) — 2026-10-03
+
+Canon: brief §4.10 "Phase 3.3b" (the spec, 2026-09-25) and "3.3b RULED"
+(the eight rulings and the ice anywhere, 2026-10-03). Authored on the pinned
+trees on top of the ten patches above (apply in this order: dead-squares,
+thread-stack, portals, wall-kinds, hammer, portals-body, portals-cast, ice,
+deck, deck-search, terrain) by `forge/apply-terrain.py` — anchor-based edits
+whose diff is the patch file; the script IS committed this time (the deck's
+never were). Files: `types.h`, `variant.h`, `parser.cpp`, `position.h`,
+`position.cpp`, `movegen.cpp`, `apiutil.h`.
+
+Design, in the engine's own shapes — A CARD IS A DEFINITION:
+
+- **The grammar** is one ini value per card: `card<ID> = <effect> <shape>
+  <targeting>`, space-separated (`card7 = hit1 xxx/xox/xxx near`; the drop
+  effect names its piece as its own token, `card9 = drop p o camp`). A
+  ONE-WORD value is a legacy kind with its old default — `ice` is `ice
+  xxx/xox/xxx middle`, `win` is `win o king`, `portal` and `meta` as they
+  were — so every ini on record (the committed samples') reads as it did.
+  `parse_card_def` (parser.cpp) fills a `CardDef` (types.h: the kind, an
+  argument — the hits per square, the piece type a drop places — the shape as
+  up to 32 (file, rank) offsets from the anchor, the targeting word and its
+  number) into `Variant::cardDefs`; `cardKinds` keeps the kind for the deck
+  patch's readers; `sledgeCards` records that a sledge card is in the deal.
+  A bad definition prints its reason under `check` and the card is a blank.
+- **Shapes** are picture strings, rows NORTH TO SOUTH separated by `/`, `x`
+  a cell, `o` the anchor (exactly one; it is a cell too), `.` nothing; up to
+  7×7; no rotation on cast (an L's four orientations are four cards); clipped
+  at the board's edge (`effect_cells`). Board space for both colours.
+- **Targeting** narrows the anchors (`cast_anchors`): `any` — every anchor of
+  the effect's own candidate squares (a hit's any square that is not bedrock
+  or a pit; `harden`'s a floor square or an intact wall; a drop's an empty
+  floor square; ice / wall / pit's a floor square, occupied or not; win and
+  sledge's the king's square); `near` — within a king's step of one of the
+  caster's pieces (`PseudoAttacks[KING]` over `pieces(c)`); `middle` — the
+  board's two middle ranks (the ice's old rule, kept as its own word: on an
+  eight-rank board `margin3` leaves a 3×3 no anchor); `margin<n>` — every
+  cell of the shape within `n` ranks of neither king row; `king` — the
+  caster's king's square; `ray` / `ray<n>` — the eight neighbours of the
+  caster's king, the cast's cells running on from the neighbour in that
+  direction THROUGH pieces and OVER pits to bedrock (`hardSquares &
+  ~holeSquares`) or the edge, `n` squares at most; `camp` — the caster's
+  double-step region (the deal's camp). THE NULL RULE (`cast_changes`) keeps
+  an anchor only where the effect would change something — per square: a hit
+  needs a crate or a breakable wall among its cells; ice a floor cell not yet
+  slippery; wall and pit an EMPTY floor cell that is no portal square or
+  half; harden an intact breakable wall; a drop an empty anchor off the
+  caster's promotion zone and off every portal square; sledge the flag still
+  off; win no winner yet.
+- **A cast is the slot letter's drop on the anchor** (`S@e4`, as the deck
+  patch's casts are), so the record, SAN and the page's cast path keep
+  working; a ray's cast is the drop on the king's neighbour. In
+  `generate_drops` a slot card's `b` IS `cast_anchors(Us, pt)` (the drop
+  region does not apply; the legacy scrolls keep their own paths). The
+  anchor may be a WALL SQUARE (a crack's monomino, a petrify, a ray's first
+  square), so `pseudo_legal` validates a slot card's drop by regeneration
+  BEFORE the board check — the hammer's own idiom — and `legal()`'s assert
+  on `to` admits it. The debug build's perft found this: the release build's
+  perft never asserts `pseudo_legal`, and a cast anchored on a wall passed
+  the oracle while failing the assert.
+- **The effects** (`apply_cast`, in `do_move` after the hand lost the card):
+  `hit1` — a crate among the cells is floor (`deadSquares` off, the
+  occupancy bit off), an intact breakable wall is a crate (`wallSquares` →
+  `deadSquares`, the occupancy unchanged — the hammer's transition); `hit2` —
+  both are floor at once; bedrock, pits and pieces are never touched. `ice` —
+  every floor cell (`board_bb & ~dead`) turns slippery (the ice patch's
+  transition, any shape). `wall` / `pit` — every empty floor cell that is no
+  portal square or half becomes a breakable wall (`wallSquares`, the
+  occupancy bit on) or a pit (`wall | hard | hole`), and THE ICE UNDER IT IS
+  CLEARED (the ruling). `harden` — an intact breakable wall becomes bedrock
+  (`hardSquares` on). `sledge` — the caster's colour's bit in
+  `StateInfo::sledge`. `drop` — `put_piece` of the def's piece on the anchor
+  (the psq, material and pawn keys as a drop's; `castPlaced` for undo). `win`
+  — as the deck patch. Every edited bitboard lives in the COPIED state, so
+  undo is the state pointer and `undo_move`'s wall and dead XORs restore the
+  occupancy; a placed piece leaves on `castPlaced`. The hash is the
+  per-square tables that exist (`Zobrist::wall / dead / hard / hole /
+  slick`) plus two new keys for the sledge flags, from their own PRNG.
+- **Check by demolition.** A hit that floors a crate or a wall changes
+  occupancy, so `cast_attacks_king` judges the king on the virtual occupancy
+  `byTypeBB[ALL_PIECES] & ~demolished` (the portal patch's idiom): in
+  `gives_check` a hit checks when the enemy king is attacked after it, a
+  drop effect when the placed piece attacks him (`attacks_bb` from the
+  anchor); in `legal()` a hit that leaves the caster's own king attacked is
+  ILLEGAL (nobody is in check before a cast, so any attacker found is the
+  cast's own). The builders only add occupancy and the ice touches nothing
+  the attack tables read: never a check, never illegal.
+- **The sledge enchantment gates the hammer**: `generate_hammers` returns
+  nothing unless `sledge_on(Us)` — the colour's flag when the deal has a
+  sledge card (`Variant::sledgeCards`), else the always-on reading of
+  `hammerPieceTypes` as before (an old `__sledge` deal plays as it did). The
+  flag rides the FEN's trailing field as `*w` / `*b` (`fen()`,
+  `parse_portal_field`, `check_portal_field`), hashed in `set_state`.
+- **Immurement** needs no code: a wall or a pit that takes a king's last
+  flight square leaves its side without a legal move, and `stalemateValue =
+  loss` scores it as the mate it is (fixture T6: the search reports mate in
+  1 by the wall).
+- Not in this patch, on purpose: a value for any card (the no-values rule),
+  a rotation on cast, per-colour mirrored shapes, the timed indestructible
+  wall (3.4), the material bit (3.5a), the search-policy question of casts
+  under late-move reductions (measured before touched, §4.10 "3.3b RULED").
+
+### Native validation (2026-10-03)
+
+THE ORACLE FIRST: `forge/oracle.py` grew the interpreter — `set_defs` reads a
+terrain ini's `card<ID>` lines into definitions (the deck tests' ID ranges
+stand when none is loaded, the legacy ice and win defaults derived the same
+way, so the deck fixtures re-validate the def path against the old one), the
+anchor candidates per effect, the targeting words, the null rule, every
+effect per square, the sledge flags (`*w` in `to_fen` / `from_fen`), the
+hammer as a move the king makes while his colour's enchantment is on, and
+random positions drawn from the loaded library with sledge flags and more
+terrain. `forge/terrain.ini` is the test variants (the deck's three boards
+with `hammerPieceTypes = k` and a 26-def library: 1–4 ice — 1 the legacy word
+— 10 portal, 20 win, 30 meta, 40–46 hits incl. the lance and a ray2, 50–53
+walls, 60–61 pits, 70–71 harden, 80 sledge, 90–91 drops). Every fixture
+count in `forge/native-test-terrain.py` (T1–T17) was derived by hand and
+confirmed by the oracle before the engine ran it. On the release and the
+debug build with asserts on: the fixtures **84/84** (the crack and the smash,
+the null rule, CHECK BY DEMOLITION both ways — a hit opening the a-file onto
+the enemy king gives check and black has the two evasions, a hit that would
+open a line onto the caster's own king is not generated — the lance north
+over two walls and a crate to the bedrock that stops it and north-east over
+a pit, `ray2`, the immuring wall with black moveless after it and the search
+reporting mate in 1, `wall x/o/x near` raising three squares, the pit the
+king will not enter, petrify and the smash that finds nothing to smash
+afterwards, the sledge card with no hammer before `S@e1` and `e1d2` after,
+`*b` giving black its hammer and white none, 47 pawn drops in the camp and
+the knight's eight near squares, a dropped pawn giving check, ice anywhere
+with 64 anchors and the enemy king row iced under him, `middle` 16, `margin1`
+32, the legacy word 16, a wall clearing the ice beneath it, the 3×3 clipped
+at the corner, a hit centred on a piece leaving it alone, the field with
+both flags round-tripping, no card in check, and the 10×10 duel shape with
+two terrain decks at perft 2 = 43,530 with a depth-8 search alive); **1,000
+(seed 7, release) + 400 (seed 21, debug) random terrain positions** (6×6 /
+8×8 / 10×10, hands and piles drawn from the library, walls, crates, bedrock,
+pits, ice as a patch / scattered / a floor, pairs and halves, sledge flags)
+equal to the oracle on perft-1 move sets and perft-2 per-move counts, the
+400 under `xsweep 2` (pseudo_legal / legal / gives_check / the incremental
+state against a fresh parse / the undo); `xsweep 3` clean on six fixtures;
+perft 4 on seven fixtures under asserts (4,403,914 nodes on the fullest).
+THE REGRESSION SUITES on the terrain build: deck 55/55, ice 46/46, portals
+62/62 (the legacy paths intact). CARD-FREE IDENTITY vs the ten-patch native
+release — perft 3 and depth-12 score / nodes / bestmove on five boards
+(chess's start, a middlegame, a crate-pit-bedrock board, the 10×10 duel
+shape, an iced board with a pair) — IDENTICAL under variants with no cards
+and no sledge card, with and without `hammerPieceTypes` (under a variant
+that DECLARES a sledge card the two builds legitimately differ: the base
+hammers at once, the terrain build waits for the enchantment). ONE BUG the
+gate caught before any WASM was built: a cast anchored on a wall square was
+rejected by `pseudo_legal`'s board check (the release perft agreed with the
+oracle; the debug perft's `pseudo_legal` assert did not).
+
+### The rule-16 gate (both WASM binaries rebuilt from the clean pinned trees)
+
+Both toolchains and both pinned trees reinstalled from scratch this session
+(the container keeps nothing; `tests/js/` has to exist and `Makefile_js`
+runs from inside `src/`; the engine's worker is `cat stockfish.worker.js
+src/emscripten/worker-postamble.js` — the raw worker answers "unknown
+command custom" and the first depth-cap run died on exactly that before
+the concatenation was in place). `ffish.js` differs from the vendored in 13
+bytes and `stockfish.js` in 9 (the static memory layout constants), the
+worker is byte-identical; the wasms +12,572 / +17,471 bytes.
+
+- [x] `test-terrain-ffish.cjs` **47/47** — the fixtures through the JS API: the crack and its pop, the smashes, the null rule, check by demolition (black in check after `S@a4`, the two evasions; the self-exposing hit not generated with four plain moves left), the lance and `ray2`, the immuring wall (black moveless), the pit the king will not enter, petrify, the sledge (no hammer, `S@e1`, `*w`, `e1d2`, SAN `K*d2`, `*b` for black), 47 pawn drops and the knight's eight, a dropped pawn's check, ice anywhere / middle / margin1 / the legacy word, a wall clearing ice, the clipped 3×3, the field round-trip, no card in check, a 10-position check-flag sweep
+- [x] `test-terrain-engine.cjs` **49/49** — perft 1 sets and perft 3 totals pinned to the native build on every fixture (T1 1,546 · T2 1,539 · T4 1,226 · T4c 465 · T5 443 · T6 622 · T6c 3,205 · T7 3,260 · T8 1,532 · T9 1,377 · T10 10,288 · T10c 3,190 · T11 97,507 · T15 4,179; the 10×10 duel shape perft 1 = 194, perft 2 = 43,530), the boards after the key casts through `d`, the demolition's check and the dropped pawn's, the immurement found as mate in 1, a depth-8 search with two terrain decks alive
+- [x] `test-deck-ffish.cjs` 39, `test-deck-engine.cjs` 58, `test-ice-ffish.cjs` 53, `test-ice-engine.cjs` 79, `test-portals-ffish.cjs` 78, `test-portals-engine.cjs` 146, `test-hammer-ffish.cjs` 27, `test-hammer-engine.cjs` 25, `test-ffish.cjs` 19, `test-engine.cjs` 7 — every older gate unchanged
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored ten-patch engine at depth 12 (19,459 / 26,462 / 35,136 nodes)
+- [x] `depthcap.cjs` — d22 110/110 (slowest 1,139 ms), d60 30/30 (slowest 10,022 ms, the movetime) — **the cap stays at d22**
 
 ## The deck patch and the deck-search patch (`patches/deck.patch`, `patches/deck-search.patch`) — 2026-09-26
 
@@ -1262,6 +1451,8 @@ FFISH_JS=... node engine/tests/test-hammer-ffish.cjs                    # the ha
 ENGINE_JS=... node engine/tests/test-hammer-engine.cjs                  # the hard wall + the sledgehammer, engine half (25)
 FFISH_JS=... node engine/tests/test-ice-ffish.cjs                       # the ice — slippery squares, the slide, the pit `_`, the scroll — ffish half (53)
 ENGINE_JS=... node engine/tests/test-ice-engine.cjs                     # the ice, engine half: perft pinned to the native build, the searches (79)
+FFISH_JS=... node engine/tests/test-terrain-ffish.cjs                   # the terrain interpreter — hits, ice anywhere, walls, pits, petrify, the sledge enchantment, drops; check by demolition — ffish half (47)
+ENGINE_JS=... node engine/tests/test-terrain-engine.cjs                 # the terrain interpreter, engine half: perft pinned to the native build, the immurement found, a duel-shaped search (49)
 node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
 ```
 
