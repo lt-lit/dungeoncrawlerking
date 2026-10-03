@@ -217,6 +217,31 @@ if (!process.argv[2]) {
   expect((L5.quakes?.length ?? 0) === 8 && (L5.branches?.length ?? 0) === 5 && (L5.anomalies?.length ?? 0) === 0 && !L5.engine.some((e) => e.recovered), 'eight quakes landed, five undos, no anomaly, no recovered search');
 }
 
+// THE DECK IN THE ENGINE (2026-10-02): the sixth sample — THE FIRST DUEL ON
+// THE ENGINE'S DECK, the designer's phone log on the 3.3a build (vaults-4 at
+// walk turn 27, restless, Android Firefox, 77 plies, 1-0 by checkmate): the
+// slot casts on the timeline (a portal pair in one turn, the enemy's ice),
+// the engine's draws at the hand-overs, the Reveal and the Undo card, the
+// hands on every state, no redraw — the enemy's two cards were both in hand
+// from the deal and the player never dug.
+if (!process.argv[2]) {
+  const L6 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-4-t27_s1830683123.json'), 'utf8'));
+  const full6 = R.renderReport(L6, { sections: R.SECTION_NAMES });
+  const tl6 = R.timelineSection(L6);
+  expect(full6.length > 10000 && full6.includes('world vaults-4') && /RESULT 1-0/.test(full6) && /checkmate/.test(full6) && /anomalies 0/.test(full6) && /undos 2/.test(full6), "the engine-deck duel sample renders: vaults-4, 1-0 by checkmate, no anomaly, two undos");
+  expect(/decks  W 8 cards \/ B 2 cards \(as shuffled\)  draws 4  meta plays reveal @p0, undo @p20  hands at the end W \[Ice, Ice\] B \[—\]/.test(full6), "the header carries both decks, the four draws, the Reveal at ply 0, the Undo at ply 20 and the hands at the end");
+  expect(tl6.some((l) => /^p  3 /.test(l) && /T@b8/.test(l)) && tl6.some((l) => /^p  4 /.test(l) && /--/.test(l)) && tl6.some((l) => /^p  5 /.test(l) && /T@g4/.test(l)), "the player's portal pair is on the timeline as its slot's drops — T@b8, the enemy's frozen pass, T@g4");
+  expect(tl6.some((l) => /^p 12 /.test(l) && /S@g5/.test(l) && /the ice is cast/.test(l)) && tl6.some((l) => /^p 39 /.test(l) && /U@h5/.test(l) && /the ice is cast/.test(l)), "the ice casts read by their slots — the enemy's S@g5, the player's U@h5");
+  expect(tl6.some((l) => /^p  2 /.test(l) && /🂠 W draws Ice/.test(l)) && tl6.some((l) => /^p  6 /.test(l) && /🂠 W draws Portal/.test(l)) && tl6.some((l) => /^p 18 /.test(l) && /🂠 W draws Undo/.test(l)) && tl6.some((l) => /^p 20 /.test(l) && /↺ Undo played/.test(l)), "the engine's draws at the hand-overs and the Undo card are on the timeline");
+  const s = L6.states;
+  expect(s[3].cast === 'half' && s[3].card === 'portal' && s[4].cast === 'pass' && s[4].san === '--' && s[5].cast === 'link' && s[12].cast === 'ice' && s[12].card === 'ice' && s[12].mover === 'engine' && s[39].card === 'ice' && s[39].mover === 'player', "every cast state names its card off the slot (the half, the pass, the link; the enemy's and the player's ice)");
+  expect(s[0].deck?.w?.hand?.join(',') === 'portal,portal,ice' && s[0].deck.w.spent.join(',') === 'reveal' && s[0].deck.w.pile.length === 4 && s[0].deck.b.hand.join(',') === 'ice,ice' && s[0].deck.b.pile.length === 0 && s.every((x) => x.deck), "the start state carries the hands by slot with the Reveal played at ply 0 already spent — two portals and an ice over a pile of four; the enemy's two ices and no pile — and every state carries a deck");
+  const last6 = s[s.length - 1];
+  expect(last6.deck.w.hand.join(',') === 'ice,ice' && last6.deck.w.pile.length === 0 && last6.deck.b.hand.length === 0 && last6.deck.b.pile.length === 0 && last6.deck.w.spent.includes('reveal') && last6.deck.w.spent.includes('undo'), "at the end two ices are dead in the player's hand, both piles are empty, the enemy's hand too, and the meta cards count as spent");
+  expect(s.filter((x) => x.drew).length === 4 && !s.some((x) => x.cast === 'mulligan') && L6.metaPlays?.length === 2 && L6.metaPlays[0].kind === 'reveal' && L6.metaPlays[0].ply === 0 && L6.metaPlays[1].kind === 'undo' && L6.metaPlays[1].ply === 20, 'four draws, no redraw, and the two meta plays on the record');
+  expect((L6.quakes?.length ?? 0) === 4 && (L6.branches?.length ?? 0) === 2 && (L6.anomalies?.length ?? 0) === 0 && !L6.engine.some((e) => e.recovered) && L6.engine.filter((e) => e.ms >= 9500).length === 14, 'four quakes landed, two undos, no anomaly, no recovered search, fourteen searches at the phone\'s ten-second bound');
+}
+
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(failures.length ? `\n${failures.length} FAILED` : `\nPASS (${notes.length} checks)`);

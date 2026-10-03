@@ -465,6 +465,23 @@ expect(/^vaults-2/.test(ic.stage) && ic.plies === 68, `?sample=4 opens the first
   expect(dk5.decks && dk5.meta && dk5.draws, 'the report carries both decks, the six draws and the Reveal at ply 10');
   expect(/W draws Portal/.test(dk5.line12), `ply 12's line marks the draw at the next turn's start (${dk5.line12})`);
 }
+// THE DECK IN THE ENGINE (2026-10-02): the sixth sample — THE FIRST DUEL ON THE ENGINE'S DECK, the designer's phone log on the 3.3a build — loads, the report carries the decks, and the slot casts, the draws and the Undo card read on the ply lines.
+{
+  await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=6&fx=0`);
+  await page.evaluate(() => window.__DCK.ready);
+  const dk6 = await page.evaluate(async () => {
+    const Rp = window.__DCK.replay;
+    await Rp.boardReady();
+    const at = (ply) => { Rp.goto(ply); return Rp.view.plyLine; };
+    const lines = { l2: at(2), l3: at(3), l4: at(4), l12: at(12), l20: at(20) };
+    const rep = typeof Rp.report === 'function' ? await Rp.report() : '';
+    return { stage: Rp.view.stage, plies: Rp.view.plies, ...lines, decks: /decks  W 8 cards \/ B 2 cards/.test(rep), meta: /meta plays reveal @p0, undo @p20/.test(rep), draws: /draws 4/.test(rep) };
+  });
+  expect(/^vaults-4/.test(dk6.stage) && dk6.plies === 77, `?sample=6 opens the first duel on the engine's deck (${dk6.stage}, ${dk6.plies} plies)`);
+  expect(dk6.decks && dk6.meta && dk6.draws, 'the report carries both decks, the four draws, the Reveal at ply 0 and the Undo at ply 20');
+  expect(/T@b8/.test(dk6.l3) && /--/.test(dk6.l4) && /S@g5/.test(dk6.l12) && /the ice is cast/.test(dk6.l12), `the slot casts read on the ply lines — the portal half T@b8, the frozen pass, the enemy's ice S@g5 (${dk6.l3} · ${dk6.l12})`);
+  expect(/W draws Ice/.test(dk6.l2) && /Undo played/.test(dk6.l20), `the draw at ply 2 and the Undo card at ply 20 read on their lines (${dk6.l2} · ${dk6.l20})`);
+}
 expect(ic.before.field === '' && ic.before.d6 < 20 && ic.before.c7 < 20, `ply 25: no ice yet (${ic.before.d6} / ${ic.before.c7} cold pixels on d6 / c7)`);
 expect(ic.cast.field === '~c5,~d5,~c6,~d6,~e6,~c7,~d7,~e7' && ic.cast.empty.length >= 5 && ic.cast.empty.every(([, n]) => n >= 60) && ic.cast.e5[0] === '*' && ic.cast.e5[1] < 20 && ic.cast.d8 < 20, `ply 26: the player's I@d6 paints the ice on the patch's empty squares (${ic.cast.empty.map(([s, n]) => `${s}:${n}`).join(' ')}) and none on the wall e5 (${ic.cast.e5[1]}) or beyond it (d8 ${ic.cast.d8})`);
 {

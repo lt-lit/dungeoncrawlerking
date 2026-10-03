@@ -2666,6 +2666,23 @@ hand, no redraw; 0 of 583 searches at the time bound; results a checkmate, a
 strip and two ply caps — and game 2 ended with both decks spent, the
 position the controller now reads through `decks0`.
 
+THE FIRST DUEL ON THE ENGINE'S DECK, from the phone (2026-10-02): the
+designer's log is THE SIXTH COMMITTED SAMPLE (`replay/samples/dck-
+log_vaults-4-t27_s1830683123.json`, `?sample=6` — vaults-4 at walk turn 27,
+restless, Android Firefox, 77 plies, 4 quakes, 2 undos, 0 anomalies, 1-0 by
+checkmate). The record shows the whole path live: the Reveal at ply 0, four
+draws at the hand-overs, three portal pairs cast in one turn each (the
+slot's drops `T@b8` / `T@g4` with the enemy's frozen pass between), the
+player's ice `U@h5`, the Undo card at ply 20, the engine's two ices `S@g5` /
+`S@h6` at plies 12 and 20 while behind, no redraw on either side (the
+enemy's two cards were both in hand from the deal, and the player never
+dug), two ices dead in the player's hand at the end. The phone's depth: 14
+of 35 searches at the 10 s bound at depth 14–22 (median 18), against 19 of
+34 and median 20 on the ice build's phone log — the cast-heavy roots cost
+depth before the deck did. test-logreport @@TLR@@ and replay-smoke @@RSM@@
+read it. `APP_BUILD` is `2026-10-03 deck-engine.1` now (it had read
+2026-09-07 since the analyzer). The branch merged 2026-10-03 as it stood.
+
 ## The deck (2026-09-25)
 
 Brief §4.10 (the designer: "Could we have spells as cards drawn from a

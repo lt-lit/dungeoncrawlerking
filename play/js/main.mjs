@@ -70,7 +70,7 @@ import { deltaWords, slideWords } from './logreport.mjs'; // the deep-Δ wording
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
 // that alters what the log records or how the gods decide.
-const APP_BUILD = '2026-09-07 replay-ui.1';
+const APP_BUILD = '2026-10-03 deck-engine.1'; // bumped per build that ships (it had read 2026-09-07 since the analyzer, so phone logs could not be told apart by build)
 
 const $ = (id) => document.getElementById(id);
 const UCI_MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))(.*)$/; // rank-10 squares are 3 chars (rule 8)
