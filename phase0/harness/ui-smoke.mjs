@@ -2600,12 +2600,16 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     out.tinted = tinted ?? null;
     out.pxHint = { frame: px(anchor, 0, 0), inset: px(anchor, 1, 1), hub: px(anchor, 7, 7), tint: tinted ? px(tinted, 8, 8) : null, tintFrame: tinted ? px(tinted, 0, 0) : null };
     out.hinted = [...document.querySelectorAll('#hand .card.hinted')].map((el) => `${el.dataset.kind}:${el.style.getPropertyValue('--hint')}`);
+    // THE DIG AS A HINT (2026-10-20): the redraw as the best line — a list entry, no arrow, the deck stack rimmed gold
+    K.paintHints([{ rank: 1, move: '@@@@', score: { type: 'cp', value: 71 }, depth: 14 }, { rank: 2, move: K.deck.castUci('crack', 'd2'), score: { type: 'cp', value: 20 }, depth: 14 }], 2);
+    const stack = document.getElementById('pile-deck');
+    out.redraw = { line: document.getElementById('hint-line').textContent, arrows: K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.rank}:${a.from}`), stackHinted: stack.classList.contains('hinted'), stackHint: stack.style.getPropertyValue('--hint'), crackHinted: [...document.querySelectorAll('#hand .card.hinted')].map((el) => `${el.dataset.kind}:${el.style.getPropertyValue('--hint')}`) };
     K.options.cheat = false;
     K.options.hints = false;
     K.applyOptions();
     K.renderer.paintNow();
     out.pxAfter = { tint: tinted ? px(tinted, 8, 8) : null, frame: px(anchor, 0, 0) };
-    out.hintedAfter = document.querySelectorAll('#hand .card.hinted').length;
+    out.hintedAfter = document.querySelectorAll('#hand .card.hinted, #pile-deck.hinted').length;
     out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
     return out;
   });
@@ -2631,7 +2635,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     expect(!!t0.tinted && t0.pxHint.tint !== t0.pxAfter.tint && t0.pxHint.tintFrame !== GOLD, `the shape's other squares are tinted, not framed (${t0.tinted}: ${t0.pxHint.tint} under the hint, ${t0.pxAfter.tint} without; its corner ${t0.pxHint.tintFrame})`);
   }
   expect(t0.hinted.length === 2 && t0.hinted.some((h) => /^demolish:#?[0-9a-f]{6}$/i.test(h)) && t0.hinted.some((h) => /^crack:#?[0-9a-f]{6}$/i.test(h)) && t0.hinted[0].split(':')[1] !== t0.hinted[1].split(':')[1], `the hinted cards in the fan wear their rank's rim (${t0.hinted.join(' ')})`);
-  expect(t0.cleared === 0 && t0.hintedAfter === 0 && t0.pxAfter.frame !== GOLD, 'hints off clears the glyph, the tint and the rims');
+  expect(/^1 redraw \+0\.7 · 2 \S+@d2 \+0\.2 · d14$/.test(t0.redraw.line) && t0.redraw.arrows.join(',') === '2:d2', `the redraw as the best line is a list entry with no arrow ("${t0.redraw.line}"; arrows ${t0.redraw.arrows.join(' ')})`);
+  expect(t0.redraw.stackHinted && /^#?f2c14e$/i.test(t0.redraw.stackHint) && t0.redraw.crackHinted.join(',') === 'crack:#c9ced8', `the deck stack wears the rank-1 gold and the Crack card the rank-2 silver (${t0.redraw.stackHint}; ${t0.redraw.crackHinted.join(' ')})`);
+  expect(t0.cleared === 0 && t0.hintedAfter === 0 && t0.pxAfter.frame !== GOLD, 'hints off clears the glyph, the tint and the rims, the deck stack\'s too');
   // THE DRAG: the Crack card onto d2 through the mouse — the anchor framed, no area beyond it, the tip, the cast on release
   const cBox = await pageT.locator('#hand .card[data-kind="crack"]').first().boundingBox();
   const d2pt = await pageT.evaluate(() => window.__DCK.app.boardUI.pointOfSquare('d2'));

@@ -2682,7 +2682,7 @@ TINTS the rest of the shape in the arrow's colour at a quarter of its
 opacity; the hint list's glyph carries `data-spell` (the effect) and
 `data-card` (the kind) with the card's name as its title; and the fan's cards
 of a hinted kind wear their rank's rim (`.card.hinted`, `--hint` the arrow
-colour; `syncHintCards`, set with the lines and cleared with them). THE BEATS
+colour; `syncHintCards`, set with the lines and cleared with them). THE DIG AS A HINT (2026-10-20; the designer, with two logs of an s80 duel at ply 6: "What's going on with the move recommendations? Here I can't see a gold one. Now the show best toggle doesn't seem to work at all"): the engine's best move for the player was the REDRAW (`@@@@` — it digs the library pile for a card, as it did for itself at ply 2), and `applyHintLines` dropped any line that was neither a move nor a cast, so the list began at rank 2 and nothing on the board or in the fan was gold. The redraw is a list entry now ("1 redraw +7.1"), with no arrow and THE DECK STACK rimmed in its rank's colour as a hinted card is; and "Show best" turned on mid-turn restarts a probe already in flight with the wrong line count (a one-line eval-bar probe used to be handed back as the hint probe, so the toggle painted one line, or none when that line was the redraw, until the next turn). THE BEATS
 (`onMove`): a terrain cast's edits wear the gods' own — a wall cracked into a
 crate the weaken beat with its chips, a crate or a wall smashed to the floor
 the breach beat with its shatter, a floor sunk into a pit the crumble beat —

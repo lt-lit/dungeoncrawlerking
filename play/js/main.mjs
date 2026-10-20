@@ -982,7 +982,14 @@ function applyOptions() {
     if (app.duel && (app.phase === 'playing' || app.phase === 'ended')) renderPlayMarks();
   }
   if (app.duel && app.duel.state === 'playing' && !app.busy && app.duel.turnColor() === app.session.playerColor) {
-    void runIdleProbes(); // options may have just enabled hints/eval/overlay mid-turn
+    // Options may have just enabled hints / eval / the overlay mid-turn. A probe ALREADY IN FLIGHT keeps the line
+    // count it started with (one line for the eval bar alone), and runIdleProbes hands back that flight — so "Show
+    // best" turned on while it ran painted one line, or none when that line was the redraw, until the next turn
+    // (2026-10-20: "the show best toggle doesn't seem to work at all"). A flight with the wrong count is cancelled
+    // and the probes run again.
+    const wantN = revealOn() ? 3 : cheatHints() ? options.hintN : 1;
+    if (cheat.active && cheat.n !== wantN) void (async () => { await cancelIdleProbes(); if (app.duel && app.duel.state === 'playing' && !app.busy) void runIdleProbes(); })();
+    else void runIdleProbes();
   }
 }
 
@@ -997,7 +1004,7 @@ function applyOptions() {
  *  line repaints the arrows, so the first hints land at depth ~8 within a
  *  few hundred ms and sharpen while the player thinks. The hint line shows
  *  the reached depth so a shifting arrow reads as refinement. */
-const cheat = { seq: 0, active: null, engine: null, failures: 0, depth: null, paintTimer: null };
+const cheat = { seq: 0, active: null, engine: null, failures: 0, depth: null, paintTimer: null, n: 0 }; // n: the line count the running probe was started with
 const PROBE_GO_DEFAULT = 'depth 22 movetime 10000'; // matched to the enemy's reply (beginDuel)
 const PROBE_GO_CONT = 'depth 22'; // "Keep evaluating": ends at the depth cap or on the player's move
 
@@ -1061,6 +1068,7 @@ async function runCheatSearch() {
   const engine = app.engine;
   const mySeq = ++cheat.seq;
   const n = revealOn() ? 3 : cheatHints() ? options.hintN : 1; // THE DECK: Reveal shows three lines
+  cheat.n = n;
   const go = probeGo();
   const mt = go.match(/movetime (\d+)/);
   // Timeout matched to the search (movetime + 4 s) so a doomed probe fails
@@ -1153,7 +1161,16 @@ function applyHintLines(pvs, n, duel, partial) {
   for (const pv of sorted) {
     const m = pv.move.match(UCI_MOVE_RE);
     const c = m ? null : pv.move.match(CAST_RE); // a cast hint: marked by its spell on the square (THE SPELL GLYPHS, 2026-09-21)
-    if (!m && !c) continue;
+    // THE DIG AS A HINT (2026-10-20): the engine's best move can be the REDRAW (`@@@@` — it digs for a card), and the
+    // painter dropped that line, so the list began at rank 2 and nothing on the board or in the fan was gold (the
+    // designer: "Here I can't see a gold one"). It is a list entry now — "1 redraw +7.1" — with no arrow (nothing to
+    // draw) and THE DECK STACK rimmed in its rank's colour (syncHintCards), the way a hinted card is.
+    const redraw = !m && !c && isMulligan(pv.move);
+    if (!m && !c && !redraw) continue;
+    if (redraw) {
+      items.push({ rank: pv.rank, san: 'redraw', score: pv.score ? fmtScore(pv.score) : null, hammer: false, spell: null, card: 'redraw' });
+      continue;
+    }
     const card = c ? spellOf(pv.move) : null; // the CARD a cast hint casts (deck.mjs cardOfCast, by the slot's binding)
     const spell = card ? CARDS[card]?.engine ?? card : null; // its EFFECT word names the glyph (PHASE 3.3b, 2026-10-03: hit / wall / pit / harden / sledge / drop beside ice / portal / win)
     const strength = Math.max(0.2, Math.min(1, 1 - (best - cpOf(pv.score)) / 300));
@@ -1176,7 +1193,7 @@ function applyHintLines(pvs, n, duel, partial) {
   }
   app.cheatArrows = arrows;
   app.hintCards = new Map(); // the best rank per hinted card kind — the fan's rims (syncHintCards)
-  for (const it of items) if (it.card && CARDS[it.card] && !app.hintCards.has(it.card)) app.hintCards.set(it.card, it.rank);
+  for (const it of items) if (it.card && (it.card === 'redraw' || CARDS[it.card]) && !app.hintCards.has(it.card)) app.hintCards.set(it.card, it.rank); // 'redraw' names the deck stack
   syncHintCards();
   renderPlayMarks();
   const depth = sorted[0].depth ?? cheat.depth;
@@ -3459,14 +3476,15 @@ function renderHand(inDuel, mine) {
  *  cards of a hinted kind wear their hint's rank colour as a rim (`.hinted`, `--hint`), set with the hint lines and
  *  cleared with them (applyHintLines / clearHints). */
 function syncHintCards() {
-  const box = document.getElementById('hand');
-  if (!box) return;
-  for (const el of box.children) {
-    const rank = app.hintCards?.get(el.dataset.kind) ?? null;
+  const rim = (el, rank) => {
     el.classList.toggle('hinted', rank !== null);
     if (rank !== null) el.style.setProperty('--hint', arrowColour({ kind: 'hint', rank }));
     else el.style.removeProperty('--hint');
-  }
+  };
+  const box = document.getElementById('hand');
+  if (box) for (const el of box.children) rim(el, app.hintCards?.get(el.dataset.kind) ?? null);
+  const stack = document.getElementById('pile-deck'); // THE DIG AS A HINT: a hinted redraw rims the deck stack
+  if (stack) rim(stack, app.hintCards?.get('redraw') ?? null);
 }
 
 /** Cast mode's lifted card: the first card of the mode's kind rises; every other card settles. */
