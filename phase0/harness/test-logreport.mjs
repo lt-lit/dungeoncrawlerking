@@ -132,7 +132,7 @@ if (!process.argv[2]) {
   const L2 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-4-t75_s3904618753.json'), 'utf8'));
   const full2 = R.renderReport(L2, { sections: R.SECTION_NAMES });
   const tl2 = R.timelineSection(L2);
-  expect(full2.length > 10000 && tl2.some((l) => /1… O@f5/.test(l)) && tl2.some((l) => /2\. O@b6/.test(l)) && tl2.some((l) => /3\. O@h8/.test(l)), 'the portal duel sample renders with its casts on the timeline');
+  expect(full2.length > 10000 && tl2.some((l) => /2\. O@f5/.test(l)) && tl2.some((l) => /2… O@b6/.test(l)) && tl2.some((l) => /3… O@h8/.test(l)), 'the portal duel sample renders with its casts on the timeline (the enemy moved first: ply 1 is Black\'s "1…", the player\'s O@f5 is "2." — THE INITIATIVE\'S NUMBERING, 2026-10-20)');
   expect(full2.includes('world vaults-4') && /kings on file f/.test(full2) && /RESULT 1-0/.test(full2), 'its header carries the world line and the result');
   const fields = L2.states.slice(0, 6).map((s) => s.fen.match(/\{([^}]*)\}/)?.[1] ?? '').join('|');
   expect(fields === '||f5w|f5w,b6b|f5-i9,b6b|f5-i9,b6-h8', `the FEN field grows cast by cast through the states (${fields})`);
@@ -240,6 +240,30 @@ if (!process.argv[2]) {
   expect(last6.deck.w.hand.join(',') === 'ice,ice' && last6.deck.w.pile.length === 0 && last6.deck.b.hand.length === 0 && last6.deck.b.pile.length === 0 && last6.deck.w.spent.includes('reveal') && last6.deck.w.spent.includes('undo'), "at the end two ices are dead in the player's hand, both piles are empty, the enemy's hand too, and the meta cards count as spent");
   expect(s.filter((x) => x.drew).length === 4 && !s.some((x) => x.cast === 'mulligan') && L6.metaPlays?.length === 2 && L6.metaPlays[0].kind === 'reveal' && L6.metaPlays[0].ply === 0 && L6.metaPlays[1].kind === 'undo' && L6.metaPlays[1].ply === 20, 'four draws, no redraw, and the two meta plays on the record');
   expect((L6.quakes?.length ?? 0) === 4 && (L6.branches?.length ?? 0) === 2 && (L6.anomalies?.length ?? 0) === 0 && !L6.engine.some((e) => e.recovered) && L6.engine.filter((e) => e.ms >= 9500).length === 14, 'four quakes landed, two undos, no anomaly, no recovered search, fourteen searches at the phone\'s ten-second bound');
+}
+
+// THE FIRST TERRAIN DUEL (2026-10-20): the seventh sample — vaults-3 at walk turn 19, the enemy's initiative, both sides
+// on the library deck, Firefox/Windows — the terrain casts recorded by their effect with their edits, the words on the
+// timeline, the enemy's Sledge and its hammer, the initiative's numbering (ply 1 is Black's: "1… U@d8", then "2. V@g2").
+if (!process.argv[2]) {
+  const L7 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-3-t19_s3367490008.json'), 'utf8'));
+  const full7 = R.renderReport(L7, { sections: R.SECTION_NAMES });
+  const tl7 = R.timelineSection(L7);
+  const at = (ply) => tl7.find((l) => new RegExp(`^p${String(ply).padStart(3)} `).test(l)) ?? '';
+  expect(full7.length > 10000 && full7.includes('world vaults-3') && /RESULT 1-0  army-extinct/.test(full7) && /quakes 12/.test(full7) && /undos 3/.test(full7) && /anomalies 0/.test(full7), 'the first terrain duel renders: vaults-3, 1-0 by extinction, twelve quakes, three undos, no anomaly');
+  expect(/decks  W 24 cards \/ B 22 cards \(as shuffled\)  draws 21  meta plays undo @p11, reveal @p11  hands at the end W \[—\] B \[—\]/.test(full7), 'the header: the library on both sides (24 / 22), twenty-one draws, the Undo and the Reveal at ply 11, both hands empty at the end');
+  expect(/^p  1    1… U@d8 /.test(at(1)) && /^p  2    2\. V@g2 /.test(at(2)) && /^p  3    2… redraw /.test(at(3)), `the initiative's numbering: ply 1 is Black's "1…", ply 2 White's "2." (${at(1).slice(0, 22)} · ${at(2).slice(0, 22)})`);
+  expect(/✸ Crack row — cracks the walls at c8, d8, e8/.test(at(1)) && /✸ Crack row — cracks the walls at f2, g2/.test(at(2)), `the hits say which walls cracked (${at(1).slice(35, 95)})`);
+  expect(/✸ Reinforce — a pawn is placed on i10/.test(at(15)) && /✸ Sink file — the floor sinks into a pit at e5/.test(at(16)) && /✸ Wall L — stone rises at i9, j9/.test(at(39)) && /✸ Blast — smashes e8 to the floor/.test(at(47)) && /✸ Demolish — cracks the walls at a3, a2, c2, b1/.test(at(65)), 'the drop, the pit, the raised wall, the smash and the 3×3 crack read in words');
+  expect(/✸ Sledge — the enemy's king carries the sledgehammer/.test(at(121)) && /K\*e4/.test(at(133)), `the enemy's Sledge at ply 121 and its hammer at 133 (${at(121).slice(35, 100)})`);
+  const s = L7.states;
+  const e = (st) => (st.edits ?? []).map((x) => `${x.sq}:${x.from ?? '.'}>${x.to ?? '.'}`).join(' ');
+  expect(s[1].cast === 'hit' && s[1].card === 'crack-row' && s[1].mover === 'engine' && e(s[1]) === 'c8:*>^ d8:*>^ e8:*>^' && ['c8', 'd8', 'e8'].every((q) => s[1].godCrates.includes(q)), `the first ply is the enemy's Crack row with its three edits, the crates in the one ledger (${e(s[1])})`);
+  expect(s[15].cast === 'drop' && s[15].card === 'reinforce' && e(s[15]) === 'i10:.>p' && s[16].cast === 'pit' && e(s[16]) === 'e5:.>_' && s[16].holes.includes('e5') && s[39].cast === 'wall' && e(s[39]) === 'i9:.>* j9:.>*', `the drop, the pit (in the holes ledger from its ply on) and the raised wall carry their edits (${e(s[15])} · ${e(s[16])} · ${e(s[39])})`);
+  expect(s[121].cast === 'sledge' && s[121].sledge === 'b' && !s[121].edits && s[133].hammer === 'e4' && s[133].mover === 'engine' && s[133].godCrates.includes('e4'), 'the enemy casts Sledge at ply 121 (no square changed) and hammers e4 at 133, the crate in the ledger');
+  expect(s.filter((x) => x.cast === 'mulligan').map((x) => x.ply).join(',') === '3,18,26,45' && s.filter((x) => x.drew).length === 21 && s.filter((x) => x.cast && !['mulligan', 'pass', 'half', 'link'].includes(x.cast)).length === 26, 'four redraws (two a side), twenty-one draws, twenty-six card casts beside the two portal pairs');
+  const last7 = s[s.length - 1];
+  expect(last7.deck.w.hand.length === 0 && last7.deck.w.pile.length === 0 && last7.deck.b.hand.length === 0 && last7.deck.b.pile.length === 0 && L7.engine.length === 66 && L7.engine.filter((x) => x.ms >= 9500).length === 55 && !L7.engine.some((x) => x.recovered), 'both decks spent to the last card; 55 of 66 searches at the ten-second bound, none recovered');
 }
 
 for (const n of notes) console.log(n);

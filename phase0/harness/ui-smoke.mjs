@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from 'playwright';
+import { spawnSync } from 'child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(ROOT, 'phase0/results/ui-smoke');
@@ -60,27 +61,54 @@ let bootRetries = 0;
 /** A duel page's boot: wait for the duel to be playing. THE BOOT HANG (2026-09-25): three long runs saw a page never
  *  reach 'playing' after 120 s while twelve isolated boots of the same URLs took 3.5 s each — so a page that has not
  *  booted in 90 s is RELOADED once and waited for again; the retry is counted on the summary line, never hidden. */
-const bootWait = async (page, make, url, hook) => {
-  const playing = (p, timeout) => p.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout });
+let pageRetries = 0;
+const race = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} did not return in ${ms / 1000} s`)), ms))]);
+/** Close a browser that may no longer answer: a bounded close, then every headless Chromium of ours killed outright
+ *  (`executablePath`'s tree — this harness is the only Playwright user on the box; Playwright 1.63's Browser has no
+ *  process handle to kill one by). */
+const killBrowser = async (old) => {
+  await race(old.close(), 5000, 'browser.close').catch(() => {});
+  if (executablePath) {
+    try { spawnSync('pkill', ['-9', '-f', `^${path.dirname(executablePath)}`]); } catch { /* no pkill: the close was the attempt */ }
+  }
+};
+const newPageSafe = async (opts) => {
   try {
-    await playing(page, 90000);
+    return await race(browser.newPage(opts), 30000, 'browser.newPage');
+  } catch (e) {
+    pageRetries++;
+    process.stderr.write(`... page retry ${pageRetries}: ${String(e).split('\n')[0]} — a fresh browser\n`);
+    await killBrowser(browser);
+    browser = await launch();
+    return await race(browser.newPage(opts), 30000, 'browser.newPage (fresh browser)');
+  }
+};
+const bootWait = async (page, make, url, hook) => {
+  const playing = (p, timeout) => p.waitForFunction(() => window.__DCK?.app?.duel?.state === 'playing', null, { timeout, polling: 250 }); // an interval, not animation frames (a page Chromium stops rendering gets none)
+  try {
+    await race(playing(page, 90000), 100000, 'the boot wait'); // Node's own timer: Playwright's deadline cannot cancel the evaluate that installs its poll (THE RENDERER THAT STOPS ANSWERING, 2026-10-03, below)
     return page;
   } catch (e) {
-    if (!/Timeout|closed|crashed/i.test(String(e))) throw e;
+    if (!/Timeout|closed|crashed|did not return/i.test(String(e))) throw e;
     bootRetries++;
-    const where = await page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`).catch((err) => `unreachable: ${String(err).split('\n')[0]}`);
+    const where = await race(page.evaluate(() => `${window.__DCK?.app?.phase ?? '?'} / ${document.getElementById('status')?.textContent ?? '?'}`), 5000, 'the boot readout').catch((err) => `unreachable: ${String(err).split('\n')[0]}`);
     process.stderr.write(`... boot retry ${bootRetries}: the page did not reach 'playing' in 90 s (${where}) — a fresh browser and page\n`);
     // THE LOST RENDERER (2026-09-25): after a run of pages in one Chromium a new page's target can die at its boot
     // ("Target page, context or browser has been closed"; 45 boots in one browser reproduced it at the 25th, a fresh
     // browser boots the same URL in 3.5 s) while the browser itself stays up — so the retry is a NEW BROWSER, not a new
     // page in the old one. Every boot site's maker reads `browser` when called, so it makes its page in the new one.
-    await page.close().catch(() => {});
-    await browser.close().catch(() => {});
+    // THE RENDERER THAT STOPS ANSWERING (2026-10-03): three full runs in five sat for good inside this very wait on a
+    // fresh page — the load event fired, the duel never read 'playing', the renderer processes idle, and Playwright's
+    // 90 s deadline never fired, because waitForFunction installs its poll through an evaluate it marks uncancellable
+    // and a renderer that has stopped answering CDP never completes it. So every wait here is raced by a Node timer,
+    // the wedged browser is killed rather than closed, and the page is made again in a new one.
+    await race(page.close(), 5000, 'page.close').catch(() => {});
+    await killBrowser(browser);
     browser = await launch();
     const fresh = await make();
     if (hook) hook(fresh);
     await fresh.goto(url);
-    await playing(fresh, 120000);
+    await race(playing(fresh, 120000), 130000, 'the boot wait (fresh browser)');
     return fresh;
   }
 };
@@ -93,7 +121,13 @@ const expect = (ok, what) => {
 const executablePath = process.env.CHROMIUM ?? (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 const launch = () => chromium.launch({ executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 let browser = await launch();
-let page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+/** A page in the live browser — or a FRESH BROWSER's when Chromium does not hand one over in 30 s. THE PAGE THAT
+ *  NEVER CAME (2026-10-03): three full runs in five WEDGED on `browser.newPage()` itself after a dozen pages in one
+ *  Chromium — the new renderer processes appeared and sat idle, the call never returned, and no timeout governs it
+ *  (it is not a navigation) — at a different block each time, never standalone. The cousin of THE LOST RENDERER
+ *  (2026-09-25, bootWait below), and the same answer: a new browser, the old one killed if it will not close, the
+ *  retry counted on the summary line. */
+let page = await newPageSafe({ viewport: { width: 390, height: 844 } });
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0]));
 
@@ -115,7 +149,7 @@ const q = new URLSearchParams({
   // idle window and would delay the hints this smoke times.
 });
 await page.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`);
-page = await bootWait(page, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`, (p) => p.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0])));
+page = await bootWait(page, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q}`, (p) => p.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0])));
 // Cheater Mode + hints ON through the options surface (persisted, so the
 // probe fires on the very next player turn).
 await page.evaluate(() => {
@@ -571,10 +605,17 @@ if ((await page.evaluate(() => window.__DCK.app.duel?.state)) === 'playing') {
     await window.__DCK.undo();
     await window.__DCK.waitIdle();
     const d = window.__DCK.app.duel;
-    return { holesBefore, holes: [...d.director.holes], godCrates: [...d.director.godCrates], fen: d.fen(), marks: window.__DCK.marks.quake, godsLine: window.__DCK.marks.godsLine, state: d.state };
+    const branch = d.record.branches[d.record.branches.length - 1] ?? null;
+    return { holesBefore, holes: [...d.director.holes], godCrates: [...d.director.godCrates], fen: d.fen(), marks: window.__DCK.marks.quake, godsLine: window.__DCK.marks.godsLine, state: d.state, playedAfter: branch ? d.ply - branch.toPly : 0 };
   });
-  expect(undone.marks === null && undone.godsLine === '', 'undo clears the gods\' residue and the gods line');
-  expect(undone.holes.length <= undone.holesBefore, `undo rewound the hole ledger (${undone.holes.length} ≤ ${undone.holesBefore})`);
+  // PORTALS v3: an undo that lands on a turn the enemy's open half FREEZES plays on at once (doUndo ends in driveTurn:
+  // the forced pass, the enemy's link, whatever the gods roll on it), so the residue and the ledger are the new plies'
+  // — the random driver met it on 2026-10-03 (two false BADs); the restored position is judged only when nothing followed.
+  if (undone.playedAfter > 0) expect(true, `the undo landed on a frozen turn and the game played on (${undone.playedAfter} plies: the pass and the enemy's link) — the residue and the ledger are the new plies'`);
+  else {
+    expect(undone.marks === null && undone.godsLine === '', 'undo clears the gods\' residue and the gods line');
+    expect(undone.holes.length <= undone.holesBefore, `undo rewound the hole ledger (${undone.holes.length} ≤ ${undone.holesBefore})`);
+  }
   const tilesAfterUndo = await page.evaluate(tilesVsLedgers, undone);
   expect(tilesAfterUndo.length === 0, `tiles agree with the restored ledgers after undo${tilesAfterUndo.length ? `: ${tilesAfterUndo.join(', ')}` : ''}`);
 }
@@ -973,12 +1014,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // --- THE FLIGHT: with motion on, the debris flies before it lands (the
 // board draws the flight's frames; the landing paints the squares). ---
 {
-  let page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page2 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs2 = [];
   page2.on('pageerror', (e) => errs2.push(String(e).split('\n')[0]));
   const q2 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', onset: '1', mramp: '2', debt: '2', ...(THEME ? { theme: THEME } : {}) });
   await page2.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`);
-  page2 = await bootWait(page2, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`, (p) => p.on('pageerror', (e) => errs2.push(String(e).split('\n')[0])));
+  page2 = await bootWait(page2, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q2}`, (p) => p.on('pageerror', (e) => errs2.push(String(e).split('\n')[0])));
   await page2.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const fl = await page2.evaluate(async () => {
     const K = window.__DCK;
@@ -1009,12 +1050,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // visible squares hit-testing back through the window, the diag naming the
 // fit — and the duel plays on unchanged.
 {
-  let page3 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page3 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs3 = [];
   page3.on('pageerror', (e) => errs3.push(String(e).split('\n')[0]));
   const q3 = new URLSearchParams({ stage: STAGE, autobegin: '1', seed: SEED, go: GO, probe: 'depth 6 movetime 100', zoom: '12', viewport: 'screen', debris: 'off', fx: '0', ...(THEME ? { theme: THEME } : {}) });
   await page3.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`);
-  page3 = await bootWait(page3, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`, (p) => p.on('pageerror', (e) => errs3.push(String(e).split('\n')[0])));
+  page3 = await bootWait(page3, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q3}`, (p) => p.on('pageerror', (e) => errs3.push(String(e).split('\n')[0])));
   await page3.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const win = await page3.evaluate(async () => {
     const K = window.__DCK;
@@ -1061,7 +1102,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // camera back, a PINCH steps the zoom, leaving and resuming keep the turn,
 // an import lands on the imported state. The board is north-up throughout.
 {
-  const page4 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page4 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs4 = [];
   page4.on('pageerror', (e) => errs4.push(String(e).split('\n')[0]));
   await page4.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&fx=0&enemies=off`); // the enemies have their own block below; this one walks an empty floor
@@ -1213,7 +1254,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // duel on a scarred floor seeds the gods with the pit; a loss ends the run
 // and resume refuses it.
 {
-  const page5 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page5 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs5 = [];
   page5.on('pageerror', (e) => errs5.push(String(e).split('\n')[0]));
   const q5 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&enemies=off'; // an empty floor: the enemies have their own block below
@@ -1362,7 +1403,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // enemies on two far rows at once — the player picks; the other keeps
 // hunting through the frozen duel and catches him on the next input.
 {
-  const page6 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page6 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs6 = [];
   page6.on('pageerror', (e) => errs6.push(String(e).split('\n')[0]));
   const q6 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
@@ -1470,7 +1511,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // the same seed and the same inputs walks the same beats (the draws come
 // from the run's seed by their count, so a run replays).
 {
-  const page7 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page7 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs7 = [];
   page7.on('pageerror', (e) => errs7.push(String(e).split('\n')[0]));
   const q7 = 'fx=0&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off';
@@ -1532,11 +1573,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // analyzer, replay-smoke). The debris is off so nothing lands on the rings;
 // hints off so no shaft crosses them.
 {
-  let page8 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page8 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs8 = [];
   page8.on('pageerror', (e) => errs8.push(String(e).split('\n')[0]));
   await page8.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  page8 = await bootWait(page8, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs8.push(String(e).split('\n')[0])));
+  page8 = await bootWait(page8, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs8.push(String(e).split('\n')[0])));
   await page8.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const ps = await page8.evaluate(async () => {
     const K = window.__DCK;
@@ -1656,11 +1697,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // the alias is read off the live duel when a landing on the player's own pair
 // is on offer.
 {
-  let page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
-  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
+  page9 = await bootWait(page9, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const v2 = await page9.evaluate(async () => {
     const K = window.__DCK;
@@ -1782,11 +1823,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   // The block runs on a stage whose middle is open (`--icestage`, s73 by default: the cast rows 5–6 are floor, so a pawn on
   // rank 4 pushes onto the patch and slides); s59's cast rows are walls but for a corner, and no pawn can enter a patch there.
   const ICE_STAGE = arg('icestage', 's73-the-tower-room');
-  let page11 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page11 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs11 = [];
   page11.on('pageerror', (e) => errs11.push(String(e).split('\n')[0]));
   await page11.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`);
-  page11 = await bootWait(page11, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`, (p) => p.on('pageerror', (e) => errs11.push(String(e).split('\n')[0])));
+  page11 = await bootWait(page11, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&portals=off`, (p) => p.on('pageerror', (e) => errs11.push(String(e).split('\n')[0])));
   await page11.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SPELL GLYPHS (2026-09-21 — designer: "On move hints, there's just a square outline for both portal and ice. How am I
   // supposed to know what spell it's suggesting?"): an ICE cast hint is its square framed at its edge with the SNOWFLAKE
@@ -1967,9 +2008,9 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs11.length === 0, `no page errors with the ice${errs11.length ? ` — ${errs11.join(' | ')}` : ''}`);
   await page11.close();
   // ?ice=off: no scroll, no button
-  let page12 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page12 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   await page12.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`);
-  page12 = await bootWait(page12, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`, null);
+  page12 = await bootWait(page12, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&stage=${ICE_STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&ice=off`, null);
   await page12.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const off = await page12.evaluate(() => ({ hidden: window.__DCK.cards.info('ice').n === 0, holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', variant: window.__DCK.app.duel.variantName }));
   expect(off.hidden && !/[Ii]/.test(off.holdings) && !/__ice/.test(off.variant), `?ice=off: no ice card in the fan, no ice scroll in hand, a deal without the suffix ([${off.holdings}] ${off.variant})`);
@@ -2030,12 +2071,12 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // a wall beside him by a manual move (ruling 11) — nobody moves, the world's
 // ledger takes the cell, the crate is a capture next, the save carries it.
 {
-  let page9 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs9 = [];
   page9.on('pageerror', (e) => errs9.push(String(e).split('\n')[0]));
   const q9 = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&arrowalpha=1&arrowwidth=2`;
-  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`);
-  page9 = await bootWait(page9, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
+  await page9.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&hammer=on&${q9}`);
+  page9 = await bootWait(page9, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&hammer=on&${q9}`, (p) => p.on('pageerror', (e) => errs9.push(String(e).split('\n')[0])));
   await page9.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // THE SLEDGEHAMMER'S GLYPH (2026-09-18): a hint onto a wall wears the hammer —
   // in the list (a canvas per hammer hint, in the rank's colour, between the
@@ -2089,7 +2130,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     const kingSq = () => { const g = gridOf(K.app.duel.fen()); for (let i = 0; i < g.length; i++) for (let f = 0; f < g[i].length; f++) if (g[i][f] === 'K') return String.fromCharCode(97 + f) + (g.length - i); return null; };
     const around = (sq) => { const f = sq.charCodeAt(0) - 97, r = parseInt(sq.slice(1), 10); const out = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) { if (!df && !dr) continue; if (f + df >= 0 && f + df < K.app.boardUI.files && r + dr >= 1 && r + dr <= K.app.boardUI.ranks) out.push(String.fromCharCode(97 + f + df) + (r + dr)); } return out; };
     const settle = async () => { await K.waitIdle(); for (let i = 0; i < 200 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
-    const out = { variant: K.app.duel.variantName, king: kingSq(), optHammer: document.getElementById('optHammer').checked };
+    const out = { variant: K.app.duel.variantName, king: kingSq() };
     out.walls = around(out.king).filter((s) => at(s) === '*');
     K.tap(out.king);
     const lit = [...K.app.boardUI.marks.targets];
@@ -2113,7 +2154,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     };
     return out;
   });
-  expect(/__sledge/.test(hm.variant) && hm.optHammer, `the deal is a sledge deal and the option is on (${hm.variant})`);
+  expect(/__sledge/.test(hm.variant), `the deal is a sledge deal under ?hammer=on (${hm.variant}) — the Sledge-kings option is retired (PHASE 3.3b: the Sledge card)`);
   expect(hm.king === 'e1' && hm.walls.length === 2 && hm.walls.includes('d1') && hm.walls.includes('d2'), `the kit's king at ${hm.king} with breakable walls beside him (${hm.walls.join(' ')})`);
   expect(hm.selected === hm.king && hm.wallsLit.length === hm.walls.length, `a tap on the king lights the walls beside him with his moves (${hm.wallsLit.join(' ')} of ${hm.lit.join(' ')})`);
   expect(hm.after.cell === '^' && hm.after.crate && hm.after.king === hm.king && hm.after.hammer === hm.target, `a tap on ${hm.target} cracks it: the state after the ply shows a crate in the ledger, the king still on ${hm.after.king}, the state marked hammer ${hm.after.hammer}`);
@@ -2123,19 +2164,19 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(errs9.length === 0, `no page errors with the sledgehammer${errs9.length ? ` — ${errs9.join(' | ')}` : ''}`);
   await page9.close();
   // Plain kings: `?hammer=off` — the same tap lights no wall and the deal is plain.
-  let page9b = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let page9b = await newPageSafe({ viewport: { width: 390, height: 844 } });
   await page9b.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`);
-  page9b = await bootWait(page9b, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`, null);
+  page9b = await bootWait(page9b, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?deck=off&${q9}&hammer=off`, null);
   await page9b.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   // (With plain kings the king at e1 has no move at all here — the walls, his own pawns and rook box him in — so nothing lights; the engine's list is the proof.)
   const plain = await page9b.evaluate(() => { const K = window.__DCK; K.tap('e1'); const lit = [...K.app.boardUI.marks.targets]; const legal = K.app.duel.legalMoves(); return { variant: K.app.duel.variantName, lit, walls: lit.filter((s) => ['d1', 'd2'].includes(s)), hammers: legal.filter((m) => m === 'e1d1' || m === 'e1d2'), legal: legal.length }; });
   expect(!/sledge/.test(plain.variant) && plain.walls.length === 0 && plain.hammers.length === 0 && plain.legal > 0, `?hammer=off: plain kings — no wall lights and the engine lists no hammer (${plain.lit.join(' ') || 'nothing lit'}; ${plain.legal} legal moves; ${plain.variant})`);
   await page9b.close();
   // THE WALK: a manual hammer on the fixture (the enemies off; motion off).
-  const page10 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page10 = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errs10 = [];
   page10.on('pageerror', (e) => errs10.push(String(e).split('\n')[0]));
-  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&gen=vaults&seed=1&fx=0&enemies=off`);
+  await page10.goto(`http://127.0.0.1:${PORT}/play/index.html?deck=off&hammer=on&gen=vaults&seed=1&fx=0&enemies=off`);
   await page10.waitForFunction(() => window.__DCK?.app?.phase === 'walk', null, { timeout: 120000 });
   const hw = await page10.evaluate(async () => {
     const K = window.__DCK;
@@ -2202,11 +2243,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // carries the decks and the plays. With `?deck=off` nothing of this shows
 // and the holdings are the stress-test set.
 {
-  let pageD = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageD = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errsD = [];
   pageD.on('pageerror', (e) => errsD.push(String(e).split('\n')[0]));
   await pageD.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
-  pageD = await bootWait(pageD, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsD.push(String(e).split('\n')[0])));
+  pageD = await bootWait(pageD, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsD.push(String(e).split('\n')[0])));
   await pageD.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const dk = await pageD.evaluate(async () => {
     const K = window.__DCK;
@@ -2326,17 +2367,18 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageD.close();
 
   // `?deck=off`: the stress-test set, nothing of the deck on screen
-  let pageE = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageE = await newPageSafe({ viewport: { width: 390, height: 844 } });
   await pageE.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`);
-  pageE = await bootWait(pageE, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`, null);
+  pageE = await bootWait(pageE, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=off`, null);
   await pageE.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
-  const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck }));
+  const off = await pageE.evaluate(() => ({ spec: window.__DCK.deck.spec(), hands: window.__DCK.deck.hands(), holdings: window.__DCK.app.duel.fen().match(/\[([^\]]*)\]/)?.[1] ?? '', fan: window.__DCK.cards.hand(), piles: window.__DCK.cards.piles(), enemy: window.__DCK.cards.enemy(), enemyPile: window.__DCK.cards.enemyPile(), optDeck: document.getElementById('optDeck').value, optDefault: window.__DCK.options.deck, variant: window.__DCK.app.duel.variantName }));
   expect(off.spec === null && off.hands === null && off.holdings === 'IOOioo' && JSON.stringify(off.fan) === '["ice","portal"]' && off.piles === null && JSON.stringify(off.enemy) === '["ice","portal"]' && off.enemyPile === null, `?deck=off is the stress-test set: holdings ${off.holdings}, the fan the two spells in hand and no piles, the enemy's two minis and no stack`);
-  expect(off.optDefault === 'adept' && off.optDeck === 'adept', `Options → Spells → Deck defaults to the starter (${off.optDefault})`);
+  expect(off.optDefault === 'library' && off.optDeck === 'library', `Options → Spells → Deck defaults to the library (${off.optDefault}) — PHASE 3.3b`);
+  expect(!/__sledge/.test(off.variant), `the stress-test set deals plain kings — the Sledge-kings option is retired, the hammer is a card (${off.variant})`);
   await pageE.close();
 
   // THE WALK: the run carries the deck; the drop deals from it and by the enemy's width
-  const pageW = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const pageW = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errsW = [];
   pageW.on('pageerror', (e) => errsW.push(String(e).split('\n')[0]));
   await pageW.goto(`http://127.0.0.1:${PORT}/play/index.html?gen=vaults&seed=1&fx=0&enemies=off&deck=adept&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off`);
@@ -2360,8 +2402,8 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.run?.starter === 'adept' && wk.run.cards.length === 8, `the run carries the starter deck (${wk.run?.starter}, ${wk.run?.cards?.length} cards)`);
   expect(wk.planOk && wk.hands?.w?.length === 4, `the drop deals a hand of four from the run's deck (${JSON.stringify(wk.hands?.w)})`);
   {
-    const n = Math.max(0, (wk.enemyWidth | 0) - 1);
-    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => k === 'ice' || k === 'portal'), `the enemy's deck is width − 1 spells, a hand of four at most and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
+    const n = 22; // the whole library, every spell once (2026-10-03: the width − 1 rule waits for the economy)
+    expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => !['reveal', 'undo', 'win'].includes(k)), `the enemy's deck is the whole library — a hand of four and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
   }
   expect(wk.enemy.pile !== null && wk.export.decks && wk.export.world && wk.save?.starter === 'adept', `the enemy's bar, the log and the run save carry the decks (enemy ${wk.enemy.hand.join(' ')} + ${wk.enemy.pile})`);
   expect(errsW.length === 0, `no page errors on the walk's deck${errsW.length ? ` — ${errsW.join(' | ')}` : ''}`);
@@ -2383,11 +2425,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // mode. The enemy's hand is face-up as mini cards in its bar; on the motion
 // page its played card flies to the board and holds for a beat.
 {
-  let pageC = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageC = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errsC = [];
   pageC.on('pageerror', (e) => errsC.push(String(e).split('\n')[0]));
   await pageC.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`);
-  pageC = await bootWait(pageC, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsC.push(String(e).split('\n')[0])));
+  pageC = await bootWait(pageC, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&fx=0&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=reveal,undo,ice,portal,ice,portal,ice,portal`, (p) => p.on('pageerror', (e) => errsC.push(String(e).split('\n')[0])));
   await pageC.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   await pageC.evaluate(() => { const o = window.__DCK.options; o.cheat = false; o.hints = false; o.evalBar = false; window.__DCK.applyOptions(); });
   const settleC = () => pageC.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state !== 'playing' || (window.__DCK.app.duel?.turnColor() === window.__DCK.app.session?.playerColor && !window.__DCK.app.busy), null, { timeout: 60000 });
@@ -2473,11 +2515,11 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageC.close();
 
   // THE PLAYED-CARD BEAT on a motion page: the enemy's card flies to the board and holds enlarged (on demand — the engine casts when it likes)
-  let pageB = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let pageB = await newPageSafe({ viewport: { width: 390, height: 844 } });
   const errsB = [];
   pageB.on('pageerror', (e) => errsB.push(String(e).split('\n')[0]));
   await pageB.goto(`http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`);
-  pageB = await bootWait(pageB, () => browser.newPage({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`, (p) => p.on('pageerror', (e) => errsB.push(String(e).split('\n')[0])));
+  pageB = await bootWait(pageB, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?stage=${STAGE}&autobegin=1&seed=${SEED}&go=depth%201%20movetime%2030&mateprobe=off&evalgate=off&onset=400&debris=off&deck=ice,portal,ice,portal,ice,portal,reveal,undo`, (p) => p.on('pageerror', (e) => errsB.push(String(e).split('\n')[0])));
   await pageB.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
   const beat = await pageB.evaluate(async () => {
     const K = window.__DCK;
@@ -2497,6 +2539,191 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   await pageB.close();
 }
 
+// --- THE TERRAIN CARDS (Phase 3.3b, 2026-10-03; brief §4.10 "Phase 3.3b";
+// engine/patches/terrain.patch; play/js/carddef.mjs): a card is a DEFINITION
+// the engine interprets — `<effect> <shape> <targeting>` — and the page reads
+// it for the face (the effect's glyph over a mini-map of the shape, the
+// targeting badge), the drag preview, the hint (the anchor framed with its
+// glyph, the shape a faint tint, the card in the fan rimmed in the rank's
+// colour) and the words. On s65-guard-post the kit's king deals at e1 with
+// breakable walls at d1 and d2: a fixed-order deck opens Crack, Sledge,
+// Reinforce and Demolish in hand. The kings do NOT hammer until the Sledge
+// card is cast (the Sledge-kings option is retired); a Crack dragged onto d2
+// cracks it into a crate (the state's `cast: 'hit'`, its `edits`, the crate
+// ledger, the weaken beat's debris, the log's words); the Sledge cast flags
+// its caster in the FEN and the king hammers from then on; Reinforce drops a
+// pawn in the camp. ---
+{
+  let pageT = await newPageSafe({ viewport: { width: 390, height: 844 } });
+  const errsT = [];
+  pageT.on('pageerror', (e) => errsT.push(String(e).split('\n')[0]));
+  const qT = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&arrowalpha=1&arrowwidth=2&deck=crack,sledge,reinforce,demolish,wall-row,sink-row,petrify,lance,reveal,undo`;
+  await pageT.goto(`http://127.0.0.1:${PORT}/play/index.html?${qT}`);
+  pageT = await bootWait(pageT, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?${qT}`, (p) => p.on('pageerror', (e) => errsT.push(String(e).split('\n')[0])));
+  await pageT.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const markT = (what) => process.stderr.write(`... terrain: ${what}\n`); // the block's steps stream to stderr as they land, so a hang is locatable
+  markT('booted');
+  const settleT = () => pageT.waitForFunction(() => !window.__DCK.app.busy && window.__DCK.app.duel?.state !== 'playing' || (window.__DCK.app.duel?.turnColor() === window.__DCK.app.session?.playerColor && !window.__DCK.app.busy), null, { timeout: 60000 });
+  const t0 = await pageT.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.options.evalBar = false;
+    K.applyOptions();
+    await K.renderer.ready();
+    const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (sq) => { const g = gridOf(K.app.duel.fen()); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+    const out = { variant: K.app.duel.variantName, hand: K.cards.hand(), piles: K.cards.piles() };
+    const legal0 = K.app.duel.legalMoves();
+    out.hammer0 = legal0.filter((m) => m === 'e1d1' || m === 'e1d2');
+    out.walls = ['d1', 'd2'].map((s) => at(s));
+    out.targets = { crack: K.deck.targets('crack'), sledge: K.deck.targets('sledge'), reinforce: K.deck.targets('reinforce'), demolish: K.deck.targets('demolish') };
+    out.campEmpty = out.targets.reinforce.every((s) => at(s) === '.');
+    out.campRanks = [...new Set(out.targets.reinforce.map((s) => parseInt(s.slice(1), 10)))].sort((a, b) => a - b);
+    out.faces = K.cards.els().map((el) => { const c = el.querySelector('canvas.card-art'); return { kind: el.dataset.kind, badge: el.querySelector('.card-badge')?.textContent ?? null, w: c?.width, h: c?.height, cls: el.className }; });
+    // THE HINT FOR A SHAPED CAST: lines injected through the probe's own paint path — Demolish (a 3×3 hit) best, Crack on d2 second, a plain move third
+    K.options.cheat = true;
+    K.options.hints = true;
+    K.applyOptions();
+    const UCI = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))$/;
+    const plain = legal0.find((m) => UCI.test(m) && !/^([a-l](?:10|[1-9]))\1$/.test(m));
+    const anchor = out.targets.demolish.find((s) => s !== 'd2' && s !== 'd1') ?? out.targets.demolish[0];
+    out.anchor = anchor;
+    K.paintHints([{ rank: 1, move: K.deck.castUci('demolish', anchor), score: { type: 'cp', value: 40 }, depth: 9 }, { rank: 2, move: K.deck.castUci('crack', 'd2'), score: { type: 'cp', value: 20 }, depth: 9 }, { rank: 3, move: plain, score: { type: 'cp', value: 10 }, depth: 9 }], 3);
+    out.icons = [...document.querySelectorAll('#hint-line .hint-item')].map((s) => { const c = s.querySelector('canvas.hint-glyph'); return `${s.dataset.rank}:${c ? `${c.dataset.spell}/${c.dataset.card}` : '-'}`; });
+    out.line = document.getElementById('hint-line').textContent;
+    out.arrows = K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => ({ from: a.from, to: a.to, cast: a.cast ?? null, cells: a.cells ?? null, rank: a.rank }));
+    K.renderer.paintNow();
+    const px = (sq, c, r) => { const p = K.renderer.square(sq); if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+    const dem = out.arrows.find((a) => a.rank === 1);
+    const tinted = (dem?.cells ?? []).find((c) => c !== anchor && c !== 'd2' && c !== 'd1' && at(c) === '.' && !(plain && plain.includes(c)));
+    out.tinted = tinted ?? null;
+    out.pxHint = { frame: px(anchor, 0, 0), inset: px(anchor, 1, 1), hub: px(anchor, 7, 7), tint: tinted ? px(tinted, 8, 8) : null, tintFrame: tinted ? px(tinted, 0, 0) : null };
+    out.hinted = [...document.querySelectorAll('#hand .card.hinted')].map((el) => `${el.dataset.kind}:${el.style.getPropertyValue('--hint')}`);
+    // THE DIG AS A HINT (2026-10-20): the redraw as the best line — a list entry, no arrow, the deck stack rimmed gold
+    K.paintHints([{ rank: 1, move: '@@@@', score: { type: 'cp', value: 71 }, depth: 14 }, { rank: 2, move: K.deck.castUci('crack', 'd2'), score: { type: 'cp', value: 20 }, depth: 14 }], 2);
+    const stack = document.getElementById('pile-deck');
+    out.redraw = { line: document.getElementById('hint-line').textContent, arrows: K.renderer.arrows.filter((a) => a.kind === 'hint').map((a) => `${a.rank}:${a.from}`), stackHinted: stack.classList.contains('hinted'), stackHint: stack.style.getPropertyValue('--hint'), crackHinted: [...document.querySelectorAll('#hand .card.hinted')].map((el) => `${el.dataset.kind}:${el.style.getPropertyValue('--hint')}`) };
+    K.options.cheat = false;
+    K.options.hints = false;
+    K.applyOptions();
+    K.renderer.paintNow();
+    out.pxAfter = { tint: tinted ? px(tinted, 8, 8) : null, frame: px(anchor, 0, 0) };
+    out.hintedAfter = document.querySelectorAll('#hand .card.hinted, #pile-deck.hinted').length;
+    out.cleared = K.renderer.arrows.filter((a) => a.kind === 'hint').length;
+    return out;
+  });
+  markT('the deal, the faces and the hint read');
+  const GOLD = '242,193,78,255';
+  expect(/__deck4_[0-9a-f]{8}$/.test(t0.variant) && !/__sledge/.test(t0.variant), `the deal's variant hashes the deck's declaration, no sledge suffix without ?hammer=on (${t0.variant})`);
+  expect(t0.hand.join(',') === 'crack,sledge,reinforce,demolish' && t0.piles?.deck === '6', `the fixed deck opens Crack, Sledge, Reinforce, Demolish in hand (${t0.hand.join(' ')}; ${t0.piles?.deck} on the pile)`);
+  expect(t0.walls.join('') === '**' && t0.hammer0.length === 0, `d1 and d2 are breakable walls beside the king and he does NOT hammer before the Sledge card (${t0.hammer0.join(' ') || 'no hammer move'})`);
+  expect(t0.targets.crack.includes('d1') && t0.targets.crack.includes('d2') && t0.targets.sledge.join(',') === 'e1', `Crack targets the walls beside the king (${t0.targets.crack.join(' ')}); Sledge targets his square alone (${t0.targets.sledge.join(' ')})`);
+  expect(t0.targets.reinforce.length > 0 && t0.campEmpty && t0.campRanks.every((r) => r <= 3), `Reinforce targets the empty squares of the camp — ranks ${t0.campRanks.join(',')} (${t0.targets.reinforce.length} squares)`);
+  expect(t0.targets.demolish.length > 0 && t0.targets.demolish.includes('d2'), `Demolish (a 3×3 hit beside your pieces) has ${t0.targets.demolish.length} anchors, d2 among them`);
+  {
+    const f = Object.fromEntries(t0.faces.map((x) => [x.kind, x]));
+    expect(f.crack?.badge === 'near' && f.sledge?.badge === 'king' && f.reinforce?.badge === 'camp' && f.demolish?.badge === 'near', `every face wears its targeting badge (${t0.faces.map((x) => `${x.kind}:${x.badge}`).join(' ')})`);
+    expect(f.crack?.h === 12 && f.demolish?.h === 16 && f.demolish?.w === 12 && f.sledge?.h === 12, `a shaped card's art carries the shape's mini-map under the glyph — Demolish 12×16, the one-square cards 12×12 (${t0.faces.map((x) => `${x.kind} ${x.w}×${x.h}`).join(', ')})`);
+  }
+  expect(t0.icons.join(' ') === '1:hit/demolish 2:hit/crack 3:-', `the hint list's glyphs name the effect and the card (${t0.icons.join(' ')})`);
+  expect(/^1 \S+@\S+ \+0\.4 · 2 \S+@d2 \+0\.2 · 3 .+ \+0\.1 · d9$/.test(t0.line), `the hint list reads as ever, the casts by their SAN ("${t0.line}")`);
+  {
+    const dem = t0.arrows.find((a) => a.rank === 1), cr = t0.arrows.find((a) => a.rank === 2);
+    expect(dem?.cast === 'hit' && dem.from === t0.anchor && Array.isArray(dem.cells) && dem.cells.length >= 4 && dem.cells.length <= 9 && dem.cells.includes(t0.anchor) && cr?.cast === 'hit' && cr.cells?.join(',') === 'd2', `the cast arrows carry the effect and the shape's squares — Demolish ${dem?.cells?.length} cells around ${t0.anchor}, Crack d2 alone`);
+    expect(t0.pxHint.frame === GOLD && t0.pxHint.inset !== GOLD && t0.pxHint.hub === GOLD, `${t0.anchor} is framed at its edge with the hit glyph inside (${t0.pxHint.frame} / ${t0.pxHint.inset} / hub ${t0.pxHint.hub})`);
+    expect(!!t0.tinted && t0.pxHint.tint !== t0.pxAfter.tint && t0.pxHint.tintFrame !== GOLD, `the shape's other squares are tinted, not framed (${t0.tinted}: ${t0.pxHint.tint} under the hint, ${t0.pxAfter.tint} without; its corner ${t0.pxHint.tintFrame})`);
+  }
+  expect(t0.hinted.length === 2 && t0.hinted.some((h) => /^demolish:#?[0-9a-f]{6}$/i.test(h)) && t0.hinted.some((h) => /^crack:#?[0-9a-f]{6}$/i.test(h)) && t0.hinted[0].split(':')[1] !== t0.hinted[1].split(':')[1], `the hinted cards in the fan wear their rank's rim (${t0.hinted.join(' ')})`);
+  expect(/^1 redraw \+0\.7 · 2 \S+@d2 \+0\.2 · d14$/.test(t0.redraw.line) && t0.redraw.arrows.join(',') === '2:d2', `the redraw as the best line is a list entry with no arrow ("${t0.redraw.line}"; arrows ${t0.redraw.arrows.join(' ')})`);
+  expect(t0.redraw.stackHinted && /^#?f2c14e$/i.test(t0.redraw.stackHint) && t0.redraw.crackHinted.join(',') === 'crack:#c9ced8', `the deck stack wears the rank-1 gold and the Crack card the rank-2 silver (${t0.redraw.stackHint}; ${t0.redraw.crackHinted.join(' ')})`);
+  expect(t0.cleared === 0 && t0.hintedAfter === 0 && t0.pxAfter.frame !== GOLD, 'hints off clears the glyph, the tint and the rims, the deck stack\'s too');
+  // THE DRAG: the Crack card onto d2 through the mouse — the anchor framed, no area beyond it, the tip, the cast on release
+  const cBox = await pageT.locator('#hand .card[data-kind="crack"]').first().boundingBox();
+  const d2pt = await pageT.evaluate(() => window.__DCK.app.boardUI.pointOfSquare('d2'));
+  await pageT.mouse.move(cBox.x + cBox.width / 2, cBox.y + cBox.height / 2);
+  await pageT.mouse.down();
+  await pageT.mouse.move(cBox.x + cBox.width / 2 + 10, cBox.y + cBox.height / 2 - 30, { steps: 4 });
+  await pageT.mouse.move(d2pt.x, d2pt.y, { steps: 12 });
+  await pageT.waitForTimeout(40);
+  const overT = await pageT.evaluate(() => { const K = window.__DCK; K.renderer.paintNow(); return { drag: K.cards.drag(), castMode: K.app.castMode, cell: K.marks.cell('d2') }; });
+  expect(overT.drag?.kind === 'crack' && overT.castMode === 'crack' && overT.drag.hover === 'd2' && overT.cell.includes('hover') && overT.cell.includes('target'), `the Crack card lifts into cast mode and frames d2 under the pointer (${overT.cell.filter((c) => /hover|area|target/.test(c)).join(' ')})`);
+  expect(overT.drag?.area?.join(',') === 'd2' && overT.drag.tip === 'release to crack at d2', `a one-square card previews its anchor alone and the tip says what the release does ("${overT.drag?.tip}")`);
+  await pageT.mouse.up();
+  await pageT.waitForTimeout(250);
+  markT('the Crack card released on d2');
+  await settleT();
+  markT('the reply is in');
+  const crack = await pageT.evaluate(() => {
+    const K = window.__DCK;
+    const st = K.app.duel.record.states[1];
+    const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const atIn = (fen, sq) => { const g = gridOf(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+    return { move: K.app.duel.record.moves[0], san: K.app.duel.record.sans[0], cast: st?.cast ?? null, card: st?.card ?? null, edits: st?.edits ?? null, crate: (st?.godCrates ?? []).includes('d2'), cell: st ? atIn(st.fen, 'd2') : null, live: atIn(K.app.duel.fen(), 'd2'), classes: K.marks.cell('d2'), log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Crack/.test(t)), weaken: K.debris.events().filter((e) => e.k === 'weaken').length, hand: K.cards.hand(), state: K.app.duel.state, ply: K.app.duel.ply };
+  });
+  expect(/^[A-Z]@d2$/.test(crack.move ?? '') && crack.cast === 'hit' && crack.card === 'crack', `the release casts Crack on d2 as its slot's drop (${crack.move}, SAN ${crack.san}): the state of record reads cast ${crack.cast}, card ${crack.card}`);
+  expect(JSON.stringify(crack.edits) === '[{"sq":"d2","from":"*","to":"^"}]' && crack.crate && crack.cell === '^', `the state carries the edit — d2 from a wall to a crate — and the crate joins the one ledger (${JSON.stringify(crack.edits)})`);
+  expect(crack.log.some((t) => /Crack — cracks the wall at d2/.test(t)), `the log says what the card did (${crack.log[0] ?? 'no line'})`);
+  expect(crack.weaken >= 1, `the crack dropped the weaken beat's chips (${crack.weaken} weaken event)`);
+  if (crack.live === '^') expect(crack.classes?.includes('cracked') && crack.classes?.includes('furniture'), `the board paints d2 as a cracked wall (${(crack.classes ?? []).filter((c) => /wall|crack|furn/.test(c)).join(' ')})`);
+  else expect(true, `d2 reads ${crack.live} now — the crate was taken on the reply`);
+  if (crack.state === 'playing') {
+    expect(crack.hand.length === 4 && crack.hand.includes('wall-row'), `the refill drew the next card into the fan (${crack.hand.join(' ')})`);
+    // THE SLEDGE: a tap on the card, a tap on the king's square — the caster's king hammers from now on
+    markT('the Sledge cast');
+    const sl = await pageT.evaluate(async () => {
+      const K = window.__DCK;
+      const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+      const out = { tapped: K.cards.tap('sledge'), castMode: K.app.castMode, lit: [...K.app.boardUI.marks.targets] };
+      K.tap('e1');
+      await settle();
+      const st = K.app.duel.record.states.find((s) => s.cast === 'sledge') ?? null;
+      out.state = st ? { cast: st.cast, card: st.card, sledge: st.sledge ?? null, edits: st.edits ?? null, mover: st.mover } : null;
+      out.fenFlag = /\*w/.test(K.app.duel.fen());
+      out.legal = K.app.duel.legalMoves().filter((m) => m === 'e1d1' || m === 'e1d2');
+      out.san = K.app.duel.record.sans.find((s, i) => K.app.duel.record.states[i + 1]?.cast === 'sledge') ?? null;
+      out.log = [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Sledge/.test(t));
+      out.live = K.app.duel.fen();
+      if (K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white') {
+        K.tap('e1');
+        out.kingLit = [...K.app.boardUI.marks.targets];
+        K.tap('e1');
+      } else out.kingLit = null;
+      out.state2 = K.app.duel.state;
+      return out;
+    });
+    expect(sl.tapped && sl.castMode === 'sledge' && sl.lit.join(',') === 'e1', `a tap on the Sledge card enters cast mode on the king's own square (${sl.lit.join(' ')})`);
+    expect(sl.state?.cast === 'sledge' && sl.state.card === 'sledge' && sl.state.sledge === 'w' && !sl.state.edits && sl.state.mover === 'player', `the cast is on the record — cast ${sl.state?.cast}, the caster ${sl.state?.sledge}, no square changed`);
+    expect(sl.fenFlag && sl.log.some((t) => /Sledge — your king carries the sledgehammer/.test(t)), `the FEN flags white's sledge (*w) and the log says so (${sl.log[0] ?? 'no line'})`);
+    if (sl.state2 === 'playing') expect(sl.legal.includes('e1d1') && (sl.kingLit === null || sl.kingLit.includes('d1')), `the king hammers from now on — e1d1 is legal (${sl.legal.join(' ')}) and a tap on him lights d1 (${sl.kingLit ? sl.kingLit.join(' ') : 'not his turn'})`);
+    else expect(true, `the duel ended on the reply (${sl.state2})`);
+    // REINFORCE: a pawn placed in the camp
+    if (sl.state2 === 'playing') {
+      markT('the Reinforce cast');
+      const rf = await pageT.evaluate(async () => {
+        const K = window.__DCK;
+        const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+        const sq = K.deck.targets('reinforce')[0] ?? null;
+        if (!sq) return { sq: null };
+        const uci = K.deck.castUci('reinforce', sq);
+        await K.playerMove(uci);
+        await settle();
+        const st = K.app.duel.record.states.find((s) => s.cast === 'drop' && s.mover === 'player') ?? null; // the enemy may have dropped its own pawn first
+        const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+        const atIn = (fen, sq2) => { const g = gridOf(fen); return g[g.length - parseInt(sq2.slice(1), 10)]?.[sq2.charCodeAt(0) - 97] ?? '?'; };
+        const L = K.log.build();
+        return { sq, uci, played: st ? { cast: st.cast, card: st.card, edits: st.edits ?? null, cell: atIn(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Reinforce/.test(t)), exportCasts: L.states.filter((s) => s.mover === 'player' && ['hit', 'sledge', 'drop'].includes(s.cast)).map((s) => s.cast), state: K.app.duel.state };
+      });
+      expect(!!rf.sq && /^[A-Z]@/.test(rf.uci ?? '') && rf.played?.cast === 'drop' && rf.played.card === 'reinforce' && rf.played.cell === 'P' && JSON.stringify(rf.played.edits) === JSON.stringify([{ sq: rf.sq, from: null, to: 'P' }]), `Reinforce places a pawn on ${rf.sq} (${rf.uci}): the state reads cast ${rf.played?.cast}, the edit ${JSON.stringify(rf.played?.edits)}`);
+      expect(rf.log.some((t) => new RegExp(`Reinforce — a pawn is placed on ${rf.sq}`).test(t)), `the log says so (${rf.log[0] ?? 'no line'})`);
+      expect(rf.exportCasts.join(',') === 'hit,sledge,drop', `the export's states carry the player's three casts by effect (${rf.exportCasts.join(' ')})`);
+    }
+  } else expect(true, `the duel ended on the crack's reply (${crack.state}) — the sledge and the pawn stand on the scratch drive`);
+  markT('done');
+  expect(errsT.length === 0, `no page errors with the terrain cards${errsT.length ? ` — ${errsT.join(' | ')}` : ''}`);
+  await pageT.close();
+}
+
 await browser.close();
 
 server.close();
@@ -2504,5 +2731,5 @@ server.close();
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(`rungs seen: weaken ${seen.weaken} · breach ${seen.breach} · displace ${seen.displace} · crumble ${seen.crumble}`);
-console.log(`SUMMARY: ${notes.length} ok, ${failures.length} failed${bootRetries ? `, ${bootRetries} boot retr${bootRetries === 1 ? 'y' : 'ies'}` : ''}${SHOTS ? ` — screenshots in ${OUT}` : ''}`);
+console.log(`SUMMARY: ${notes.length} ok, ${failures.length} failed${bootRetries ? `, ${bootRetries} boot retr${bootRetries === 1 ? 'y' : 'ies'}` : ''}${pageRetries ? `, ${pageRetries} page retr${pageRetries === 1 ? 'y' : 'ies'}` : ''}${SHOTS ? ` — screenshots in ${OUT}` : ''}`);
 process.exit(failures.length ? 1 : 0);

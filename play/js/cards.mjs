@@ -28,9 +28,10 @@
 //   that stays; the drag preview vanishes with the finger; agreed 2026-09-25).
 // - THE WORDS (`cardHint`, `dropWords`): what a card's face and the ghost's
 //   tooltip say.
-import { CARDS } from './deck.mjs';
+import { CARDS, defOf } from './deck.mjs';
 import { SPELL_GLYPHS, SPELL_SHADOW } from './pixelarrow.mjs';
-import { isTerrain } from './fen.mjs';
+import { isTerrain, splitFen, parseBoard, findSquares } from './fen.mjs';
+import { castCells, PIECE_NAMES } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): the terrain interpreter's grammar — a card's shape at an anchor
 
 /** A press that travels this many CSS pixels is a drag, not a tap. */
 export const DRAG_SLOP = 8;
@@ -72,9 +73,11 @@ export const UNDO_GLYPH = Object.freeze([
 ]);
 export const META_GLYPHS = Object.freeze({ reveal: REVEAL_GLYPH, undo: UNDO_GLYPH });
 
-/** A card kind's glyph rows: the spell's off pixelarrow (the hint's own drawing), a meta card's from above. Null for an unknown kind. */
+/** A card kind's glyph rows: the spell's EFFECT's off pixelarrow (the hint's own drawing — one per effect word, the
+ *  terrain interpreter's cards included), a meta card's from above. Null for an unknown kind. */
 export function cardArt(kind) {
-  return SPELL_GLYPHS[kind] ?? META_GLYPHS[kind] ?? null;
+  const c = CARDS[kind];
+  return (c && SPELL_GLYPHS[c.engine]) ?? SPELL_GLYPHS[kind] ?? META_GLYPHS[kind] ?? null;
 }
 
 /** A glyph's box with its drop shadow: { w, h } (the shadow adds a pixel right and below). */
@@ -148,30 +151,41 @@ export function gestureEnd(g) {
 
 /**
  * THE DROP PREVIEW: the squares a cast on `sq` would touch, for the board to
- * tint under the dragged card. The ice's 3×3 patch on floor (the engine's
- * `ice_patch`: the 3×3 ∩ the board ∩ ~terrain — a wall, a crate, bedrock, a
- * pit take no ice; a piece stands on ice); a portal's own square; nothing
- * for a meta card. `at(sq)` reads the FEN's square (null for empty, a piece
- * letter, or a terrain glyph); `files` / `ranks` bound the board.
+ * tint under the dragged card and the hint's faint shape (PHASE 3.3b,
+ * 2026-10-03: every spell is a DEFINITION — carddef.mjs `castCells`, the
+ * shape clipped to the board, a ray from the caster's king through the
+ * anchor). The ice shows the floor it would take (the engine's `ice_patch`:
+ * the shape ∩ the board ∩ ~terrain — a wall, a crate, bedrock, a pit take no
+ * ice; a piece stands on ice); a hit, a wall, a pit or a petrify its whole
+ * shape (the designer: "the drag preview tints an area card's whole shape");
+ * a portal, the sledge, a drop and the win card their own square; nothing for
+ * a meta card. `at(sq)` reads the FEN's square (null for empty, a piece
+ * letter, or a terrain glyph); `files` / `ranks` bound the board; `kingSq`
+ * is the caster's king, which a ray needs.
  */
-export function castArea(kind, sq, { files, ranks, at }) {
+export function castArea(kind, sq, { files, ranks, at, kingSq = null } = {}) {
   if (!sq || !CARDS[kind] || CARDS[kind].cls !== 'spell') return [];
-  const m = sq.match(/^([a-l])(10|[1-9])$/);
-  if (!m) return [];
-  if (kind !== 'ice') return [sq];
-  const f0 = m[1].charCodeAt(0) - 97, r0 = parseInt(m[2], 10);
-  const out = [];
-  for (let dr = 1; dr >= -1; dr--) {
-    for (let df = -1; df <= 1; df++) {
-      const f = f0 + df, r = r0 + dr;
-      if (f < 0 || f >= files || r < 1 || r > ranks) continue;
-      const s = String.fromCharCode(97 + f) + r;
-      const c = at(s);
-      if (c != null && isTerrain(c)) continue;
-      out.push(s);
-    }
-  }
-  return out;
+  if (!/^([a-l])(10|[1-9])$/.test(sq)) return [];
+  const def = defOf(kind);
+  if (!def || def.effect === 'portal' || def.effect === 'win' || def.effect === 'sledge' || def.effect === 'drop') return [sq];
+  const cells = castCells(def, sq, { files, ranks, at, kingSq });
+  if (def.effect === 'ice') return cells.filter((s) => { const c = at(s); return c == null || !isTerrain(c); });
+  return cells;
+}
+
+/** `castArea` read off a FEN: the board's size and squares from its board field, the caster's king for a ray (`side` 'w' | 'b'; the side to move when omitted). The live hint (main.mjs applyHintLines) and the analyzer's lines (replay.mjs pvArrows) share it. */
+export function castAreaOnFen(kind, sq, fen, side = null) {
+  const F = splitFen(fen);
+  const rows = parseBoard(F.board);
+  const ranks = rows.length, files = rows[0]?.length ?? 0;
+  const at = (s) => {
+    const m = String(s).match(/^([a-l])(10|[1-9])$/);
+    if (!m) return null;
+    return rows[ranks - parseInt(m[2], 10)]?.[m[1].charCodeAt(0) - 97] ?? null;
+  };
+  const c = side ?? (F.turn === 'b' ? 'b' : 'w');
+  const kingSq = findSquares(fen, (cell) => cell === (c === 'w' ? 'K' : 'k'))[0]?.name ?? null;
+  return castArea(kind, sq, { files, ranks, at, kingSq });
 }
 
 /** The face's one line and the reader's line for a card in play: the portal with its half open asks for the link. */
@@ -180,17 +194,24 @@ export function cardHint(kind, { halfAt = null } = {}) {
   if (!c) return '';
   if (kind === 'portal' && halfAt) return `your portal at ${halfAt} is open: pick the square it links to`;
   if (kind === 'portal') return 'cast a portal: pick a square; the second cast links it to the first';
-  if (kind === 'ice') return 'cast ice: pick the centre of a 3×3 patch on the middle rows — a piece that moves onto the ice slides on until something stops it';
   return c.text;
 }
 
 /** The ghost's tooltip while a card is dragged: over a legal square what the release does, elsewhere nothing. */
 export function dropWords(kind, sq, { halfAt = null } = {}) {
   if (!sq) return '';
-  if (kind === 'ice') return `release to freeze the floor around ${sq}`;
-  if (kind === 'portal') return halfAt ? `release to link the portals ${halfAt}–${sq}` : `release to open a portal at ${sq}`;
+  const effect = CARDS[kind]?.engine ?? kind; // by EFFECT since PHASE 3.3b: every ice shape freezes, every hit cracks
+  const def = defOf(kind);
+  if (effect === 'ice') return `release to freeze the floor around ${sq}`;
+  if (effect === 'portal') return halfAt ? `release to link the portals ${halfAt}–${sq}` : `release to open a portal at ${sq}`;
   if (kind === 'reveal') return 'release to reveal the oracle’s lines';
   if (kind === 'undo') return 'release to take back the last turn';
+  if (effect === 'hit') return def?.target === 'ray' ? `release to lance out through ${sq}` : `release to ${def?.arg === 2 ? 'smash' : 'crack'} at ${sq}`;
+  if (effect === 'wall') return `release to raise stone at ${sq}`;
+  if (effect === 'pit') return `release to sink the floor at ${sq}`;
+  if (effect === 'harden') return `release to petrify the walls at ${sq}`;
+  if (effect === 'sledge') return 'release to hand your king the sledgehammer';
+  if (effect === 'drop') return `release to place a ${PIECE_NAMES[def?.arg] ?? 'piece'} on ${sq}`;
   return `release to play on ${sq}`;
 }
 

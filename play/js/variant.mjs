@@ -4,6 +4,7 @@
 // — spike 6 — so a typo produces legal-looking wrong rules) and the fixed
 // 60-variant catalog (variant names are single-use — spike 1 — so the game
 // loads every duel_<files>x<ranks> once at boot and never redefines).
+import { parseDef } from './carddef.mjs'; // THE TERRAIN INTERPRETER (2026-10-03): the card grammar the declaration carries
 import { emptyBoard, serializeBoard, isTerrain } from './fen.mjs';
 
 // Keys the duel baseline is allowed to emit. Extend deliberately, never ad hoc.
@@ -265,24 +266,52 @@ export function catalogVariantName(files, ranks) {
 export const DECK_SLOT_LETTERS = 'stuvwxyz';
 export const DECK_HAND_SIZE = 4;
 export const DECK_VARIANT_SUFFIX = '__deck';
-/** The engine's card kinds a deal may declare, and the initial each wears in the variant name. */
-export const DECK_ENGINE_KINDS = { portal: 'p', ice: 'i', win: 'w', meta: 'm' };
 
-/** The variants.ini keys that declare a deck: `deck` = { handSize, cards: { <id>: <engine kind> } }. */
+// THE TERRAIN INTERPRETER (2026-10-03, Phase 3.3b; engine/patches/terrain.patch;
+// brief §4.10 "3.3b RULED"): a card is a DEFINITION the engine interprets over
+// the board — `card<ID> = <effect> <shape> <targeting>` (carddef.mjs has the
+// grammar; a one-word value is a legacy kind with its old default). The deal
+// declares every card ID either deck holds with its def, and THE NAME CARRIES
+// A HASH OF THE DECLARATION (rule 7): `__deck4_<fnv1a of "id=def;…">` — two
+// deals that declare different cards, or one card differently, are different
+// variants, and a same-named re-registration is always an identical no-op.
+// The committed samples keep their recorded `__deck4_1i_2p_101m_102m` names:
+// a log carries its own ini and the analyzer registers it as recorded.
+
+/** FNV-1a (32-bit) of a string, as eight hex digits — the deck declaration's fingerprint in a variant name. */
+export function fnv1a(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/** The canonical text of a deck declaration: the hand size, then every ID with its def, sorted by ID. */
+export function deckDeclarationText({ handSize = DECK_HAND_SIZE, cards = {} } = {}) {
+  const ids = Object.keys(cards).map(Number).sort((a, b) => a - b);
+  return `${handSize | 0};${ids.map((id) => `${id}=${parseDef(cards[id]).text}`).join(';')}`;
+}
+
+/** The variants.ini keys that declare a deck: `deck` = { handSize, cards: { <id>: <def string> } }; a malformed def throws here, never at the engine. */
 export function deckIniKeys({ handSize = DECK_HAND_SIZE, cards = {} } = {}) {
   const out = { handSize: String(handSize | 0), cardSlots: DECK_SLOT_LETTERS, pieceDrops: 'true' };
   for (const id of Object.keys(cards).map(Number).sort((a, b) => a - b)) {
-    if (!DECK_ENGINE_KINDS[cards[id]]) throw new Error(`card ${id}: unknown engine kind "${cards[id]}"`);
-    out[`card${id}`] = cards[id];
+    let def;
+    try { def = parseDef(cards[id]); } catch (e) { throw new Error(`card ${id}: ${e.message}`); }
+    out[`card${id}`] = def.text;
   }
   return out;
 }
 
-/** The name suffix that encodes a deck declaration (rule 7): the hand size, then every ID with its kind's initial. */
-export function deckVariantSuffix({ handSize = DECK_HAND_SIZE, cards = {} } = {}) {
-  const ids = Object.keys(cards).map(Number).sort((a, b) => a - b);
-  return `${DECK_VARIANT_SUFFIX}${handSize | 0}${ids.map((id) => `_${id}${DECK_ENGINE_KINDS[cards[id]]}`).join('')}`;
+/** The name suffix that encodes a deck declaration (rule 7): the hand size and the fingerprint of every ID's def. */
+export function deckVariantSuffix(deck = {}) {
+  return `${DECK_VARIANT_SUFFIX}${(deck.handSize ?? DECK_HAND_SIZE) | 0}_${fnv1a(deckDeclarationText(deck))}`;
 }
+
+/** Does a deck declaration hold a sledge card? Then the deal declares the hammer's type and the ENCHANTMENT gates it (terrain.patch). */
+export const deckHasSledge = (deck) => !!deck && Object.values(deck.cards ?? {}).some((d) => parseDef(d).effect === 'sledge');
 
 /**
  * Per-deal duel variant: the catalog baseline with the pawn double-step
@@ -317,6 +346,9 @@ export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portal
   }
   // The name encodes the config (rule 7): a portal deal, a sledge deal, an ice deal, is its own variant.
   const name = `${catalogVariantName(files, ranks)}__w${w}__b${b}${portals ? PORTAL_VARIANT_SUFFIX : ''}${hammer ? HAMMER_VARIANT_SUFFIX : ''}${ice ? ICE_VARIANT_SUFFIX : ''}${deck ? deckVariantSuffix(deck) : ''}`;
+  // THE SLEDGE ENCHANTMENT (terrain.patch): a deck with a sledge card declares the hammer's type too — the card's flag
+  // gates it; the always-on `hammer` (the labs' and the smokes' `?hammer=on`) declares it without a card
+  const hammerKeys = hammer || deckHasSledge(deck);
   const ini = makeDuelVariantIni({
     name,
     files,
@@ -325,8 +357,8 @@ export function dealVariant(files, ranks, whiteLineRank, blackLineRank, { portal
       doubleStepRegionWhite: Array.from({ length: w }, (_, i) => `*${i + 1}`).join(' '),
       doubleStepRegionBlack: Array.from({ length: ranks - b + 1 }, (_, i) => `*${b + i}`).join(' '),
       ...spellIniKeys(ranks, { portals, ice }),
-      ...(hammer ? hammerIniKeys() : {}),
-      ...(deck ? deckIniKeys(deck) : {}), // THE DECK IN THE ENGINE: the hand size, the slots, every card ID's kind
+      ...(hammerKeys ? hammerIniKeys() : {}),
+      ...(deck ? deckIniKeys(deck) : {}), // THE DECK IN THE ENGINE: the hand size, the slots, every card ID's definition (terrain.patch)
     },
   });
   return { name, ini, portals: !!portals, hammer: !!hammer, ice: !!ice, deck: deck ? { handSize: deck.handSize ?? DECK_HAND_SIZE, cards: { ...deck.cards } } : null };

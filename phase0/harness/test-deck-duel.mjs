@@ -41,8 +41,8 @@ const decks = { w: newDeckState(starterCards('adept'), seeds.w), b: newDeckState
 const dealWith = (d) => dealMatchup({ stage, white: { spec: { width: 4, pieces: ['R', 'N', 'B'] }, archetype: 'heavies-deep' }, black: { spec: { width: 3, pieces: ['N', 'B'] }, archetype: 'heavies-deep' }, seed, turn: 'w', portals: true, hammer: true, ice: true, decks: d, ffish });
 const deal = dealWith(decks);
 if (!deal.ok) { console.error('deal failed:', deal.error); process.exit(2); }
-check(/__deck4_1i_2p_101m_102m$/.test(deal.variantName), `the deal's variant declares the deck (${deal.variantName})`);
-check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 2 && pileOf(deal.fen, 'b').length === 0, `the start FEN carries the hands and the piles (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
+check(/__deck4_[0-9a-f]{8}$/.test(deal.variantName), `the deal's variant declares the deck (${deal.variantName})`);
+check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 4 && pileOf(deal.fen, 'b').length === 18, `the start FEN carries the hands and the piles (the enemy's deck the whole library since 2026-10-03: four in hand, eighteen on the pile) (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
 await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni);
 
 const mk = async (d0, dl = deal) => {
@@ -54,7 +54,7 @@ const mk = async (d0, dl = deal) => {
 const fixed = { w: { pile: ['portal', 'reveal', 'ice', 'undo', 'ice', 'portal', 'ice', 'win'] }, b: { pile: ['ice', 'portal'] } };
 const dealFixed = dealWith(cloneDecks(fixed));
 if (!dealFixed.ok) { console.error('fixed deal failed:', dealFixed.error); process.exit(2); }
-check(/__deck4_1i_2p_101m_102m_200w$/.test(dealFixed.variantName) && dealFixed.variantName !== deal.variantName, `a deck with the win card is another variant (${dealFixed.variantName})`);
+check(/__deck4_[0-9a-f]{8}$/.test(dealFixed.variantName) && dealFixed.variantName !== deal.variantName, `a deck with the win card is another variant (${dealFixed.variantName})`);
 check(handOf(dealFixed.fen, 'w').join(',') === 'portal,reveal,ice,undo' && pileOf(dealFixed.fen, 'w').join(',') === 'ice,portal,ice,win', 'the hand-built decks deal in their own order, the win card last on the pile');
 await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni + '\n' + dealFixed.variantIni);
 const plain = (duel) => duel.legalMoves().find((m) => /^[a-l]\d+[a-l]\d+[nbrq]?$/.test(m) && m.slice(0, 2) !== m.slice(2, 4));
@@ -68,7 +68,7 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
 {
   const duel = await mk(decks);
   const h = hands(duel);
-  check(duel.hasDeck && h.w.length === 4 && h.b.length === 2, `opening hands: white ${h.w.join(',')} · black ${h.b.join(',')}`);
+  check(duel.hasDeck && h.w.length === 4 && h.b.length === 4, `opening hands: white ${h.w.join(',')} · black ${h.b.join(',')}`);
   check(duel.record.states[0].deck?.w?.hand?.length === 4 && duel.record.states[0].deck.w.pile.length === 4 && duel.record.states[0].deck.w.spent.length === 0, 'the start state carries the hands, the piles and an empty spent list');
   const pile0 = piles(duel).w.length;
   await duel.playerMove(plain(duel));
@@ -188,10 +188,10 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
   duel.destroy();
 }
 
-// ---- the enemy's hand runs dry: a width-3 enemy holds two cards and draws nothing more
+// ---- the enemy's deck is the whole library (2026-10-03; it was width − 1 spells, a hand that ran dry at once): a hand of four, the rest on its pile
 {
   const duel = await mk(cloneDecks(decks));
-  check(piles(duel).b.length === 0 && hands(duel).b.length === 2, `the enemy's whole deck is its hand (${hands(duel).b.join(',')})`);
+  check(piles(duel).b.length === 18 && hands(duel).b.length === 4 && new Set([...hands(duel).b, ...piles(duel).b]).size === 22, `the enemy holds four of the library's 22 and the other eighteen wait on its pile (${hands(duel).b.join(',')})`);
   duel.destroy();
 }
 

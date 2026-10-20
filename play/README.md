@@ -81,6 +81,14 @@ https / `localhost` where `coi-serviceworker.min.js` (which must stay NEXT TO
 
 ## Layout
 
+- **`js/carddef.mjs` — THE TERRAIN INTERPRETER's grammar on the page (Phase
+  3.3b, 2026-10-03; brief §4.10 "Phase 3.3b" / "3.3b RULED"; § "The terrain
+  interpreter on the page" below):** a card is a DEFINITION the engine
+  interprets — `<effect> <shape> <targeting>` — and this pure module mirrors
+  parser.cpp's `parse_card_def`: `parseDef`, the shape as offsets and as a
+  face's mini-map, `castCells` (the shape at an anchor, a ray from the king),
+  `castChanges` (the per-square table), the words and the badge. Node gate
+  `phase0/harness/test-carddef.mjs`.
 - **`js/deck.mjs` — THE DECK (2026-09-25; brief §4.10; § "The deck" below):**
   spells as cards — the catalog, the starter deck, the enemy's deck by
   width, the seeded shuffle, the hand as the pocket's scrolls plus the meta
@@ -2557,6 +2565,173 @@ legend with it) and 'auto' returning the stage's own; gates ui-smoke
 saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
 now holds across a reload and that the replay page wears crypt on the
 sample log.
+
+## The terrain interpreter on the page (Phase 3.3b, 2026-10-03)
+
+**A CARD IS A DEFINITION.** The second forge put the interpreter in the engine
+(`engine/patches/terrain.patch`, the eleventh patch; `engine/README.md` § "The
+terrain patch"; brief §4.10 "Phase 3.3b" and "3.3b RULED" carry the spec and
+the designer's eight rulings): a deal declares every card of either deck as
+`card<ID> = <effect> <shape> <targeting>` and the engine lists, prices and
+plays the casts itself. The page's half is READING: it never decides a cast's
+legality (ffish lists the legal casts, as for every move), it reads a def for
+the face, the preview, the hint and the words, and it reads what a cast DID
+off the record. Every rule below is the engine's; the page shows it.
+
+**The grammar on the page — `js/carddef.mjs`.** `parseDef(text)` mirrors
+parser.cpp's `parse_card_def`: the effect word with its number (`hit1` /
+`hit2`) or its piece (`drop p`), the SHAPE as a picture string (`xxx/xox/xxx`,
+rows north to south, `x` a cell, `o` the anchor, `.` nothing; no rotation on
+cast — an L's four orientations are four cards; clipped at the board's edge),
+the TARGETING word with its number (`any`, `near`, `middle`, `margin<n>`,
+`king`, `ray` / `ray<n>`, `camp`), a one-word value a LEGACY kind with its old
+default (`ice` = `ice xxx/xox/xxx middle`, `win` = `win o king`, `portal` and
+`meta` as they were — the committed samples' inis read unchanged). `shapeCells`
+gives the offsets, `shapeGrid` the mini-map, `castCells(def, anchor, {files,
+ranks, at, kingSq})` the squares a cast covers (the shape clipped; a ray from
+the caster's king on through the anchor to bedrock or the edge, over a pit,
+capped by `ray<n>`), `castChanges` the squares it would change by the ruling's
+per-square table (a hit: walls and crates; ice: floor not yet slippery; wall /
+pit: empty floor off every portal square; harden: intact walls), `defWords` /
+`targetBadge` the face's words. `EFFECTS`, `TARGETS`, `TERRAIN_EFFECTS` (the
+effects a cast is recorded under: hit / wall / pit / harden / sledge / drop).
+
+**The deal.** `variant.mjs deckIniKeys` emits each card's def verbatim
+(`card10 = hit1 o near`), and the variant NAME hashes the whole declaration —
+`__deck4_<fnv1a>` over `handSize;id=def;…` sorted — since the clear spelling of
+3.3a (`__deck4_1i_2p_101m_102m`) does not fit a library of defs (rule 7: the
+name must determine the rules, and a hash of the text does; the committed
+samples keep their recorded names and inis). A deck with a SLEDGE card
+declares the hammer's keys too (`deckHasSledge` → `hammerIniKeys`): the
+enchantment is the engine's `*w` / `*b` flag in the trailing field, and a king
+hammers when his colour's flag is up (`fen.mjs sledgeOf`; `withDeck` /
+`withSlick` carry the entries). `deck.mjs CARDS` is THE FIRST LIBRARY, every
+card `card(kind, id, def, name, glyph, short)` with its `engine` the EFFECT word
+and `def` the text: Ice (1, `ice xxx/xox/xxx any` — ANYWHERE since the ruling),
+Portal (2), Ice row / Ice L (3–4), Crack / Smash / Crack row / Crack file /
+Demolish / Blast / Lance (10–16), Wall file / Wall row / four Wall L's (20–25),
+Sink row / Sink file (30–31), Petrify (40), Sledge (50, `sledge o king`),
+Reinforce (60, `drop p o camp`), Reveal / Undo (101–102, `meta`), You Win
+(200, test). `defOf(kind)` is the parsed def.
+
+**The starters.** THE LIBRARY IS THE DEFAULT (2026-10-03; `DEFAULT_STARTER`
+'library'): every spell in the library once plus Reveal and Undo — 24 cards
+today, every card the library gains joins it — shuffled by the deal's seed
+like every deck; ADEPT stays (3 portals, 3 ice); SAPPER is the terrain set
+(Crack, Smash, Crack row, Demolish, Blast, Lance, Wall file, Wall row, Sink
+row, Petrify, Sledge, Reinforce, Reveal, Undo). THE ENEMY'S DECK IS THE WHOLE
+LIBRARY TOO (`enemyDeck`, every spell once, shuffled by its own seed). Both
+replaced, the day they shipped, ruling 8's six-spell Random starter and the
+width − 1 enemy deck (two spells at width 3 — a rule written when the library
+held two cards) — the designer, on the first play: "We just got thru
+refactoring the fucking game to support large decks, and the setting to test
+it gives the enemy TWO cards. Not even a full hand. What is the point of
+this?" The stress-test setting deals full decks to both sides; "deck strength
+scaling with army size" (brief §8) returns as the run's economy in Phase 3.6,
+where the size is a rule of the floor. Options → Spells → Deck lists the three
+and "Everything, no deck"; `?deck=library|adept|sapper|off|<list>`. On the
+arena page the enemy mirrors the player's spells (a hand-built `?deck=` list
+included); on the walk it carries the library.
+
+**THE SLEDGE-KINGS OPTION IS RETIRED (ruling 7).** The hammer lives in the
+Sledge card: its caster's king hammers for the rest of the duel, nobody else
+ever does — `main.mjs hammerOn()` is `?hammer=on` alone (the smokes and the
+labs), the Options row is gone, a saved `hammer` option is not read, and the
+WALK'S HAMMER is gone with it (`army.hammer` follows the same switch). A
+`?deck=off` duel (the stress-test set) deals plain kings.
+
+**The record — `duel.mjs`.** `castKind` reads the card's EFFECT word: every ice
+shape is `cast: 'ice'`, a terrain card its effect — `hit` / `wall` / `pit` /
+`harden` / `sledge` / `drop` (`TERRAIN_EFFECTS`), the portal's half / link and
+the win card as before. For a terrain cast `#push` records `edits` — every
+square whose glyph changed between the two FENs (`fen.mjs squareChanges`,
+`{ sq, from, to }`, null for floor), the engine's `apply_cast` read off its
+result rather than re-derived — and keeps THE ONE CRATE LEDGER: a wall cracked
+by a card joins `director.godCrates` (a cracked wall is a cracked wall,
+whoever cracked it), a crate smashed to the floor leaves it, a pit sunk by a
+card joins `director.holes`; a sledge cast marks `sledge: 'w' | 'b'`. The
+gods read a terrain cast as an ordinary ply (only the half and the frozen pass
+are skipped). PERMANENCE (ruling 6) holds by construction: every ply's FEN is
+written into the world's cells (`world.mjs writeArena` — a raised `*` a WALL, a
+`_` a HOLE, a `#` outside the holes ledger BEDROCK), so a wall raised in a
+corridor stands there on the walk and a card's pit is a pit for the run.
+
+**The page — `main.mjs`.** THE FACE is GENERATED from the def
+(`cardArtCanvas`): the effect's glyph — one drawing per effect word in
+`pixelarrow.mjs SPELL_GLYPHS` (hit a burst, wall a block, pit a ring with a
+drop, harden a diamond, sledge the hammer, drop a pawn, beside the portal's
+ring, the ice's snowflake and the win card's star; `cards.mjs cardArt` looks
+the glyph up by the card's effect) — over a MINI-MAP of the shape, one pixel a
+cell, the anchor lit and the rest at half (a single-cell shape and a ray draw
+none), so the four Wall L's read apart; and a TARGETING BADGE (`.card-badge`:
+any / near / mid / m2 / king / ray / camp) top right, opposite the cost pip.
+THE DRAG PREVIEW tints the shape at the anchor (`cards.mjs castArea` through
+`castCells`; `castAreaOnFen` reads the board and the caster's king off a FEN
+for the ray; the ice shows the floor it would take, a hit its whole shape,
+the one-square cards their anchor); the tip says what the release does by
+effect (`dropWords`: "release to crack at d2", "… to raise stone at …", "… to
+sink the floor at …", "… to petrify the walls at …", "… to hand your king the
+sledgehammer", "… to place a pawn on …"). A legal target on a wall (a crack's
+anchor, a petrify's, the hammer's wall) wears the target FRAME now, bare floor
+the dot (canvas-board `#paintMarksOver`). THE HINT FOR A SHAPED CAST (ruled
+2026-09-25: "the anchor outlined plus the shape as a faint tint, and outline
+the card itself in gold/silver/bronze"): the hint arrow carries `cast` (the
+effect word, which names the glyph) and `cells` (the shape's squares on the
+live board); canvas-board frames the anchor with the glyph as before and
+TINTS the rest of the shape in the arrow's colour at a quarter of its
+opacity; the hint list's glyph carries `data-spell` (the effect) and
+`data-card` (the kind) with the card's name as its title; and the fan's cards
+of a hinted kind wear their rank's rim (`.card.hinted`, `--hint` the arrow
+colour; `syncHintCards`, set with the lines and cleared with them). THE DIG AS A HINT (2026-10-20; the designer, with two logs of an s80 duel at ply 6: "What's going on with the move recommendations? Here I can't see a gold one. Now the show best toggle doesn't seem to work at all"): the engine's best move for the player was the REDRAW (`@@@@` — it digs the library pile for a card, as it did for itself at ply 2), and `applyHintLines` dropped any line that was neither a move nor a cast, so the list began at rank 2 and nothing on the board or in the fan was gold. The redraw is a list entry now ("1 redraw +7.1"), with no arrow and THE DECK STACK rimmed in its rank's colour as a hinted card is; and "Show best" turned on mid-turn restarts a probe already in flight with the wrong line count (a one-line eval-bar probe used to be handed back as the hint probe, so the toggle painted one line, or none when that line was the redraw, until the next turn). THE BEATS
+(`onMove`): a terrain cast's edits wear the gods' own — a wall cracked into a
+crate the weaken beat with its chips, a crate or a wall smashed to the floor
+the breach beat with its shatter, a floor sunk into a pit the crumble beat —
+all the squares of one cast at once (a shape lands as one); a raised wall, a
+petrified one and a placed pawn appear with the commit (no beat of their own
+yet). The enemy's card still flies to the board first (`enemyCardBeat`). THE
+WORDS: `logreport.mjs castWords(lm, mover)` reads the record — "Crack — cracks
+the wall at d2", "Smash — smashes d2 to the floor", "Wall row — stone rises at
+c3, d3, e3", "Sink row — the floor sinks into a pit at …", "Petrify — the walls
+at … turn to bedrock", "Sledge — your king carries the sledgehammer",
+"Reinforce — a pawn is placed on a1" — in the duel log, on the report's
+timeline (`✸`) and in the analyzer alike; the analyzer's arrows name the
+effect (`replay.mjs effectOf`) and its first PV cast carries the shape's
+tint.
+
+**Gates.** `test-carddef` 27 (the parser against parser.cpp's rules — the
+legacy words, the shapes as offsets north-first, the numbers, the refusals;
+the grid; the lance over a pit and stopped by bedrock; the per-square table;
+the words), `test-deck` 68 (the def declaration, the hashed name, a sledge
+deck's hammer keys, the 22 spell kinds, the library starter and the library enemy deck), `test-cards` 117
+(every kind's art by effect), `test-deck-duel` 46 on the vendored pair,
+`test-logreport` 89, `test-barrier` 170, selftest 52/52 headless (the deck
+check reads the hashed name and 64 ice anchors — anywhere on the 8×8 deal
+board, 16 on the middle rows before), ui-smoke 492 ok / 0 failed (THE TERRAIN CARDS
+block on s65-guard-post with a fixed deck — Crack, Sledge, Reinforce,
+Demolish in hand: the hashed name without a sledge suffix, the king NOT
+hammering before the card, the targets per card (the walls beside the king,
+his own square, the camp's empty ranks 1–3, 25 demolish anchors), the badges
+and the 12×16 art of the shaped card, the hint list's `hit/demolish` glyph,
+the Demolish arrow's cells tinted and the anchor framed with the glyph, the
+two hinted cards rimmed gold and silver, a REAL DRAG of the Crack card onto d2
+— framed under the pointer, the tip, the cast on release as the slot's drop,
+`cast: 'hit'`, the edit `d2 * → ^`, the crate in the ledger, the weaken
+event, the log's words, the board painting a cracked wall — the Sledge cast
+flagging `*w` with e1d1 legal and the wall lit after it, Reinforce placing a
+pawn on a1 with its edit, the export's casts by effect; the sledgehammer
+block under `?hammer=on`; `?deck=off` dealing plain kings; the deck block's
+default 'random'), replay-smoke 95 ok. THE RENDERER THAT STOPS ANSWERING, found and answered the same day: three of five full ui-smoke runs on this build sat for good on a fresh page's BOOT — the load event fired, the duel never read 'playing', the renderer processes idle, no error, no boot retry, Playwright's 90 s deadline never firing — at a different block each time (the terrain block twice, the window page, the flight page), never standalone; Playwright's API trace (`DEBUG=pw:api`) put every stall inside `waitForFunction` right after `page.goto` succeeded, and its server installs that poll through an evaluate it marks UNCANCELLABLE, so a renderer that takes the load and then stops answering CDP leaves the deadline nothing to cancel. The harness answers from the Node side now (`ui-smoke.mjs`): every page comes through `newPageSafe` (30 s, else a fresh browser), `bootWait`'s waits are raced by Node timers with the poll on an interval, a wedged browser is KILLED rather than closed, and the page retries join the boot retries on the summary line; `atlas.mjs loadImage` waits on the image's load event rather than `img.decode()` alone (a decode can stay pending on a page Chromium has stopped rendering — a robustness fix made on the way, not the cause). The run after: ui-smoke 439 ok / 0 failed (the run before it met the stall at a page's boot and the harness caught it — the readout evaluate hung too, the browser was replaced — then crashed on Playwright 1.63's missing process handle, fixed with a bounded close plus a kill of our Chromium tree), selftest 52/52, facing-walk 108/108, replay-smoke 95 ok. The run after that met the stall again at a page's boot and came through the new path to a green summary — 497 ok / 0 failed, 1 boot retry. Measured with `deck-stress.mjs`:
+Sapper (the 12 terrain spells + Reveal + Undo) against a width-3 enemy whose two spells are drawn from the whole library, on s59, gods off, four games each at depth 8 / 300 ms (`results/deck-stress/sapper-vs-width3-d8.jsonl`) and at depth 12 / 2,000 ms (`sapper-vs-width3-d12.jsonl`; 0 of 741 and 0 of 799 searches at the time bound). THE SAME 35 CASTS AT BOTH DEPTHS, by the deck side, and the same 8 by the enemy: at depth 8 the deck side cast on 24% of its castable turns (4.7 casts per 100 plies, 4 redraws), at depth 12 on 17% (4.4 per 100 plies, 4 redraws — the share fell because the games ran longer with a spell in hand, not because fewer casts were played); the enemy on 11% and 12% (1.1 and 1.0 per 100 plies), every one of its casts while behind, no redraw. THE DECK SIDE OPENS WITH A CAST IN EVERY GAME (Smash, Blast or Reinforce at ply 1, the next at ply 3 or 5) and spends its whole terrain set by the end — Reinforce at a median ply 3, Blast 3, Smash 5 / 11, Crack row 15 / 13, Lance 13 / 25, Crack 33 / 39, Wall row 29 / 99, Sink row 31 / 65, Petrify 39 / 67, Wall file 61, Demolish 55 / 75, Sledge 103 / 55 — nothing dead in hand; the enemy's two cards go at plies 8–62. THE GAMES DO NOT END: one checkmate and three ply caps at depth 8, FOUR PLY CAPS AT DEPTH 12 — with the gods off, a board the terrain set has walled and pitted closes up (the Adept batches ended a strip and a mate in four; the gods are the closer in play and were off here), so the terrain set's pacing is the god lab's to read with the gods on before anything is called a problem.
+
+THE SEVENTH COMMITTED SAMPLE, THE FIRST TERRAIN DUEL (2026-10-20 — the designer's log, Firefox/Windows, with the verdict "that was a pretty funny game. Nice to see the engine is in fact eager to play the cards when it knows they're available": `replay/samples/dck-log_vaults-3-t19_s3367490008.json`, `?sample=7` — vaults-3 at walk turn 19, the enemy's initiative, THE LIBRARY ON BOTH SIDES, 134 plies, 12 quakes, 3 undos plus the Undo and the Reveal cards at ply 11, 0 anomalies, 1-0 by extinction). WHAT THE RECORD SAYS: 36 casts — the enemy opened with Crack row on its FIRST ply (c8, d8, e8 cracked), the player answered with Crack row on f2 and g2; four redraws, two a side; walls raised by both (the enemy's Wall L on i9–j9, Wall row, Wall L, Wall file, Wall L; the player's Wall file, Wall L, Wall row), pits sunk by the player (Sink file at e5, Sink row at g5–h5), Reinforce pawns dropped by both (the enemy's on i10, its own home rank — the camp is the double-step region, home edge to camp line, as ruled), the enemy's Blast smashing e8 to the floor and its Demolish cracking four squares at once, three ices a side, a portal pair each; THE ENEMY CAST SLEDGE AT PLY 121 AND HAMMERED e4 AT 133 (the first hammer through the card; `sledge: 'b'` on the state, the crate in the ledger); both decks spent to the last card by ply 70; the raised walls and the pits stand on the vaults-3 floor for the run (permanence by `writeArena`). THE PHONE-DEPTH NOTE HOLDS ON A DESKTOP: 55 of 66 searches at the ten-second bound, depth 12–22 (median 17), the forced mates at d22 at the end. THE LOG FOUND ONE BUG: THE INITIATIVE'S NUMBERING — when the enemy moves first (the ambush's initiative, `turn` 'b') ply 1 is Black's, and the duel log, the report's timeline and the analyzer's ply line had numbered every odd ply as White's ("1. U@d8" for the engine's opening cast); they read "1… U@d8" and "2. V@g2" now (main.mjs onMove, `logreport.mjs timelineLine` with `firstTurn`, replay.mjs; the second sample's test, which had pinned the old dots, re-pinned). test-logreport 100 and replay-smoke 103 ok read the sample (the words of every effect on the timeline, the edits and the ledgers on the states, the analyzer painting a card's crack, pit and raised wall from the record, the played hit as the bare red frame on d8, the initiative's dots); ui-smoke 509 ok / 0 failed (3 boot retries: the renderer stall met three times in one run and recovered each time through the hardened boot wait).  THE ICE STAYS AS IT IS — a balance question for Phase 3.7, after fire, and NOT TO BE RAISED AGAIN (designer 2026-10-20: "stop nagging me about fucking nerfing the ice spell when we haven't even implemented fire yet. If it's a balancing question it can wait"). THE PHONE VERDICT CAME 2026-10-20 (designer: "looks fine on phone") — PHASE 3.3b IS IN; the branch merges as it stands.
+
+**Held over:** a beat for a raised wall, a petrified one and a placed pawn
+(they appear with the commit); authored card names and art (the names are
+systematic, the glyph is one per effect); the Lance's hint on the analyzer's
+later PV casts (the first cast's board alone is known); the shaped-cast hint
+on a crop of the dimmed dungeon; the LMR gap (3.3a's spec exempts every cast,
+the build the dig alone — measured, not changed: the cast COUNTS are identical at depth 8 and depth 12 (35 and 8), with the same opening casts and the same redraws, so late-move reductions on late-ordered casts are not hiding casts at the shallower depth; the search policy stays as 3.3a built it (the dig alone exempt).); the materials, the
+timers and the economy of 3.4 onward.
 
 ## The deck in the engine (Phase 3.3a, 2026-09-26)
 

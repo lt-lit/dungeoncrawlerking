@@ -22,10 +22,12 @@ check(CARDS.ice.id === 1 && CARDS.ice.engine === 'ice' && CARDS.portal.id === 2 
 check(CARDS.reveal.engine === 'meta' && CARDS.undo.engine === 'meta' && CARDS.win.engine === 'win' && CARDS.win.test === true, 'the meta cards are blanks to the engine; You Win is the test card');
 check(new Set(CARD_KINDS.map((k) => CARDS[k].id)).size === CARD_KINDS.length && CARD_KINDS.every((k) => kindOfId(CARDS[k].id) === k && idOfKind(k) === CARDS[k].id), 'every card has its own ID and reads back by it');
 check(kindOfId(999) === 'card999' && idOfKind('nope') === null, 'an unknown ID reads as card<id>, an unknown kind has no ID');
-check(SPELL_KINDS.join(',') === 'ice,portal' && META_KINDS.join(',') === 'reveal,undo', `spells ${SPELL_KINDS} (the test card apart) · meta ${META_KINDS}`);
+check(SPELL_KINDS.length === 22 && SPELL_KINDS.includes('ice') && SPELL_KINDS.includes('portal') && SPELL_KINDS.includes('crack') && SPELL_KINDS.includes('lance') && SPELL_KINDS.includes('sledge') && SPELL_KINDS.includes('reinforce') && !SPELL_KINDS.includes('win') && META_KINDS.join(',') === 'reveal,undo', `spells ${SPELL_KINDS} (the test card apart) · meta ${META_KINDS}`);
+check(CARDS.crack.def === 'hit1 o near' && CARDS.crack.engine === 'hit' && CARDS.lance.def === 'hit1 o ray' && CARDS.reinforce.def === 'drop p o camp' && CARDS.reinforce.engine === 'drop' && CARDS.sledge.def === 'sledge o king' && CARDS.ice.def === 'ice xxx/xox/xxx any', 'the library carries its definitions (the Ice anywhere since the 3.3b ruling)');
+check(STARTER_DECKS.library && DEFAULT_STARTER === 'library' && starterCards('library').length === SPELL_KINDS.length + 2 && new Set(starterCards('library')).size === SPELL_KINDS.length + 2 && SPELL_KINDS.every((k) => starterCards('library').includes(k)) && starterCards('library').includes('reveal') && starterCards('library').includes('undo'), 'the library starter is every spell once plus Reveal and Undo, and the default');
 check(CARDS.ice.letter === ICE_SCROLL && CARDS.portal.letter === PORTAL_SCROLL, 'the legacy letters stay on the two scroll cards');
 check(HAND_SIZE === 4 && MULLIGAN === '@@@@' && isMulligan(MULLIGAN), 'a hand of four; the mulligan is the move @@@@');
-check(STARTER_DECKS[DEFAULT_STARTER] && starterCards(DEFAULT_STARTER).length === 8 && starterCards('nope') === null, 'the default starter deck has eight cards; an unknown name is null');
+check(STARTER_DECKS[DEFAULT_STARTER] && starterCards(DEFAULT_STARTER).length === SPELL_KINDS.length + 2 && starterCards('adept').length === 8 && starterCards('nope') === null, 'the default starter is the library (every spell + 2); Adept has eight cards; an unknown name is null');
 check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_STARTER).includes('undo') && !starterCards(DEFAULT_STARTER).includes('win'), 'every starter carries Reveal and Undo and never the test card');
 
 // ---- a seeded shuffle replays; another seed differs; the cards are conserved
@@ -72,11 +74,14 @@ check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_S
   check(rec.w.hand.length === 4 && rec.w.pile.length === 4 && rec.w.spent.length === 0 && rec.b.hand.length === 4 && rec.b.pile.length === 1, 'the record carries both decks: hand, pile, spent');
   check(deckRecord(fen).w.spent.length === 0, 'without the pair as shuffled the spent pile reads empty');
   const decl = deckDeclaration(decks);
-  check(JSON.stringify(decl) === JSON.stringify({ handSize: 4, cards: { 1: 'ice', 2: 'portal', 101: 'meta', 102: 'meta' } }), `the declaration names every ID either deck holds (${JSON.stringify(decl)})`);
+  check(JSON.stringify(decl) === JSON.stringify({ handSize: 4, cards: { 1: 'ice xxx/xox/xxx any', 2: 'portal', 101: 'meta', 102: 'meta' } }), `the declaration names every ID either deck holds with its DEFINITION (${JSON.stringify(decl)})`);
   const v = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: decl });
-  check(v.name === 'duel_8x8__w2__b7__portals2__ice__deck4_1i_2p_101m_102m', `the deal's variant name carries the declaration (${v.name})`);
-  check(/handSize = 4\n/.test(v.ini) && /cardSlots = stuvwxyz\n/.test(v.ini) && /card1 = ice\n/.test(v.ini) && /card2 = portal\n/.test(v.ini) && /card101 = meta\n/.test(v.ini) && /card102 = meta\n/.test(v.ini) && /pieceDrops = true\n/.test(v.ini), 'the ini declares the hand size, the slots and every card');
-  check(deckVariantSuffix({ handSize: 4, cards: { 200: 'win', 1: 'ice' } }) === '__deck4_1i_200w' && DECK_SLOT_LETTERS === 'stuvwxyz', 'the suffix sorts the IDs; the slot letters are s..z');
+  check(/^duel_8x8__w2__b7__portals2__ice__deck4_[0-9a-f]{8}$/.test(v.name), `the deal's variant name carries the declaration's fingerprint (${v.name})`);
+  check(/handSize = 4\n/.test(v.ini) && /cardSlots = stuvwxyz\n/.test(v.ini) && /card1 = ice xxx\/xox\/xxx any\n/.test(v.ini) && /card2 = portal\n/.test(v.ini) && /card101 = meta\n/.test(v.ini) && /card102 = meta\n/.test(v.ini) && /pieceDrops = true\n/.test(v.ini) && !/hammerPieceTypes/.test(v.ini), 'the ini declares the hand size, the slots and every card\'s def; no hammer without a sledge card');
+  const sfx1 = deckVariantSuffix({ handSize: 4, cards: { 200: 'win', 1: 'ice' } }), sfx2 = deckVariantSuffix({ handSize: 4, cards: { 1: 'ice', 200: 'win' } }), sfx3 = deckVariantSuffix({ handSize: 4, cards: { 1: 'ice xxx/xox/xxx any', 200: 'win' } });
+  check(/^__deck4_[0-9a-f]{8}$/.test(sfx1) && sfx1 === sfx2 && sfx1 !== sfx3 && DECK_SLOT_LETTERS === 'stuvwxyz', `the suffix is a fingerprint of the sorted declaration — the same deck in any order, another def another name (${sfx1} ${sfx3}); the slot letters are s..z`);
+  const vs = dealVariant(10, 10, 2, 8, { portals: true, deck: { handSize: 4, cards: { 50: 'sledge o king', 10: 'hit1 o near' } } });
+  check(/hammerPieceTypes = k\n/.test(vs.ini) && /card50 = sledge o king\n/.test(vs.ini) && /card10 = hit1 o near\n/.test(vs.ini) && !/__sledge/.test(vs.name), 'a deck with a sledge card declares the hammer\'s type (the enchantment gates it) without the always-on suffix');
   let threw = false;
   try { deckIniKeys({ cards: { 7: 'fire' } }); } catch { threw = true; }
   check(threw, 'an unknown engine kind is refused');
@@ -124,8 +129,8 @@ check(starterCards(DEFAULT_STARTER).includes('reveal') && starterCards(DEFAULT_S
 
 // ---- the enemy's deck by width, the page's parameter, the glyphs
 {
-  check(enemyDeck(3, 1).length === 2 && enemyDeck(4, 1).length === 3 && enemyDeck(1, 1).length === 0, 'width − 1 spell cards');
-  check(enemyDeck(4, 5).join(',') === enemyDeck(4, 5).join(',') && enemyDeck(4, 5).every((k) => SPELL_KINDS.includes(k)), 'stable by seed, spells only');
+  check(enemyDeck(3, 1).length === SPELL_KINDS.length && enemyDeck(8, 1).length === SPELL_KINDS.length && new Set(enemyDeck(3, 1)).size === SPELL_KINDS.length, 'the enemy deck is the whole library, every spell once, at any width (the width rule waits for the economy)');
+  check(enemyDeck(4, 5).every((k) => SPELL_KINDS.includes(k)), 'spells only');
   check(enemyCards(['ice', 'reveal', 'portal', 'undo', 'win']).join(',') === 'ice,portal,win', 'the enemy keeps the spell cards alone');
   check(parseDeckParam(null) === null && parseDeckParam('off').off && parseDeckParam('adept').starter === 'adept' && parseDeckParam('adept').cards.length === 8, '?deck=: off, a starter');
   const list = parseDeckParam('ice,portal,win');

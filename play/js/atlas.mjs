@@ -106,12 +106,25 @@ function retone(g, sx, sy, w, h, from, to, { highlight = null, highlightTo = nul
 }
 const variantOf = (role) => { const m = role.match(/-(\d+)$/); return m ? parseInt(m[1], 10) : 1; };
 
-/** Decode an image URL into { img, w, h } (the image itself is the drawImage source). */
+/** Load an image URL into { img, w, h } (the image itself is the drawImage
+ *  source). THE DECODE THAT NEVER SETTLES (2026-10-03): this waited on
+ *  `img.decode()` alone, and in Chromium that promise can stay pending for good
+ *  on a page the browser has stopped rendering — the full ui-smoke wedged on a
+ *  fresh page's first `renderer.ready()` with the renderer idle, in one run of
+ *  three, at different blocks each time, never standalone. The LOAD EVENT is
+ *  the wait now (it fires when the bytes are in), and the decode is a bounded
+ *  courtesy: `drawImage` decodes a loaded image itself, so nothing is lost if
+ *  the decode never answers. */
 async function loadImage(src) {
   const img = new Image();
   img.decoding = 'sync';
+  const loaded = new Promise((res, rej) => {
+    img.onload = () => res();
+    img.onerror = () => rej(new Error(`the image did not load: ${src}`));
+  });
   img.src = src;
-  await img.decode();
+  await loaded;
+  await Promise.race([img.decode().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
   return { img, w: img.naturalWidth, h: img.naturalHeight };
 }
 
