@@ -73,8 +73,14 @@ const params = new URLSearchParams(location.search);
 // 5 — THE FIRST DECK DUEL (2026-09-25, s77 The Smithy flipped, the designer's
 // log on the card UI build, Firefox/Windows): the Adept deck against the
 // starter's spells — a Reveal at ply 10, six draws, the enemy casting its
-// whole deck (three ices, three portal pairs) from behind, 1-0 by checkmate.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json', 'samples/dck-log_s77-the-smithy_s210339940.json', 'samples/dck-log_vaults-4-t27_s1830683123.json']; // ?sample=5: THE FIRST DECK DUEL (2026-09-25, the designer's log on the card UI build); ?sample=6: THE FIRST DUEL ON THE ENGINE'S DECK (2026-10-02, the designer's phone log on the 3.3a build)
+// whole deck (three ices, three portal pairs) from behind, 1-0 by checkmate;
+// 6 — THE FIRST DUEL ON THE ENGINE'S DECK (2026-10-02, vaults-4 at walk turn
+// 27, the phone); 7 — THE FIRST TERRAIN DUEL (2026-10-20, vaults-3 at walk
+// turn 19, Firefox/Windows, the enemy's initiative): both sides on the
+// library deck — 36 casts, the enemy's Crack row on its first ply, four
+// redraws, walls raised and pits sunk on both sides, Reinforce pawns, the
+// enemy's Sledge at ply 121 and its hammer at 133, 1-0 by extinction.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json', 'samples/dck-log_s77-the-smithy_s210339940.json', 'samples/dck-log_vaults-4-t27_s1830683123.json', 'samples/dck-log_vaults-3-t19_s3367490008.json']; // ?sample=5: THE FIRST DECK DUEL (2026-09-25, the designer's log on the card UI build); ?sample=6: THE FIRST DUEL ON THE ENGINE'S DECK (2026-10-02, the designer's phone log on the 3.3a build)
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;
@@ -475,7 +481,7 @@ function paint() {
   say($('ply-readout'), `p${ply} / ${line.plies ?? 0}`);
   const san = ply > 0 ? line.sans?.[ply - 1] ?? line.moves?.[ply - 1] ?? '?' : null;
   // THE DECK: the ply line marks a Reveal or an Undo card played on this ply as the Node timeline does (it built the line without the meta-plays map until 2026-10-03 — replay-smoke caught it on the sixth sample).
-  const plyLine = ply > 0 ? R.timelineLine(ply, san, { ...ix, states: line.states, meta: R.metaPlaysMap({ metaPlays: line.metaPlays ?? L.metaPlays ?? [] }) }) : `p  0  the start position${L.turn === 'b' ? ' (the enemy moves first)' : ''}`;
+  const plyLine = ply > 0 ? R.timelineLine(ply, san, { ...ix, states: line.states, meta: R.metaPlaysMap({ metaPlays: line.metaPlays ?? L.metaPlays ?? [] }), firstTurn: L.turn ?? 'w' }) : `p  0  the start position${L.turn === 'b' ? ' (the enemy moves first)' : ''}`;
   const meter = st?.meter ? `  meter ${fmt(st.meter.value)} tedium ${fmt(st.meter.tedium)} heat ${fmt(st.meter.heat)} fun ${fmt(1 - (st.meter.staleness ?? 0))}` : '';
   const probe = st?.probe ? `\nprobe (${st.probe.go}, white POV): ${R.fmtScore(st.probe)}${st.probe.depth ? ` d${st.probe.depth}` : ''}  pv ${(st.probe.pv ?? []).slice(0, 8).join(' ')}` : '';
   const ended = st?.ended ? `\ngame over: ${st.result ?? ''} ${st.termination ?? st.error ?? ''}`.trimEnd() : '';
@@ -810,7 +816,7 @@ function renderTimeline() {
     const ply = i + 1;
     const san = line.sans?.[i] ?? line.moves[i];
     const inTail = !line.parent || ply > line.forkPly;
-    const text = R.timelineLine(ply, san, { ...ix, states: line.states });
+    const text = R.timelineLine(ply, san, { ...ix, states: line.states, firstTurn: app.log?.turn ?? 'w' });
     row(ply, text, `${ix.quakes.has(ply) ? 'quake' : ''} ${inTail ? '' : 'prefix'} ${line.states?.some((s) => s.ply === ply && s.mover === 'player') ? 'player' : ''}`);
     tuneRows(ply);
     forkRows(ply);

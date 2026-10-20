@@ -233,20 +233,24 @@ export const leftMateLine = (st) => st?.mover === 'player' && st.followed === fa
 
 /** The timeline: one line per ply — move, engine eval, the quake or veto,
  *  flags, where an undo resumed (`resumedAt`, the line of record only). */
-export function timelineLines(moves, sans, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], startPly = 0, resumedAt = null, meta = new Map() } = {}) {
+export function timelineLines(moves, sans, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], startPly = 0, resumedAt = null, meta = new Map(), firstTurn = 'w' } = {}) {
   const lines = [];
   for (let i = 0; i < moves.length; i++) {
     const ply = startPly + i + 1;
-    lines.push(timelineLine(ply, sans?.[i] ?? moves[i], { engine, quakes, traces, flags, states, meta }));
+    lines.push(timelineLine(ply, sans?.[i] ?? moves[i], { engine, quakes, traces, flags, states, meta, firstTurn }));
     if (resumedAt?.has(ply)) for (const k of resumedAt.get(ply)) lines.push(`      ↩ undo #${k} rewound to here (see branches)`);
   }
   return lines;
 }
 
 /** One timeline line (the replay screen's status line for a ply). */
-export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], meta = new Map() } = {}) {
-  const n = Math.ceil(ply / 2);
-  const white = ply % 2 === 1;
+export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(), traces = new Map(), flags = new Map(), states = [], meta = new Map(), firstTurn = 'w' } = {}) {
+  // THE INITIATIVE'S NUMBERING (2026-10-20): when the enemy moves first (`turn` 'b' — the ambush's initiative) ply 1
+  // is Black's, so the first line reads "1… U@d8" and White's reply "2. V@g2", as chess numbers a game Black opens;
+  // every line read as White's from ply 1 until the seventh sample showed the engine's moves with White's dots.
+  const blackFirst = firstTurn === 'b';
+  const n = blackFirst ? Math.floor(ply / 2) + 1 : Math.ceil(ply / 2);
+  const white = (ply % 2 === 1) !== blackFirst;
   const e = engine.get(ply);
   const q = quakes.get(ply);
   const t = traces.get(ply);
@@ -367,7 +371,7 @@ export function timelineSection(L) {
   const idx = indexLine(L);
   const resumedAt = resumedAtMap(L);
   if (resumedAt.has(0)) for (const k of resumedAt.get(0)) s.push(`      ↩ undo #${k} rewound to the start`);
-  s.push(...timelineLines(L.moves ?? [], L.sans ?? [], { ...idx, states: L.states ?? [], resumedAt, meta: metaPlaysMap(L) }));
+  s.push(...timelineLines(L.moves ?? [], L.sans ?? [], { ...idx, states: L.states ?? [], resumedAt, meta: metaPlaysMap(L), firstTurn: L.turn ?? 'w' }));
   const last = L.states?.[L.states.length - 1];
   if (last?.fen) {
     s.push('\nfinal position' + (last.ended ? ` (${last.result ?? ''} ${last.termination ?? last.error ?? ''})` : ''));
@@ -426,7 +430,7 @@ export function branchLines(L, b, i) {
   if (tail.moves?.length) {
     s.push('  the abandoned line:');
     const idx = indexLine(tail);
-    for (const l of timelineLines(tail.moves, tail.sans, { ...idx, states: tail.states ?? [], startPly: b.toPly })) s.push('  ' + l);
+    for (const l of timelineLines(tail.moves, tail.sans, { ...idx, states: tail.states ?? [], startPly: b.toPly, firstTurn: L.turn ?? 'w' })) s.push('  ' + l);
     // The tail's states carry the ledgers for its own quake boards.
     const tailStates = [...(L.states ?? []).filter((s) => s.ply <= b.toPly), ...(tail.states ?? [])];
     for (const q of tail.quakes ?? []) {

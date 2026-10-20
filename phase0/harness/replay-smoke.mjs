@@ -482,6 +482,35 @@ expect(/^vaults-2/.test(ic.stage) && ic.plies === 68, `?sample=4 opens the first
   expect(/T@b8/.test(dk6.l3) && /--/.test(dk6.l4) && /S@g5/.test(dk6.l12) && /the ice is cast/.test(dk6.l12), `the slot casts read on the ply lines — the portal half T@b8, the frozen pass, the enemy's ice S@g5 (${dk6.l3} · ${dk6.l12})`);
   expect(/W draws Ice/.test(dk6.l2) && /Undo played/.test(dk6.l20), `the draw at ply 2 and the Undo card at ply 20 read on their lines (${dk6.l2} · ${dk6.l20})`);
 }
+// THE FIRST TERRAIN DUEL (2026-10-20): the seventh sample — vaults-3 at walk turn 19, the enemy's initiative, the library on both sides —
+// loads; the terrain casts read on the ply lines by their words; the analyzer paints a card's crack, pit and raised wall from the record;
+// a played terrain cast is the bare frame on its anchor; the initiative's numbering puts Black's dots on ply 1.
+{
+  await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=7&fx=0`);
+  await page.evaluate(() => window.__DCK.ready);
+  const t7 = await page.evaluate(async () => {
+    const Rp = window.__DCK.replay;
+    await Rp.boardReady();
+    const at = (ply) => { Rp.goto(ply); return { line: Rp.view.plyLine, cell: (sq) => Rp.view.cell(sq), arrows: Rp.view.marks?.arrows ?? [] }; };
+    const p0 = at(0); const d8before = p0.cell('d8');
+    const p1 = at(1); const l1 = p1.line, d8 = p1.cell('d8'), a1 = p1.arrows.find((a) => a.from === 'd8' && a.to === 'd8') ?? null;
+    const p15 = at(15); const l15 = p15.line; const i10 = (() => { const rows = Rp.view.fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/'); const row = rows[0]; const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out[8] ?? '?'; })(); // rank 10, file i — the piece letter off the FEN
+    const p16 = at(16); const l16 = p16.line, e5 = p16.cell('e5');
+    const p38 = at(38); const i9before = p38.cell('i9');
+    const p39 = at(39); const l39 = p39.line, i9 = p39.cell('i9'), j9 = p39.cell('j9');
+    const l121 = at(121).line, l133 = at(133).line;
+    const rep = typeof Rp.report === 'function' ? await Rp.report() : '';
+    return { stage: Rp.view.stage, plies: Rp.view.plies, d8before, d8, a1, l1, l15, i10, l16, e5, i9before, i9, j9, l39, l121, l133, decks: /decks  W 24 cards \/ B 22 cards/.test(rep) };
+  });
+  expect(/^vaults-3/.test(t7.stage) && t7.plies === 134, `?sample=7 opens the first terrain duel (${t7.stage}, ${t7.plies} plies)`);
+  expect(/^p  1    1… U@d8 /.test(t7.l1) && /Crack row — cracks the walls at c8, d8, e8/.test(t7.l1), `ply 1 reads as Black's first move with the crack's words (${t7.l1.slice(0, 80)})`);
+  expect(t7.d8before.includes('wall') && !t7.d8before.includes('cracked') && t7.d8.includes('cracked') && t7.d8.includes('furniture'), `the analyzer paints d8 cracked from ply 1 on (${t7.d8before.filter((c) => /wall|crack|furn/.test(c)).join(' ')} → ${t7.d8.filter((c) => /wall|crack|furn/.test(c)).join(' ')})`);
+  expect(!!t7.a1 && t7.a1.cast === 'hit' && t7.a1.played === true && t7.a1.kind === 'last', `the ply's mark is a played hit on d8, the bare frame in the enemy's red (${JSON.stringify(t7.a1)})`);
+  expect(/Reinforce — a pawn is placed on i10/.test(t7.l15) && t7.i10 === 'p', `ply 15: the enemy's pawn stands on i10 (${t7.i10}; ${t7.l15.slice(35, 90)})`);
+  expect(/Sink file — the floor sinks into a pit at e5/.test(t7.l16) && t7.e5.includes('hole'), `ply 16: the pit at e5 is painted as a hole (${t7.e5.filter((c) => /hole|floor|wall/.test(c)).join(' ')})`);
+  expect(!t7.i9before.includes('wall') && t7.i9.includes('wall') && t7.j9.includes('wall') && /Wall L — stone rises at i9, j9/.test(t7.l39), `ply 39: the raised wall stands on i9 and j9 where floor was (${t7.i9before.filter((c) => /wall|floor/.test(c)).join(' ')} → ${t7.i9.filter((c) => /wall|floor/.test(c)).join(' ')})`);
+  expect(/Sledge — the enemy's king carries the sledgehammer/.test(t7.l121) && /K\*e4/.test(t7.l133) && t7.decks, `the Sledge at ply 121, the hammer at 133, the report's decks line (${t7.l121.slice(35, 95)})`);
+}
 expect(ic.before.field === '' && ic.before.d6 < 20 && ic.before.c7 < 20, `ply 25: no ice yet (${ic.before.d6} / ${ic.before.c7} cold pixels on d6 / c7)`);
 expect(ic.cast.field === '~c5,~d5,~c6,~d6,~e6,~c7,~d7,~e7' && ic.cast.empty.length >= 5 && ic.cast.empty.every(([, n]) => n >= 60) && ic.cast.e5[0] === '*' && ic.cast.e5[1] < 20 && ic.cast.d8 < 20, `ply 26: the player's I@d6 paints the ice on the patch's empty squares (${ic.cast.empty.map(([s, n]) => `${s}:${n}`).join(' ')}) and none on the wall e5 (${ic.cast.e5[1]}) or beyond it (d8 ${ic.cast.d8})`);
 {

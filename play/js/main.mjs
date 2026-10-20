@@ -39,7 +39,7 @@ import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
 import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, glyphsOf, parseDeckParam, cloneDecks, handOf, pileOf, spentOf, cardOfCast, castUci, defOf } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards — IN THE ENGINE since 2026-09-26 (the FEN is the deck)
 import { fanLayout, cardArt, artSize, stampGlyph, gestureStart, gestureMove, gestureHold, gestureEnd, castArea, castAreaOnFen, cardHint, dropWords, costWords, LONG_PRESS_MS } from './cards.mjs'; // THE CARD UI (Phase 3.2, 2026-09-25): the fan, the art, the gesture, the drop preview
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, PIT, isWall, hammerOf, castLetter, slickSquares } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, PIT, isWall, hammerOf, castLetter, slickSquares, splitFen } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
 import { shapeGrid, targetBadge, TERRAIN_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): the terrain interpreter's grammar on the page — a card's shape and targeting on its face, the casts recorded by their effect
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
@@ -4089,8 +4089,10 @@ async function onMove({ uci, san, mover, ply }) {
   godsHeatOff(); // the census described the pre-move position
   paintBoard(app.duel.fen());
   renderPlayMarks();
-  const n = Math.ceil(ply / 2);
-  const isWhiteMove = ply % 2 === 1;
+  // THE INITIATIVE'S NUMBERING (2026-10-20): when the enemy moved first, ply 1 is Black's — "1… U@d8", then "2. V@g2" (the seventh sample showed the engine's moves with White's dots; logreport.mjs numbers the timeline the same way)
+  const blackFirst = splitFen(duel.startFen).turn === 'b';
+  const n = blackFirst ? Math.floor(ply / 2) + 1 : Math.ceil(ply / 2);
+  const isWhiteMove = (ply % 2 === 1) !== blackFirst;
   // THE PORTAL SPELL: say what a cast did and where a portal move came out.
   let note = '';
   {
