@@ -45,7 +45,13 @@ export const EFFECTS = Object.freeze({
 export const STATE_EFFECTS = Object.freeze(new Set(['stun', 'invincible', 'control', 'entomb']));
 const TIMED_EFFECTS = new Set(['stun', 'invincible', 'control']);
 export const MAX_STATE_COUNT = 15;
-export const TARGETS = Object.freeze(['any', 'near', 'middle', 'margin', 'king', 'ray', 'camp']);
+export const TARGETS = Object.freeze(['any', 'near', 'middle', 'margin', 'king', 'ray', 'camp', 'sight']);
+/** THE SIGHT WORD (sight.patch, 2026-10-21; the designer, on the first piece-states log: "restrict targeting range
+ *  on spells like this" — "Sight seems like the only one that wouldn't make these spells practically useless"):
+ *  `sight` (and `sight<n>`, a cap) — the anchor must be IN SIGHT of the caster's army: every square a queen standing
+ *  on one of the caster's pieces could move onto, the first blocker on each line included (a piece of either colour,
+ *  a crate, a wall, a pit, bedrock; a portal body ends the line). Every piece is an eye; the enemy's pieces are
+ *  nobody's eyes. The mirror for the page is rays.mjs `sightSquares`; the engine lists the casts. */
 /** The effects whose cast is recorded by its own name in the duel record (`cast: 'hit' | 'wall' | …`; ice, win and the portal keep theirs). */
 export const TERRAIN_EFFECTS = Object.freeze(new Set(['hit', 'wall', 'pit', 'harden', 'sledge', 'drop']));
 export const MAX_SHAPE_CELLS = 32;
@@ -97,8 +103,8 @@ export function parseDef(text) {
   if (!tm || !TARGETS.includes(tm[1])) throw new Error(`unknown targeting: ${target}`);
   const tword = tm[1];
   const tnum = tm[2] ? parseInt(tm[2], 10) : null;
-  if (tnum !== null && tword !== 'margin' && tword !== 'ray') throw new Error(`a number on ${tword}`);
-  const targetArg = tword === 'margin' ? (tnum ?? 2) : tword === 'ray' ? (tnum ?? 0) : 0;
+  if (tnum !== null && tword !== 'margin' && tword !== 'ray' && tword !== 'sight') throw new Error(`a number on ${tword}`);
+  const targetArg = tword === 'margin' ? (tnum ?? 2) : tword === 'ray' || tword === 'sight' ? (tnum ?? 0) : 0;
   if ((effect === 'win' || effect === 'sledge') && tword !== 'king') throw new Error(`${effect} is cast on the king`);
   if (tword === 'ray' && cells.length !== 1) throw new Error("a ray's shape is o");
   return { effect, arg, shape, cells, target: tword, targetArg, text: tok.join(' ') };
@@ -193,7 +199,7 @@ export function castChanges(def, cells, anchor, { at = () => null, slick = new S
 /** One line of words for a def, for a card's face and the reader. */
 export function defWords(def) {
   const shapeWords = def.cells.length === 1 ? 'one square' : def.cells.length === 9 && def.shape === 'xxx/xox/xxx' ? 'a 3×3' : `${def.cells.length} squares (${def.shape})`;
-  const where = { any: 'anywhere', near: 'beside your pieces', middle: 'on the middle rows', margin: `${def.targetArg} rows off the king rows`, king: 'on your king', ray: def.targetArg ? `a ray of ${def.targetArg} from your king` : 'a ray from your king', camp: 'in your camp' }[def.target];
+  const where = { any: 'anywhere', near: 'beside your pieces', middle: 'on the middle rows', margin: `${def.targetArg} rows off the king rows`, king: 'on your king', ray: def.targetArg ? `a ray of ${def.targetArg} from your king` : 'a ray from your king', sight: def.targetArg ? `in sight of your pieces, within ${def.targetArg}` : 'in sight of your pieces', camp: 'in your camp' }[def.target];
   switch (def.effect) {
     case 'hit': return def.target === 'ray' ? `${where}: every wall on it cracks, every crate is floor` : `${def.arg === 2 ? 'smash' : 'crack'} ${shapeWords} ${where}: ${def.arg === 2 ? 'walls and crates become floor' : 'a wall cracks, a crate becomes floor'}`;
     case 'ice': return `${shapeWords} of ice ${where}; a piece that moves onto it slides on`;
@@ -216,5 +222,5 @@ export const PIECE_NAMES = Object.freeze({ p: 'pawn', n: 'knight', b: 'bishop', 
 
 /** A short badge for the targeting word on a card face. */
 export function targetBadge(def) {
-  return { any: 'any', near: 'near', middle: 'mid', margin: `m${def.targetArg}`, king: 'king', ray: def.targetArg ? `ray${def.targetArg}` : 'ray', camp: 'camp' }[def.target] ?? def.target;
+  return { any: 'any', near: 'near', middle: 'mid', margin: `m${def.targetArg}`, king: 'king', ray: def.targetArg ? `ray${def.targetArg}` : 'ray', camp: 'camp', sight: def.targetArg ? `sight${def.targetArg}` : 'sight' }[def.target] ?? def.target;
 }

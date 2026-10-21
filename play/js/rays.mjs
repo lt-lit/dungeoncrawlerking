@@ -19,7 +19,7 @@
 // without a signature change; a grid without the property walks plain lines,
 // as before.
 
-import { parseBoard, parsePortalField, splitFen } from './fen.mjs';
+import { parseBoard, parsePortalField, splitFen, isTerrain } from './fen.mjs';
 
 /** 'e4' → { f, r } (0-based, r from the bottom). */
 export const sqFR = (sq) => ({ f: sq.charCodeAt(0) - 97, r: parseInt(sq.slice(1), 10) - 1 });
@@ -84,6 +84,36 @@ export function walkRay(grid, files, ranks, f0, r0, df, dr, visit) {
     r += dr;
   }
   return path;
+}
+
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+/**
+ * THE SIGHT WORD (sight.patch, 2026-10-21; the targeting ruling after the
+ * first piece-states log): the squares in sight of a colour's army on a FEN —
+ * every square a queen standing on one of its pieces could move onto, the
+ * first blocker on each line included (a piece of either colour, a crate, a
+ * wall, a pit, bedrock; a portal body ends the line), each line capped at
+ * `cap` squares when cap > 0. Every piece is an eye, an entombed or a stunned
+ * one too, a piece held under mind control for its holder; the enemy's pieces
+ * are nobody's eyes; the eye's own square is not in its sight. The engine's
+ * rule mirrored for the page (the hover, the tests) — never legality: ffish
+ * lists the casts. Returns a Set of square names.
+ */
+export function sightSquares(fen, colour, cap = 0) {
+  const { grid, files, ranks } = gridFromFen(fen);
+  const out = new Set();
+  const mine = (c) => !!c && !isTerrain(c) && (colour === 'w' ? c === c.toUpperCase() : c === c.toLowerCase());
+  for (let r = 0; r < ranks; r++) {
+    for (let f = 0; f < files; f++) {
+      if (!mine(grid[r][f])) continue;
+      for (const [df, dr] of DIRS) {
+        let n = 0;
+        walkRay(grid, files, ranks, f, r, df, dr, (nf, nr) => { out.add(SQ(nf, nr)); return !(cap && ++n >= cap); });
+      }
+    }
+  }
+  return out;
 }
 
 /** A FEN → { grid, files, ranks }, the grid [rankFromBottom][file] with the pairs attached. */

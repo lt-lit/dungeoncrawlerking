@@ -2730,7 +2730,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
 // per piece in the FEN's trailing field, the clock in plies, a new effect
 // overwriting the last. On s65-guard-post seed 1 a fixed-order deck opens
 // Stun, Mind control, Invincible and Entomb in hand: every face wears its
-// effect's glyph and the `any` badge; a Stun tapped onto an enemy piece
+// effect's glyph and its badge (`sight` on three, `any` on Invincible — THE
+// SIGHT WORD, 2026-10-21: a piece effect reaches what the army sees, the
+// page's mirror rays.mjs sightSquares held to the engine's own cast list),
+// the army marches until an enemy piece is in sight; a Stun tapped onto it
 // writes `%<sq>s3` (the state's `cast: 'stun'`, its `states.set`, the log's
 // words), the board paints the count on a dark pill at the square's top-right
 // in the stun's lavender, and the enemy's reply ticks it to 2; a Mind control
@@ -2755,9 +2758,25 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
     await K.renderer.ready();
     const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
     const at = (fen, sq) => { const g = gridOf(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+    const { sightSquares } = await import('/play/js/rays.mjs');
+    const settle0 = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+    // THE SIGHT WORD: at the deal the enemy may stand behind its pawns — march (the plain move that advances a piece the most) until an enemy piece is in sight, at most 20 inputs
+    let marched = 0;
+    for (; marched < 20 && K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white'; marched++) {
+      const f = K.app.duel.fen();
+      if (K.deck.targets('stun').some((s) => /[a-z]/.test(at(f, s)))) break;
+      const plain = K.app.duel.legalMoves().map((u) => u.match(/^([a-l])(\d+)([a-l])(\d+)$/)).filter((m) => m && (m[1] !== m[3] || m[2] !== m[4]));
+      if (!plain.length) break;
+      plain.sort((a, b) => (parseInt(b[4], 10) - parseInt(b[2], 10)) - (parseInt(a[4], 10) - parseInt(a[2], 10)));
+      await K.playerMove(plain[0][0]); await settle0();
+    }
     const fen = K.app.duel.fen();
-    const out = { variant: K.app.duel.variantName, hand: K.cards.hand(), fen };
-    out.targets = { stun: K.deck.targets('stun'), control: K.deck.targets('control'), entomb: K.deck.targets('entomb'), invincible: K.deck.targets('invincible') };
+    const out = { variant: K.app.duel.variantName, hand: K.cards.hand(), fen, marched, playing: K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white' };
+    const seen = sightSquares(fen, 'w');
+    const nonKing = (sq) => { const c = at(fen, sq); return /[a-z]/i.test(c) && c.toLowerCase() !== 'k'; };
+    out.mirror = { stun: [...seen].filter(nonKing).sort().join(' '), control: [...seen].filter((sq) => /[a-z]/.test(at(fen, sq)) && at(fen, sq) !== 'k').sort().join(' ') };
+    out.targets = { stun: [...K.deck.targets('stun')].sort(), control: [...K.deck.targets('control')].sort(), entomb: [...K.deck.targets('entomb')].sort(), invincible: [...K.deck.targets('invincible')].sort() };
+    out.anyCount = out.targets.stun.length; out.allNonKing = (fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').match(/[a-jl-z]/gi) || []).length; // every non-king piece on the board (the invincibility's any)
     out.kings = { stunHasKing: out.targets.stun.some((s) => /k/i.test(at(fen, s))), controlOnOwn: out.targets.control.filter((s) => /[A-Z]/.test(at(fen, s))).length, controlOnEnemy: out.targets.control.filter((s) => /[a-z]/.test(at(fen, s))).length, stunOnBoth: out.targets.stun.some((s) => /[A-Z]/.test(at(fen, s))) && out.targets.stun.some((s) => /[a-z]/.test(at(fen, s))) };
     out.faces = K.cards.els().map((el) => { const c = el.querySelector('canvas.card-art'); return { kind: el.dataset.kind, badge: el.querySelector('.card-badge')?.textContent ?? null, w: c?.width, h: c?.height }; });
     // the enemy piece the stun will land on: a black piece of value among the stun's targets, the farthest from the king's file
@@ -2769,12 +2788,13 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   markS('the deal read');
   expect(/__deck4_[0-9a-f]{8}$/.test(s0.variant), `the deal's variant hashes a declaration with the piece-state cards (${s0.variant})`);
   expect(s0.hand.join(',') === 'stun,control,entomb,invincible', `the fixed deck opens Stun, Mind control, Entomb, Invincible in hand (${s0.hand.join(' ')})`);
-  expect(s0.targets.stun.length > 0 && !s0.kings.stunHasKing && s0.kings.stunOnBoth, `Stun targets every non-king piece of either colour (${s0.targets.stun.length} squares, no king)`);
-  expect(s0.kings.controlOnEnemy > 0 && s0.kings.controlOnOwn === 0, `Mind control targets the enemy's pieces alone (${s0.kings.controlOnEnemy} enemy, ${s0.kings.controlOnOwn} own)`);
-  expect(s0.targets.entomb.length === s0.targets.stun.length && s0.targets.invincible.length === s0.targets.stun.length, `Entomb and Invincible target the same squares as Stun (${s0.targets.entomb.length} / ${s0.targets.invincible.length})`);
+  expect(s0.marched < 20 && s0.playing, `the army marched ${s0.marched} input${s0.marched === 1 ? '' : 's'} until an enemy piece stood in sight (${s0.playing ? 'white to move' : 'the duel moved on'})`);
+  expect(s0.targets.stun.length > 0 && !s0.kings.stunHasKing && s0.kings.stunOnBoth && s0.targets.stun.join(' ') === s0.mirror.stun, `Stun targets every non-king piece of either colour IN SIGHT of the army — ${s0.targets.stun.length} squares, no king, the page's mirror agrees (${s0.targets.stun.join(' ')})`);
+  expect(s0.kings.controlOnEnemy > 0 && s0.kings.controlOnOwn === 0 && s0.targets.control.join(' ') === s0.mirror.control, `Mind control targets the enemy's pieces alone, in sight (${s0.kings.controlOnEnemy} enemy, ${s0.kings.controlOnOwn} own; the mirror agrees)`);
+  expect(s0.targets.entomb.join(' ') === s0.targets.stun.join(' ') && s0.targets.invincible.length === s0.allNonKing && s0.targets.invincible.length >= s0.targets.stun.length, `Entomb targets the same squares as Stun; Invincible (any) every non-king piece on the board (${s0.targets.entomb.length} / ${s0.targets.invincible.length} of ${s0.allNonKing})`);
   {
     const f = Object.fromEntries(s0.faces.map((x) => [x.kind, x]));
-    expect(['stun', 'control', 'entomb', 'invincible'].every((k) => f[k]?.badge === 'any' && f[k].w === 12 && f[k].h === 12), `every face wears the any badge and a one-square card's 12×12 art (${s0.faces.map((x) => `${x.kind}:${x.badge} ${x.w}×${x.h}`).join(' ')})`);
+    expect(['stun', 'control', 'entomb'].every((k) => f[k]?.badge === 'sight' && f[k].w === 12 && f[k].h === 12) && f.invincible?.badge === 'any' && f.invincible.w === 12, `three faces wear the sight badge, Invincible the any badge, each a one-square card's 12×12 art (${s0.faces.map((x) => `${x.kind}:${x.badge} ${x.w}×${x.h}`).join(' ')})`);
   }
   if (s0.stunSq) {
     // THE STUN: a tap on the card, a tap on the enemy piece
@@ -2825,14 +2845,18 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
         }
         if (K.app.duel.state !== 'playing' || K.app.duel.turnColor() !== 'white') return { skip: `the duel moved on (${K.app.duel.state})` };
         const fen0 = K.app.duel.fen();
-        const sq = K.deck.targets('control').find((s) => /[rnbq]/.test(at(fen0, s)) && !new RegExp(`%${s}`).test(fen0)) ?? K.deck.targets('control')[0] ?? null;
+        // a target WITHOUT a record first (a piece of value, else any): the enemy may have stolen one of ours already (it did, on the sight build's first run — its
+        // Mind control on our f3 pawn in sight of its own f-pawn), and a control cast on your own stolen piece is the RECALL, not a theft
+        const fresh = K.deck.targets('control').filter((s) => !new RegExp(`%${s}`).test(fen0));
+        const sq = fresh.find((s) => /[rnbq]/.test(at(fen0, s))) ?? fresh[0] ?? K.deck.targets('control')[0] ?? null;
         if (!sq) return { skip: `no target (in check ${K.app.duel.board.isCheck()}; ${K.app.duel.legalMoves().length} legal moves; hand ${K.cards.hand().join(' ')})` };
         const was = at(fen0, sq);
+        const recall = new RegExp(`%${sq}c\\d+w`).test(fen0); // our own piece held by the enemy: the cast brings it home
         K.cards.tap('control');
         K.tap(sq);
         await settle();
         const st = K.app.duel.record.states.find((s) => s.cast === 'control' && s.mover === 'player') ?? null; // the enemy may have cast its own Mind control first (it did, with check, on the first run)
-        const out = { sq, was, state: st ? { cast: st.cast, card: st.card, set: st.states?.set ?? null, field: (st.fen.match(/\{[^}]*\}/) || [''])[0], piece: at(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Mind control — the enemy's/.test(t)), duelState: K.app.duel.state, live: K.app.duel.fen() };
+        const out = { sq, was, recall, state: st ? { cast: st.cast, card: st.card, set: st.states?.set ?? null, ended: st.states?.ended ?? null, field: (st.fen.match(/\{[^}]*\}/) || [''])[0], piece: at(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Mind control — the enemy's/.test(t)), duelState: K.app.duel.state, live: K.app.duel.fen() };
         if (K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white') {
           const live = K.app.duel.fen();
           const m = live.match(new RegExp(`%${sq}c(\\d)b`));
@@ -2845,7 +2869,10 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
         return out;
       });
       if (mc.skip) expect(true, `the Mind control step is skipped (${mc.skip})`);
-      else {
+      else if (mc.recall) {
+        expect(mc.state?.cast === 'control' && mc.state.card === 'control' && mc.state.set?.length === 0 && mc.state.ended?.length === 1 && mc.state.ended[0].sq === mc.sq && mc.state.ended[0].kind === 'control' && mc.state.piece === mc.was.toUpperCase(), `Mind control on your own stolen ${mc.sq}: the RECALL — the piece comes home with no record (${mc.state?.field}; ${JSON.stringify(mc.state?.ended)})`);
+        expect(mc.log.some((t) => new RegExp(`Mind control — your \\w+ on ${mc.sq} comes home`).test(t)), `the log says so (${mc.log[0] ?? 'no line'})`);
+      } else {
         expect(mc.state?.cast === 'control' && mc.state.card === 'control' && mc.state.set?.length === 1 && mc.state.set[0].kind === 'control' && mc.state.set[0].owner === 'b' && mc.state.set[0].count === 4 && mc.state.piece === mc.was.toUpperCase() && mc.state.field.includes(`%${mc.sq}c4b`), `Mind control on ${mc.sq}: the ${mc.was} is white's, the record %${mc.sq}c4b counted for black (${mc.state?.field}; ${JSON.stringify(mc.state?.set)})`);
         expect(mc.log.some((t) => new RegExp(`Mind control — the enemy's \\w+ on ${mc.sq} changes sides for 4 plies`).test(t)), `the log says so (${mc.log[0] ?? 'no line'})`);
         if (mc.held) {
@@ -2917,7 +2944,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
         expect(en.exportCasts.length >= 2 && en.exportCasts[0] === 'stun', `the export's states carry the player's casts by effect (${en.exportCasts.join(' ')})`);
       }
     }
-  } else expect(false, 'no enemy piece to stun on the deal');
+  } else expect(false, `no enemy piece in sight to stun after the march (${s0.marched} inputs; ${s0.fen})`);
   markS('done');
   expect(errsS.length === 0, `no page errors with the piece states${errsS.length ? ` — ${errsS.join(' | ')}` : ''}`);
   await pageS.close();

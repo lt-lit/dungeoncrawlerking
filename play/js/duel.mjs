@@ -21,7 +21,7 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN, squareChanges, stateChanges, getSquare, WALL, FURNITURE, HARD, PIT } from './fen.mjs';
+import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN, squareChanges, stateChanges, WALL, FURNITURE, HARD, PIT } from './fen.mjs';
 import { slideOutcome, fallen } from './ice.mjs'; // THE ICE (2026-09-20): the slide a move makes, for the record
 import { flipTurn, evalSoftens } from './tactics.mjs';
 // THE DECK (2026-09-25): spells as cards — the hand is the pocket plus the meta cards, drawn up to at the start of each turn (deck.mjs).
@@ -648,15 +648,10 @@ export class DuelController {
     // freed by a hit, a stunned piece captured). A record rode the mover: it ends on the square the piece rests on.
     // The page's words, the report's and the analyzer's read this; the board reads the FEN's field itself.
     {
-      const S = stateChanges(fenBefore, this.board.fen());
-      if (S.set.length || S.ended.length) {
-        const mv = uci.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/);
-        if (mv && mv[1] !== mv[2]) {
-          const rest = slide?.steps?.[0]?.to ?? parsePortalField(this.board.fen()).twin.get(mv[2]) ?? mv[2];
-          for (const e of S.ended) if (e.sq === mv[1]) { e.sq = rest; e.piece = getSquare(this.board.fen(), rest) ?? null; }
-        }
-        this.lastMove.states = S;
-      }
+      const mv = uci.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/);
+      const rest = mv && mv[1] !== mv[2] ? (slide?.steps?.[0]?.to ?? parsePortalField(this.board.fen()).twin.get(mv[2]) ?? mv[2]) : null;
+      const S = stateChanges(fenBefore, this.board.fen(), mv && rest ? { from: mv[1], rest } : null); // the mover's own record rides with it (fen.mjs)
+      if (S.set.length || S.ended.length) this.lastMove.states = S;
     }
     {
       const fenAfter = this.board.fen();

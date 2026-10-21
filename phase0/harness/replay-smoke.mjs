@@ -511,6 +511,29 @@ expect(/^vaults-2/.test(ic.stage) && ic.plies === 68, `?sample=4 opens the first
   expect(!t7.i9before.includes('wall') && t7.i9.includes('wall') && t7.j9.includes('wall') && /Wall L — stone rises at i9, j9/.test(t7.l39), `ply 39: the raised wall stands on i9 and j9 where floor was (${t7.i9before.filter((c) => /wall|floor/.test(c)).join(' ')} → ${t7.i9.filter((c) => /wall|floor/.test(c)).join(' ')})`);
   expect(/Sledge — the enemy's king carries the sledgehammer/.test(t7.l121) && /K\*e4/.test(t7.l133) && t7.decks, `the Sledge at ply 121, the hammer at 133, the report's decks line (${t7.l121.slice(35, 95)})`);
 }
+
+// THE FIRST PIECE-STATES DUEL (2026-10-21): the eighth sample — the designer's log on the 3.4 build, vaults-2 at walk
+// turn 7, the enemy's initiative: the engine's opening Mind control on the rook beside the king WITH CHECK (the cast
+// that ruled the sight word), the player's the same three plies later, the enemy's last rook sealed on f10 from ply
+// 88 to the stalemate; ply 37's rider (a rook with a record taking a stunned pawn) prints no expiry words.
+{
+  await page.goto(`http://127.0.0.1:${PORT}/replay/index.html?sample=8&fx=0`);
+  await page.evaluate(() => window.__DCK.ready);
+  const t8 = await page.evaluate(async () => {
+    const Rp = window.__DCK.replay;
+    await Rp.boardReady();
+    const at = (ply) => { Rp.goto(ply); return Rp.view.plyLine; };
+    const l1 = at(1), l4 = at(4), l37 = at(37), l88 = at(88), l98 = at(98);
+    const lastFen = (() => { Rp.goto(Rp.view.plies); return Rp.view.fen; })();
+    return { stage: Rp.view.stage, plies: Rp.view.plies, l1, l4, l37, l88, l98, lastFen };
+  });
+  expect(/^vaults-2/.test(t8.stage) && t8.plies === 144, `?sample=8 opens the first piece-states duel (${t8.stage}, ${t8.plies} plies)`);
+  expect(/^p  1    1… V@f1\+ /.test(t8.l1) && /Mind control — your rook on f1 changes sides for 4 plies/.test(t8.l1), `ply 1: the engine's Mind control on the rook beside the king, with check (${t8.l1.slice(0, 90)})`);
+  expect(/^p  4    3\. U@a10\+ /.test(t8.l4) && /Mind control — the enemy's rook on a10 changes sides for 4 plies/.test(t8.l4), `ply 4: the player's answer in kind (${t8.l4.slice(0, 90)})`);
+  expect(/Rxg5/.test(t8.l37) && !/⏳/.test(t8.l37), `ply 37: the rook's own invincibility rode its capture — no expiry words (${t8.l37.slice(0, 100)})`);
+  expect(/Entomb — the enemy's rook on f10 is sealed in stone/.test(t8.l88) && /%f10e/.test(t8.lastFen), `ply 88: the enemy's last rook sealed on f10, still in stone at the end (${t8.l88.slice(35, 95)})`);
+  expect(/⏳ your pawn on i8 is freed from the stone/.test(t8.l98), `ply 98: the Demolish frees the pawn on i8 (${t8.l98.slice(35, 120)})`);
+}
 expect(ic.before.field === '' && ic.before.d6 < 20 && ic.before.c7 < 20, `ply 25: no ice yet (${ic.before.d6} / ${ic.before.c7} cold pixels on d6 / c7)`);
 expect(ic.cast.field === '~c5,~d5,~c6,~d6,~e6,~c7,~d7,~e7' && ic.cast.empty.length >= 5 && ic.cast.empty.every(([, n]) => n >= 60) && ic.cast.e5[0] === '*' && ic.cast.e5[1] < 20 && ic.cast.d8 < 20, `ply 26: the player's I@d6 paints the ice on the patch's empty squares (${ic.cast.empty.map(([s, n]) => `${s}:${n}`).join(' ')}) and none on the wall e5 (${ic.cast.e5[1]}) or beyond it (d8 ${ic.cast.d8})`);
 {

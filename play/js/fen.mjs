@@ -189,15 +189,31 @@ export function settleStates(fen) {
  *  now on the square and the one that stood there before), `ended` the records that are gone (a count run out, a
  *  control returned, a block freed, a stunned piece captured — `piece` is what stands there now, or null). The record's
  *  `states` on a state cast and the expiries on any ply read off this. */
-export function stateChanges(fenBefore, fenAfter) {
+export function stateChanges(fenBefore, fenAfter, move = null) {
   const A = pieceStates(fenBefore), B = pieceStates(fenAfter);
   const set = [], ended = [];
+  // THE RIDER (2026-10-21, found on the first piece-states log): a record rides its piece's move — when the mover
+  // carried one and the same record (a ply older, or as it was) stands where the piece RESTS (`move.rest`: the
+  // destination, a portal's twin, a slide's end), nothing was set there and nothing ended at its old square; the
+  // record of a piece it captured there ended with the capture. Without the move the two squares read as a set
+  // and an end, which is how the designer's log said a rook that took a stunned pawn "can be captured again".
+  const from = move?.from ?? null, rest = move?.rest ?? null;
+  const carried = from && rest && from !== rest ? A.get(from) : null;
+  const rode = !!(carried && B.get(rest) && B.get(rest).kind === carried.kind && (B.get(rest).owner ?? null) === (carried.owner ?? null)
+    && (carried.kind === 'entomb' || carried.count === B.get(rest).count + 1 || carried.count === B.get(rest).count));
   for (const [sq, rec] of B) {
+    if (rode && sq === rest) continue;
     const was = A.get(sq);
     if (was && was.kind === rec.kind && was.owner === rec.owner && (rec.kind === 'entomb' || was.count === rec.count + 1 || was.count === rec.count)) continue; // the same record a ply older (or untouched)
     set.push({ sq, ...rec, piece: getSquare(fenAfter, sq) ?? null, was: getSquare(fenBefore, sq) ?? null, prev: was ? { kind: was.kind, count: was.count, owner: was.owner } : null });
   }
-  for (const [sq, rec] of A) if (!B.has(sq)) ended.push({ sq, kind: rec.kind, owner: rec.owner, piece: getSquare(fenAfter, sq) ?? null, was: getSquare(fenBefore, sq) ?? null });
+  for (const [sq, rec] of A) {
+    if (rode && sq === from) continue;
+    if (rode && sq === rest) { ended.push({ sq, kind: rec.kind, owner: rec.owner, piece: getSquare(fenAfter, sq) ?? null, was: getSquare(fenBefore, sq) ?? null }); continue; } // the captured piece's record
+    if (B.has(sq)) continue;
+    const at = sq === from && rest ? rest : sq; // a record that ended as its piece moved (a control returning with the move) ends where the piece rests
+    ended.push({ sq: at, kind: rec.kind, owner: rec.owner, piece: getSquare(fenAfter, at) ?? null, was: getSquare(fenBefore, sq) ?? null });
+  }
   return { set, ended };
 }
 

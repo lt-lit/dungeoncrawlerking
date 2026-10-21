@@ -12,10 +12,10 @@
 // return through castKind + stateChanges on real positions, the duel
 // variant declaring the five cards. Needs the play/vendor overlay for the
 // ffish half (engine/README.md). Usage: cd phase0 && node harness/test-states-game.mjs
-import { pieceStates, withStates, settleStates, stateChanges, withSlick, withDeck, stateEntry, getSquare } from '../../play/js/fen.mjs';
+import { pieceStates, withStates, settleStates, stateChanges, withSlick, withDeck, stateEntry, getSquare, isTerrain } from '../../play/js/fen.mjs';
 import { fenGrid, displacementCandidates, uncapturableOf } from '../../play/js/director.mjs';
 import { gridOf } from '../../play/js/tactics.mjs';
-import { copyGrid } from '../../play/js/rays.mjs';
+import { copyGrid, sightSquares } from '../../play/js/rays.mjs';
 import { captureLoss, landingIsSafe } from '../../play/js/threat.mjs';
 import { slideOutcome } from '../../play/js/ice.mjs';
 import { castKind } from '../../play/js/duel.mjs';
@@ -94,30 +94,46 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const o3 = slideOutcome('4k3/p7/8/n7/8/8/8/R3K3[] w - - 0 1 {~a2,~a3,~a4,~a5,%a5e}', 'a1a2');
   check(o3 && o3.steps.length === 1 && o3.steps[0].to === 'a4', `an entombed knight on the ice is a wall: the rook stops on a4 and shoves nothing (${JSON.stringify(o3?.steps)})`);
 }
+// ---- THE RIDER (2026-10-21): a record rides its piece's move; the captured piece's record ends with the capture
+{
+  const before = '4k3/8/6R1/8/8/6p1/8/4K3[] w - - 0 1 {%g3s2,%g6i2}';   // an invincible rook on g6 (2 left), a stunned black pawn on g3 (2 left)
+  const after = '4k3/8/8/8/8/6R1/8/4K3[] b - - 0 2 {%g3i1}';              // Rxg3: the rook's record rode with it and ticked, the pawn's went with the pawn
+  const plain = stateChanges(before, after);
+  const withMove = stateChanges(before, after, { from: 'g6', rest: 'g3' });
+  check(plain.set.length === 1 && plain.ended.length === 1 && plain.ended[0].sq === 'g6', `without the move the reader sees a record set on g3 and one ended on g6 (${JSON.stringify(plain.ended)})`);
+  check(withMove.set.length === 0 && withMove.ended.length === 1 && withMove.ended[0].sq === 'g3' && withMove.ended[0].kind === 'stun' && withMove.ended[0].was === 'p' && withMove.ended[0].piece === 'R', `with the move the rook's invincibility rode to g3 and only the pawn's stun ended, by capture (${JSON.stringify(withMove)})`);
+  const slid = stateChanges('4k3/8/8/8/8/8/8/R3K3[] w - - 0 1 {~a3,~a4,%a1i3}', '4k3/8/8/8/R7/8/8/4K3[] b - - 0 2 {~a3,~a4,%a4i2}', { from: 'a1', rest: 'a4' });
+  check(slid.set.length === 0 && slid.ended.length === 0, `a record rides a slide to where the piece rests (${JSON.stringify(slid)})`);
+  const returned = stateChanges('4k3/8/8/8/8/8/8/R2RK3[] w - - 0 1 {%d1c1b}', '4k3/8/8/8/8/8/8/R2rK3[] b - - 0 2', { from: 'a1', rest: 'b1' });
+  check(returned.ended.length === 1 && returned.ended[0].sq === 'd1' && returned.ended[0].kind === 'control' && returned.ended[0].piece === 'r', `a control that returns as another piece moves ends on its own square (${JSON.stringify(returned.ended)})`);
+  const moved = stateChanges('4k3/8/8/8/8/8/8/R2RK3[] w - - 0 1 {%d1c1b}', '4k3/8/8/8/8/8/3r4/R3K3[] b - - 0 2', { from: 'd1', rest: 'd2' });
+  check(moved.ended.length === 1 && moved.ended[0].sq === 'd2' && moved.ended[0].piece === 'r' && moved.ended[0].was === 'R', `a held rook that moves as its control runs out ends where it rests, the enemy's again (${JSON.stringify(moved.ended)})`);
+}
 // ---- the catalog and the deal's declaration
 {
-  check(SPELL_KINDS.length === 27 && ['stun', 'stun-area', 'invincible', 'control', 'entomb'].every((k) => SPELL_KINDS.includes(k)) && CARDS.stun.engine === 'stun' && CARDS.control.engine === 'control' && CARDS.entomb.def === 'entomb o any' && CARDS['stun-area'].def === 'stun3 xxx/xox/xxx any', 'the library holds the five piece-state cards, their effects their words');
+  check(SPELL_KINDS.length === 27 && ['stun', 'stun-area', 'invincible', 'control', 'entomb'].every((k) => SPELL_KINDS.includes(k)) && CARDS.stun.engine === 'stun' && CARDS.control.engine === 'control' && CARDS.entomb.def === 'entomb o sight' && CARDS['stun-area'].def === 'stun3 xxx/xox/xxx sight', 'the library holds the five piece-state cards, their effects their words');
   const decks = { w: newDeckState(starterCards('library'), 1), b: newDeckState(['stun', 'control'], 2) };
   const dv = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: deckDeclaration(decks) });
-  check(/card70 = stun3 o any\n/.test(dv.ini) && /card80 = control4 o any\n/.test(dv.ini) && /card85 = entomb o any\n/.test(dv.ini) && /card75 = invincible5 o any\n/.test(dv.ini) && /card71 = stun3 xxx\/xox\/xxx any\n/.test(dv.ini), 'the deal declares the five to the engine by their defs');
+  check(/card70 = stun3 o sight\n/.test(dv.ini) && /card80 = control4 o sight\n/.test(dv.ini) && /card85 = entomb o sight\n/.test(dv.ini) && /card75 = invincible5 o any\n/.test(dv.ini) && /card71 = stun3 xxx\/xox\/xxx sight\n/.test(dv.ini), 'the deal declares the five to the engine by their defs');
 }
 // ---- on the vendored ffish: the record's reading of a cast and a return
 {
   const ffish = await loadFfish();
   const dv = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: deckDeclaration({ w: { pile: ['stun', 'control', 'entomb', 'invincible'] }, b: { pile: ['stun'] } }) });
   ffish.loadVariantConfig(dv.ini);
-  const f0 = '4k3/p7/3r4/8/8/8/P7/R3K3[STUVs] w - - 0 1 {S=w70,T=w80,U=w85,V=w75,S=b70}';
+  // the black rook on d4: on the a1 rook's long diagonal, so IN SIGHT (the sight word, 2026-10-21); a rook on d6 would be off every white line and no cast could reach it
+  const f0 = '4k3/p7/8/8/3r4/8/P7/R3K3[STUVs] w - - 0 1 {S=w70,T=w80,U=w85,V=w75,S=b70}';
   check(ffish.validateFen(f0, dv.name) === 1, `the game's deal variant accepts a hand of the four piece-state cards (${dv.name})`);
   const b = new ffish.Board(dv.name, f0);
   const legal = b.legalMoves().split(' ').filter(Boolean);
-  check(legal.includes('S@d6') && legal.includes('T@d6') && legal.includes('U@d6') && legal.includes('V@a1') && !legal.includes('S@e8') && !legal.includes('T@e1'), `the four cast on the non-king pieces of either colour, never a king (${legal.filter((m) => m.includes('@')).join(' ')})`);
+  check(legal.includes('S@d4') && legal.includes('T@d4') && legal.includes('U@d4') && legal.includes('V@a1') && !legal.includes('S@e8') && !legal.includes('T@e1'), `the four cast on the non-king pieces of either colour, never a king (${legal.filter((m) => m.includes('@')).join(' ')})`);
   const before = b.fen();
-  b.push('T@d6');
+  b.push('T@d4');
   const after = b.fen();
-  check(castKind(before, 'T@d6', after) === 'control' && castKind(before, 'S@d6', after) === 'stun' && castKind(before, 'U@d6', after) === 'entomb' && castKind(before, 'V@a1', after) === 'invincible', 'castKind reads a piece effect by its word off the slot\'s card');
+  check(castKind(before, 'T@d4', after) === 'control' && castKind(before, 'S@d4', after) === 'stun' && castKind(before, 'U@d4', after) === 'entomb' && castKind(before, 'V@a1', after) === 'invincible', 'castKind reads a piece effect by its word off the slot\'s card');
   const S = stateChanges(before, after);
-  check(S.set.length === 1 && S.set[0].sq === 'd6' && S.set[0].kind === 'control' && S.set[0].count === 4 && S.set[0].owner === 'b' && S.set[0].piece === 'R' && S.set[0].was === 'r', `the record of record: the black rook on d6 is white's for four, owner black (${JSON.stringify(S.set)})`);
-  b.push('e8f8'); b.push('d6d2'); b.push('f8e8');
+  check(S.set.length === 1 && S.set[0].sq === 'd4' && S.set[0].kind === 'control' && S.set[0].count === 4 && S.set[0].owner === 'b' && S.set[0].piece === 'R' && S.set[0].was === 'r', `the record of record: the black rook on d6 is white's for four, owner black (${JSON.stringify(S.set)})`);
+  b.push('e8f8'); b.push('d4d2'); b.push('f8e8');
   const f4 = b.fen();
   check(pieceStates(f4).get('d2')?.count === 1 && getSquare(f4, 'd2') === 'R', `three plies on, the record rides the rook to d2 at count 1 (${f4})`);
   b.push('e1f1');
@@ -125,6 +141,20 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const R = stateChanges(f4, f5);
   check(pieceStates(f5).size === 0 && getSquare(f5, 'd2') === 'r' && R.ended.length === 1 && R.ended[0].sq === 'd2' && R.ended[0].piece === 'r' && R.ended[0].was === 'R', `white's move ends the count: the rook is black's again on d2, the record ended (${JSON.stringify(R.ended)})`);
   b.delete();
+  // THE SIGHT WORD: the page's mirror (rays.mjs sightSquares) held to ffish's own cast list — the stun casts on
+  // exactly the non-king pieces in sight of white's army, on boards with a wall, a crate, a pit, a portal pair
+  // and a piece held under control (an eye of its holder)
+  for (const [name, fen] of [
+    ['the deal board', '4k3/p7/8/8/3r4/8/P7/R3K3[STUVs] w - - 0 1 {S=w70,T=w80,U=w85,V=w75,S=b70}'],
+    ['a wall, a crate and a pit on the lines', '4k3/p7/8/^7/3r4/1*6/P7/R3K3[STUVs] w - - 0 1 {S=w70,T=w80,U=w85,V=w75,S=b70}'],
+    ['a portal pair on the diagonal, a held rook for an eye', '4k3/p7/5n2/8/8/8/P6R/R3K3[STUVs] w - - 0 1 {c3-d4,%h2c3b,S=w70,T=w80,U=w85,V=w75,S=b70}'], // the knight f6 beyond the body c3 is out of sight; the held rook h2 is seen along rank 2 from a2
+  ]) {
+    const bb = new ffish.Board(dv.name, fen);
+    const casts = bb.legalMoves().split(' ').filter((m) => m.startsWith('S@')).map((m) => m.slice(2)).sort();
+    bb.delete();
+    const want = [...sightSquares(fen, 'w')].filter((sq) => { const c = getSquare(fen, sq); return !!c && !isTerrain(c) && c.toLowerCase() !== 'k'; }).sort();
+    check(casts.join(' ') === want.join(' ') && casts.length > 0, `sight: ${name} — ffish casts the stun on ${casts.join(' ')}, the mirror says ${want.join(' ')}`);
+  }
   // the gods leave a piece with a record alone: no displacement of it, and its square is no landing
   const fenG = '4k3/p7/3r4/8/8/8/P7/R3K3[] w - - 0 1 {%d6s3,%a1i2}';
   const tiers = displacementCandidates(ffish, dv.name, fenG, 8, 8, { touched: new Set(), pieces: new Set(), squares: new Set(), states: new Set(pieceStates(fenG).keys()) });

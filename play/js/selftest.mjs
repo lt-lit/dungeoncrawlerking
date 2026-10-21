@@ -735,39 +735,42 @@ async function main() {
   await check('the piece states: stun, mind control and its return, entomb, invincible (ffish + engine, the deal variant)', async () => {
     const decks = { w: { pile: ['control', 'stun', 'entomb', 'invincible'] }, b: { pile: ['stun'] } };
     const dv = dealVariant(8, 8, 2, 7, { portals: true, ice: true, deck: deckDeclaration(decks) });
-    if (!/card80 = control4 o any\n/.test(dv.ini) || !/card70 = stun3 o any\n/.test(dv.ini) || !/card85 = entomb o any\n/.test(dv.ini) || !/card75 = invincible5 o any\n/.test(dv.ini)) throw new Error(`the deal variant ${dv.name} declares ${dv.ini.match(/card\d+ = [^\n]+/g)?.join(' | ')}`);
+    if (!/card80 = control4 o sight\n/.test(dv.ini) || !/card70 = stun3 o sight\n/.test(dv.ini) || !/card85 = entomb o sight\n/.test(dv.ini) || !/card75 = invincible5 o any\n/.test(dv.ini)) throw new Error(`the deal variant ${dv.name} declares ${dv.ini.match(/card\d+ = [^\n]+/g)?.join(' | ')}`);
     ffish.loadVariantConfig(dv.ini);
     await engine.loadVariantsIni(catalogIni + '\n' + dv.ini);
-    // the black rook on d7 (off the king's file: nobody is in check), a pawn each, the rooks on a1 and d7
-    const f0 = dealDeckFen('4k3/p2r4/8/8/8/8/P7/R3K3 w - - 0 1', decks);
+    // the black rook on d4: off the king's file (nobody is in check) and ON the a1 rook's long diagonal — IN SIGHT of white's army, which the
+    // sight word (2026-10-21) requires of a stun, a control and an entomb; a pawn each (the black pawn a7 in sight up the a-file from a2)
+    const f0 = dealDeckFen('4k3/p7/8/8/3r4/8/P7/R3K3 w - - 0 1', decks);
     if (!/\[STUVs\]/.test(f0) || ffish.validateFen(f0, dv.name) !== 1) throw new Error(`the opening deal: ${f0}`);
     const lm = (bd) => bd.legalMoves().trim().split(/\s+/).filter(Boolean);
     const b = new ffish.Board(dv.name, f0);
     const legal0 = lm(b);
     const casts = legal0.filter((m) => m.includes('@'));
-    // the stun, the entomb and the invincibility cast on every non-king piece of either colour; the control on the enemy's alone (on your own it changes nothing — the null rule); never on a king
-    for (const L of ['T', 'U', 'V']) if (!casts.includes(`${L}@a1`) || !casts.includes(`${L}@a2`) || !casts.includes(`${L}@d7`) || !casts.includes(`${L}@a7`) || casts.includes(`${L}@e1`) || casts.includes(`${L}@e8`)) throw new Error(`${L}'s casts: ${casts.filter((m) => m.startsWith(L)).join(' ')}`);
-    if (!casts.includes('S@d7') || !casts.includes('S@a7') || casts.includes('S@a1') || casts.includes('S@e8')) throw new Error(`the control's casts: ${casts.filter((m) => m.startsWith('S')).join(' ')}`);
+    // the stun and the entomb cast on every non-king piece of either colour IN SIGHT (a1 from the king along rank 1, a2 from a1 up the file, a7 from a2, d4 on a1's diagonal), the invincibility on
+    // every non-king piece anywhere; the control on the enemy's alone (on your own it changes nothing — the null rule); never on a king
+    for (const L of ['T', 'U', 'V']) if (!casts.includes(`${L}@a1`) || !casts.includes(`${L}@a2`) || !casts.includes(`${L}@d4`) || !casts.includes(`${L}@a7`) || casts.includes(`${L}@e1`) || casts.includes(`${L}@e8`)) throw new Error(`${L}'s casts: ${casts.filter((m) => m.startsWith(L)).join(' ')}`);
+    if (!casts.includes('S@d4') || !casts.includes('S@a7') || casts.includes('S@a1') || casts.includes('S@e8')) throw new Error(`the control's casts: ${casts.filter((m) => m.startsWith('S')).join(' ')}`);
     // MIND CONTROL on the black rook: it is white's for four plies, counted for black
     const before = b.fen();
-    b.push('S@d7');
+    b.push('S@d4');
     const f1 = b.fen();
-    if (!/4k3\/p2R4\//.test(f1) || !f1.endsWith(',%d7c4b}') || castKind(before, 'S@d7', f1) !== 'control') throw new Error(`the control: ${f1} (${castKind(before, 'S@d7', f1)})`);
+    if (!/\/3R4\//.test(f1) || !f1.endsWith(',%d4c4b}') || castKind(before, 'S@d4', f1) !== 'control') throw new Error(`the control: ${f1} (${castKind(before, 'S@d4', f1)})`);
     const S1 = stateChanges(before, f1);
-    if (S1.set.length !== 1 || S1.set[0].sq !== 'd7' || S1.set[0].kind !== 'control' || S1.set[0].owner !== 'b' || S1.set[0].piece !== 'R' || S1.set[0].was !== 'r') throw new Error(`the record's reading: ${JSON.stringify(S1)}`);
+    if (S1.set.length !== 1 || S1.set[0].sq !== 'd4' || S1.set[0].kind !== 'control' || S1.set[0].owner !== 'b' || S1.set[0].piece !== 'R' || S1.set[0].was !== 'r') throw new Error(`the record's reading: ${JSON.stringify(S1)}`);
     const black1 = lm(b);
-    if (black1.some((m) => m.startsWith('d7')) || !black1.includes('S@d7')) throw new Error(`black cannot move its stolen rook but may stun it: ${black1.join(' ')}`);
+    if (black1.some((m) => m.startsWith('d4')) || !black1.includes('S@d4')) throw new Error(`black cannot move its stolen rook but may stun it (d4 is in sight down its a7 pawn's diagonal): ${black1.join(' ')}`);
     b.push('e8f8');
-    if (!b.fen().endsWith(',%d7c3b}')) throw new Error(`the count read 3 after black's move: ${b.fen()}`);
-    b.push('d7d3'); // white moves the stolen rook: the record rides it
+    if (!b.fen().endsWith(',%d4c3b}')) throw new Error(`the count read 3 after black's move: ${b.fen()}`);
+    b.push('d4d3'); // white moves the stolen rook: the record rides it
     if (!b.fen().endsWith(',%d3c2b}') || !/\/3R4\//.test(b.fen())) throw new Error(`the record rides the rook: ${b.fen()}`);
     b.push('f8e8');
     const f4 = b.fen();
     if (!f4.endsWith(',%d3c1b}')) throw new Error(`count 1, the return due at the end of white's move: ${f4}`);
-    // the moves that would leave the returning rook on the king's line are illegal (the king to d1 or d2, the rook to e3 or d1); the rest stand — and the entomb on it, which silences it, too
+    // the moves that would leave the returning rook on the king's line are illegal (the king to d1 or d2, the rook to e3 or d1); the rest stand — and the entomb that would silence it is NOT
+    // offered: d3 is off every white line (the sight word), where the rook on d4 was in sight
     const white4 = lm(b);
-    for (const m of ['e1d1', 'e1d2', 'd3e3', 'd3d1']) if (white4.includes(m)) throw new Error(`${m} is illegal with the return due: ${white4.join(' ')}`);
-    for (const m of ['e1e2', 'e1f1', 'a2a3', 'a1b1', 'd3d2', 'd3a3', 'U@d3']) if (!white4.includes(m)) throw new Error(`${m} stands with the return due: ${white4.join(' ')}`);
+    for (const m of ['e1d1', 'e1d2', 'd3e3', 'd3d1', 'U@d3']) if (white4.includes(m)) throw new Error(`${m} is illegal with the return due (or, U@d3, out of sight): ${white4.join(' ')}`);
+    for (const m of ['e1e2', 'e1f1', 'a2a3', 'a1b1', 'd3d2', 'd3a3']) if (!white4.includes(m)) throw new Error(`${m} stands with the return due: ${white4.join(' ')}`);
     b.push('e1e2');
     const f5 = b.fen();
     if (f5.includes('%') || !/\/3r4\//.test(f5)) throw new Error(`the return as the move's last act: a black rook on d3, no record: ${f5}`);
@@ -776,18 +779,18 @@ async function main() {
     b.delete();
     // THE OVERWRITE: black stuns its stolen rook — it comes home at once, stunned for three; the block has no clock; the invincible pawn
     const b2 = new ffish.Board(dv.name, f0);
-    b2.push('S@d7'); b2.push('S@d7');
+    b2.push('S@d4'); b2.push('S@d4'); // black's own stun on its stolen rook: d4 is in black's sight down the a7 pawn's diagonal (b6, c5, d4)
     const f6 = b2.fen();
-    if (!/4k3\/p2r4\//.test(f6) || !f6.endsWith(',%d7s3}')) throw new Error(`the stun ends the control: ${f6}`);
+    if (!/\/3r4\//.test(f6) || !f6.endsWith(',%d4s3}')) throw new Error(`the stun ends the control: ${f6}`);
     b2.push('U@a1'); // white entombs its own rook on a1
-    if (!b2.fen().endsWith(',%a1e,%d7s2}')) throw new Error(`the block has no clock, the stun ticked: ${b2.fen()}`);
+    if (!b2.fen().endsWith(',%a1e,%d4s2}')) throw new Error(`the block has no clock, the stun ticked: ${b2.fen()}`);
     b2.push('e8d8');
     const white7 = lm(b2);
     if (white7.some((m) => m.startsWith('a1'))) throw new Error(`the entombed rook has no move: ${white7.filter((m) => m.startsWith('a1')).join(' ')}`);
     b2.push('V@a2'); // the pawn on a2 is invincible for five
-    if (!b2.fen().endsWith(',%a1e,%a2i5}') || pieceStates(b2.fen()).get('d7')) throw new Error(`the stun ran out, the pawn invincible: ${b2.fen()}`);
+    if (!b2.fen().endsWith(',%a1e,%a2i5}') || pieceStates(b2.fen()).get('d4')) throw new Error(`the stun ran out, the pawn invincible: ${b2.fen()}`);
     const settled = settleStates(b2.fen());
-    if (settled.includes('%') || !settled.startsWith('3k4/p2r4/')) throw new Error(`settleStates: ${settled}`);
+    if (settled.includes('%') || !settled.startsWith('3k4/p7/8/8/3r4/')) throw new Error(`settleStates: ${settled}`);
     b2.delete();
     // the engine: the same move set on the control position; the invincible queen takes the defended pawn (and never without)
     engine.setoption('UCI_Variant', dv.name);
@@ -804,7 +807,7 @@ async function main() {
     engine.position({ fen: qfen });
     const r2 = await engine.go('depth 10 movetime 5000');
     if (r1.bestmove !== 'a1d4' || r2.bestmove === 'a1d4') throw new Error(`the invincible queen: ${r1.bestmove} with, ${r2.bestmove} without`);
-    return `four cards cast on every non-king piece (the control on the enemy's); S@d7 steals the rook (%d7c4b, black's count), it moves as white's and returns on e1e2 with the king kept off its lines (U@d3 would silence it); the stun recalls it (%d7s3); the block has no clock; engine perft ${n1} = ffish; the invincible queen takes the defended rook (${r1.bestmove}), a plain one plays ${r2.bestmove}`;
+    return `three cards cast on the non-king pieces in sight and the invincibility anywhere (the control on the enemy's); S@d4 steals the rook (%d4c4b, black's count), it moves as white's and returns on e1e2 with the king kept off its lines (U@d3 is out of sight); the stun recalls it (%d4s3); the block has no clock; engine perft ${n1} = ffish; the invincible queen takes the defended rook (${r1.bestmove}), a plain one plays ${r2.bestmove}`;
   });
 
   await check('duel startFen validateFen', async () => {

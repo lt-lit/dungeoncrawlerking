@@ -5,7 +5,7 @@
 // clipped shape; a ray from the king through the anchor, over a pit, stopped
 // by bedrock, capped), the changed squares by the per-square table, the words.
 //   node harness/test-carddef.mjs
-import { parseDef, shapeCells, shapeGrid, castCells, castChanges, defWords, targetBadge, STATE_EFFECTS, EFFECTS } from '../../play/js/carddef.mjs';
+import { parseDef, shapeCells, shapeGrid, castCells, castChanges, defWords, targetBadge, STATE_EFFECTS, EFFECTS, TARGETS } from '../../play/js/carddef.mjs';
 
 let pass = 0, fail = 0;
 const ok = (n, c, x = '') => { c ? pass++ : fail++; console.log(`${c ? 'ok' : 'FAIL'}  ${n}${x ? '  ' + x : ''}`); };
@@ -72,5 +72,13 @@ ok('words: the crack', /crack one square beside your pieces/.test(defWords(parse
 ok('words: the lance', /a ray from your king: every wall on it cracks/.test(defWords(parseDef('hit1 o ray'))));
 ok('words: the drop', defWords(parseDef('drop p o camp')) === 'place a pawn in your camp');
 ok('badges', targetBadge(parseDef('wall o margin2')) === 'm2' && targetBadge(parseDef('hit1 o ray2')) === 'ray2' && targetBadge(parseDef('ice')) === 'mid');
+// THE SIGHT WORD (sight.patch, 2026-10-21): `sight` and `sight<n>` as a targeting word of any effect; the badge, the words
+d = parseDef('stun3 o sight');
+ok('stun3 o sight: the sight word, no cap', d.target === 'sight' && d.targetArg === 0 && d.cells.length === 1 && TARGETS.includes('sight'));
+ok('sight2 reads its cap; sight on a terrain card and on a shape too', parseDef('control4 o sight2').targetArg === 2 && parseDef('hit1 o sight').target === 'sight' && parseDef('stun3 xxx/xox/xxx sight').cells.length === 9);
+ok('badges: sight and sight3', targetBadge(parseDef('entomb o sight')) === 'sight' && targetBadge(parseDef('stun3 o sight3')) === 'sight3');
+ok('words: in sight of your pieces, the cap named', /one square in sight of your pieces: an enemy piece there is yours for 4 plies/.test(defWords(parseDef('control4 o sight'))) && /in sight of your pieces, within 2/.test(defWords(parseDef('stun3 o sight2'))), defWords(parseDef('stun3 o sight2')));
+ok('refused: a number on near or any still', throws(() => parseDef('stun3 o near2')) && throws(() => parseDef('hit1 o any3')));
+ok('the sight word restricts the anchor alone: castCells follows the shape as ever', same(castCells(parseDef('stun3 xxx/xox/xxx sight'), 'e5', B).sort(), ['d4', 'd5', 'd6', 'e4', 'e5', 'e6', 'f4', 'f5', 'f6']));
 console.log(`\ntest-carddef: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

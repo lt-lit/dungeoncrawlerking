@@ -266,6 +266,35 @@ if (!process.argv[2]) {
   expect(last7.deck.w.hand.length === 0 && last7.deck.w.pile.length === 0 && last7.deck.b.hand.length === 0 && last7.deck.b.pile.length === 0 && L7.engine.length === 66 && L7.engine.filter((x) => x.ms >= 9500).length === 55 && !L7.engine.some((x) => x.recovered), 'both decks spent to the last card; 55 of 66 searches at the ten-second bound, none recovered');
 }
 
+// THE FIRST PIECE-STATES DUEL (2026-10-21): the eighth sample — the designer's log on the 3.4 build (vaults-2 at walk
+// turn 7, the enemy's initiative, Firefox/Windows): the engine's opening Mind control on the rook beside the player's
+// king WITH CHECK, answered by the king taking its own rook; the player's the same three plies later; Invincible,
+// Stun (the overwrite), the 3x3 stun; the enemy's last rook stunned, then sealed on f10 from ply 88 to the stalemate;
+// a Demolish freeing the pawn on i8. The verdict that ruled THE SIGHT WORD ("a little over the top"). Ply 37 is the
+// RIDER: a rook with an invincibility record takes a stunned pawn — an older build's reading said it ended; the
+// timeline, judged against the state's own field, prints no expiry words there.
+if (!process.argv[2]) {
+  const L8 = JSON.parse(fs.readFileSync(path.join(ROOT, 'replay/samples/dck-log_vaults-2-t7_s3786340449.json'), 'utf8'));
+  const full8 = R.renderReport(L8, { sections: R.SECTION_NAMES });
+  const tl8 = R.timelineSection(L8);
+  const at = (ply) => tl8.find((l) => new RegExp(`^p${String(ply).padStart(3)} `).test(l)) ?? '';
+  expect(full8.length > 10000 && full8.includes('world vaults-2') && /RESULT 1-0  stalemate/.test(full8) && /plies 144  quakes 16/.test(full8) && /undos 2/.test(full8) && /anomalies 0/.test(full8), 'the first piece-states duel renders: vaults-2, 1-0 by stalemate, 144 plies, 16 quakes');
+  expect(/decks  W 29 cards \/ B 27 cards \(as shuffled\)  draws 32  meta plays undo @p73, reveal @p97/.test(full8), 'the header: the library on both sides (29 / 27), 32 draws, the Undo and the Reveal');
+  expect(/^p  1    1… V@f1\+ /.test(at(1)) && /✺ Mind control — your rook on f1 changes sides for 4 plies/.test(at(1)), `ply 1: the enemy's opening Mind control on the rook beside your king, with check (${at(1).slice(0, 100)})`);
+  expect(/^p  2    2\. Kxf1 /.test(at(2)) && !/⏳/.test(at(2)), `ply 2: the king takes its own rook — no expiry words for a captured record (${at(2).slice(0, 60)})`);
+  expect(/^p  4    3\. U@a10\+ /.test(at(4)) && /✺ Mind control — the enemy's rook on a10 changes sides for 4 plies/.test(at(4)) && /^p  5    3… Kxa10 /.test(at(5)), 'ply 4: your Mind control on its rook, with check; ply 5 its king takes it');
+  expect(/✺ Invincible — the enemy's rook on g8 cannot be captured for 5 plies/.test(at(33)) && /✺ Invincible — your pawn on g5 cannot be captured for 5 plies/.test(at(34)) && /✺ Stun — your pawn on g5 is stunned for 3 plies \(the invincibility it wore is gone\)/.test(at(35)), `plies 33-35: the invincibilities and the stun that overwrites one (${at(35).slice(35, 120)})`);
+  expect(/Rxg5/.test(at(37)) && !/⏳/.test(at(37)), `ply 37: the rook's own record rode its capture — no expiry words (${at(37).slice(0, 110)})`);
+  expect(/⏳ the enemy's rook on g5 can be captured again/.test(at(38)), `ply 38: the ridden invincibility runs out where the rook stands (${at(38).slice(35, 120)})`);
+  expect(/✺ Stun 3×3 — your bishop on e3 is stunned for 3 plies, your pawn on e4 is stunned for 3 plies, your pawn on d5 is stunned for 3 plies/.test(at(41)) && /⏳ your bishop on e3 can move again, your pawn on e4 can move again/.test(at(44)), `ply 41: the 3x3 stun; ply 44: two of them free again (${at(44).slice(35, 120)})`);
+  expect(/✺ Stun — the enemy's rook on f10 is stunned for 3 plies/.test(at(84)) && /✺ Entomb — your pawn on i8 is sealed in stone/.test(at(85)) && /✺ Entomb — the enemy's rook on f10 is sealed in stone/.test(at(88)), 'plies 84-88: the enemy\'s rook stunned then sealed, your pawn sealed');
+  expect(/⏳ your pawn on i8 is freed from the stone/.test(at(98)), `ply 98: the Demolish frees the pawn (${at(98).slice(35, 130)})`);
+  const s8 = L8.states;
+  expect(s8[1].cast === 'control' && s8[1].mover === 'engine' && s8[1].states.set[0].sq === 'f1' && s8[1].states.set[0].owner === 'w' && s8[1].states.set[0].was === 'R' && s8[1].states.set[0].piece === 'r' && s8[2].states.ended[0].sq === 'f1' && s8[2].states.ended[0].piece === 'K', 'the record: the rook f1 white-owned under black\'s control at ply 1, taken by its own king at ply 2');
+  expect(s8[88].cast === 'entomb' && s8[88].mover === 'player' && s8[88].states.set[0].sq === 'f10' && s8[88].states.set[0].kind === 'entomb' && s8[88].states.set[0].prev === null && s8[87].states.ended[0].sq === 'f10' && /%f10e/.test(s8[s8.length - 1].fen), 'the entomb on f10 lands the ply after its stun ran out (no record to overwrite) and stands to the end');
+  expect(R.expiryWords(s8[37], s8[37].fen) === '' && R.expiryWords(s8[37]) !== '', 'ply 37 judged against its field prints nothing; without the field the older reading would have');
+}
+
 // THE PIECE STATES (Phase 3.4, 2026-10-21): the words of a piece-effect cast and of the records that run out, off the record's `states`
 {
   const w1 = R.castWords({ cast: 'stun', card: 'stun', states: { set: [{ sq: 'd6', kind: 'stun', count: 3, piece: 'r', was: 'r', prev: null }], ended: [] } });

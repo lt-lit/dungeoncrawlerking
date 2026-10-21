@@ -87,11 +87,11 @@ export const CARDS = {
   reinforce: card('reinforce', 60, 'drop p o camp', 'Reinforce', '♟', 'a pawn in your camp'),
   // THE PIECE STATES (Phase 3.4, 2026-10-21; brief §4.10 "3.4 RULED"): one record per piece, the clock in plies, a new
   // effect overwriting the last — the designer's defaults for the first set ("none of these effects are set in stone")
-  stun: card('stun', 70, 'stun3 o any', 'Stun', '✺', 'cannot move for 3 plies'),
-  'stun-area': card('stun-area', 71, 'stun3 xxx/xox/xxx any', 'Stun 3×3', '✺', 'a 3×3 of pieces, 3 plies'),
+  stun: card('stun', 70, 'stun3 o sight', 'Stun', '✺', 'cannot move for 3 plies'),
+  'stun-area': card('stun-area', 71, 'stun3 xxx/xox/xxx sight', 'Stun 3×3', '✺', 'a 3×3 of pieces, 3 plies'),
   invincible: card('invincible', 75, 'invincible5 o any', 'Invincible', '◈', 'uncapturable for 5 plies'),
-  control: card('control', 80, 'control4 o any', 'Mind control', '☍', 'steal a piece for 4 plies'),
-  entomb: card('entomb', 85, 'entomb o any', 'Entomb', '▣', 'a piece sealed in stone'),
+  control: card('control', 80, 'control4 o sight', 'Mind control', '☍', 'steal a piece for 4 plies'),
+  entomb: card('entomb', 85, 'entomb o sight', 'Entomb', '▣', 'a piece sealed in stone'),
   // the meta cards: the player's alone, free, never cast by the engine
   reveal: card('reveal', 101, 'meta', 'Reveal', '☉', "the oracle's three lines", { text: "the engine's best lines for this turn; costs no move" }),
   undo: card('undo', 102, 'meta', 'Undo', '↺', 'take back your last turn', { text: "take back your last move and the enemy's reply; costs no move" }),

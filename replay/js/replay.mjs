@@ -79,8 +79,14 @@ const params = new URLSearchParams(location.search);
 // turn 19, Firefox/Windows, the enemy's initiative): both sides on the
 // library deck — 36 casts, the enemy's Crack row on its first ply, four
 // redraws, walls raised and pits sunk on both sides, Reinforce pawns, the
-// enemy's Sledge at ply 121 and its hammer at 133, 1-0 by extinction.
-const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json', 'samples/dck-log_s77-the-smithy_s210339940.json', 'samples/dck-log_vaults-4-t27_s1830683123.json', 'samples/dck-log_vaults-3-t19_s3367490008.json']; // ?sample=5: THE FIRST DECK DUEL (2026-09-25, the designer's log on the card UI build); ?sample=6: THE FIRST DUEL ON THE ENGINE'S DECK (2026-10-02, the designer's phone log on the 3.3a build)
+// enemy's Sledge at ply 121 and its hammer at 133, 1-0 by extinction;
+// 8 — THE FIRST PIECE-STATES DUEL (2026-10-21, vaults-2 at walk turn 7,
+// Firefox/Windows, the enemy's initiative): the engine's opening Mind
+// control on the rook beside the player's king with check, answered by the
+// king taking its own rook, the player's the same three plies later, the
+// enemy's last rook sealed on f10 from ply 88 to the stalemate — the log
+// that ruled the sight word.
+const SAMPLES = ['samples/dck-log_s77-the-smithy_s1818861954.json', 'samples/dck-log_vaults-4-t75_s3904618753.json', 'samples/dck-log_vaults-4-t109_s3010228489.json', 'samples/dck-log_vaults-2-t24_s3571496125.json', 'samples/dck-log_s77-the-smithy_s210339940.json', 'samples/dck-log_vaults-4-t27_s1830683123.json', 'samples/dck-log_vaults-3-t19_s3367490008.json', 'samples/dck-log_vaults-2-t7_s3786340449.json']; // ?sample=5: THE FIRST DECK DUEL (2026-09-25, the designer's log on the card UI build); ?sample=6: THE FIRST DUEL ON THE ENGINE'S DECK (2026-10-02, the designer's phone log on the 3.3a build)
 const $ = (id) => document.getElementById(id);
 const OPT_KEY = 'dck.options.v1'; // the game's options (same origin): the board's look
 const FX_SCALE = params.has('fx') ? Math.max(0, parseFloat(params.get('fx')) || 0) : 1;
