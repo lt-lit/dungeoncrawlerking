@@ -94,7 +94,7 @@ works pretty good" — IN.
 **Status 2026-10-03: THE TERRAIN PATCH shipped — Phase 3.3b, the second
 forge.** `patches/terrain.patch` (938 lines, 703+/23− across `types.h`,
 `variant.h`, `parser.cpp`, `position.h`, `position.cpp`, `movegen.cpp`,
-`apiutil.h`; applied on top of the ten above — ELEVEN patches now, in order
+`apiutil.h`; applied on top of the ten above — eleven patches then, TWELVE since piece-states (2026-10-21, below), in order
 dead-squares, thread-stack, portals, wall-kinds, hammer, portals-body,
 portals-cast, ice, deck, deck-search, terrain) gives the engine brief §4.10
 "Phase 3.3b": THE TERRAIN INTERPRETER — a card is a DEFINITION, `card<ID> =
@@ -129,6 +129,15 @@ random positions, the sweep, perft 4 under asserts) before any WASM was
 built; ice-free boards node-identical to the seven-patch build; the
 rule-16 gate ran green end to end (see "The ice patch" below). The phone
 verdict is owed.
+**Status 2026-10-21: THE PIECE-STATES PATCH shipped.** `patches/piece-states.patch`
+(the twelfth patch, 1,397 lines across seven files; its source
+`forge/apply-states.py`) gives the engine Phase 3.4's clock and four piece
+states — stun, invincible, mind control, entomb — as records in the FEN's
+trailing field, ticking in plies, judged on the board a move leaves. Both
+artifacts rebuilt from the same pins and toolchains; the rule-16 gate ran
+green end to end (see "The piece-states patch" below). The designer's verdict
+on this build is owed.
+
 
 `patches/dead-squares.patch` is the patch of record — written from scratch
 against the pinned trees, informed by a hunk-by-hunk audit of the reference
@@ -579,6 +588,176 @@ took about twenty minutes wall-clock, scripted in the session's scratch);
 wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
 `#` board ("Invalid piece character"), so a phase0 run that forgot the
 overlay dies at once instead of misplaying.
+
+## The piece-states patch (`patches/piece-states.patch`) — 2026-10-21
+
+Canon: brief §4.10 "3.4 RULED" (the eight rulings of the discussion, the
+designer's words) and "3.4 BUILT" (the record). Authored on the pinned trees
+on top of the eleven patches above (apply in this order: dead-squares,
+thread-stack, portals, wall-kinds, hammer, portals-body, portals-cast, ice,
+deck, deck-search, terrain, piece-states) by `forge/apply-states.py` —
+anchor-based edits whose diff is the patch file (1,397 lines). Files:
+`types.h`, `variant.h`, `parser.cpp`, `position.h`, `position.cpp`,
+`movegen.cpp`, `apiutil.h`.
+
+Design, in the engine's own shapes — ONE RECORD PER PIECE, THE CLOCK IN PLIES:
+
+- **The record** is `PieceState` (`STATE_STUN`, `STATE_INVINCIBLE`,
+  `STATE_CONTROL`, `STATE_ENTOMB`) with a count in plies (0 for a block,
+  `MAX_STATE_COUNT` 15) and, for a control, the OWNER it returns to —
+  `stateKind[sq]` / `stateCount[sq]` / `stateOwner[sq]` plus the bitboards
+  `stated`, `immobile`, `uncapturable`, `entombed`, `controlled`, all in the
+  copied `StateInfo` so `undo_move` is the state pointer (the colour flips a
+  move makes are listed in the state, `flipCount` / `flips`, and undone
+  backwards). Hashed by `Zobrist::pieceState[sq][kind][count][owner]` from its
+  own PRNG (`0x5A3C9E17D2B48F61`; the stock key sequence untouched). The
+  trailing FEN field carries `%e5s3`, `%e5i5`, `%e5c4w`, `%e5e`; a record that
+  cannot stand (no piece, a king, a count out of range, a control owned by the
+  piece's own colour) is dropped on parse; `fen()` prints the records last,
+  after the sledge flags, in square order.
+- **The cards** declare a piece effect as `card<ID> = stun3 o any` /
+  `invincible5 o any` / `control4 o any` / `entomb o any` — the count rides
+  the word (parser.cpp refuses a timed effect without one, or one outside
+  1..15, and a number on entomb); `CardKind` gained `CARD_STUN` /
+  `CARD_INVINCIBLE` / `CARD_CONTROL` / `CARD_ENTOMB` (`is_piece_effect`,
+  `is_timed_effect`); the variant flag `pieceStateCards` is set by the parser
+  when any deck holds one. A cast is the slot's drop on the anchor, as every
+  card's; its cells are the shape's non-king pieces of either colour;
+  `piece_effect_result` gives the record a square would carry (a controlled
+  piece FIRST returns to its owner, then the new record applies — the
+  overwrite; control on your own stolen piece returns it with no record — the
+  recall; control on your own plain piece changes nothing) and
+  `piece_effect_changes` is the NULL RULE (a cast that changes nothing is not
+  generated — a recast at the same count included).
+- **The clock**: `ticks(m)` is `!is_pass(m) && portalHalf[sideToMove] ==
+  SQ_NONE` — every real move of either side, the mulligan included; the
+  frozen pass, the fizzle and the link ply tick nothing. `tick_states()` runs
+  at the end of `do_move` before the deck's refill: every count falls by one
+  except the records this move set (`freshStates`), and what reaches zero
+  ENDS as the move's last act — a stun lifts, an invincibility ends, a control
+  RETURNS (`flip_piece_colour` where the piece stands, as what it has become).
+  A record rides its piece: a normal move, a castling rook, a portal landing
+  (the twin-to-twin swap skipped), a slide's every relocation move it; a
+  capture clears the victim's.
+- **Stun**: `immobile` — `pseudo_legal` refuses a move from it (castling
+  apart), movegen masks it out of the movers; it still attacks (in
+  `attackers_to`, so it gives check and pins and counts in SEE), and it is
+  capturable. **Invincible**: `uncapturable` — no capture onto it, en passant
+  onto it or portal landing that would swap with it; `see_ge` ends an
+  exchange at an invincible captor; the pit still kills (`slide_outcome` is
+  the ice patch's). **Control**: the piece's colour flips for the count and
+  flips back at zero wherever it stands; `count_with_hand_spellfree` counts a
+  controlled piece for its OWNER (a side whose last piece is stolen is not
+  bare; the owner that captures its own stolen piece bares itself); a stolen
+  pawn marches the thief's way and promotes as the thief's, returning as the
+  queen it became. **Entomb**: `entombed` — immobile, uncapturable, attacks
+  NOTHING (`attackers_to` and `slider_blockers` mask it — it is neither a
+  checker nor a pinner), a wall to every line and to the slide
+  (`slide_outcome` stops before it), never a landing's swap partner
+  (`portal_landable`), freed by any HIT whose cells cover it.
+- **Judged on the board the move leaves**: `needs_virtual_test(m)` — a
+  piece-effect cast, a hit that frees a block, or a control expiring with
+  this move — routes `legal()` and `gives_check()` to `virtual_attacks_king(m,
+  kingColor)`, which builds an edit list for the move (the mover, a capture,
+  a castling rook, a portal swap, a slide's steps, a cast's flips and blocks,
+  a freed piece attacking again) plus the returns that end with it (looked up
+  where their pieces have moved to — a capturer replacing one is not "still
+  there"), and asks whether the king is attacked on that board. So a return
+  may GIVE check; a return may RESOLVE a check against the mover — in check
+  from a piece whose control ends with your move, generation is the full
+  move set (`generate_all<EVASIONS>` routes to NON_EVASIONS when a control is
+  expiring; `pseudo_legal`'s evasion filter is skipped) and `legal()` decides,
+  the hammer included (`pseudo_legal` regenerates it through the evasions
+  list then); and a move that would leave the returning piece on the mover's
+  own king is illegal. NO CARD IN CHECK stands for every piece effect.
+- **Stock when absent**: a board with no record and no piece-state card
+  declared is node-identical to the eleven-patch build (the identity run,
+  below).
+
+### Native validation (2026-10-21)
+
+The oracle (`forge/oracle.py`) grew the states — a record per (char,
+origin) pair on the working board so it follows its piece, the clock with
+the pass / link / mulligan rules, the overwrite, the returns judged by the
+universal "safe after the move" test, the hammer under a return — and
+`forge/native-test-states.py` runs it (`forge/states.ini` the test variants:
+terrain.ini's boards plus cards 100–131). Every fixture count was the
+oracle's before the engine ran it.
+
+- Fixtures S1–S15 **137/137** on the debug build (asserts on) and the
+  release: the stun (immobile, attacking, capturable, the clock a ply at a
+  time, the record going with the victim), the invincible (no capture, no en
+  passant, the search sending the invincible queen for a defended pawn and
+  never without, the pit), the control (the flip, the count by owner, the
+  uses, the record riding the rook, the return judged on the move — the five
+  moves that would leave the returning rook on the king's line refused, 23
+  standing — the return giving check on the owner's move, the stolen pawn
+  marching the thief's way and promoting, the recall, the owner baring
+  itself), the entomb (inert, uncapturable, a wall to the line and the slide,
+  no clock, freed by a 3×3 hit, a freeing illegal onto your own king, a
+  freeing that gives check, no landing onto an entombed twin), the overwrite
+  (the owner's stun and invincibility as counterplay, the thief's entomb
+  handing the piece back, a recast refreshing, a null recast no move, a
+  return onto your own king illegal, a return that gives check, control over
+  a stun), the clock (the half ticks, the pass and the link do not, the
+  mulligan does), the field's round trip and the dropped records, no card in
+  check, the area stun, the ray, the king's neighbours, the hammer under a
+  return (legal when the return resolves the check, a plain check without
+  it, a second checker the return does not answer).
+- `xsweep 3` clean on six boards; 400 random positions on the debug build
+  under xsweep 2, then 1,000 and 600 on the release, equal to the oracle on
+  perft-1 move sets and perft-2 per-move counts, **0 mismatches**; perft 4
+  under asserts on seven fixtures (58,312,800 nodes on the fullest).
+- The portal, terrain, deck and ice suites on the twelve-patch build:
+  **62 / 84 / 55 / 46**, unchanged.
+- IDENTITY vs the eleven-patch native release on eight record-free boards
+  (terrain8 / terrain10 / states8 / states10 with cards declared but none
+  in the deal): perft 3 totals and depth-12 transcripts identical.
+- Three defects found and fixed before any wasm was built: the freeing hit
+  was in the oracle and missing from the patch; a king capturing an
+  expiring controlled piece read as the king vanishing (the relocation
+  lookup treated a square replaced by a capturer as "still there"); a stale
+  TT PORTAL move onto a square no longer a portal hit the `portal_landable`
+  assert (it crashed the portal regression suite's search). And one rule
+  written from the oracle's reading after the random sweep found 28
+  mismatches in 1,000: in check from a piece whose control returns with the
+  mover's move, the engine had generated evasions alone.
+
+### Capture or wait (2026-10-21, `forge/control-curve.py`)
+
+The designer's question on mind control — "I'd be curious to see if the
+engine tends to capture a mind controlled piece or wait out the effect" —
+measured on the native build at depth 14: six middle-game boards with a
+black piece under White's control for n = 1 2 3 4 6 8 plies, nobody in
+check on either seat (a first cut had three boards with the stolen piece
+checking its own king — a forced evasion, not a choice — and was thrown
+out). THE OWNER (Black to move) WAITS in 30 of 36 cases; it captures its
+own stolen piece back only when the piece threatens worse where it stands
+than it is worth: a knight beside its castled king held six plies or more
+(Nxh7 coming), its own queen beside its rook held four or more. THE THIEF
+(White to move) SPENDS IT AT ONCE: in 29 of 36 lines the stolen piece moves
+on the thief's first or third ply, almost always a capture — the bishop
+takes a7, the knight h7, the pawn the knight on f6, the rook the bishop on
+c8, the queen the rook on f8 — and in 11 the owner then takes its own piece.
+The engine reads a stolen piece as a kamikaze: whatever it takes is profit,
+and the owner's recapture kills the owner's own piece. Nothing is tuned by
+this (the no-values rule); it is the measurement the designer asked for.
+
+### The rule-16 gate (both WASM binaries rebuilt from the clean pinned trees)
+
+Both toolchains and both pinned trees reinstalled from scratch this session
+(the container keeps nothing; the NNUE net the engine's Makefile wants
+downloaded once through the proxy and cached beside it). `ffish.js` differs
+from the vendored in its 13 layout bytes and `stockfish.js` in its 9, the
+worker is byte-identical; the wasms +19,404 / +24,969 bytes.
+
+- [x] `test-states-ffish.cjs` **68/68** — the fixtures through the JS API: validateFen on a record field, S1–S15 as the native gate ran them, pop restoring the record at every count, SAN `Kg8+` for a return that gives check and `S@e6+` for a freeing hit that does, `K*d2` for the hammer under a return, a two-ply check-flag sweep over thirteen fixtures (the 10×10 shape included)
+- [x] `test-states-engine.cjs` **91/91** — perft 1 sets and perft 3 totals pinned to the native build on 26 fixtures (S1 3,952 · S2 3,312 · S3 3,703 · S3-return 5,088 · S4 3,040 · S4c 3,092 · S5 690 · S6 5,869 · S12 18,254 · S15 413 · S15c 533 …; the 10×10 duel shape perft 1 = 118, perft 2 = 14,392), the boards after every key cast through `d`, the checks a return and a freeing hit give, the invincible queen taking the defended pawn and never without, a search across a return, a depth-8 search with two state decks alive
+- [x] `test-terrain-ffish.cjs` 47, `test-terrain-engine.cjs` 49, `test-deck-ffish.cjs` 39, `test-deck-engine.cjs` 58, `test-ice-ffish.cjs` 53, `test-ice-engine.cjs` 79, `test-portals-ffish.cjs` 78, `test-portals-engine.cjs` 146, `test-hammer-ffish.cjs` 27, `test-hammer-engine.cjs` 25, `test-ffish.cjs` 19, `test-engine.cjs` 7 — every older gate unchanged
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical to the shipped pair; `xcheck.cjs` — ffish and engine agree on every crate fixture; `stack-regress.cjs` 5
+- [x] `search-identity.cjs` — node-for-node identical to the vendored eleven-patch engine at depth 12
+- [x] `depthcap.cjs` — d22 110/110 (slowest 1,015 ms), d60 30/30 (slowest 10,021 ms, the movetime) — **the cap stays at d22**
+- [x] `play/selftest.html` 53/53 in headless Chromium with the piece-states check; `ui-smoke` 486 ok / 0 failed with THE PIECE STATES block (2 boot retries — the renderer stall on record, caught by the harness both times); the phase0 overlay: test-deck-duel 46, test-ice-game 42, test-states-game 37
 
 ## The terrain patch (`patches/terrain.patch`) — 2026-10-03
 
@@ -1453,6 +1632,8 @@ FFISH_JS=... node engine/tests/test-ice-ffish.cjs                       # the ic
 ENGINE_JS=... node engine/tests/test-ice-engine.cjs                     # the ice, engine half: perft pinned to the native build, the searches (79)
 FFISH_JS=... node engine/tests/test-terrain-ffish.cjs                   # the terrain interpreter — hits, ice anywhere, walls, pits, petrify, the sledge enchantment, drops; check by demolition — ffish half (47)
 ENGINE_JS=... node engine/tests/test-terrain-engine.cjs                 # the terrain interpreter, engine half: perft pinned to the native build, the immurement found, a duel-shaped search (49)
+FFISH_JS=... node engine/tests/test-states-ffish.cjs                    # the piece states — stun, invincible, mind control and its return, entomb, the overwrite, the clock in plies — ffish half (68)
+ENGINE_JS=... node engine/tests/test-states-engine.cjs                  # the piece states, engine half: perft pinned to the native build, the boards through `d`, the searches (91)
 node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
 ```
 

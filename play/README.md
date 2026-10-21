@@ -2566,6 +2566,117 @@ saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
 now holds across a reload and that the replay page wears crypt on the
 sample log.
 
+## The piece states on the page (Phase 3.4, 2026-10-21)
+
+Canon: brief §4.10 "3.4 RULED" (the designer's rulings, in their words) and
+"3.4 BUILT" (the record); the engine's half is `engine/README.md` § "The
+piece-states patch" (the twelfth patch). THE FEN IS THE TRUTH, as for the
+deck: one record per piece in the trailing field — `%e5s3` the piece on e5
+is STUNNED for three plies (it cannot move; it still attacks, so it gives
+check, pins and defends; it can be taken, and its record goes with it),
+`%e5i5` INVINCIBLE for five (nothing captures it — en passant and a portal
+landing's swap included; the pit still kills), `%e5c4w` under MIND CONTROL
+for four plies and returning to White, its OWNER (it wears Black's colour
+meanwhile; it counts for White in the extinction count; a stolen pawn
+marches the thief's way), `%e5e` ENTOMBED (no clock: immobile, uncapturable,
+attacks nothing, a wall to every line and to the slide, freed by any hit).
+THE CLOCK IS IN PLIES: every real move of either side ticks every count —
+the frozen pass, the fizzle and the link ply tick nothing, the mulligan
+ticks — and what reaches zero ends as the move's last act; a record set this
+move does not tick on it. A NEW EFFECT OVERWRITES the record whole, and a
+controlled piece first returns to its owner (the owner's stun or
+invincibility is counterplay; the thief's entomb hands the piece back as a
+block; control cast on your own stolen piece is the recall). The engine
+writes the field and judges a cast, a freeing hit and any move a control
+returns on ON THE BOARD THE MOVE LEAVES (a return may give check, may
+resolve a check against the mover, and may not land the returning piece on
+the mover's own king); no card in check; kings are never targets. The page
+never decides any of it — it reads the field.
+
+- **`fen.mjs`** — `pieceStates(fen)` (a Map square → `{ kind, count, owner
+  }`), `stateEntry`, `withStates(fen, records)` (the fixtures' builder),
+  `settleStates(fen)` (the duel is over: every record dropped, every
+  controlled piece home in its owner's colour), `stateChanges(fenBefore,
+  fenAfter)` (`set`: the records that appeared or changed, each with the
+  piece now on the square, the one that stood there before and the record
+  it overwrote; `ended`: the records that are gone, with the piece now on
+  the square or null); `withSlick` and `withDeck` carry the records last, as
+  the engine prints them.
+- **`carddef.mjs`** — the words `stun<n>` / `invincible<n>` / `control<n>`
+  (the count on the word, 1 to 15, required) / `entomb` (no count), class
+  `'state'` (`STATE_EFFECTS`); `castChanges` lists the shape's non-king
+  pieces of either colour (the null rule's finer half — a recast that
+  changes nothing — is the engine's); `defWords` says the plies.
+- **`deck.mjs`** — FIVE CARDS in the library, the designer's defaults for
+  the first set ("none of these effects are set in stone"): Stun `stun3 o
+  any` (70), Stun 3×3 `stun3 xxx/xox/xxx any` (71), Invincible `invincible5
+  o any` (75), Mind control `control4 o any` (80), Entomb `entomb o any`
+  (85); `SPELL_KINDS` is 27; the library starter and the enemy's library
+  deck grow with it. **`pixelarrow.mjs`** — four glyphs for the faces and
+  the hints (`STUN_GLYPH` a dizzy spiral, `INVINCIBLE_GLYPH` a shield,
+  `CONTROL_GLYPH` two arrows changing places, `ENTOMB_GLYPH` a figure sealed
+  in a stone frame), in `SPELL_GLYPHS` by effect word. The faces, the drag
+  preview, the hint's frame and glyph, the enemy's played-card beat and the
+  cast path all come for free: a piece effect is a card like any other.
+- **`duel.mjs`** — `castKind` names a piece-effect cast by its effect word
+  (`cast: 'stun' | 'invincible' | 'control' | 'entomb'`), and EVERY ply's
+  `lastMove.states` carries `stateChanges` when a record was set or ended
+  (a record that rode the mover ends on the square it rests on — the
+  destination, the twin of a portal landing, the slide's rest). The record
+  of a duel reads the FEN's field on every state; nothing else is added.
+- **The words** — `logreport.mjs castWords` for a cast ("Stun — the enemy's
+  rook on d6 is stunned for 3 plies", "Mind control — the enemy's rook on
+  d6 changes sides for 4 plies", "Invincible — the enemy's rook on d6
+  cannot be captured for 1 ply (the mind control ends)", "Mind control —
+  your rook on a1 comes home", "Entomb — your knight on c3 is sealed in
+  stone") and `expiryWords` for the records a plain ply ran out ("the
+  enemy's rook on d2 is the enemy's again", "your knight on c3 can move
+  again", "your queen on g5 can be captured again", "… is freed from the
+  stone"; a record that went with a captured piece says nothing) — shared by
+  the duel log (main.mjs `onMove`), the report's timeline (✺ and ⏳) and the
+  analyzer.
+- **The board** — `canvas-board setStates(records)`, set with the position
+  by main.mjs `paintWithDebris` and the analyzer's `portalsAt`, paints a
+  record OVER its piece after the tall pass (`#paintState`, in
+  `#paintMarksOver`): the count as a 3×5 digit on a dark pill at the
+  square's top-right in the KIND's colour — lavender a stun, white an
+  invincible, and a mind control in the colour of the side it RETURNS to
+  (gold the player's, red the enemy's: the sprite already says whose it is
+  now) — and an entombed piece in a stone block (its box, head included,
+  tinted stone with a rim at the square's edge). A digit on the piece is
+  the whole display, as ruled.
+- **The gods and the grids** — a piece with a record is stone to the gods:
+  its record is keyed by square, so `blockedReason` vetoes any displacement
+  of it (`state`); the grid builders (`director.mjs fenGrid`, `tactics.mjs
+  gridOf`) write an entombed piece as bedrock and carry the invincible
+  squares as the grid's `uncapturable` set (`rays.mjs withPortals`,
+  `copyGrid`), so `threat.mjs captureLoss` prices no capture of an
+  invincible piece and ends an exchange at an invincible captor, and
+  `ice.mjs slideOutcome` stops before a block and shoves a stunned piece
+  like any other. The meters and the repetition record are untouched (the
+  position key is the board and the turn, never the field).
+- **The duel's end** — nothing persists past the duel: `settleStates` is
+  applied before the survivors are read (main.mjs), so a piece the enemy
+  still held comes home, a piece you held goes back to the floor's enemy,
+  and no record reaches the run.
+
+Gates: `test-states-game.mjs` 37 (the field, the changes, the grids, the
+landing guard, the slide, the catalog and the declaration, and on the
+vendored ffish the record's reading of a cast and a return, the gods' vetoes),
+`test-carddef` 36, `test-deck` 68, `test-cards` 132, `test-logreport` 107,
+`test-deck-duel` 46 (its library pins read the catalog; its ice cast waits
+out a frozen ply), the selftest's piece-states check (headless 53/53),
+ui-smoke 486 ok / 0 failed with THE PIECE STATES block (2 boot retries — the renderer stall on record, caught by the harness both times) (a fixed deck on
+s65-guard-post: the faces, a Stun tapped onto an enemy piece — the record,
+the field, the words, the lavender count on its pill ticking on the reply —
+a Mind control, an Entomb, an Invincible). CAPTURE OR WAIT, the designer's
+question, measured on the native build (`engine/forge/control-curve.py`,
+`engine/README.md`): the owner waits in 30 of 36 cases and takes its own
+stolen piece back only when it threatens worse where it stands than it is
+worth; the thief spends it at once — a capture with it in 29 of 36 lines.
+Held over: a beat for a cast and for a return (the commit paints them), a
+sprite for the block, the clock on the hint list.
+
 ## The terrain interpreter on the page (Phase 3.3b, 2026-10-03)
 
 **A CARD IS A DEFINITION.** The second forge put the interpreter in the engine

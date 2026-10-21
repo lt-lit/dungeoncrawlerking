@@ -219,6 +219,15 @@ const THREAT_TINT = 'rgba(229,72,77,0.16)'; // the rest of the band (the far hal
 // frame), an area card's whole shape tinted; both gone on release.
 const AREA_TINT = 'rgba(124,200,255,0.24)';
 const HEAT = { a: 'rgba(255,215,90,0.78)', b: 'rgba(108,195,255,0.59)', c: 'rgba(154,157,170,0.33)', t: 'rgba(255,90,90,0.78)' };
+// THE PIECE STATES (Phase 3.4, 2026-10-21): a piece with a record wears its clock as a 3×5 digit at its square's
+// top-right corner, on a dark pill, in the KIND's colour — lavender a stun, white an invincible, and for a MIND
+// CONTROL the colour of the side it RETURNS to (gold the player's, red the enemy's; the sprite already shows whose
+// it is now). An ENTOMBED piece stands in a block: its box tinted stone with a rim at the square's edge.
+const STATE_INK = { stun: '#d9b3ff', invincible: '#ffffff' };
+const CONTROL_INK = { w: '#f2c14e', b: '#e5484d' }; // GOLD / BAD, by the owner
+const STATE_PILL = 'rgba(0,0,0,0.65)';
+const ENTOMB_TINT = 'rgba(92,92,106,0.62)';
+const ENTOMB_RIM = '#c7c7d1';
 const COORD = 'rgba(255,255,255,0.4)';
 const COORD_SHADOW = 'rgba(0,0,0,0.6)';
 /** The wall's jitter in the weaken fx, six steps (style.css crack-jitter). */
@@ -295,6 +304,7 @@ export class CanvasBoard {
     this.marks = { selected: null, targets: EMPTY, check: null, pits: EMPTY, cracked: EMPTY, breached: EMPTY, heat: {}, hover: null, area: EMPTY };
     this.portals = null; // THE PORTAL SPELL: the position's pairs and halves (fen.mjs parsePortalField), painted on the floor
     this.slick = null; // THE ICE (2026-09-20): the position's slippery squares (fen.mjs slickSquares), the ice over their flagstones
+    this.states = null; // THE PIECE STATES (Phase 3.4, 2026-10-21): the position's records by square (fen.mjs pieceStates) — a clock digit or a block over the piece
     this.cellMarks = { selected: null, targets: new Map(), threats: new Map(), badges: new Map() }; // the walk's (setCellMarks): a selection, its targets, THE THREAT DISPLAY (milestone 6: the band where a hunter's duel would start — the far row framed, the rest tinted) and the badges over the enemy kings
     this.debrisBufs = new Map(); // cell index → 16×16 RGBA in WORLD orientation (the test surface: the buffer the cell wears)
     this.debrisCanvas = new Map(); // cell index → a 16×16 canvas of it, turned to the screen
@@ -961,6 +971,16 @@ export class CanvasBoard {
   setSlick(squares) {
     const set = squares instanceof Set ? squares : new Set(squares ?? []);
     this.slick = set.size ? set : null;
+    this.invalidate();
+  }
+
+  /** THE PIECE STATES (Phase 3.4, 2026-10-21): the records of the position
+   *  (fen.mjs pieceStates — a Map square → { kind, count, owner }), painted
+   *  over the pieces after the tall pass: a count digit in the kind's colour
+   *  on a dark pill at the square's top-right, a stone block over an
+   *  entombed piece. */
+  setStates(records) {
+    this.states = records instanceof Map && records.size ? records : null;
     this.invalidate();
   }
 
@@ -2139,6 +2159,23 @@ export class CanvasBoard {
     if (alpha < 1) g.globalAlpha = 1;
   }
 
+  /** THE PIECE STATES (Phase 3.4): a record's mark over its piece — the block, or the clock digit on its pill. */
+  #paintState(rec, x, y) {
+    const g = this.bctx;
+    if (rec.kind === 'entomb') {
+      g.fillStyle = ENTOMB_TINT;
+      g.fillRect(x, y - this.tileLift, T, T + this.tileLift); // the piece's whole box, head included: sealed in stone
+      this.#frame1(x, y, ENTOMB_RIM, 0);
+      return;
+    }
+    const text = rec.count == null ? '' : String(rec.count);
+    if (!text) return;
+    const w = textWidth(text);
+    g.fillStyle = STATE_PILL;
+    g.fillRect(x + T - w - 3, y, w + 3, 7);
+    drawText(g, text, x + T - 1 - w, y + 1, rec.kind === 'control' ? CONTROL_INK[rec.owner] ?? CONTROL_INK.w : STATE_INK[rec.kind] ?? '#ffffff');
+  }
+
   #paintCellMarks({ idx, x, y, k }) {
     const g = this.bctx;
     const cm = this.cellMarks;
@@ -2170,6 +2207,8 @@ export class CanvasBoard {
   #paintMarksOver({ sq, x, y, k }) {
     const g = this.bctx;
     const m = this.marks;
+    const rec = this.states?.get(sq);
+    if (rec && k?.v && !isWall(k.v)) this.#paintState(rec, x, y); // THE PIECE STATES: over the piece, under the frames
     if (m.selected === sq) this.#frame1(x, y, GOLD);
     if (m.check === sq) this.#frame1(x, y, BAD);
     if (m.hover === sq) this.#frame1(x, y, GODS, 0); // THE CARD UI: the square under the dragged card, framed at its edge like a proposed cast

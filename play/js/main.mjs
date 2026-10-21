@@ -39,9 +39,9 @@ import { getFfish, createEngine } from './engine.mjs';
 import { makeCatalogIni, PORTAL_SCROLL, ICE_SCROLL } from './variant.mjs';
 import { HAND_SIZE, CARDS, STARTER_DECKS, DEFAULT_STARTER, starterCards, enemyDeck, enemyCards, newDeckState, deckSeeds, glyphsOf, parseDeckParam, cloneDecks, handOf, pileOf, spentOf, cardOfCast, castUci, defOf } from './deck.mjs'; // THE DECK (2026-09-25): spells as cards — IN THE ENGINE since 2026-09-26 (the FEN is the deck)
 import { fanLayout, cardArt, artSize, stampGlyph, gestureStart, gestureMove, gestureHold, gestureEnd, castArea, castAreaOnFen, cardHint, dropWords, costWords, LONG_PRESS_MS } from './cards.mjs'; // THE CARD UI (Phase 3.2, 2026-09-25): the fan, the art, the gesture, the drop preview
-import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, PIT, isWall, hammerOf, castLetter, slickSquares, splitFen } from './fen.mjs';
+import { findSquares, emptyBoard, serializeBoard, isTerrain, WALL, FURNITURE, getSquare, squareName, parseSquare, parsePortalField, portalInfo, portalLedger, isCast, isPass, isMulligan, CAST_RE, HARD, PIT, isWall, hammerOf, castLetter, slickSquares, splitFen, pieceStates, settleStates } from './fen.mjs';
 import { slideOutcome, slideAliases } from './ice.mjs'; // THE ICE (2026-09-20): the slide's physics on the grid — the lit resting squares, the hint arrows' ends
-import { shapeGrid, targetBadge, TERRAIN_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): the terrain interpreter's grammar on the page — a card's shape and targeting on its face, the casts recorded by their effect
+import { shapeGrid, targetBadge, TERRAIN_EFFECTS, STATE_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): the terrain interpreter's grammar on the page — a card's shape and targeting on its face, the casts recorded by their effect; Phase 3.4: the piece effects
 import { loadStageV2, flipStageVertical, cropStage, stageSkins, THEMES } from './stage.mjs';
 import { dealMatchup, ARMY_MIN_WIDTH, ARMY_MAX_WIDTH } from './armygen.mjs';
 import { pickPromotion, PIECE_SETS, DOOR_SETS, DEFAULT_PIECE_FIT, TILE_LIFT_RANGE, TILE_SHIFT_RANGE, DEFAULT_DOOR_FIT, DOOR_LIFT_RANGE, EDGE_DOOR_LIFT_RANGE, classifyTerrain, residueStep, skinVariantIndex, floorVariantIndex } from './board-ui.mjs';
@@ -66,7 +66,7 @@ import { Particles } from './particles.mjs';
 import { DuelController } from './duel.mjs';
 import { displacementCandidates, crumbleCandidates, lockedPawns, fenGrid, terrainCensus, GOD_PRESETS, DIRECTOR_DEFAULTS } from './director.mjs';
 import { buildLog, deliverLog, logFileName, logSize, LogStore } from './replaylog.mjs';
-import { deltaWords, slideWords, castWords } from './logreport.mjs'; // the deep-Δ wording and THE ICE's slide words, shared with the report and the analyzer
+import { deltaWords, slideWords, castWords, expiryWords } from './logreport.mjs'; // the deep-Δ wording and THE ICE's slide words, shared with the report and the analyzer; Phase 3.4: the piece states' expiries
 
 // Stamped into every exported replay log (`meta.app`) so a log says which
 // build played it. Pages has no build step: bump it by hand with a change
@@ -2914,6 +2914,7 @@ function paintWithDebris(fen, ledgers) {
   // this one (fen.mjs portalLedger; a paint before any duel has none).
   app.boardUI.setPortals?.(portalInfo(fen, portalLedger([...(app.duel?.record?.states ?? []).map((s) => s.fen), fen])));
   app.boardUI.setSlick?.(slickSquares(fen)); // THE ICE: the slippery squares of the position, over their flagstones
+  app.boardUI.setStates?.(pieceStates(fen)); // THE PIECE STATES (Phase 3.4): the records over their pieces — a clock digit, a block
   app.boardUI.setPosition(fen, { ...ledgers, debris: debrisPainter() });
 }
 
@@ -4110,6 +4111,8 @@ async function onMove({ uci, san, mover, ply }) {
       note = ' — the You Win card is played: the duel is over'; // THE DECK IN THE ENGINE: the test card
     } else if (TERRAIN_EFFECTS.has(duel.lastMove?.cast ?? '')) {
       note = ` — ${castWords(duel.lastMove, mover)}`; // PHASE 3.3b: what the terrain card did (logreport.mjs — the report says it the same way)
+    } else if (STATE_EFFECTS.has(duel.lastMove?.cast ?? '')) {
+      note = ` — ${castWords(duel.lastMove, mover)}`; // THE PIECE STATES (Phase 3.4): what the piece effect did
     } else if (isCast(uci)) {
       const half = P.halves[mover === 'player' ? 'w' : 'b'];
       note = half ? ` — a portal opens at ${half}` : ' — the portals are linked';
@@ -4118,6 +4121,7 @@ async function onMove({ uci, san, mover, ply }) {
     }
   }
   if (hammered) note = ` — the sledgehammer cracks the wall at ${hammered}`; // THE SLEDGEHAMMER
+  { const ex = expiryWords(duel.lastMove); if (ex) note = `${note ?? ''}${note ? '; ' : ' — '}${ex}`; } // THE PIECE STATES: the records that ran out with this ply
   log($('duel-log'), `${n}${isWhiteMove ? '.' : '…'} ${san}${note}${mover === 'engine' && lastEngineInfo ? `  (${lastEngineInfo})` : ''}`);
   if (mover === 'engine') lastEngineInfo = null;
 }
@@ -5521,7 +5525,8 @@ async function walkOut() {
   } else if (playerWon) {
     const world = W.world;
     // The survivors, in world cells, off the final board through the crop.
-    const survivors = findSquares(finalFen, (c) => !!c && !isTerrain(c) && c === c.toUpperCase()).map((s) => ({ ch: s.cell, ...arenaToWorld(session.crop, s.file, s.rankFromBottom) }));
+    // THE PIECE STATES (Phase 3.4): nothing persists past the duel — a piece the enemy still held comes home, a piece you held goes back, every record drops (fen.mjs settleStates) before the survivors are read
+    const survivors = findSquares(settleStates(finalFen), (c) => !!c && !isTerrain(c) && c === c.toUpperCase()).map((s) => ({ ch: s.cell, ...arenaToWorld(session.crop, s.file, s.rankFromBottom) }));
     const kingCell = survivors.find((s) => s.ch === 'K') ?? { f: W.army.king.f, r: W.army.king.r };
     for (const p of world.cropPieces(session.crop)) world.pieces[world.idx(p.f, p.r)] = null;
     W.army = walkOutArmy(world, W.army.pattern, { f: kingCell.f, r: kingCell.r }, W.army.facing, survivors, 'w');

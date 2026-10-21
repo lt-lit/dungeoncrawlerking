@@ -238,8 +238,64 @@ export const DROP_GLYPH = Object.freeze([
   '.PPPPPPPPP.',
   '...........',
 ]);
-/** The glyphs BY EFFECT WORD (a card's `engine` field is its effect): the three the spells shipped with, the terrain interpreter's six. */
-export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH, win: WIN_GLYPH, hit: HIT_GLYPH, wall: WALL_GLYPH, pit: PIT_GLYPH, harden: HARDEN_GLYPH, sledge: SLEDGE_GLYPH, drop: DROP_GLYPH });
+// THE PIECE STATES (Phase 3.4, 2026-10-21): STUN a dizzy spiral, INVINCIBLE a
+// shield, CONTROL two arrows changing places (a piece changes sides), ENTOMB a
+// figure sealed in a stone frame. Line drawings at 11×11, hollow like the
+// rest, so the drop shadow reads and the halo never fills them.
+export const STUN_GLYPH = Object.freeze([
+  '....SSSS...',
+  '..SS....SS.',
+  '.S........S',
+  'S...SSS...S',
+  'S..S...S..S',
+  'S..S.S.S..S',
+  'S..S.SS...S',
+  'S..S......S',
+  '.S..SSSS.S.',
+  '.S.......S.',
+  '..SSSSSSS..',
+]);
+export const INVINCIBLE_GLYPH = Object.freeze([
+  'IIIIIIIIIII',
+  'I....I....I',
+  'I....I....I',
+  'I....I....I',
+  'I....I....I',
+  '.I...I...I.',
+  '.I...I...I.',
+  '..I..I..I..',
+  '...I.I.I...',
+  '....III....',
+  '.....I.....',
+]);
+export const CONTROL_GLYPH = Object.freeze([
+  '....C......',
+  '...CC......',
+  '..CCCCCCCC.',
+  '...CC......',
+  '....C......',
+  '...........',
+  '......C....',
+  '......CC...',
+  '.CCCCCCCC..',
+  '......CC...',
+  '......C....',
+]);
+export const ENTOMB_GLYPH = Object.freeze([
+  'EEEEEEEEEEE',
+  'E.........E',
+  'E...EEE...E',
+  'E...E.E...E',
+  'E...EEE...E',
+  'E..EEEEE..E',
+  'E.E..E..E.E',
+  'E....E....E',
+  'E...E.E...E',
+  'E...E.E...E',
+  'EEEEEEEEEEE',
+]);
+/** The glyphs BY EFFECT WORD (a card's `engine` field is its effect): the three the spells shipped with, the terrain interpreter's six, the four piece states. */
+export const SPELL_GLYPHS = Object.freeze({ portal: PORTAL_GLYPH, ice: ICE_GLYPH, win: WIN_GLYPH, hit: HIT_GLYPH, wall: WALL_GLYPH, pit: PIT_GLYPH, harden: HARDEN_GLYPH, sledge: SLEDGE_GLYPH, drop: DROP_GLYPH, stun: STUN_GLYPH, invincible: INVINCIBLE_GLYPH, control: CONTROL_GLYPH, entomb: ENTOMB_GLYPH });
 export const SPELL_SHADOW = HALO; // the drop shadow's colour
 
 /** A spell glyph's size: { w, h } — its shadow adds a pixel right and below. */

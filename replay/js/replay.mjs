@@ -52,7 +52,7 @@ import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { cardOfCast, CARDS } from '../../play/js/deck.mjs'; // THE DECK IN THE ENGINE (2026-09-26): which card a slot's drop casts
 import { castAreaOnFen } from '../../play/js/cards.mjs'; // PHASE 3.3b (2026-10-03): a shaped cast's squares for the hint's tint
 import { deliverLog, logFileName, logSize, LogStore, jsonSafeNumbers } from '../../play/js/replaylog.mjs';
-import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf, slickSquares } from '../../play/js/fen.mjs';
+import { parseBoard, splitFen, CAST_RE, portalInfo, portalLedgerStep, portalLedgerEmpty, isTerrain, hammerOf, slickSquares, pieceStates } from '../../play/js/fen.mjs';
 import { slideOutcome } from '../../play/js/ice.mjs'; // THE ICE (2026-09-20): a line's first move ends where its piece rests
 import * as R from '../../play/js/logreport.mjs';
 import { stripData, renderStrips, setCursor, plyAtX, readoutAt, ALL_SERIES } from './strips.mjs';
@@ -428,7 +428,7 @@ function paint() {
   const st = stateAt(line, ply);
   const i = stateIndexAt(line, ply);
   const res = residueFor(line)[i] ?? { opened: new Set(), rubble: new Set() };
-  const portalsAt = (f) => { ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); ui.setSlick?.(slickSquares(f)); }; // THE PORTAL SPELL: each pair in its caster's colour; THE ICE: the slippery squares of the position
+  const portalsAt = (f) => { ui.setPortals?.(portalInfo(f, portalFor(line)[i] ?? null)); ui.setSlick?.(slickSquares(f)); ui.setStates?.(pieceStates(f)); }; // THE PORTAL SPELL: each pair in its caster's colour; THE ICE: the slippery squares of the position; THE PIECE STATES: the records over their pieces
   const ix = idx();
   const q = ix.quakes.get(ply) ?? null;
   const t = ix.traces.get(ply) ?? null;

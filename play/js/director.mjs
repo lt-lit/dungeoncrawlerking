@@ -136,7 +136,7 @@
 // still terrain to molding, crop, the camp line, and to displacement, which
 // neither moves a crate nor lands on one.
 import { validateCrumbleCandidate } from './crumbleFilter.mjs';
-import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField, HARD, PIT, slickSquares } from './fen.mjs';
+import { getSquare, setSquare, clearEp, splitFen, joinFen, isTerrain, WALL, FURNITURE, parsePortalField, HARD, PIT, slickSquares, pieceStates, parseSquare } from './fen.mjs';
 import { RestlessnessMeter } from './meter.mjs';
 import { mulberry32, childSeed, randInt } from './prng.mjs';
 import { stalenessOf } from './staleness.mjs';
@@ -166,7 +166,22 @@ export function fenGrid(fen, files, ranks) {
       f++;
     }
   });
-  return withPortals(g, portalTwins(fen)); // Portals v2: the pairs ride the grid (rays.mjs)
+  return withPortals(g, portalTwins(fen), uncapturableOf(fen, g)); // Portals v2: the pairs ride the grid (rays.mjs); Phase 3.4: the records too
+}
+
+/** THE PIECE STATES (Phase 3.4, 2026-10-21): the records of a FEN on a grid — an ENTOMBED piece is written as
+ *  bedrock (it attacks nothing, nothing takes it, every line and the slide stop at it: stone to every grid reader,
+ *  the gods included — a hit frees it, which is a card's business), and the INVINCIBLE squares are returned as the
+ *  grid's `uncapturable` set ('f,r') for threat.mjs. Shared by tactics.mjs gridOf. */
+export function uncapturableOf(fen, g) {
+  const unc = new Set();
+  for (const [sq, rec] of pieceStates(fen)) {
+    const { file, rankFromBottom } = parseSquare(sq);
+    if (!g[rankFromBottom] || file >= g[rankFromBottom].length) continue;
+    if (rec.kind === 'entomb') g[rankFromBottom][file] = HARD;
+    else if (rec.kind === 'invincible') unc.add(`${file},${rankFromBottom}`);
+  }
+  return unc;
 }
 
 /** Can this pawn reach its promotion rank by straight pushes through
@@ -245,6 +260,7 @@ function blockedReason(blocked, mover, target) {
   // crumble on one, no displacement onto or off one (the engine's rule
   // is that only a MOVE teleports; the gods never move a piece through).
   if (blocked.portals && (blocked.portals.has(mover) || blocked.portals.has(target))) return 'portal';
+  if (blocked.states && (blocked.states.has(mover) || blocked.states.has(target))) return 'state'; // THE PIECE STATES (Phase 3.4): a piece with a record is stone to the gods — its record is keyed by square, and a cast's business, not theirs
   // THE ICE (2026-09-20): the gods leave slippery squares alone — nothing lands
   // on one (a piece resting on open ice is a picture the rules never paint:
   // only a move slides) and no pit opens under one; a piece may be moved OFF
@@ -1519,7 +1535,7 @@ export class Director {
     // twice, no piece moved twice); `pieces`/`squares` are the protected set
     // — every threat on the board and every forced win's net, both sides
     // (tactics.mjs). Computed once, on the board the gods are about to edit.
-    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set(), portals: parsePortalField(fen).squares, slick: slickSquares(fen) }; // THE ICE: no landing on, no pit under, a slippery square
+    const blocked = { touched: new Set(), pieces: new Set(), squares: new Set(), portals: parsePortalField(fen).squares, slick: slickSquares(fen), states: new Set(pieceStates(fen).keys()) }; // THE ICE: no landing on, no pit under, a slippery square; THE PIECE STATES: no displacement of a piece with a record
     if (this.protect) {
       const guard = protectedSet(ffish, variant, fen, files, ranks, { depth: this.winDepth, nodeBudget: this.winNodes, hints: mates });
       blocked.pieces = guard.pieces;

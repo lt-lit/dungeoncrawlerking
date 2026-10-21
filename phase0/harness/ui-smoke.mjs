@@ -21,6 +21,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from 'playwright';
 import { spawnSync } from 'child_process';
+import { SPELL_KINDS } from '../../play/js/deck.mjs'; // the library's size, for the enemy's deck pin (every spell once)
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(ROOT, 'phase0/results/ui-smoke');
@@ -2402,7 +2403,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   expect(wk.run?.starter === 'adept' && wk.run.cards.length === 8, `the run carries the starter deck (${wk.run?.starter}, ${wk.run?.cards?.length} cards)`);
   expect(wk.planOk && wk.hands?.w?.length === 4, `the drop deals a hand of four from the run's deck (${JSON.stringify(wk.hands?.w)})`);
   {
-    const n = 22; // the whole library, every spell once (2026-10-03: the width − 1 rule waits for the economy)
+    const n = SPELL_KINDS.length; // the whole library, every spell once (2026-10-03: the width − 1 rule waits for the economy; 27 since the piece states, 2026-10-21)
     expect(wk.hands?.b?.length === Math.min(4, n) && wk.decks?.b?.pile?.length === Math.max(0, n - 4) && wk.hands.b.every((k) => !['reveal', 'undo', 'win'].includes(k)), `the enemy's deck is the whole library — a hand of four and the rest on its pile (width ${wk.enemyWidth}: ${JSON.stringify(wk.hands?.b)} + ${wk.decks?.b?.pile?.length})`);
   }
   expect(wk.enemy.pile !== null && wk.export.decks && wk.export.world && wk.save?.starter === 'adept', `the enemy's bar, the log and the run save carry the decks (enemy ${wk.enemy.hand.join(' ')} + ${wk.enemy.pile})`);
@@ -2722,6 +2723,204 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
   markT('done');
   expect(errsT.length === 0, `no page errors with the terrain cards${errsT.length ? ` — ${errsT.join(' | ')}` : ''}`);
   await pageT.close();
+}
+
+// --- THE PIECE STATES (Phase 3.4, 2026-10-21; brief §4.10 "3.4 RULED";
+// engine/patches/piece-states.patch; play/js/fen.mjs pieceStates): one record
+// per piece in the FEN's trailing field, the clock in plies, a new effect
+// overwriting the last. On s65-guard-post seed 1 a fixed-order deck opens
+// Stun, Mind control, Invincible and Entomb in hand: every face wears its
+// effect's glyph and the `any` badge; a Stun tapped onto an enemy piece
+// writes `%<sq>s3` (the state's `cast: 'stun'`, its `states.set`, the log's
+// words), the board paints the count on a dark pill at the square's top-right
+// in the stun's lavender, and the enemy's reply ticks it to 2; a Mind control
+// flips an enemy piece to white's, the record counted for black (the badge
+// in the enemy's red), the piece moves as white's; an Entomb on your own
+// piece seals it (the stone rim at the square's edge), an Invincible on your
+// own pawn marks it white. ---
+{
+  let pageS = await newPageSafe({ viewport: { width: 390, height: 844 } });
+  const errsS = [];
+  pageS.on('pageerror', (e) => errsS.push(String(e).split('\n')[0]));
+  const qS = `stage=s65-guard-post&autobegin=1&fx=0&seed=1&go=depth%201%20movetime%2030&probe=depth%206%20movetime%20300&mateprobe=off&evalgate=off&onset=400&arrowalpha=1&arrowwidth=2&deck=stun,control,entomb,invincible,stun-area,crack,reveal,undo`;
+  await pageS.goto(`http://127.0.0.1:${PORT}/play/index.html?${qS}`);
+  pageS = await bootWait(pageS, () => newPageSafe({ viewport: { width: 390, height: 844 } }), `http://127.0.0.1:${PORT}/play/index.html?${qS}`, (p) => p.on('pageerror', (e) => errsS.push(String(e).split('\n')[0])));
+  await pageS.waitForFunction(() => !window.__DCK.app.busy, null, { timeout: 60000 });
+  const markS = (what) => process.stderr.write(`... states: ${what}\n`);
+  markS('booted');
+  const LAV = '217,179,255,255', RED = '229,72,77,255', WHITE = '255,255,255,255', RIM = '199,199,209,255';
+  const s0 = await pageS.evaluate(async () => {
+    const K = window.__DCK;
+    K.options.cheat = false; K.options.hints = false; K.options.evalBar = false; K.applyOptions();
+    await K.renderer.ready();
+    const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+    const at = (fen, sq) => { const g = gridOf(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+    const fen = K.app.duel.fen();
+    const out = { variant: K.app.duel.variantName, hand: K.cards.hand(), fen };
+    out.targets = { stun: K.deck.targets('stun'), control: K.deck.targets('control'), entomb: K.deck.targets('entomb'), invincible: K.deck.targets('invincible') };
+    out.kings = { stunHasKing: out.targets.stun.some((s) => /k/i.test(at(fen, s))), controlOnOwn: out.targets.control.filter((s) => /[A-Z]/.test(at(fen, s))).length, controlOnEnemy: out.targets.control.filter((s) => /[a-z]/.test(at(fen, s))).length, stunOnBoth: out.targets.stun.some((s) => /[A-Z]/.test(at(fen, s))) && out.targets.stun.some((s) => /[a-z]/.test(at(fen, s))) };
+    out.faces = K.cards.els().map((el) => { const c = el.querySelector('canvas.card-art'); return { kind: el.dataset.kind, badge: el.querySelector('.card-badge')?.textContent ?? null, w: c?.width, h: c?.height }; });
+    // the enemy piece the stun will land on: a black piece of value among the stun's targets, the farthest from the king's file
+    const enemies = out.targets.stun.filter((s) => /[a-z]/.test(at(fen, s)));
+    out.stunSq = enemies.find((s) => /[rnbq]/.test(at(fen, s))) ?? enemies[0] ?? null;
+    out.stunPiece = out.stunSq ? at(fen, out.stunSq) : null;
+    return out;
+  });
+  markS('the deal read');
+  expect(/__deck4_[0-9a-f]{8}$/.test(s0.variant), `the deal's variant hashes a declaration with the piece-state cards (${s0.variant})`);
+  expect(s0.hand.join(',') === 'stun,control,entomb,invincible', `the fixed deck opens Stun, Mind control, Entomb, Invincible in hand (${s0.hand.join(' ')})`);
+  expect(s0.targets.stun.length > 0 && !s0.kings.stunHasKing && s0.kings.stunOnBoth, `Stun targets every non-king piece of either colour (${s0.targets.stun.length} squares, no king)`);
+  expect(s0.kings.controlOnEnemy > 0 && s0.kings.controlOnOwn === 0, `Mind control targets the enemy's pieces alone (${s0.kings.controlOnEnemy} enemy, ${s0.kings.controlOnOwn} own)`);
+  expect(s0.targets.entomb.length === s0.targets.stun.length && s0.targets.invincible.length === s0.targets.stun.length, `Entomb and Invincible target the same squares as Stun (${s0.targets.entomb.length} / ${s0.targets.invincible.length})`);
+  {
+    const f = Object.fromEntries(s0.faces.map((x) => [x.kind, x]));
+    expect(['stun', 'control', 'entomb', 'invincible'].every((k) => f[k]?.badge === 'any' && f[k].w === 12 && f[k].h === 12), `every face wears the any badge and a one-square card's 12×12 art (${s0.faces.map((x) => `${x.kind}:${x.badge} ${x.w}×${x.h}`).join(' ')})`);
+  }
+  if (s0.stunSq) {
+    // THE STUN: a tap on the card, a tap on the enemy piece
+    markS(`the Stun on ${s0.stunSq}`);
+    const st = await pageS.evaluate(async (sq) => {
+      const K = window.__DCK;
+      const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+      const out = { tapped: K.cards.tap('stun'), castMode: K.app.castMode, lit: K.app.boardUI.marks.targets.has(sq) };
+      K.tap(sq);
+      await settle();
+      const rec = K.app.duel.record;
+      const st1 = rec.states[1] ?? null;
+      out.move = rec.moves[0]; out.san = rec.sans[0];
+      out.state = st1 ? { cast: st1.cast, card: st1.card, states: st1.states ?? null, field: (st1.fen.match(/\{[^}]*\}/) || [''])[0] } : null;
+      out.log = [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Stun/.test(t));
+      out.live = K.app.duel.fen();
+      out.state2 = K.app.duel.state;
+      K.renderer.paintNow();
+      const p = K.renderer.square(sq);
+      const px = (c, r) => { if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+      out.px = { corner: [], pill: px(10, 0), floor: px(2, 14) };
+      for (let r = 1; r <= 5; r++) for (let c = 10; c <= 15; c++) out.px.corner.push(px(c, r));
+      return out;
+    }, s0.stunSq);
+    expect(st.tapped && st.castMode === 'stun' && st.lit, `a tap on the Stun card enters cast mode with ${s0.stunSq} lit`);
+    expect(/^[A-Z]@/.test(st.move ?? '') && st.state?.cast === 'stun' && st.state.card === 'stun', `the tap casts Stun on ${s0.stunSq} as its slot's drop (${st.move}, SAN ${st.san}): cast ${st.state?.cast}, card ${st.state?.card}`);
+    expect(st.state?.states?.set?.length === 1 && st.state.states.set[0].sq === s0.stunSq && st.state.states.set[0].kind === 'stun' && st.state.states.set[0].count === 3 && st.state.field.includes(`%${s0.stunSq}s3`), `the state carries the record — ${s0.stunSq} stunned for three — and the FEN's field reads it (${st.state?.field}; ${JSON.stringify(st.state?.states)})`);
+    expect(st.log.some((t) => new RegExp(`Stun — the enemy's \\w+ on ${s0.stunSq} is stunned for 3 plies`).test(t)), `the log says what the card did (${st.log[0] ?? 'no line'})`);
+    const liveRec = st.live.match(new RegExp(`%${s0.stunSq}s(\\d)`));
+    if (st.state2 === 'playing' && liveRec) {
+      expect(liveRec[1] === '2', `the enemy's reply ticked the stun to ${liveRec[1]}`);
+      expect(st.px.corner.includes(LAV) && st.px.pill !== st.px.floor, `the board paints the count at the square's top-right in the stun's lavender on a dark pill (${st.px.corner.filter((c) => c === LAV).length} lavender pixels; pill ${st.px.pill} over floor ${st.px.floor})`);
+    } else expect(true, `the stunned piece was taken or the duel ended on the reply (${st.state2}; ${st.live})`);
+    // MIND CONTROL: an enemy piece becomes white's, the record counted for black; the badge in the enemy's red; it moves as white's
+    if (st.state2 === 'playing') {
+      markS('the Mind control');
+      const mc = await pageS.evaluate(async () => {
+        const K = window.__DCK;
+        const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+        const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+        const at = (fen, sq) => { const g = gridOf(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+        if (K.app.duel.turnColor() !== 'white') return { skip: 'not white to move' };
+        // a reply may have put the king in check (no card in check) — play a plain move through it, up to three times
+        for (let i = 0; i < 3 && K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white' && !K.deck.targets('control').length; i++) {
+          const mv = K.app.duel.legalMoves().find((u) => /^[a-l]\d+[a-l]\d+$/.test(u) && u.slice(0, 2) !== u.slice(2, 4)) ?? K.app.duel.legalMoves()[0];
+          if (!mv) break;
+          await K.playerMove(mv); await settle();
+        }
+        if (K.app.duel.state !== 'playing' || K.app.duel.turnColor() !== 'white') return { skip: `the duel moved on (${K.app.duel.state})` };
+        const fen0 = K.app.duel.fen();
+        const sq = K.deck.targets('control').find((s) => /[rnbq]/.test(at(fen0, s)) && !new RegExp(`%${s}`).test(fen0)) ?? K.deck.targets('control')[0] ?? null;
+        if (!sq) return { skip: `no target (in check ${K.app.duel.board.isCheck()}; ${K.app.duel.legalMoves().length} legal moves; hand ${K.cards.hand().join(' ')})` };
+        const was = at(fen0, sq);
+        K.cards.tap('control');
+        K.tap(sq);
+        await settle();
+        const st = K.app.duel.record.states.find((s) => s.cast === 'control' && s.mover === 'player') ?? null; // the enemy may have cast its own Mind control first (it did, with check, on the first run)
+        const out = { sq, was, state: st ? { cast: st.cast, card: st.card, set: st.states?.set ?? null, field: (st.fen.match(/\{[^}]*\}/) || [''])[0], piece: at(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Mind control — the enemy's/.test(t)), duelState: K.app.duel.state, live: K.app.duel.fen() };
+        if (K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white') {
+          const live = K.app.duel.fen();
+          const m = live.match(new RegExp(`%${sq}c(\\d)b`));
+          out.held = m ? { count: parseInt(m[1], 10), piece: at(live, sq), moves: K.app.duel.legalMoves().filter((u) => u.startsWith(sq)).length } : null;
+          K.renderer.paintNow();
+          const p = K.renderer.square(sq);
+          const px = (c, r) => { if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+          out.corner = []; for (let r = 1; r <= 5; r++) for (let c = 10; c <= 15; c++) out.corner.push(px(c, r));
+        }
+        return out;
+      });
+      if (mc.skip) expect(true, `the Mind control step is skipped (${mc.skip})`);
+      else {
+        expect(mc.state?.cast === 'control' && mc.state.card === 'control' && mc.state.set?.length === 1 && mc.state.set[0].kind === 'control' && mc.state.set[0].owner === 'b' && mc.state.set[0].count === 4 && mc.state.piece === mc.was.toUpperCase() && mc.state.field.includes(`%${mc.sq}c4b`), `Mind control on ${mc.sq}: the ${mc.was} is white's, the record %${mc.sq}c4b counted for black (${mc.state?.field}; ${JSON.stringify(mc.state?.set)})`);
+        expect(mc.log.some((t) => new RegExp(`Mind control — the enemy's \\w+ on ${mc.sq} changes sides for 4 plies`).test(t)), `the log says so (${mc.log[0] ?? 'no line'})`);
+        if (mc.held) {
+          expect(mc.held.count === 3 && mc.held.piece === mc.was.toUpperCase() && mc.held.moves > 0, `after the reply the stolen piece is still white's at count 3 and has ${mc.held.moves} moves of its own`);
+          expect(mc.corner.includes(RED), `its badge is in the enemy's red — the side it returns to (${mc.corner.filter((c) => c === RED).length} red pixels)`);
+        } else expect(true, `the stolen piece went or the duel moved on (${mc.duelState}; ${mc.live})`);
+      }
+    }
+    // ENTOMB and INVINCIBLE on your own pieces: the block's rim, the white digit
+    if ((await pageS.evaluate(() => window.__DCK.app.duel.state === 'playing' && window.__DCK.app.duel.turnColor() === 'white'))) {
+      markS('the Entomb and the Invincible');
+      const en = await pageS.evaluate(async () => {
+        const K = window.__DCK;
+        const settle = async () => { await K.waitIdle(); for (let i = 0; i < 400 && K.app.busy; i++) await new Promise((r) => setTimeout(r, 25)); };
+        const gridOf = (fen) => fen.split(' ')[0].replace(/\[[^\]]*\]$/, '').split('/').map((row) => { const out = []; let num = ''; for (const ch of row) { if (/\d/.test(ch)) num += ch; else { if (num) { out.push(...Array(parseInt(num, 10)).fill('.')); num = ''; } out.push(ch); } } if (num) out.push(...Array(parseInt(num, 10)).fill('.')); return out; });
+        const at = (fen, sq) => { const g = gridOf(fen); return g[g.length - parseInt(sq.slice(1), 10)]?.[sq.charCodeAt(0) - 97] ?? '?'; };
+        const own = (kind) => K.deck.targets(kind).filter((s) => /[PRNBQ]/.test(at(K.app.duel.fen(), s)) && !new RegExp(`%${s}`).test(K.app.duel.fen()));
+        const out = {};
+        for (let i = 0; i < 3 && K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white' && !own('entomb').length; i++) { // through a check, as above
+          const mv = K.app.duel.legalMoves().find((u) => /^[a-l]\d+[a-l]\d+$/.test(u) && u.slice(0, 2) !== u.slice(2, 4)) ?? K.app.duel.legalMoves()[0];
+          if (!mv) break;
+          await K.playerMove(mv); await settle();
+        }
+        if (K.app.duel.state !== 'playing' || K.app.duel.turnColor() !== 'white') return { skip: `the duel moved on (${K.app.duel.state})` };
+        const e = own('entomb').find((s) => /[RNBQ]/.test(at(K.app.duel.fen(), s))) ?? own('entomb')[0] ?? null;
+        if (!e) return { skip: `no own piece to entomb (in check ${K.app.duel.board.isCheck()}; hand ${K.cards.hand().join(' ')})` };
+        K.cards.tap('entomb'); K.tap(e); await settle();
+        const st = K.app.duel.record.states.find((s) => s.cast === 'entomb' && s.mover === 'player') ?? null;
+        out.entomb = { sq: e, state: st ? { cast: st.cast, field: (st.fen.match(/\{[^}]*\}/) || [''])[0], set: st.states?.set ?? null } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Entomb — your/.test(t)) };
+        if (K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white') {
+          out.entomb.still = new RegExp(`%${e}e`).test(K.app.duel.fen());
+          out.entomb.moves = K.app.duel.legalMoves().filter((u) => u.startsWith(e)).length;
+          K.renderer.paintNow();
+          const p = K.renderer.square(e);
+          const px = (c, r) => { if (!p) return null; const i = (r * 16 + c) * 4; return `${p[i]},${p[i + 1]},${p[i + 2]},${p[i + 3]}`; };
+          out.entomb.rim = [px(0, 0), px(15, 0), px(0, 15), px(8, 15)];
+          const v = own('invincible').find((s) => /P/.test(at(K.app.duel.fen(), s))) ?? own('invincible')[0] ?? null;
+          if (v) {
+            K.cards.tap('invincible'); K.tap(v); await settle();
+            const st2 = K.app.duel.record.states.find((s) => s.cast === 'invincible' && s.mover === 'player') ?? null;
+            out.inv = { sq: v, state: st2 ? { cast: st2.cast, field: (st2.fen.match(/\{[^}]*\}/) || [''])[0] } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Invincible — your/.test(t)) };
+            if (K.app.duel.state === 'playing') {
+              const m = K.app.duel.fen().match(new RegExp(`%${v}i(\\d)`));
+              out.inv.count = m ? parseInt(m[1], 10) : null;
+              K.renderer.paintNow();
+              const q = K.renderer.square(v);
+              const qx = (c, r) => { if (!q) return null; const i = (r * 16 + c) * 4; return `${q[i]},${q[i + 1]},${q[i + 2]},${q[i + 3]}`; };
+              out.inv.corner = []; for (let r = 1; r <= 5; r++) for (let c = 10; c <= 15; c++) out.inv.corner.push(qx(c, r));
+            }
+          }
+        }
+        out.exportCasts = K.log.build().states.filter((s) => s.mover === 'player' && ['stun', 'control', 'entomb', 'invincible'].includes(s.cast)).map((s) => s.cast);
+        out.state = K.app.duel.state;
+        return out;
+      });
+      if (en.skip) expect(true, `the Entomb step is skipped (${en.skip})`);
+      else {
+        expect(en.entomb.state?.cast === 'entomb' && en.entomb.state.field.includes(`%${en.entomb.sq}e`) && en.entomb.state.set?.[0]?.kind === 'entomb', `Entomb on your ${en.entomb.sq}: the record %${en.entomb.sq}e, no count (${en.entomb.state?.field})`);
+        expect(en.entomb.log.some((t) => new RegExp(`Entomb — your \\w+ on ${en.entomb.sq} is sealed in stone`).test(t)), `the log says so (${en.entomb.log[0] ?? 'no line'})`);
+        if (en.entomb.rim) {
+          expect(en.entomb.still && en.entomb.moves === 0, `the block has no clock and the piece no move after the reply (${en.entomb.still}; ${en.entomb.moves} moves)`);
+          expect(en.entomb.rim.every((c) => c === RIM), `the board draws the stone rim at the square's edge (${en.entomb.rim.join(' / ')})`);
+        }
+        if (en.inv) {
+          expect(en.inv.state?.cast === 'invincible' && en.inv.state.field.includes(`%${en.inv.sq}i5`), `Invincible on your ${en.inv.sq}: %${en.inv.sq}i5 (${en.inv.state?.field})`);
+          expect(en.inv.log.some((t) => new RegExp(`Invincible — your \\w+ on ${en.inv.sq} cannot be captured for 5 plies`).test(t)), `the log says so (${en.inv.log[0] ?? 'no line'})`);
+          if (en.inv.corner) expect(en.inv.count === 4 && en.inv.corner.includes(WHITE), `after the reply the count reads 4 in white at the corner (${en.inv.count}; ${en.inv.corner.filter((c) => c === WHITE).length} white pixels)`);
+        }
+        expect(en.exportCasts.length >= 2 && en.exportCasts[0] === 'stun', `the export's states carry the player's casts by effect (${en.exportCasts.join(' ')})`);
+      }
+    }
+  } else expect(false, 'no enemy piece to stun on the deal');
+  markS('done');
+  expect(errsS.length === 0, `no page errors with the piece states${errsS.length ? ` — ${errsS.join(' | ')}` : ''}`);
+  await pageS.close();
 }
 
 await browser.close();

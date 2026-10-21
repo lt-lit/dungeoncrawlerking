@@ -266,6 +266,22 @@ if (!process.argv[2]) {
   expect(last7.deck.w.hand.length === 0 && last7.deck.w.pile.length === 0 && last7.deck.b.hand.length === 0 && last7.deck.b.pile.length === 0 && L7.engine.length === 66 && L7.engine.filter((x) => x.ms >= 9500).length === 55 && !L7.engine.some((x) => x.recovered), 'both decks spent to the last card; 55 of 66 searches at the ten-second bound, none recovered');
 }
 
+// THE PIECE STATES (Phase 3.4, 2026-10-21): the words of a piece-effect cast and of the records that run out, off the record's `states`
+{
+  const w1 = R.castWords({ cast: 'stun', card: 'stun', states: { set: [{ sq: 'd6', kind: 'stun', count: 3, piece: 'r', was: 'r', prev: null }], ended: [] } });
+  expect(w1 === "Stun — the enemy's rook on d6 is stunned for 3 plies", `a stun's words (${w1})`);
+  const w2 = R.castWords({ cast: 'control', card: 'control', states: { set: [{ sq: 'd6', kind: 'control', count: 4, owner: 'b', piece: 'R', was: 'r', prev: null }], ended: [] } });
+  expect(w2 === "Mind control — the enemy's rook on d6 changes sides for 4 plies", `a control's words (${w2})`);
+  const w3 = R.castWords({ cast: 'invincible', card: 'invincible', states: { set: [{ sq: 'd6', kind: 'invincible', count: 1, piece: 'r', was: 'R', prev: { kind: 'control', count: 2, owner: 'b' } }], ended: [] } });
+  expect(w3 === "Invincible — the enemy's rook on d6 cannot be captured for 1 ply (the mind control ends)", `an overwrite's words name the control it ended (${w3})`);
+  const w4 = R.castWords({ cast: 'control', card: 'control', states: { set: [], ended: [{ sq: 'a1', kind: 'control', owner: 'w', piece: 'R', was: 'r' }] } });
+  expect(w4 === 'Mind control — your rook on a1 comes home', `the recall's words (${w4})`);
+  const w5 = R.castWords({ cast: 'entomb', card: 'entomb', states: { set: [{ sq: 'c3', kind: 'entomb', count: null, piece: 'N', was: 'N', prev: null }], ended: [] } });
+  expect(w5 === 'Entomb — your knight on c3 is sealed in stone', `an entomb's words (${w5})`);
+  const e1 = R.expiryWords({ move: 'e1f1', states: { set: [], ended: [{ sq: 'd2', kind: 'control', owner: 'b', piece: 'r', was: 'R' }, { sq: 'a7', kind: 'stun', piece: 'p', was: 'p' }, { sq: 'g5', kind: 'invincible', piece: 'Q', was: 'Q' }, { sq: 'h8', kind: 'stun', piece: 'K', was: 'n' }] } });
+  expect(e1 === "the enemy's rook on d2 is the enemy's again, the enemy's pawn on a7 can move again, your queen on g5 can be captured again", `the expiries' words skip a record that went with a captured piece (${e1})`);
+  expect(R.expiryWords({ cast: 'stun', states: { set: [], ended: [{ sq: 'd2', kind: 'control', owner: 'b', piece: 'r', was: 'R' }] } }) === '' && R.expiryWords({ move: 'e1f1' }) === '', "a cast's overwrites are the cast's words, not expiries; a ply without records says nothing");
+}
 for (const n of notes) console.log(n);
 for (const f of failures) console.log(`FAIL ${f}`);
 console.log(failures.length ? `\n${failures.length} FAILED` : `\nPASS (${notes.length} checks)`);

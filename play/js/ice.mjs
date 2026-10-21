@@ -26,7 +26,7 @@
 // stopping, and the engine lists its quiet move onto a run of ice ONCE, at
 // the last empty ice square before what stops it (`slideEnds`' aliases light
 // the resting square on the page).
-import { parseBoard, splitFen, serializeBoard, parsePortalField, slickSquares, squareName, parseSquare, isTerrain, PIT, WALL, HARD, FURNITURE } from './fen.mjs';
+import { parseBoard, splitFen, serializeBoard, parsePortalField, slickSquares, squareName, parseSquare, isTerrain, pieceStates, PIT, WALL, HARD, FURNITURE } from './fen.mjs';
 
 const MOVE_RE = /^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))([a-zA-Z]?)$/;
 const STRONGEST = 'q';
@@ -82,6 +82,7 @@ export function slideOutcome(fenBefore, uci) {
   rows.forEach((row, ri) => row.forEach((c, f) => { g[ranks - 1 - ri][f] = c; }));
   const P = parsePortalField(fenBefore);
   const slick = slickSquares(fenBefore);
+  const tomb = new Set([...pieceStates(fenBefore)].filter(([, rec]) => rec.kind === 'entomb').map(([sq]) => sq)); // THE PIECE STATES (Phase 3.4): an entombed piece is a wall to the slide — never shoved
   const at = (sq) => { const s = parseSquare(sq); return { f: s.file, r: s.rankFromBottom }; };
   const on = (f, r) => f >= 0 && f < files && r >= 0 && r < ranks;
   const a = at(from), b = at(to);
@@ -117,6 +118,7 @@ export function slideOutcome(fenBefore, uci) {
       if (occ === WALL || occ === HARD || occ === FURNITURE) break; // a wall, a crate: stop here
       if (occ === PIT) { pit = { f: nf, r: nr }; break; } // a pit: gone
       const name = squareName(nf, nr);
+      if (tomb.has(name)) break; // sealed in stone: stop before it
       if (P.twin.has(name)) {
         if (occ === null) landing = { f: nf, r: nr }; // an empty portal square: a landing on it
         break; // a piece on one is an obstacle

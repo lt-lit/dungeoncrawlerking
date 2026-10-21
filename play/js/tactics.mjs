@@ -52,7 +52,7 @@
 // through isTerrain first ('^' === '^'.toUpperCase() is the standing
 // landmine, §4.6).
 
-import { isTerrain, splitFen, joinFen } from './fen.mjs';
+import { isTerrain, splitFen, joinFen, pieceStates, parseSquare, HARD } from './fen.mjs';
 import { captureLoss, PIECE_VALUE } from './threat.mjs';
 import { walkRay, withPortals, portalTwins } from './rays.mjs'; // the body rule: a linked portal square ends every line (a grid carries its pairs)
 
@@ -301,7 +301,15 @@ export function gridOf(fen, files, ranks) {
       f++;
     }
   });
-  return withPortals(g, portalTwins(fen)); // Portals v2: the pairs ride the grid
+  // THE PIECE STATES (Phase 3.4, 2026-10-21): an entombed piece is stone to the grid, an invincible one uncapturable (director.mjs uncapturableOf's rule, kept apart so tactics.mjs depends on nothing in director.mjs)
+  const unc = new Set();
+  for (const [sq, rec] of pieceStates(fen)) {
+    const { file, rankFromBottom } = parseSquare(sq);
+    if (!g[rankFromBottom] || file >= g[rankFromBottom].length) continue;
+    if (rec.kind === 'entomb') g[rankFromBottom][file] = HARD;
+    else if (rec.kind === 'invincible') unc.add(`${file},${rankFromBottom}`);
+  }
+  return withPortals(g, portalTwins(fen), unc); // Portals v2: the pairs ride the grid
 }
 
 /** Every move after which the opponent has no legal move — mate, stalemate

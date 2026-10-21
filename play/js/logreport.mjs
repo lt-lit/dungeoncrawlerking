@@ -13,7 +13,7 @@
 // throw — every read is optional.
 import { parseBoard, splitFen, isTerrain } from './fen.mjs';
 import { CARDS } from './deck.mjs'; // THE DECK (2026-09-25): the card names on the report
-import { TERRAIN_EFFECTS, PIECE_NAMES } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): a terrain cast's words
+import { TERRAIN_EFFECTS, STATE_EFFECTS, PIECE_NAMES } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): a terrain cast's words; Phase 3.4 (2026-10-21): a piece effect's
 
 /** jsonSafeNumbers' strings back to numbers ('Infinity', '-Infinity', 'NaN'). */
 export const num = (v) => (typeof v === 'string' && /^-?Infinity$|^NaN$/.test(v) ? Number(v) : v);
@@ -263,6 +263,8 @@ export function timelineLine(ply, san, { engine = new Map(), quakes = new Map(),
   if (st?.cast === 'mulligan') line += `  🂠 redraws${st.mulligan ? `: discards ${cardNames(st.mulligan.discarded)}, draws ${cardNames(st.mulligan.drew)}` : ''}`;
   if (st?.cast === 'win') line += `  ★ the You Win card — the duel is over`; // THE DECK IN THE ENGINE (2026-09-26): the test card
   if (TERRAIN_EFFECTS.has(st?.cast)) line += `  ✸ ${castWords(st, st.mover)}`; // PHASE 3.3b (2026-10-03): what the terrain card did
+  if (STATE_EFFECTS.has(st?.cast)) line += `  ✺ ${castWords(st, st.mover)}`; // THE PIECE STATES (Phase 3.4, 2026-10-21): what the piece effect did
+  { const ex = expiryWords(st); if (ex) line += `  ⏳ ${ex}`; } // … and the records that ran out with this ply
   if (st?.drew?.cards?.length) line += `  🂠 ${st.drew.side === 'w' ? 'W' : 'B'} draws ${cardNames(st.drew.cards)}`;
   for (const m of meta.get(ply) ?? []) line += `  ${m.kind === 'reveal' ? '☉ Reveal' : m.kind === 'undo' ? '↺ Undo' : m.kind} played`;
   if (leftMateLine(st)) line += `  ⚠ left the engine's mate-in-${-st.engineSaw.value} line (it expected ${st.predicted})`;
@@ -310,8 +312,52 @@ export function castWords(lm, mover = null) {
     case 'harden': { const sq = edits.filter((e) => e.to === '#').map((e) => e.sq); return `${name} — the ${plural(sq, 'wall', 'walls')} at ${list(sq) || '?'} ${plural(sq, 'turns', 'turn')} to bedrock`; }
     case 'sledge': return `${name} — ${mover === 'engine' ? "the enemy's" : mover === 'player' ? 'your' : "the caster's"} king carries the sledgehammer`;
     case 'drop': { const e = edits.find((x) => x.to && !isTerrain(x.to)); return `${name} — a ${PIECE_NAMES[String(e?.to ?? 'p').toLowerCase()] ?? 'piece'} is placed on ${e?.sq ?? '?'}`; }
+    // THE PIECE STATES (Phase 3.4, 2026-10-21): what a piece effect did, off the record's `states` (duel.mjs #push)
+    case 'stun': case 'invincible': case 'control': case 'entomb': return `${name} — ${stateWords(lm)}`;
     default: return `${name} is cast`;
   }
+}
+
+// ---- THE PIECE STATES' words (Phase 3.4, 2026-10-21). The player is White:
+// a white piece is "your", a black one "the enemy's", whoever moved.
+const PIECE_WORD = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+/** "your rook" / "the enemy's rook" for a piece letter. */
+export function pieceWords(letter) {
+  const ch = String(letter ?? '');
+  const name = PIECE_WORD[ch.toLowerCase()] ?? 'piece';
+  return `${ch && ch === ch.toUpperCase() ? 'your' : "the enemy's"} ${name}`;
+}
+const PLIES = (n) => `${n} ${n === 1 ? 'ply' : 'plies'}`;
+/** The records a piece-effect cast set (and the one it overwrote), the recall it made. */
+function stateWords(lm) {
+  const S = lm?.states ?? { set: [], ended: [] };
+  const parts = [];
+  for (const s of S.set) {
+    const after = pieceWords(s.piece);
+    if (s.kind === 'stun') parts.push(`${after} on ${s.sq} is stunned for ${PLIES(s.count)}`);
+    else if (s.kind === 'invincible') parts.push(`${after} on ${s.sq} cannot be captured for ${PLIES(s.count)}`);
+    else if (s.kind === 'entomb') parts.push(`${after} on ${s.sq} is sealed in stone`);
+    else if (s.kind === 'control') parts.push(`${pieceWords(s.was ?? s.piece)} on ${s.sq} changes sides for ${PLIES(s.count)}`);
+    if (s.prev?.kind === 'control' && s.kind !== 'control') parts[parts.length - 1] += ' (the mind control ends)';
+    else if (s.prev && s.prev.kind !== 'control') parts[parts.length - 1] += ` (the ${s.prev.kind === 'entomb' ? 'stone' : s.prev.kind === 'invincible' ? 'invincibility' : s.prev.kind} it wore is gone)`;
+  }
+  for (const e of S.ended) if (e.kind === 'control' && !S.set.some((s) => s.sq === e.sq)) parts.push(`${pieceWords(e.piece)} on ${e.sq} comes home`); // the recall: a control cast on your own stolen piece
+  return parts.join(', ') || 'nothing changes';
+}
+/** The records that ran out with a ply (not the ones a cast overwrote): a control returned, a stun worn off, an
+ *  invincibility ended, a block freed — in words, or '' when nothing did. A record that went with a captured piece
+ *  says nothing (the capture speaks for itself). */
+export function expiryWords(lm) {
+  if (lm?.cast && STATE_EFFECTS.has(lm.cast)) return '';
+  const parts = [];
+  for (const e of lm?.states?.ended ?? []) {
+    if (!e.piece || !e.was || e.piece.toLowerCase() !== e.was.toLowerCase()) continue; // gone, or another piece stands there: nothing to say
+    if (e.kind === 'control') parts.push(`${pieceWords(e.piece)} on ${e.sq} is ${e.owner === 'w' ? 'yours' : "the enemy's"} again`);
+    else if (e.kind === 'stun') parts.push(`${pieceWords(e.piece)} on ${e.sq} can move again`);
+    else if (e.kind === 'invincible') parts.push(`${pieceWords(e.piece)} on ${e.sq} can be captured again`);
+    else if (e.kind === 'entomb') parts.push(`${pieceWords(e.piece)} on ${e.sq} is freed from the stone`);
+  }
+  return parts.join(', ');
 }
 
 // ------------------------------------------------------------- sections

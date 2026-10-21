@@ -38,15 +38,24 @@ export function portalTwins(fen) {
   return m;
 }
 
-/** Attach the pairs to a grid (non-enumerable, so the grid still reads as rows). Returns the grid. */
-export function withPortals(grid, twins) {
+/** Attach the pairs to a grid (non-enumerable, so the grid still reads as rows) — and, since THE PIECE STATES
+ *  (Phase 3.4, 2026-10-21), the UNCAPTURABLE squares as a Set of 'f,r' (an invincible piece: threat.mjs prices no
+ *  capture of it, and its own captures are never answered). An entombed piece is written into the grid as stone by
+ *  the builders (director.mjs fenGrid, tactics.mjs gridOf), so every reader treats it as the wall it is. Returns the grid. */
+export function withPortals(grid, twins, uncapturable = null) {
   Object.defineProperty(grid, 'portals', { value: twins && twins.size ? twins : null, enumerable: false, writable: true, configurable: true });
+  Object.defineProperty(grid, 'uncapturable', { value: uncapturable && uncapturable.size ? uncapturable : null, enumerable: false, writable: true, configurable: true });
   return grid;
 }
 
-/** A copy of a grid that keeps its pairs (a plain `map(row => [...row])` would drop them). */
+/** A copy of a grid that keeps its pairs and its uncapturable squares (a plain `map(row => [...row])` would drop them). */
 export function copyGrid(grid) {
-  return withPortals(grid.map((row) => [...row]), grid.portals ?? null);
+  return withPortals(grid.map((row) => [...row]), grid.portals ?? null, grid.uncapturable ?? null);
+}
+
+/** Is the piece on (f, r) of this grid uncapturable (invincible)? */
+export function uncapturableAt(grid, f, r) {
+  return !!grid.uncapturable?.has(key(f, r));
 }
 
 /** The twin of the portal square at (f, r) on this grid, or null. */

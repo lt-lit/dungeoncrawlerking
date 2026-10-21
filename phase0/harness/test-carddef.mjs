@@ -5,7 +5,7 @@
 // clipped shape; a ray from the king through the anchor, over a pit, stopped
 // by bedrock, capped), the changed squares by the per-square table, the words.
 //   node harness/test-carddef.mjs
-import { parseDef, shapeCells, shapeGrid, castCells, castChanges, defWords, targetBadge } from '../../play/js/carddef.mjs';
+import { parseDef, shapeCells, shapeGrid, castCells, castChanges, defWords, targetBadge, STATE_EFFECTS, EFFECTS } from '../../play/js/carddef.mjs';
 
 let pass = 0, fail = 0;
 const ok = (n, c, x = '') => { c ? pass++ : fail++; console.log(`${c ? 'ok' : 'FAIL'}  ${n}${x ? '  ' + x : ''}`); };
@@ -56,6 +56,17 @@ ok('ice changes floor not yet slippery', same(castChanges(parseDef('ice xox any'
 ok('a wall changes empty floor off the portal squares', same(castChanges(parseDef('wall xox any'), ['c2', 'd2', 'e2'], 'd2', { at, portals: new Set(['c2']) }), ['e2']));
 ok('petrify changes intact walls alone', same(castChanges(parseDef('harden xxx/xox/xxx any'), ['d2', 'e3', 'e6'], 'e2', { at }), ['d2', 'e3']));
 ok('a drop changes its anchor', same(castChanges(parseDef('drop p o camp'), ['e2'], 'e2', { at }), ['e2']));
+// THE PIECE STATES (Phase 3.4, 2026-10-21): the four words, the count on the timed ones, the changed squares, the words
+d = parseDef('stun3 o any');
+ok('stun3 o any: a stun for three plies, one square, anywhere', d.effect === 'stun' && d.arg === 3 && d.cells.length === 1 && d.target === 'any' && STATE_EFFECTS.has('stun') && EFFECTS.stun === 'state');
+ok('control4 o any and invincible5 o any read their counts; entomb o any has none', parseDef('control4 o any').arg === 4 && parseDef('invincible5 o any').arg === 5 && parseDef('entomb o any').arg === null && parseDef('entomb o any').effect === 'entomb');
+ok('stun3 xxx/xox/xxx any: a 3×3 stun', parseDef('stun3 xxx/xox/xxx any').cells.length === 9);
+ok('refused: a timed effect without a count, a count of 0 or 16, a number on entomb', throws(() => parseDef('stun o any')) && throws(() => parseDef('control0 o any')) && throws(() => parseDef('invincible16 o any')) && throws(() => parseDef('entomb2 o any')));
+ok('a piece effect changes the squares with a non-king piece of either colour (the king and the floor and the walls never)', same(castChanges(parseDef('stun3 xxx/xox/xxx any'), ['d6', 'e6', 'f6', 'a1', 'b2', 'e3'], 'e6', { at: (s) => ({ d6: 'r', e6: 'k', f6: 'N', a1: 'K', e3: '*' })[s] ?? null }), ['d6', 'f6']));
+ok('words: the stun says the plies and that the piece still attacks', /cannot move for 3 plies/.test(defWords(parseDef('stun3 o any'))) && /still attacks/.test(defWords(parseDef('stun3 o any'))), defWords(parseDef('stun3 o any')));
+ok('words: the control says it returns to its owner wherever it stands', /yours for 4 plies, then returns to its owner wherever it stands/.test(defWords(parseDef('control4 o any'))), defWords(parseDef('control4 o any')));
+ok('words: the entomb says a hit frees it', /sealed in stone/.test(defWords(parseDef('entomb o any'))) && /until a hit frees it/.test(defWords(parseDef('entomb o any'))), defWords(parseDef('entomb o any')));
+ok('the badge of a piece effect is its targeting word', targetBadge(parseDef('invincible5 o any')) === 'any');
 // the words and the badge
 ok('words: the crack', /crack one square beside your pieces/.test(defWords(parseDef('hit1 o near'))), defWords(parseDef('hit1 o near')));
 ok('words: the lance', /a ray from your king: every wall on it cracks/.test(defWords(parseDef('hit1 o ray'))));

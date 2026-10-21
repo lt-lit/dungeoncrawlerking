@@ -19,7 +19,7 @@ import { makeCatalogIni } from '../../play/js/variant.mjs';
 import { loadStageV2 } from '../../play/js/stage.mjs';
 import { dealMatchup } from '../../play/js/armygen.mjs';
 import { DuelController } from '../../play/js/duel.mjs';
-import { starterCards, enemyDeck, newDeckState, deckSeeds, cloneDecks, HAND_SIZE, handOf, pileOf, castUci, MULLIGAN } from '../../play/js/deck.mjs';
+import { starterCards, enemyDeck, newDeckState, deckSeeds, cloneDecks, HAND_SIZE, handOf, pileOf, castUci, MULLIGAN, SPELL_KINDS } from '../../play/js/deck.mjs';
 import { splitFen, parseDeckField } from '../../play/js/fen.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -42,7 +42,7 @@ const dealWith = (d) => dealMatchup({ stage, white: { spec: { width: 4, pieces: 
 const deal = dealWith(decks);
 if (!deal.ok) { console.error('deal failed:', deal.error); process.exit(2); }
 check(/__deck4_[0-9a-f]{8}$/.test(deal.variantName), `the deal's variant declares the deck (${deal.variantName})`);
-check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 4 && pileOf(deal.fen, 'b').length === 18, `the start FEN carries the hands and the piles (the enemy's deck the whole library since 2026-10-03: four in hand, eighteen on the pile) (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
+check(parseDeckField(deal.fen).present && handOf(deal.fen, 'w').length === 4 && pileOf(deal.fen, 'w').length === 4 && handOf(deal.fen, 'b').length === 4 && pileOf(deal.fen, 'b').length === SPELL_KINDS.length - 4, `the start FEN carries the hands and the piles (the enemy's deck the whole library since 2026-10-03: four in hand, the other ${SPELL_KINDS.length - 4} of the library's ${SPELL_KINDS.length} on the pile) (${splitFen(deal.fen).pocket} ${(deal.fen.match(/\{[^}]*\}/) || [''])[0]})`);
 await engine.loadVariantsIni(catalogIni + '\n' + deal.variantIni);
 
 const mk = async (d0, dl = deal) => {
@@ -74,11 +74,15 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
   await duel.playerMove(plain(duel));
   await duel.engineMove();
   check(piles(duel).w.length === pile0 && !duel.record.states[duel.record.states.length - 1].drew, 'a quiet ply draws nothing');
-  // an ice cast: the card leaves the hand; the engine draws for white inside black's reply
-  const ice = castOf(duel, 'ice');
+  // an ice cast: the card leaves the hand; the engine draws for white inside black's reply (the enemy's opening cast may
+  // have been its portal's half, which freezes white for a ply — play through it and the link: the library holds every
+  // card since 2026-10-03, and the piece-state cards since 2026-10-21 reshuffled its opening hand)
+  let ice = castOf(duel, 'ice');
+  for (let i = 0; i < 4 && !ice && duel.state === 'playing'; i++) { await myTurn(duel); if (duel.state === 'playing') await duel.engineMove(); ice = castOf(duel, 'ice'); }
   if (ice) {
     const pileBefore = piles(duel).w.length;
     const top = piles(duel).w[0];
+    const since0 = duel.movesSinceBase.length;
     await duel.playerMove(ice);
     check(hands(duel).w.length === 3 && duel.lastMove.card === 'ice' && duel.lastMove.cast === 'ice', `after the cast the hand is three (${hands(duel).w.join(',')}); the record names the card`);
     const r = await duel.engineMove();
@@ -87,7 +91,7 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
       check(hands(duel).w.length === 4 && piles(duel).w.length === pileBefore - 1, `at the hand-over the engine drew one: hand ${hands(duel).w.join(',')}, pile ${piles(duel).w.length}`);
       check(st.drew?.side === 'w' && st.drew.cards.length === 1 && st.drew.cards[0] === top, `the state of record says what was drawn (${JSON.stringify(st.drew)}), the top of the pile`);
       check(st.deck.w.hand.length === 4 && st.deck.w.spent.join(',') === 'ice', `the state's deck: the hand refilled, the ice spent (${st.deck.w.spent})`);
-      check(duel.movesSinceBase.length === 4, 'no bare position was needed: the draw is the engine\'s own (four moves since the base)');
+      check(duel.movesSinceBase.length === since0 + 2, 'no bare position was needed: the draw is the engine\'s own (two more moves since the base)');
       check(duel.legalMoves().length > 0, 'the engine and ffish agree on the refilled position');
     } else check(false, 'the duel ended on the reply');
   } else check(false, 'no ice cast was legal at ply 3');
@@ -191,7 +195,7 @@ const piles = (duel) => ({ w: pileOf(duel.fen(), 'w'), b: pileOf(duel.fen(), 'b'
 // ---- the enemy's deck is the whole library (2026-10-03; it was width − 1 spells, a hand that ran dry at once): a hand of four, the rest on its pile
 {
   const duel = await mk(cloneDecks(decks));
-  check(piles(duel).b.length === 18 && hands(duel).b.length === 4 && new Set([...hands(duel).b, ...piles(duel).b]).size === 22, `the enemy holds four of the library's 22 and the other eighteen wait on its pile (${hands(duel).b.join(',')})`);
+  check(piles(duel).b.length === SPELL_KINDS.length - 4 && hands(duel).b.length === 4 && new Set([...hands(duel).b, ...piles(duel).b]).size === SPELL_KINDS.length, `the enemy holds four of the library's ${SPELL_KINDS.length} and the other ${SPELL_KINDS.length - 4} wait on its pile (${hands(duel).b.join(',')})`);
   duel.destroy();
 }
 

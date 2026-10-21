@@ -107,7 +107,7 @@ function buildChains(grid, tf, tr, files, ranks) {
         walkRay(grid, files, ranks, from.f, from.r, df, dr, (f, r, ch) => {
           dist++;
           if (isTerrain(ch)) { stop = true; return false; }
-          if (ch) { cells.push({ ch, dist }); next = { f, r }; return false; }
+          if (ch) { cells.push({ ch, dist, f, r }); next = { f, r }; return false; }
           return true;
         });
         if (!next) break;
@@ -127,7 +127,7 @@ function knightAttackers(grid, tf, tr, files, ranks) {
     const r = tr + dr;
     if (f < 0 || f >= files || r < 0 || r >= ranks) continue;
     const ch = grid[r][f];
-    if (ch && !isTerrain(ch) && ch.toLowerCase() === 'n') out.push({ ch, used: false });
+    if (ch && !isTerrain(ch) && ch.toLowerCase() === 'n') out.push({ ch, used: false, f, r });
   }
   return out;
 }
@@ -158,9 +158,12 @@ function leastValuableAttacker(state, white) {
 function swapOff(state, white, occupantValue) {
   const attacker = leastValuableAttacker(state, white);
   if (!attacker) return 0;
+  // THE PIECE STATES (Phase 3.4): an INVINCIBLE captor is never taken back — its capture ends the exchange
+  const cell = attacker.chain ? attacker.chain.cells[attacker.chain.idx] : attacker.knight;
+  const unanswerable = !!(state.unc && state.unc.has(`${cell.f},${cell.r}`));
   if (attacker.chain) attacker.chain.idx++;
   else attacker.knight.used = true;
-  const net = Math.max(0, occupantValue - swapOff(state, !white, attacker.value));
+  const net = Math.max(0, occupantValue - (unanswerable ? 0 : swapOff(state, !white, attacker.value)));
   if (attacker.chain) attacker.chain.idx--;
   else attacker.knight.used = false;
   return net;
@@ -174,9 +177,11 @@ function swapOff(state, white, occupantValue) {
 export function captureLoss(grid, tf, tr, files, ranks) {
   const occ = grid[tr]?.[tf];
   if (!occ || isTerrain(occ)) return 0;
+  if (grid.uncapturable?.has(`${tf},${tr}`)) return 0; // THE PIECE STATES (Phase 3.4): nothing captures an invincible piece
   const state = {
     chains: buildChains(grid, tf, tr, files, ranks),
     knights: knightAttackers(grid, tf, tr, files, ranks),
+    unc: grid.uncapturable ?? null,
   };
   return swapOff(state, !isWhitePiece(occ), valueOf(occ));
 }

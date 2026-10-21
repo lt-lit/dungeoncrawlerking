@@ -11,7 +11,8 @@
 // sinks into a pit, the ice under it cleared), harden (an intact wall becomes
 // bedrock), sledge (the caster's colour may hammer from now on), drop
 // <letter> (a real piece of the caster placed on the anchor), win, portal,
-// meta. SHAPES are picture strings: rows north to south separated by '/',
+// meta — and since Phase 3.4 (2026-10-21) the PIECE EFFECTS stun<n> /
+// invincible<n> / control<n> / entomb (STATE_EFFECTS below). SHAPES are picture strings: rows north to south separated by '/',
 // 'x' a cell, 'o' the anchor (a cell too), '.' nothing; no rotation on cast
 // (an L's four orientations are four cards); clipped at the board's edge.
 // TARGETING: any (every anchor where the effect changes something), near
@@ -34,7 +35,16 @@
 export const EFFECTS = Object.freeze({
   hit: 'terrain', ice: 'terrain', wall: 'terrain', pit: 'terrain', harden: 'terrain',
   sledge: 'enchant', drop: 'piece', win: 'meta', portal: 'portal', meta: 'meta',
+  stun: 'state', invincible: 'state', control: 'state', entomb: 'state', // THE PIECE STATES (Phase 3.4, 2026-10-21)
 });
+/** THE PIECE STATES (Phase 3.4, 2026-10-21; brief §4.10 "3.4 RULED"; engine/patches/piece-states.patch): the effects
+ *  that put a RECORD on a piece — stun<n> (immobile for n plies, still attacks, capturable), invincible<n> (nothing
+ *  captures it), control<n> (an enemy piece changes sides for n plies, then returns to its owner wherever it stands),
+ *  entomb (no clock: sealed in stone until a hit frees it). The count rides the word (`stun3`), 1 to 15 plies; a new
+ *  piece effect overwrites the record before it; kings are never targets; a cast is recorded by its effect word. */
+export const STATE_EFFECTS = Object.freeze(new Set(['stun', 'invincible', 'control', 'entomb']));
+const TIMED_EFFECTS = new Set(['stun', 'invincible', 'control']);
+export const MAX_STATE_COUNT = 15;
 export const TARGETS = Object.freeze(['any', 'near', 'middle', 'margin', 'king', 'ray', 'camp']);
 /** The effects whose cast is recorded by its own name in the duel record (`cast: 'hit' | 'wall' | …`; ice, win and the portal keep theirs). */
 export const TERRAIN_EFFECTS = Object.freeze(new Set(['hit', 'wall', 'pit', 'harden', 'sledge', 'drop']));
@@ -56,12 +66,18 @@ export function parseDef(text) {
   const effect = m[1];
   const num = m[2] ? parseInt(m[2], 10) : null;
   if (!(effect in EFFECTS)) throw new Error(`unknown effect: ${effect}`);
-  if (num !== null && effect !== 'hit') throw new Error(`a number on ${effect}`);
+  if (num !== null && effect !== 'hit' && !TIMED_EFFECTS.has(effect)) throw new Error(`a number on ${effect}`);
   let at = 1;
   let arg = null;
   if (effect === 'hit') {
     arg = num ?? 1;
     if (arg < 1 || arg > 2) throw new Error('hit takes 1 or 2');
+  }
+  if (TIMED_EFFECTS.has(effect)) {
+    // THE PIECE STATES: the count in plies rides the word (parser.cpp: 1 to MAX_STATE_COUNT, required)
+    if (num === null) throw new Error(`${effect} needs a count of plies`);
+    if (num < 1 || num > MAX_STATE_COUNT) throw new Error(`${effect} takes a count from 1 to ${MAX_STATE_COUNT}`);
+    arg = num;
   }
   if (effect === 'drop') {
     if (at >= tok.length || tok[at].length !== 1 || !/[a-z]/i.test(tok[at])) throw new Error('drop needs a piece letter');
@@ -169,6 +185,7 @@ export function castChanges(def, cells, anchor, { at = () => null, slick = new S
     case 'ice': return cells.filter((s) => !terrain(at(s)) && !slick.has(s));
     case 'wall': case 'pit': return cells.filter((s) => at(s) == null && !portals.has(s));
     case 'harden': return cells.filter((s) => at(s) === '*');
+    case 'stun': case 'invincible': case 'control': case 'entomb': return cells.filter((s) => { const c = at(s); return !!c && !terrain(c) && c.toLowerCase() !== 'k'; }); // THE PIECE STATES: every non-king piece of either colour (the null rule's finer half — a recast that changes nothing — is the engine's)
     default: return [anchor];
   }
 }
@@ -187,6 +204,11 @@ export function defWords(def) {
     case 'drop': return `place a ${PIECE_NAMES[def.arg] ?? def.arg} ${where}`;
     case 'win': return 'play it and you win';
     case 'portal': return 'a pair of portals, cast in one turn';
+    // THE PIECE STATES (Phase 3.4): the words say the plies, and that a new effect replaces the old
+    case 'stun': return `stun ${shapeWords} ${where}: a piece there cannot move for ${def.arg} plies (it still attacks, and can be taken)`;
+    case 'invincible': return `${shapeWords} ${where}: a piece there cannot be captured for ${def.arg} plies`;
+    case 'control': return `${shapeWords} ${where}: an enemy piece there is yours for ${def.arg} plies, then returns to its owner wherever it stands`;
+    case 'entomb': return `entomb ${shapeWords} ${where}: a piece there is sealed in stone — it neither moves, attacks nor can be taken — until a hit frees it`;
     default: return def.text;
   }
 }

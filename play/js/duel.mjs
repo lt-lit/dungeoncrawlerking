@@ -21,12 +21,12 @@
 // but the reset also clears TT-adjacent state after surgery.
 import { Director } from './director.mjs';
 import { moveEvents, PositionLog } from './meter.mjs';
-import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN, squareChanges, WALL, FURNITURE, HARD, PIT } from './fen.mjs';
+import { findSquares, splitFen, hammerOf, isCast, isPass, parsePortalField, parseDeckField, isMulligan, MULLIGAN, squareChanges, stateChanges, getSquare, WALL, FURNITURE, HARD, PIT } from './fen.mjs';
 import { slideOutcome, fallen } from './ice.mjs'; // THE ICE (2026-09-20): the slide a move makes, for the record
 import { flipTurn, evalSoftens } from './tactics.mjs';
 // THE DECK (2026-09-25): spells as cards — the hand is the pocket plus the meta cards, drawn up to at the start of each turn (deck.mjs).
 import { deckRecord, handOf, drawnBetween, cardOfCast, removeCard, mulliganOffered, mustLinkOf, deckOn, cloneDecks, HAND_SIZE, CARDS } from './deck.mjs';
-import { TERRAIN_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): a terrain card's cast is recorded by its effect word
+import { TERRAIN_EFFECTS, STATE_EFFECTS } from './carddef.mjs'; // PHASE 3.3b (2026-10-03): a terrain card's cast is recorded by its effect word; Phase 3.4 (2026-10-21): a piece effect's too
 import { joinFen } from './fen.mjs';
 
 /** PORTALS v3 (the one-turn cast, 2026-09-19): what a ply is inside a cast —
@@ -38,8 +38,9 @@ import { joinFen } from './fen.mjs';
  *  (the test-only You Win card) — a deck's cast is a slot's drop, read by the
  *  card the slot holds — and since PHASE 3.3b (2026-10-03) a terrain card's
  *  EFFECT word, 'hit' / 'wall' / 'pit' / 'harden' / 'sledge' / 'drop'
- *  (carddef.mjs TERRAIN_EFFECTS; every ice shape reads 'ice') — or null for
- *  an ordinary ply. */
+ *  (carddef.mjs TERRAIN_EFFECTS; every ice shape reads 'ice'), and since
+ *  Phase 3.4 (2026-10-21) a PIECE EFFECT's word, 'stun' / 'invincible' /
+ *  'control' / 'entomb' (STATE_EFFECTS) — or null for an ordinary ply. */
 export function castKind(fenBefore, uci, fenAfter) {
   const side = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
   if (isMulligan(uci)) return 'mulligan';
@@ -49,6 +50,7 @@ export function castKind(fenBefore, uci, fenAfter) {
     if (effect === 'ice') return 'ice';
     if (effect === 'win') return 'win';
     if (TERRAIN_EFFECTS.has(effect)) return effect;
+    if (STATE_EFFECTS.has(effect)) return effect; // THE PIECE STATES (Phase 3.4)
     return parsePortalField(fenAfter).halves[side] ? 'half' : 'link';
   }
   if (isPass(uci)) return parsePortalField(fenBefore).halves[side] && !parsePortalField(fenAfter).halves[side] ? 'fizzle' : 'pass';
@@ -639,6 +641,22 @@ export class DuelController {
         if (e.to === PIT) this.director.holes.add(e.sq);
       }
       if (cast === 'sledge') this.lastMove.sledge = splitFen(fenBefore).turn === 'b' ? 'b' : 'w';
+    }
+    // THE PIECE STATES (Phase 3.4, 2026-10-21; engine/patches/piece-states.patch): what the ply did to the records,
+    // read off the two FENs (fen.mjs stateChanges) — the records a piece-effect cast set (with the one each
+    // overwrote), the records that ENDED with this move (a count run out, a control returned to its owner, a block
+    // freed by a hit, a stunned piece captured). A record rode the mover: it ends on the square the piece rests on.
+    // The page's words, the report's and the analyzer's read this; the board reads the FEN's field itself.
+    {
+      const S = stateChanges(fenBefore, this.board.fen());
+      if (S.set.length || S.ended.length) {
+        const mv = uci.match(/^([a-l](?:10|[1-9]))([a-l](?:10|[1-9]))/);
+        if (mv && mv[1] !== mv[2]) {
+          const rest = slide?.steps?.[0]?.to ?? parsePortalField(this.board.fen()).twin.get(mv[2]) ?? mv[2];
+          for (const e of S.ended) if (e.sq === mv[1]) { e.sq = rest; e.piece = getSquare(this.board.fen(), rest) ?? null; }
+        }
+        this.lastMove.states = S;
+      }
     }
     {
       const fenAfter = this.board.fen();

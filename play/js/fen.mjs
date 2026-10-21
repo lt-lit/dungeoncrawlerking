@@ -122,6 +122,85 @@ export function sledgeOf(fen) {
 }
 const sledgeEntries = (fen) => { const s = sledgeOf(fen); return [...(s.w ? ['*w'] : []), ...(s.b ? ['*b'] : [])]; };
 
+// ---- THE PIECE STATES (Phase 3.4, 2026-10-21; brief §4.10 "3.4 RULED";
+// engine/patches/piece-states.patch). ONE RECORD PER PIECE in the trailing
+// field — `%e5s3` the piece on e5 is STUNNED for three plies (it cannot move,
+// still attacks, can be taken), `%e5i5` INVINCIBLE for five (nothing captures
+// it; the pit still kills), `%e5c4w` under MIND CONTROL for four plies and
+// returns to White, its OWNER (it wears Black's colour meanwhile, counts for
+// White in the extinction count, and comes back as what it has become,
+// wherever it stands, as the last act of the move the count runs out on),
+// `%e5e` ENTOMBED (no clock: immobile, uncapturable, attacks nothing, a wall
+// to every line and to the slide, freed by any hit). THE CLOCK IS IN PLIES:
+// every real move of either side drops every count by one; the frozen pass,
+// the fizzle and the link ply tick nothing; the mulligan ticks; a record set
+// this move does not tick on it; expiry is the move's last act. A new piece
+// effect OVERWRITES the record whole (a controlled piece first returns to its
+// owner). The engine writes the field; the page reads it for the board's
+// badges, the words, the gods' blocked set and the grids; `withStates` builds
+// fixtures and `settleStates` closes a duel (every record dropped, every
+// controlled piece home).
+export const STATE_KINDS = Object.freeze({ s: 'stun', i: 'invincible', c: 'control', e: 'entomb' });
+export const STATE_LETTER = Object.freeze({ stun: 's', invincible: 'i', control: 'c', entomb: 'e' });
+const STATE_RE = /^%([a-l](?:10|[1-9]))([sice])(\d*)([wb]?)$/;
+
+/** The records of a FEN: Map<square, { kind, count (null for entomb), owner ('w' | 'b' for control, else null) }>. */
+export function pieceStates(fen) {
+  const out = new Map();
+  const m = String(fen ?? '').match(/\{([^}]*)\}/);
+  for (const entry of m ? m[1].split(',') : []) {
+    const x = entry.trim().match(STATE_RE);
+    if (!x) continue;
+    const kind = STATE_KINDS[x[2]];
+    out.set(x[1], { kind, count: kind === 'entomb' ? null : parseInt(x[3] || '0', 10), owner: kind === 'control' ? x[4] || null : null });
+  }
+  return out;
+}
+
+/** One record as the field writes it: `%e5s3`, `%e5c4w`, `%e5e`. */
+export const stateEntry = (sq, rec) => `%${sq}${STATE_LETTER[rec.kind]}${rec.kind === 'entomb' ? '' : rec.count}${rec.kind === 'control' ? rec.owner ?? '' : ''}`;
+const stateEntries = (fen) => [...pieceStates(fen)].sort(([a], [b]) => squareOrder(a) - squareOrder(b)).map(([sq, rec]) => stateEntry(sq, rec));
+
+/** The FEN with these records (a Map or an object by square) in place of whatever records it carried; the rest of the field kept. */
+export function withStates(fen, records) {
+  const bare = String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim();
+  const m = String(fen).match(/\{([^}]*)\}/);
+  const keep = (m ? m[1].split(',') : []).map((e) => e.trim()).filter((e) => e && !STATE_RE.test(e));
+  const recs = records instanceof Map ? [...records] : Object.entries(records ?? {});
+  const entries = [...keep, ...recs.sort(([a], [b]) => squareOrder(a) - squareOrder(b)).map(([sq, rec]) => stateEntry(sq, rec))];
+  return entries.length ? `${bare} {${entries.join(',')}}` : bare;
+}
+
+/** The duel is over: every record dropped and every controlled piece returned to its owner's colour where it stands
+ *  (nothing persists past the duel — the floor is written, the survivors walk out, as their own). */
+export function settleStates(fen) {
+  const S = pieceStates(fen);
+  if (!S.size) return fen;
+  let out = fen;
+  for (const [sq, rec] of S) {
+    if (rec.kind !== 'control' || !rec.owner) continue;
+    const ch = getSquare(out, sq);
+    if (ch && !isTerrain(ch)) out = setSquare(out, sq, rec.owner === 'w' ? ch.toUpperCase() : ch.toLowerCase());
+  }
+  return withStates(out, []);
+}
+
+/** What a ply did to the records, read off the two FENs: `set` the records that appeared or changed (with the piece
+ *  now on the square and the one that stood there before), `ended` the records that are gone (a count run out, a
+ *  control returned, a block freed, a stunned piece captured — `piece` is what stands there now, or null). The record's
+ *  `states` on a state cast and the expiries on any ply read off this. */
+export function stateChanges(fenBefore, fenAfter) {
+  const A = pieceStates(fenBefore), B = pieceStates(fenAfter);
+  const set = [], ended = [];
+  for (const [sq, rec] of B) {
+    const was = A.get(sq);
+    if (was && was.kind === rec.kind && was.owner === rec.owner && (rec.kind === 'entomb' || was.count === rec.count + 1 || was.count === rec.count)) continue; // the same record a ply older (or untouched)
+    set.push({ sq, ...rec, piece: getSquare(fenAfter, sq) ?? null, was: getSquare(fenBefore, sq) ?? null, prev: was ? { kind: was.kind, count: was.count, owner: was.owner } : null });
+  }
+  for (const [sq, rec] of A) if (!B.has(sq)) ended.push({ sq, kind: rec.kind, owner: rec.owner, piece: getSquare(fenAfter, sq) ?? null, was: getSquare(fenBefore, sq) ?? null });
+  return { set, ended };
+}
+
 /** The holdings string for a set of deck slots: White's letters (uppercase, slot order, one per copy) then Black's. */
 export function deckPocket(slots) {
   let s = '';
@@ -145,7 +224,8 @@ export function withDeck(fen, deck) {
     }
   }
   if (deck.winner) entries.push(`!${deck.winner}`);
-  entries.push(...sledgeEntries(fen)); // the sledge flags ride along (terrain.patch prints them last)
+  entries.push(...sledgeEntries(fen)); // the sledge flags ride along (terrain.patch prints them after the deck)
+  entries.push(...stateEntries(fen)); // THE PIECE STATES ride along too (piece-states.patch prints them last)
   const bare = withPocket(String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim(), deckPocket(deck.slots ?? {}));
   return entries.length ? `${bare} {${entries.join(',')}}` : bare;
 }
@@ -292,7 +372,7 @@ export function slickSquares(fen) {
 export function withSlick(fen, squares) {
   const P = parsePortalField(fen);
   const all = new Set([...P.slick, ...squares]);
-  const entries = [...P.pairs.map(([a, b]) => `${a}-${b}`), ...['w', 'b'].filter((s) => P.halves[s]).map((s) => `${P.halves[s]}${s}`), ...[...all].sort((a, b) => squareOrder(a) - squareOrder(b)).map((sq) => `~${sq}`), ...sledgeEntries(fen)];
+  const entries = [...P.pairs.map(([a, b]) => `${a}-${b}`), ...['w', 'b'].filter((s) => P.halves[s]).map((s) => `${P.halves[s]}${s}`), ...[...all].sort((a, b) => squareOrder(a) - squareOrder(b)).map((sq) => `~${sq}`), ...sledgeEntries(fen), ...stateEntries(fen)];
   const bare = String(fen).replace(/\s*\{[^}]*\}\s*$/, '').trim();
   return entries.length ? `${bare} {${entries.join(',')}}` : bare;
 }
