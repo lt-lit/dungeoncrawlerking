@@ -2566,6 +2566,86 @@ saved `theme: 'auto'` from the old build is ignored, that 'auto' picked
 now holds across a reload and that the replay page wears crypt on the
 sample log.
 
+## The sight word on the page (2026-10-21)
+
+The targeting ruling after the first piece-states log (brief §4.10 "3.4 THE
+SIGHT WORD"; the designer: "Alright the mind control and stun is a little
+over the top. Right off the bat we gotta restrict targeting range on spells
+like this"; on the options, "Sight seems like the only one that wouldn't make
+these spells practically useless"). The engine's rule is the thirteenth patch
+(`engine/README.md` § "The sight patch"): a square is IN SIGHT of a colour
+when a queen standing on any of that colour's pieces could move onto it —
+every piece an eye along its ranks, files and diagonals, a line blocked by
+what blocks a slider (a piece of either colour, a crate, a wall, a pit,
+bedrock) and ended by a portal body; the first blocker is in sight, the eye's
+own square is not; the enemy's pieces are nobody's eyes; a piece held under
+mind control sees for its holder; a stunned or an entombed piece still sees;
+`sight<n>` caps every line at n. The word restricts the anchor alone: a shaped
+cast's cells follow the shape.
+
+- `carddef.mjs` — `sight` in `TARGETS`, a number allowed on it (`sight3`), the
+  badge `sight` / `sight3`, the words "in sight of your pieces" (", within 3"
+  with a cap). The page never decides legality: ffish lists the casts.
+- `rays.mjs sightSquares(fen, colour, cap)` — THE MIRROR: the walker on
+  `gridFromFen` (which keeps an entombed piece as the letter it is, so it is
+  an eye) from every piece of the colour in the eight directions, the first
+  blocker visited, a portal square ending the walk, the cap counted in
+  squares. For the tests and a hover line later; held to ffish's own cast
+  list by test-states-game on three boards (a wall, a crate and a pit on the
+  lines; a portal pair on the diagonal and a held rook for an eye) and by
+  ui-smoke on the live deal.
+- `deck.mjs` — Stun (`stun3 o sight`), Stun 3×3 (`stun3 xxx/xox/xxx sight`),
+  Mind control (`control4 o sight`) and Entomb (`entomb o sight`) cast in
+  sight; Invincible stays `invincible5 o any` (a buff on your own piece at
+  range showed nothing wrong in the log). The deal's variant hashes the
+  declaration, so the name moves with the defs.
+- What it does on the board: at the deal each pawn sees straight up its open
+  file to the enemy's front pawn and nothing behind that pawn line, so the
+  rook beside the king (the log's ply-1 steal with check) is hidden until a
+  file or a diagonal opens; mid-game the lines come back the chess way, and
+  the answers are chess answers — keep the rook off the line, block it, raise
+  a wall with a card.
+
+FOUND ON THE LOG, FIXED — THE RIDER: a record rides its piece's move, and the
+record's reader (`fen.mjs stateChanges`) read a rook with an invincibility
+taking a stunned pawn (the log's ply 37) as a record SET on the landing square
+and one ENDED on the square it left, so the timeline said the rook "can be
+captured again" with its invincibility still on it. `stateChanges(fenBefore,
+fenAfter, { from, rest })` knows the move now (duel.mjs hands it the
+destination, a portal's twin or a slide's end): a record that rode is neither
+set nor ended, the captured piece's record ended by the capture (`was` the
+victim, `piece` the captor — the expiry words skip it), and a record that
+ended as its piece moved (a control returning with the move) ends where the
+piece rests; `logreport.mjs expiryWords(lm, fenAfter)` judges an older log's
+reading against the state's own field, so the eighth sample's ply 37 prints
+nothing (main.mjs hands it the live position; the timeline the state's).
+
+THE EIGHTH COMMITTED SAMPLE — THE FIRST PIECE-STATES DUEL
+(`replay/samples/dck-log_vaults-2-t7_s3786340449.json`, `?sample=8`: vaults-2
+at walk turn 7, the enemy's initiative, restless, Firefox/Windows, 144 plies,
+16 quakes, 2 undos plus the Undo card at ply 73 and the Reveal at 97, 0
+anomalies, 1-0 by stalemate; the designer's log, with the verdict that ruled
+the sight word). What the record says: the engine's `V@f1+` at ply 1 — Mind
+control on the rook beside the player's king, check from where it stood — and
+`Kxf1`; the player's `U@a10+` at ply 4 and `Kxa10`; Invincible on both sides
+at 33 and 34, the enemy's Stun overwriting the player's invincibility on g5 at
+35 and the rook taking the pawn at 37 (the rider); the 3×3 stun at 41 and
+`Rxd5+`; the player's Stun on the enemy's last rook at 84, the enemy's Entomb
+on i8 at 85, the player's Entomb on f10 at 88 (its stun had run out the ply
+before), the block standing to the end; the Demolish freeing i8 at 98. The
+header's build read `2026-10-03 terrain.1`: the piece-states build had
+shipped with the stamp unbumped (fixed the same day).
+
+Gates: test-states-game 45, test-carddef 42, test-deck 68, test-cards 132,
+test-deck-duel 46, test-logreport 121 (the eighth sample), test-barrier 170,
+test-portals-game 27, test-ice-game 42, replay-smoke 109 ok (`?sample=8`:
+the plies, the ply-1 and ply-4 lines, ply 37 without expiry words, f10 sealed
+to the end, i8 freed), selftest 53/53 headless, ui-smoke __UISMOKE3__ (THE
+PIECE STATES block: the army marches until an enemy piece stands in sight,
+the targets held to the mirror, three faces with the sight badge and
+Invincible's any). `APP_BUILD` `2026-10-21 sight.1`. Held over: the line
+drawn under the hover, `sight<n>` as a per-card dial.
+
 ## The piece states on the page (Phase 3.4, 2026-10-21)
 
 Canon: brief §4.10 "3.4 RULED" (the designer's rulings, in their words) and

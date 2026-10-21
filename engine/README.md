@@ -94,7 +94,7 @@ works pretty good" — IN.
 **Status 2026-10-03: THE TERRAIN PATCH shipped — Phase 3.3b, the second
 forge.** `patches/terrain.patch` (938 lines, 703+/23− across `types.h`,
 `variant.h`, `parser.cpp`, `position.h`, `position.cpp`, `movegen.cpp`,
-`apiutil.h`; applied on top of the ten above — eleven patches then, TWELVE since piece-states (2026-10-21, below), in order
+`apiutil.h`; applied on top of the ten above — eleven patches then, TWELVE since piece-states and THIRTEEN since sight (both 2026-10-21, below), in order
 dead-squares, thread-stack, portals, wall-kinds, hammer, portals-body,
 portals-cast, ice, deck, deck-search, terrain) gives the engine brief §4.10
 "Phase 3.3b": THE TERRAIN INTERPRETER — a card is a DEFINITION, `card<ID> =
@@ -588,6 +588,108 @@ took about twenty minutes wall-clock, scripted in the session's scratch);
 wasms grew 2.5 KB (ffish) and 5 KB (engine). The stock pair now REFUSES a
 `#` board ("Invalid piece character"), so a phase0 run that forgot the
 overlay dies at once instead of misplaying.
+
+## The sight patch (`patches/sight.patch`) — 2026-10-21
+
+**The thirteenth patch: ONE TARGETING WORD for the card grammar, `sight` (and
+`sight<n>`, a cap).** The targeting ruling after the first piece-states log
+(brief §4.10 "3.4 THE SIGHT WORD"; the designer: "restrict targeting range on
+spells like this", and on the options, "Sight seems like the only one that
+wouldn't make these spells practically useless"). A square is IN SIGHT of a
+colour when a queen standing on any of that colour's pieces could move onto
+it: every piece is an eye along its ranks, files and diagonals, a line is
+blocked by what blocks a slider (a piece of either colour, a crate, a wall, a
+pit, bedrock) and ended by a portal body; the first blocker on a line IS in
+sight (so a wall in sight is a hit's anchor, a piece in sight a piece
+effect's), the eye's own square is not; the enemy's pieces are nobody's eyes;
+a piece held under mind control sees for its holder; a stunned or an entombed
+piece still sees. With a number the line runs that many squares and no more.
+The word restricts the ANCHOR (as `near` does): a shaped cast's other cells
+follow the shape. Source: `forge/apply-sight.py` (anchored edits on the
+twelve-patch tree; 103 lines over four files):
+
+- `types.h` — `TARGET_SIGHT` on the `CardTarget` enum.
+- `parser.cpp` — the word with its cap (`sight3`), the number allowed on it.
+- `position.h/.cpp` — `sight_squares(Color, cap)`: the union over every piece
+  of the colour of `attacks_bb<ROOK>` | `attacks_bb<BISHOP>` on the occupancy
+  every slider reads (`byTypeBB[ALL_PIECES] | st->portalSquares`), each ray
+  cut to `distance <= cap` when a cap is set, masked to the board — and
+  `cast_anchors`' `case TARGET_SIGHT: cand &= sight_squares(c, targetArg)`.
+
+Stock when no card carries the word: sight-free boards are node-identical to
+the twelve-patch build (perft 3 and depth-12 transcripts; `IDENTITY OK`).
+
+### Native validation (2026-10-21)
+
+The oracle (`forge/oracle.py`) grew `Pos.sight(c, cap)` (eight rays from
+every piece of the colour, the first blocker kept, the cap) and the `anchors`
+branch; `forge/states.ini` carries the sight cards 140–147 (stun3 o sight,
+control4 o sight, entomb o sight, stun3 xxx/xox/xxx sight, hit1 o sight, wall
+o sight, stun3 o sight2, invincible5 o sight), so the states suite's random
+positions draw them too. `forge/native-test-sight.py`:
+
+- fixtures G1–G12, every count derived by the oracle before the engine ran
+  them — the line and each blocker (a pawn of yours an eye of its own, a
+  wall, an enemy pawn, a crate, a pit, bedrock, ice no blocker, a knight for
+  an eye), the cap, the portal body and a piece standing on it, the 3×3 stun
+  through an anchor in sight (the knights off every line stunned through
+  e5), a hit on the wall at a diagonal's end, a wall raised on the 30 empty
+  squares in sight, a control through sight that checks from where the
+  stolen rook stands, the enemy's pieces nobody's eyes, a held rook its
+  holder's eye, black's own sight, the 10×10 duel shape where each pawn sees
+  straight up its file to the pawn facing it: **63/63** on the debug build
+  (asserts on) and on the release;
+- random positions with a sight card forced into a slot of each colour,
+  equal to the oracle on perft-1 move sets and perft-2 per-move counts, the
+  engine's xsweep clean: 400 (debug, seed 21) + 600 (seed 99) + 1,000 (seed
+  7) + 800 (seed 3) on the release; perft 4 on seven fixtures under asserts
+  (+ the 10×10 at 3); the states suite re-run on the sight build with the
+  sight cards in its pool (137 fixtures, 400 + 600 random with sweep); the
+  portal / terrain / deck / ice fixtures 62 / 84 / 55 / 46;
+- THREE FINDINGS before the engine's rule changed once: two fixture slips
+  (a pawn facing a pawn down an open file sees it — the 10×10 board's control
+  casts are the enemy's front pawns; a black king left bare is decided at
+  load, CLAUDE.md rule 4(b) again) and ONE DISAGREEMENT between the oracle
+  and the engine in a position play can never reach — a caster in check with
+  its own portal half open, playing an evasion while a record ran out (seed
+  99's 600th position): the engine's letter is `ticks(m) = !is_pass(m) &&
+  portalHalf[sideToMove] == SQ_NONE`, nothing ticks while the mover's own
+  half stands open, which in play is the link ply alone; the oracle ticked
+  that evasion and reads the engine's letter now (`Pos.after`).
+
+### The rule-16 gate (both WASM binaries rebuilt from the pinned trees + thirteen patches)
+
+ffish.js and the worker byte-identical to the twelve-patch pair, stockfish.js
+six layout bytes, ffish.wasm +825 bytes, stockfish.wasm +836 bytes.
+
+- [x] `test-sight-ffish.cjs` **37/37** — G1–G12 through the JS API, `S@a8+`
+  the SAN of a control cast that checks, a two-ply check-flag sweep.
+- [x] `test-sight-engine.cjs` **41/41** — perft 1 and 3 pinned to the native
+  build on 25 fixtures (the 10×10 at 2: 1,490 / 1,235), the boards after the
+  key casts through `d`, two searches: with a rook en prise the engine TAKES
+  it rather than steal it (a capture beats a cast), and with the enemy's
+  queen beside its king in sight up a pawn's file and no capture on offer it
+  steals it with check (`bestmove S@d8`); a depth-8 search with sight decks
+  on both sides completes.
+- [x] `test-states-ffish.cjs` 68 · `test-states-engine.cjs` 91 ·
+  `test-terrain-ffish.cjs` 47 · `test-terrain-engine.cjs` 49 ·
+  `test-deck-ffish.cjs` 39 · `test-deck-engine.cjs` 58 ·
+  `test-ice-ffish.cjs` 53 · `test-ice-engine.cjs` 79 ·
+  `test-portals-ffish.cjs` 78 · `test-portals-engine.cjs` 146 ·
+  `test-hammer-ffish.cjs` 27 · `test-hammer-engine.cjs` 25 ·
+  `test-ffish.cjs` 19 · `test-engine.cjs` 7.
+- [x] `regress.cjs` + `regress-ffish.cjs` — crate-free positions identical
+  to the vendored twelve-patch pair; `xcheck.cjs` — ffish and the engine
+  agree on every crate fixture; `stack-regress.cjs` 5/5.
+- [x] `search-identity.cjs` — node-for-node identical to the vendored
+  twelve-patch engine at depth 12.
+- [x] depth-cap re-measure (`depthcap.cjs`): d22 110/110 clean (slowest
+  971 ms), d60 30/30 clean (slowest 10,023 ms) — **the cap STAYS at d22.**
+- [x] `play/selftest.html` 53/53 in headless Chromium (the piece-states
+  check on a board where the rook stands in sight); the game's gates on the
+  overlaid pair: test-states-game 45 (the page's mirror `rays.mjs
+  sightSquares` equal to ffish's cast list on three boards), test-deck-duel
+  46, test-barrier 170, test-portals-game 27, test-ice-game 42.
 
 ## The piece-states patch (`patches/piece-states.patch`) — 2026-10-21
 
@@ -1634,6 +1736,8 @@ FFISH_JS=... node engine/tests/test-terrain-ffish.cjs                   # the te
 ENGINE_JS=... node engine/tests/test-terrain-engine.cjs                 # the terrain interpreter, engine half: perft pinned to the native build, the immurement found, a duel-shaped search (49)
 FFISH_JS=... node engine/tests/test-states-ffish.cjs                    # the piece states — stun, invincible, mind control and its return, entomb, the overwrite, the clock in plies — ffish half (68)
 ENGINE_JS=... node engine/tests/test-states-engine.cjs                  # the piece states, engine half: perft pinned to the native build, the boards through `d`, the searches (91)
+FFISH_JS=... node engine/tests/test-sight-ffish.cjs                     # the sight targeting word — the line and its blockers, the cap, the portal body, a control through sight that checks — ffish half (37)
+ENGINE_JS=... node engine/tests/test-sight-engine.cjs                   # the sight targeting word — perft pinned to the native build, the searches — engine half (41)
 node engine/tests/stack-regress.cjs                                      # P60 stack-overflow kill-fixture: completes + SURVIVES (no env: guards play/vendor)
 ```
 
