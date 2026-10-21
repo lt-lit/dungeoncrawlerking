@@ -101,6 +101,30 @@ extinction: a side down to one piece has lost, so the position has no moves):
     may crack an adjacent intact wall into a crate (uci from-to, never in
     check) when the variant declares hammerPieceTypes - and, once a sledge
     card is in the library, only while its colour's enchantment is on.
+  * THE PIECE STATES (2026-10-21, brief 4.10 "3.4 RULED"; engine/patches/
+    piece-states.patch): ONE RECORD PER PIECE - a kind, a count in plies and,
+    for control, the owner it returns to ("%e5s3", "%e5i5", "%e5c4w", "%e5e"
+    in the trailing field). STUN: the piece cannot move, still attacks and
+    defends, can be taken. INVINCIBLE: nothing captures it (en passant
+    included, a landing on its portal square included); it moves, attacks and
+    gives check; a pit still kills it. CONTROL: the piece wears the caster's
+    colour and plays as the caster's (a pawn marches the caster's way); it
+    counts for its OWNER in the extinction count; when the count runs out it
+    returns to its owner at the end of that move, wherever it stands and
+    whatever it has become. ENTOMB (no count): inert - no moves, no attacks,
+    uncapturable, a wall to every line and to the slide, no landing swaps with
+    it; freed by any hit. THE CLOCK IS IN PLIES: every real move by either side
+    drops every count by one (the frozen pass, the fizzle and the link ply
+    tick nothing; the mulligan ticks); what reaches zero ends as the move's
+    last act; a record a cast sets does not tick on the cast's own move. A
+    piece effect targets any non-king piece of either colour (an area every
+    non-king piece in its shape); a new piece effect OVERWRITES the record: a
+    controlled piece first returns to its owner, then the effect applies -
+    control by the piece's own owner is a recall (no record); a cast that
+    changes nothing is no move. Legality is the king's after everything the
+    move does (the flips of a cast, the returns of the clock): a move that
+    leaves the mover's king attacked is illegal, one that leaves the other king
+    attacked gives check.
 """
 import random, sys, re
 
@@ -135,6 +159,8 @@ def parse_def(value):
     at = 1
     if eff == 'hit':
         d['arg'] = num or 1
+    if eff in ('stun', 'invincible', 'control'):
+        d['arg'] = num
     if eff == 'drop':
         d['arg'] = tok[at]
         at += 1
@@ -189,9 +215,10 @@ def ice_rows(R):
     return {R // 2 - 1, R // 2}
 
 class Pos:
-    def __init__(self, files, ranks, board, twin, side, ep=None, hand=(0, 0), half=(None, None), slick=None, icehand=(0, 0), deck=None, sledge=(False, False)):
+    def __init__(self, files, ranks, board, twin, side, ep=None, hand=(0, 0), half=(None, None), slick=None, icehand=(0, 0), deck=None, sledge=(False, False), state=None):
         self.F, self.R = files, ranks
         self.sledge = list(sledge)  # THE TERRAIN INTERPRETER: the hammer enchantment per colour
+        self.state = dict(state) if state else {}   # THE PIECE STATES: sq -> (kind 's'|'i'|'c'|'e', count, owner)
         # THE DECK: deck = {handsize, slots: [[ [id, count] | None ]*8 per colour], pile: [[ids], [ids]], castslot: [slot | None]*2, winner}
         self.deck = deck
         self.board = board          # dict (f, r) -> char; absent = empty
@@ -212,6 +239,29 @@ class Pos:
 
     def is_body(self, sq):
         return sq in self.board or sq in self.twin  # a piece, terrain, or a portal square
+
+    # ---- THE PIECE STATES
+    def kind_at(self, sq):
+        return self.state[sq][0] if sq in self.state else None
+
+    def immobile(self, sq):
+        return self.kind_at(sq) in ('s', 'e')
+
+    def uncapturable(self, sq):
+        return self.kind_at(sq) in ('i', 'e')
+
+    def entombed(self, sq):
+        return self.kind_at(sq) == 'e'
+
+    def owner_of(self, sq):
+        """The colour a piece belongs to: a controlled piece's record names it, else the board colour."""
+        if self.kind_at(sq) == 'c':
+            return self.state[sq][2]
+        return colour(self.board[sq])
+
+    def landable(self, sq):
+        """A portal square whose twin holds no entombed piece (a wall never swaps)."""
+        return sq not in self.twin or not self.entombed(self.twin[sq])
 
     def slippery(self, sq):
         return sq in self.slick and sq not in self.twin
@@ -285,7 +335,10 @@ class Pos:
                     two = (sq[0], sq[1] + 2 * up)
                     if 0 < sq[1] < self.R - 1 and self.on(*two) and two not in self.board and one not in self.twin:
                         out.append(two)                          # the double step: from any non-king row, first square no portal
-        # drop own pieces; one entry per square
+        # drop own pieces; one entry per square. THE PIECE STATES: a MOVE never
+        # captures an invincible or entombed piece (en passant included) and never
+        # lands on a portal square whose twin holds an entombed piece; an ATTACK
+        # on such a square is still an attack.
         res, seen = [], set()
         for x in out:
             occ = self.board.get(x)
@@ -293,13 +346,20 @@ class Pos:
                 continue
             if x in seen:
                 continue
+            if not attacks_only:
+                if occ and occ not in TERRAIN and self.uncapturable(x):
+                    continue
+                if t == 'p' and not occ and self.ep == x and self.uncapturable((x[0], x[1] - (1 if c == WHITE else -1))):
+                    continue
+                if not self.landable(x):
+                    continue
             seen.add(x)
             res.append(x)
         return res
 
     def attacked(self, sq, by):
         for s, ch in self.board.items():
-            if ch in TERRAIN or colour(ch) != by:
+            if ch in TERRAIN or colour(ch) != by or self.entombed(s):
                 continue
             if sq in self.targets(s, ch, attacks_only=True):
                 return True
@@ -312,7 +372,8 @@ class Pos:
         return None
 
     def count(self, c):
-        return sum(1 for ch in self.board.values() if ch not in TERRAIN and colour(ch) == c)
+        """The extinction count: pieces by OWNER (a controlled piece counts for its owner)."""
+        return sum(1 for s, ch in self.board.items() if ch not in TERRAIN and self.owner_of(s) == c)
 
     def ended(self):
         # extinction, or (the ice) a king that fell into a pit, or (the deck) a win card played
@@ -347,8 +408,22 @@ class Pos:
             else:
                 d['slots'][c][s] = [cid, 1]
 
-    def after(self, nxt):
-        """The engine's end-of-move draw: the side about to move refills unless a half is open or the game is won."""
+    def after(self, nxt, ticks=True, fresh=()):
+        """The end of a move: THE CLOCK (every record set before this move drops by one; a stun or an
+        invincibility at zero ends, a control at zero returns the piece to its owner - a colour flip where
+        it stands), then the engine's draw (the side about to move refills unless a half is open or the
+        game is won). `ticks` is False for the frozen pass, the fizzle and the link ply; `fresh` the
+        squares whose records this move set."""
+        if ticks:
+            for sq, (kind, count, owner) in list(nxt.state.items()):
+                if count == 0 or sq in fresh:
+                    continue
+                if count > 1:
+                    nxt.state[sq] = (kind, count - 1, owner)
+                    continue
+                del nxt.state[sq]
+                if kind == 'c':
+                    nxt.board[sq] = nxt.board[sq].upper() if owner == WHITE else nxt.board[sq].lower()
         if nxt.deck and nxt.deck['winner'] is None and nxt.half[WHITE] is None and nxt.half[BLACK] is None:
             nxt.refill(nxt.side)
         return nxt
@@ -380,10 +455,14 @@ class Pos:
 
     def slide(self, b, to, d, named=None):
         """Run the physics on board b (a copy; the mover already on `to`, the victim
-        gone) with the mover sliding in direction d. Mutates b."""
+        gone) with the mover sliding in direction d. Mutates b. A piece on b is a
+        (char, origin) pair so a record can follow it (THE PIECE STATES); an
+        entombed piece is a wall to the slide and no landing swaps with one."""
         sq = to
         pc = b[to]
         is_mover = True
+        def promo(v, s, nm):
+            return (self.promote(v[0], s, nm), v[1])
         while True:
             cur = sq
             landing = None
@@ -391,14 +470,14 @@ class Pos:
             fell = False
             while True:
                 nx = (cur[0] + d[0], cur[1] + d[1])
-                if not self.on(*nx) or b.get(nx) in ('*', '#', '^'):
-                    break                                # the edge, a wall, a crate: stop here
+                if not self.on(*nx) or b.get(nx) in ('*', '#', '^') or (nx in b and self.entombed(nx)):
+                    break                                # the edge, a wall, a crate, an entombed piece: stop here
                 if b.get(nx) == '_':
                     fell = True                          # a pit: gone
                     break
                 if nx in self.twin:
-                    if nx not in b:
-                        landing = nx                     # an empty portal square: a landing on it
+                    if nx not in b and self.landable(nx):
+                        landing = nx                     # an empty portal square: a landing on it (never a swap with an entombed twin)
                     break                                # a piece on one is an obstacle
                 if nx in b:
                     if self.slippery(nx):
@@ -415,12 +494,12 @@ class Pos:
             elif landing is not None and landing in self.twin:
                 q = self.twin[landing]
                 sw = b.pop(q, None)                      # whatever stands on the twin comes back
-                b[q] = self.promote(pc, q, named if is_mover else None)
+                b[q] = promo(pc, q, named if is_mover else None)
                 if sw is not None:
                     b[landing] = sw
             else:
                 end = landing if landing is not None else cur
-                b[end] = self.promote(pc, end, named if is_mover else None)
+                b[end] = promo(pc, end, named if is_mover else None)
             if shoved is None:
                 break
             sq = shoved
@@ -429,9 +508,10 @@ class Pos:
 
     # ---- the positions a move leads to (copies)
     def make(self, frm, to, promo=None):
-        """Return the position after an ordinary move (a copy)."""
-        b = dict(self.board)
-        ch = b.pop(frm)
+        """Return the position after an ordinary move (a copy). The working board carries
+        every piece as (char, origin) so its record follows it (THE PIECE STATES)."""
+        b = {s: (v if v in TERRAIN else (v, s)) for s, v in self.board.items()}
+        ch = b.pop(frm)[0]
         c = colour(ch)
         up = 1 if c == WHITE else -1
         ep = None
@@ -445,20 +525,28 @@ class Pos:
         if to in self.twin:
             q = self.twin[to]
             if q == frm:
-                b[frm] = ch                          # twin to twin: ends where it stood
+                b[frm] = (ch, frm)                   # twin to twin: ends where it stood
             else:
                 sw = b.pop(q, None)                  # whatever stands on the twin comes back
-                b[q] = ch
+                b[q] = (ch, frm)
                 if sw is not None:
                     b[to] = sw
         elif self.slippery(to) and d is not None:
-            b[to] = ch
+            b[to] = (ch, frm)
             self.slide(b, to, d, promo)              # THE ICE: the move ends on ice - it slides on
         else:
-            b[to] = ch
+            b[to] = (ch, frm)
             if ch.lower() == 'p' and abs(to[1] - frm[1]) == 2:
                 ep = (frm[0], frm[1] + up)
-        return self.after(Pos(self.F, self.R, b, self.twin, 1 - self.side, ep, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge))
+        board, state = {}, {}
+        for s, v in b.items():
+            if v in TERRAIN:
+                board[s] = v
+            else:
+                board[s] = v[0]
+                if v[1] in self.state:
+                    state[s] = self.state[v[1]]
+        return self.after(Pos(self.F, self.R, board, self.twin, 1 - self.side, ep, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge, state))
 
     def cast_half(self, sq, slot=None):
         """The opening cast: the caster's half stands on sq; a legacy scroll leaves the hand, a deck card marks its slot and stays."""
@@ -469,7 +557,7 @@ class Pos:
         else:
             deck['castslot'][self.side] = slot
         half = list(self.half); half[self.side] = sq
-        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck, self.sledge))
+        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck, self.sledge, self.state))
 
     def link(self, sq, slot=None):
         """The linking cast: the caster's half and sq become a pair; a scroll (or the deck card) leaves the hand."""
@@ -478,13 +566,13 @@ class Pos:
         hand = list(self.hand)
         deck = self.deck_copy()
         half = list(self.half); half[self.side] = None
-        nxt = Pos(self.F, self.R, dict(self.board), twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck, self.sledge)
+        nxt = Pos(self.F, self.R, dict(self.board), twin, 1 - self.side, None, hand, half, self.slick, self.icehand, deck, self.sledge, self.state)
         if slot is None:
             nxt.hand[self.side] -= 1
         else:
             nxt.spend(self.side, slot)
             nxt.deck['castslot'][self.side] = None
-        return self.after(nxt)
+        return self.after(nxt, ticks=False)   # the link ply ticks nothing
 
     def cast_ice(self, sq, slot=None):
         """The ice cast: the floor of the 3x3 around sq turns slippery, a scroll (or the deck card) leaves the hand."""
@@ -496,7 +584,7 @@ class Pos:
                     slick.add(s)
         icehand = list(self.icehand)
         deck = self.deck_copy()
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, slick, icehand, deck, self.sledge)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, slick, icehand, deck, self.sledge, self.state)
         if slot is None:
             nxt.icehand[self.side] -= 1
         else:
@@ -506,7 +594,7 @@ class Pos:
     def cast_win(self, slot):
         """THE DECK: the win card, cast on the caster's own king square - the game is over."""
         deck = self.deck_copy()
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck, self.sledge)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck, self.sledge, self.state)
         nxt.spend(self.side, slot)
         nxt.deck['winner'] = self.side
         return nxt
@@ -514,23 +602,23 @@ class Pos:
     def mulligan(self):
         """THE DECK: discard the whole hand (blanks included) and draw anew; then the other side's turn."""
         deck = self.deck_copy()
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck, self.sledge)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, deck, self.sledge, self.state)
         nxt.deck['slots'][self.side] = [None] * 8
         nxt.refill(self.side)
         return self.after(nxt)
 
     def passed(self):
-        """The frozen side's pass: nothing changes but the turn."""
-        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge))
+        """The frozen side's pass: nothing changes but the turn (no tick)."""
+        return self.after(Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge, self.state), ticks=False)
 
     def fizzle(self):
         """The caster's pass when no link is legal: the half is gone, its scroll (or the deck card) spent."""
         half = list(self.half); half[self.side] = None
-        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, half, self.slick, self.icehand, self.deck_copy(), self.sledge)
+        nxt = Pos(self.F, self.R, dict(self.board), self.twin, 1 - self.side, None, self.hand, half, self.slick, self.icehand, self.deck_copy(), self.sledge, self.state)
         if nxt.deck and nxt.deck['castslot'][self.side] is not None:
             nxt.spend(self.side, nxt.deck['castslot'][self.side])
             nxt.deck['castslot'][self.side] = None
-        return self.after(nxt)
+        return self.after(nxt, ticks=False)   # the fizzle is a pass: no tick
 
     def slide_stop(self, frm, to, ch):
         """Where the mover of a (non-promoting) slide ends, or None if it falls."""
@@ -541,11 +629,11 @@ class Pos:
         b.pop(to, None)
         d = self.direction(frm, to)
         # track the mover: run the physics on a board where the mover is uniquely marked
-        marker = '@'
-        b[to] = marker
+        b = {s: (v if v in TERRAIN else (v, s)) for s, v in b.items()}
+        b[to] = ('@', frm)
         self.slide(b, to, d)
         for s, x in b.items():
-            if x == marker:
+            if x not in TERRAIN and x[0] == '@':
                 return s
         return None
 
@@ -583,7 +671,9 @@ class Pos:
         if kind == 'ice':
             return any(self.board.get(c) not in TERRAIN and c not in self.slick for c in cells)
         if kind == 'hit':
-            return any(self.board.get(c) in ('*', '^') for c in cells)
+            return any(self.board.get(c) in ('*', '^') or (c in self.board and self.entombed(c)) for c in cells)
+        if kind in ('stun', 'invincible', 'control', 'entomb'):
+            return any(self.piece_effect(d, c) is not None for c in cells)
         if kind in ('wall', 'pit'):
             return any(c not in self.board and c not in self.twin and c not in self.half for c in cells)
         if kind == 'harden':
@@ -605,7 +695,7 @@ class Pos:
         elif kind == 'drop':
             cand = [s for s in allsq if s not in self.board]                           # empty floor
         else:
-            cand = [s for s in allsq if self.board.get(s) not in TERRAIN]              # ice, wall, pit: a floor square, occupied or not
+            cand = [s for s in allsq if self.board.get(s) not in TERRAIN]              # ice, wall, pit, a piece effect: a floor square, occupied or not
         if target == 'king':
             cand = [s for s in cand if s == k]
         elif target == 'near':
@@ -628,6 +718,31 @@ class Pos:
                 out.append(a)
         return out
 
+    def piece_effect(self, d, c):
+        """What a piece effect does to the piece on c: (kind, count, owner, colour) - the record it leaves
+        (kind None for none) and the colour the piece ends in - or None when nothing would change. A
+        controlled piece first returns to its owner (the overwrite); control then takes it for the caster
+        unless the caster is its owner (a recall)."""
+        ch = self.board.get(c)
+        if ch is None or ch in TERRAIN or ch.lower() == 'k':
+            return None
+        bc = colour(ch)
+        cur = self.state.get(c)
+        true_owner = cur[2] if cur and cur[0] == 'c' else bc
+        us = self.side
+        if d['kind'] == 'control':
+            res = (None, 0, WHITE, us) if true_owner == us else ('c', d['arg'], true_owner, us)
+        elif d['kind'] == 'stun':
+            res = ('s', d['arg'], WHITE, true_owner)
+        elif d['kind'] == 'invincible':
+            res = ('i', d['arg'], WHITE, true_owner)
+        else:
+            res = ('e', 0, WHITE, true_owner)
+        new = None if res[0] is None else (res[0], res[1], res[2])
+        if res[3] == bc and new == cur:
+            return None
+        return res
+
     def cast_def(self, d, slot, a):
         """The position after a slot card's cast at anchor a: the def applied over the board, the card spent, the draw."""
         kind = d['kind']
@@ -636,8 +751,21 @@ class Pos:
         b = dict(self.board)
         slick = set(self.slick)
         sledge = list(self.sledge)
+        state = dict(self.state)
+        fresh = set()
         cells = self.cells_of(d, a)
-        if kind == 'ice':
+        if kind in ('stun', 'invincible', 'control', 'entomb'):
+            for c in cells:
+                res = self.piece_effect(d, c)
+                if res is None:
+                    continue
+                k2, n2, owner, col = res
+                b[c] = b[c].upper() if col == WHITE else b[c].lower()
+                state.pop(c, None)
+                if k2 is not None:
+                    state[c] = (k2, n2, owner)
+                fresh.add(c)
+        elif kind == 'ice':
             for c in cells:
                 if b.get(c) not in TERRAIN:
                     slick.add(c)
@@ -650,6 +778,8 @@ class Pos:
                         del b[c]
                     else:
                         b[c] = '^'
+                elif c in state and state[c][0] == 'e':
+                    del state[c]                       # THE PIECE STATES: a hit frees an entombed piece
         elif kind in ('wall', 'pit'):
             for c in cells:
                 if c not in b and c not in self.twin and c not in self.half:
@@ -663,15 +793,15 @@ class Pos:
             sledge[self.side] = True
         elif kind == 'drop':
             b[a] = d['arg'].upper() if self.side == WHITE else d['arg'].lower()
-        nxt = Pos(self.F, self.R, b, self.twin, 1 - self.side, None, self.hand, self.half, slick, self.icehand, self.deck_copy(), sledge)
+        nxt = Pos(self.F, self.R, b, self.twin, 1 - self.side, None, self.hand, self.half, slick, self.icehand, self.deck_copy(), sledge, state)
         nxt.spend(self.side, slot)
-        return self.after(nxt)
+        return self.after(nxt, fresh=fresh)
 
     def make_hammer(self, frm, to):
         """The king cracks the adjacent wall on `to` into a crate; nothing moves."""
         b = dict(self.board)
         b[to] = '^'
-        return self.after(Pos(self.F, self.R, b, self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge))
+        return self.after(Pos(self.F, self.R, b, self.twin, 1 - self.side, None, self.hand, self.half, self.slick, self.icehand, self.deck_copy(), self.sledge, self.state))
 
     def legal_moves(self):
         """Moves as (from, to, promo, next): promo is a letter for a promotion,
@@ -700,8 +830,12 @@ class Pos:
                 return [(k, k, 'pass', self.fizzle())]
             return [(k, k, 'pass', self.passed())]
         res = []
+        def safe(nxt):
+            """THE PIECE STATES: the mover's king after everything the move did - the clock's returns included."""
+            kk = nxt.king(us)
+            return kk is not None and not nxt.attacked(kk, them)
         for s, ch in list(self.board.items()):
-            if ch in TERRAIN or colour(ch) != us:
+            if ch in TERRAIN or colour(ch) != us or self.immobile(s):
                 continue
             zone = self.R - 1 if us == WHITE else 0
             for to in self.targets(s, ch):
@@ -729,11 +863,15 @@ class Pos:
         # the opening cast: a scroll in hand, not in check, any castable square
         if not in_check and self.hand[us] > 0:
             for sq in self.castables():
-                res.append((None, sq, 'cast', self.cast_half(sq)))
+                nxt = self.cast_half(sq)
+                if safe(nxt):
+                    res.append((None, sq, 'cast', nxt))
         # the ice cast: a scroll in hand, not in check, any floor square of the cast rows
         if not in_check and self.icehand[us] > 0:
             for sq in self.ice_castables():
-                res.append((None, sq, 'ice', self.cast_ice(sq)))
+                nxt = self.cast_ice(sq)
+                if safe(nxt):
+                    res.append((None, sq, 'ice', nxt))
         # THE DECK: each slot's card by its definition, never in check (a portal card its half; the
         # rest the interpreter's anchors - a hit judged for the caster's own king); the mulligan while
         # the pile has cards
@@ -746,25 +884,31 @@ class Pos:
                 kind = d['kind']
                 if kind == 'portal':
                     for sq in self.castables():
-                        res.append((None, sq, 'cast:' + L, self.cast_half(sq, slot)))
+                        nxt = self.cast_half(sq, slot)
+                        if safe(nxt):
+                            res.append((None, sq, 'cast:' + L, nxt))
                 elif kind == 'meta':
                     continue
                 else:
                     for sq in self.anchors(d):
                         nxt = self.cast_def(d, slot, sq)
-                        if kind == 'hit':
-                            kk = nxt.king(us)
-                            if kk is None or nxt.attacked(kk, them):
-                                continue                   # the demolition opened a line onto the caster's own king
+                        if kind != 'win' and not safe(nxt):
+                            continue                   # the demolition (or a flip, or a return) left the caster's own king attacked
                         res.append((None, sq, 'card:' + L, nxt))
             if k is not None and self.deck['pile'][us]:
-                res.append((k, k, 'mulligan', self.mulligan()))
-        # THE HAMMER: the king cracks an adjacent intact wall, never in check, while his colour's hammer is on
-        if not in_check and k is not None and self.hammer_on(us):
+                nxt = self.mulligan()
+                if safe(nxt):
+                    res.append((k, k, 'mulligan', nxt))
+        # THE HAMMER: the king cracks an adjacent intact wall while his colour's hammer is on; in check it
+        # stands only when the move leaves the king safe - a control returning with the move may do that
+        # (THE PIECE STATES), nothing else does, since the hammer moves nothing
+        if k is not None and self.hammer_on(us):
             for df, dr in ORTHO + DIAG:
                 w = (k[0] + df, k[1] + dr)
                 if self.on(*w) and self.board.get(w) == '*':
-                    res.append((k, w, 'hammer', self.make_hammer(k, w)))
+                    nxt = self.make_hammer(k, w)
+                    if safe(nxt):
+                        res.append((k, w, 'hammer', nxt))
         return res
 
 def sqname(sq):
@@ -825,6 +969,9 @@ def to_fen(pos):
     for c, letter in ((WHITE, 'w'), (BLACK, 'b')):
         if pos.sledge[c]:
             entries.append('*' + letter)
+    for s in sorted(pos.state, key=lambda x: (x[1], x[0])):       # THE PIECE STATES: in square order, as the engine prints them
+        kind, count, owner = pos.state[s]
+        entries.append('%' + sqname(s) + kind + (str(count) if count else '') + (('w' if owner == WHITE else 'b') if kind == 'c' else ''))
     field = (' {' + ','.join(entries) + '}') if entries else ''
     ep = sqname(pos.ep) if pos.ep else '-'
     return '/'.join(rows) + pocket + ' ' + ('w' if pos.side == WHITE else 'b') + ' - ' + ep + ' 0 1' + field
@@ -884,9 +1031,18 @@ def from_fen(fen, handsize=0):
                 else:
                     deck['slots'][c][slot] = [0, 1]
     sledge = [False, False]
+    state = {}
     for e in entries:
         if e[0] == '*':
             sledge[WHITE if e[1] == 'w' else BLACK] = True
+            continue
+        if e[0] == '%':
+            m = re.match(r'^%([a-l]\d+)([sice])(\d*)([wb]?)$', e)
+            s = sq(m.group(1))
+            kind, count = m.group(2), int(m.group(3) or 0)
+            owner = (WHITE if m.group(4) == 'w' else BLACK) if m.group(4) else WHITE
+            if s in board and board[s] not in TERRAIN and board[s].lower() != 'k':
+                state[s] = (kind, count, owner)
             continue
         if e[0] == '~':
             slick.add(sq(e[1:]))
@@ -918,7 +1074,7 @@ def from_fen(fen, handsize=0):
                 e = deck['slots'][c][slot]
                 if e and e[1] <= 0 and deck['castslot'][c] != slot:
                     deck['slots'][c][slot] = None
-    return Pos(F, R, board, twin, side, ep, hand, half, slick, icehand, deck, sledge)
+    return Pos(F, R, board, twin, side, ep, hand, half, slick, icehand, deck, sledge, state)
 
 def perft(pos, depth):
     if depth == 0:
@@ -954,7 +1110,7 @@ def random_deck(rng, handsize=4, win_p=0.12):
         d['pile'][c] = [card() for _ in range(rng.randint(0, 6))]
     return d
 
-def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3, scrolls=True, half_p=0.35, ice=None, deck=False):
+def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3, scrolls=True, half_p=0.35, ice=None, deck=False, states=False):
     """A random legal-looking position: kings apart, a few pieces, some terrain, `pairs`
     portal pairs, scrolls in hand and — with probability half_p — an open half for one side
     (so the frozen ply and the link ply are exercised). With `ice` (a string):
@@ -1022,7 +1178,18 @@ def random_position(rng, F, R, pairs=1, extra=(2, 5), terrain=(0, 3), plug=0.3, 
                     half[c] = cand[0]
                     d['castslot'][c] = ps[0]
         sledge = [rng.random() < 0.4, rng.random() < 0.4] if (deck and DEFS is not None) else [False, False]
-        pos = Pos(F, R, board, twin, side, None, hand, half, slick, icehand, d, sledge)
+        state = {}
+        if states:
+            # THE PIECE STATES: a few records on non-king pieces - counts short enough that the clock runs
+            # out inside a perft 2, a control's owner the other colour, kings never
+            cand = [s for s, ch in board.items() if ch not in TERRAIN and ch.lower() != 'k']
+            rng.shuffle(cand)
+            for s in cand[:rng.randint(0, 3)]:
+                kind = rng.choice('ssiicce')
+                count = 0 if kind == 'e' else rng.choice([1, 1, 2, 3, 5])
+                owner = 1 - colour(board[s]) if kind == 'c' else WHITE
+                state[s] = (kind, count, owner)
+        pos = Pos(F, R, board, twin, side, None, hand, half, slick, icehand, d, sledge, state)
         kw, kb = pos.king(WHITE), pos.king(BLACK)
         # the side not to move may not be in check, nobody may have lost already
         if pos.attacked(kw if side == BLACK else kb, side):
