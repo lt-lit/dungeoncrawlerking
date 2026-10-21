@@ -2640,7 +2640,7 @@ Gates: test-states-game 45, test-carddef 42, test-deck 68, test-cards 132,
 test-deck-duel 46, test-logreport 121 (the eighth sample), test-barrier 170,
 test-portals-game 27, test-ice-game 42, replay-smoke 109 ok (`?sample=8`:
 the plies, the ply-1 and ply-4 lines, ply 37 without expiry words, f10 sealed
-to the end, i8 freed), selftest 53/53 headless, ui-smoke __UISMOKE3__ (THE
+to the end, i8 freed), selftest 53/53 headless, ui-smoke — the first run on this build 428 ok / 2 failed with 2 boot retries, both failures the block’s own expectation of a theft where the engine had already stolen the pawn and the cast was the recall (the step prefers an unheld target and accepts a recall now; the clean rerun’s count follows) (THE
 PIECE STATES block: the army marches until an enemy piece stands in sight,
 the targets held to the mirror, three faces with the sight badge and
 Invincible's any). `APP_BUILD` `2026-10-21 sight.1`. Held over: the line
