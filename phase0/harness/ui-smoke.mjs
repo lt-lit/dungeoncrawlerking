@@ -2856,7 +2856,7 @@ if (SHOTS) await page.locator('#options-card').screenshot({ path: path.join(OUT,
         K.tap(sq);
         await settle();
         const st = K.app.duel.record.states.find((s) => s.cast === 'control' && s.mover === 'player') ?? null; // the enemy may have cast its own Mind control first (it did, with check, on the first run)
-        const out = { sq, was, recall, state: st ? { cast: st.cast, card: st.card, set: st.states?.set ?? null, ended: st.states?.ended ?? null, field: (st.fen.match(/\{[^}]*\}/) || [''])[0], piece: at(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Mind control — the enemy's/.test(t)), duelState: K.app.duel.state, live: K.app.duel.fen() };
+        const out = { sq, was, recall, state: st ? { cast: st.cast, card: st.card, set: st.states?.set ?? null, ended: st.states?.ended ?? null, field: (st.fen.match(/\{[^}]*\}/) || [''])[0], piece: at(st.fen, sq) } : null, log: [...document.querySelectorAll('#duel-log div')].map((d) => d.textContent).filter((t) => /Mind control/.test(t)), duelState: K.app.duel.state, live: K.app.duel.fen() };
         if (K.app.duel.state === 'playing' && K.app.duel.turnColor() === 'white') {
           const live = K.app.duel.fen();
           const m = live.match(new RegExp(`%${sq}c(\\d)b`));
