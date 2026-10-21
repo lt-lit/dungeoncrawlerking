@@ -414,6 +414,9 @@ class Pos:
         it stands), then the engine's draw (the side about to move refills unless a half is open or the
         game is won). `ticks` is False for the frozen pass, the fizzle and the link ply; `fresh` the
         squares whose records this move set."""
+        if ticks and self.half[self.side] is not None:
+            ticks = False   # the engine's letter (position.h ticks()): nothing ticks while the mover's OWN half stands open - in play the
+                            # link ply alone; in a random position an evasion played inside a cast too (found by the sight gate's seed 99)
         if ticks:
             for sq, (kind, count, owner) in list(nxt.state.items()):
                 if count == 0 or sq in fresh:
@@ -680,6 +683,27 @@ class Pos:
             return any(self.board.get(c) == '*' for c in cells)
         return False
 
+    def sight(self, c, cap=0):
+        """THE SIGHT WORD (sight.patch, 2026-10-21): the squares in sight of colour c's army - every square a queen
+        standing on one of its pieces could move onto, the first blocker on each line included (a piece of either
+        colour, a crate, a wall, a pit, bedrock; a portal body ends the line), each line capped at `cap` squares
+        when cap > 0. The eye's own square is not in its sight; the enemy's pieces see nothing for c; a piece held
+        under mind control sees for its holder; a stunned or an entombed piece still sees."""
+        out = set()
+        for s, ch in self.board.items():
+            if ch in TERRAIN or colour(ch) != c:
+                continue
+            for df, dr in ORTHO + DIAG:
+                f, r, n = s[0] + df, s[1] + dr, 0
+                while self.on(f, r):
+                    sq = (f, r)
+                    out.add(sq)
+                    n += 1
+                    if sq in self.board or sq in self.twin or (cap and n >= cap):
+                        break
+                    f += df; r += dr
+        return out
+
     def anchors(self, d):
         """Where a card may be cast: the effect's candidate squares, narrowed by its targeting, kept by the null rule."""
         us = self.side
@@ -709,6 +733,9 @@ class Pos:
             if k is None:
                 return []
             cand = [(k[0] + df, k[1] + dr) for df, dr in ORTHO + DIAG if self.on(k[0] + df, k[1] + dr)]
+        elif target == 'sight':
+            vis = self.sight(us, d['targ'])                                            # THE SIGHT WORD: the anchor in sight of the caster's army
+            cand = [s for s in cand if s in vis]
         out = []
         for a in cand:
             cells = self.cells_of(d, a)
